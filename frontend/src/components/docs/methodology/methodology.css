@@ -130,7 +130,7 @@
 .mr-l3 .nm::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--c, var(--text-mute)); margin-right: 7px; vertical-align: 1px; }
 .mr-l3 .sb { display: block; font-size: 11px; color: var(--text-mute); }
 .mr-l3.on { border-color: var(--border-glow); background: rgba(22, 51, 45, 0.92); }
-.mr-l3.dim { opacity: 0.38; }
+.mr-l3.dim { opacity: 0.55; }
 .mr-l3.sel { border-color: var(--text-hi); }
 /* in the scene a name stands without its plate, and without its second line, until its piece is in use or picked:
    there are two dozen pieces, and a plate over each would cover what it names */
@@ -150,7 +150,7 @@
 /* the check that has just passed, in its own colour */
 .mr-e3.mr-ck { color: var(--c, var(--text-hi)); border: 1px solid var(--c, var(--border-hi)); }
 .mr-zoom { position: absolute; right: 10px; top: 10px; display: flex; gap: 4px; }
-.mr-zoom .mr-step { padding: 3px 10px; font-size: 14px; letter-spacing: 0; background: rgba(8, 23, 20, 0.74); }
+.mr-zoom .mr-step { padding: 3px 10px; letter-spacing: 0; background: rgba(8, 23, 20, 0.74); }
 /* before the scene is drawn, and where it cannot be: the names in a plain wrapping row */
 .mr-stage[data-scene="loading"] .mr-labels, .mr-stage[data-scene="off"] .mr-labels { display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; padding: 14px; overflow: auto; }
 .mr-l3.flow { position: static; }
@@ -190,8 +190,8 @@
   .mr-title { font-size: 22px; }
   .mr-stage { height: 330px; }
   .mr-l3 { padding: 2px 6px 3px; } .mr-l3 .sb { display: none; } .mr-l3 .nm { font-size: 10px; letter-spacing: 0.06em; }
-  /* a narrow stage has no room for every name. A step names the pieces it uses; the whole map names the hosts, the
-     app, the API, the database and the registry, and the rest are read from the cards when pressed */
-  .mr-stage[data-scene="on"] .mr-l3.dim, .mr-stage[data-scene="on"][data-step="all"] .mr-l3:not(.anc):not(.sel), .mr-stage[data-scene="on"] .mr-e3 { display: none; }
+  /* a narrow stage has no room for every name. A step names the pieces it uses; the whole map names the app, the
+     API, the database and the registry; the hosts and the rest are read from the cards when a piece is pressed */
+  .mr-stage[data-scene="on"] .mr-l3.dim, .mr-stage[data-scene="on"][data-step="all"] .mr-l3:not(.anc):not(.sel), .mr-stage[data-scene="on"] .mr-e3, .mr-h3 { display: none; }
   .mr-lede { display: block; margin: 0; flex-basis: 100%; }
 }

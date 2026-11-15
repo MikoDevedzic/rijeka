@@ -57,6 +57,22 @@ describe('how the system is built, against the API', () => {
   })
 })
 
+describe('the clock, against the scheduler', () => {
+  it('each step of the clock names the jobs of one of the scheduler\'s groups', () => {
+    const sched = read('scheduler.py')
+    const group = (g) => [...sched.matchAll(new RegExp(`\\(\\s*["'](\\w+)["'],\\s*["']${g}["'],\\s*lambda`, 'g'))].map(m => m[1]).sort()      // a job: its name, its group, what it runs
+    expect(group('every_cycle')).toEqual(['chain_reconcile'])
+    expect(group('marks')).toEqual(['crypto_marks'])
+    expect(group('half_hourly')).toEqual(['crypto_fixings', 'news', 'spots', 'summaries'])
+    expect(group('daily')).toEqual(['ccr', 'market_data', 'pnl', 'risk'])
+    // what each step says of its group: a word for each job
+    for (const [k, words] of [['t0', ['confirmation']], ['t1', ['marks', 'forwards', 'spot']], ['t2', ['spot', 'news', 'summaries', 'fixings']], ['t3', ['market data', 'P&L', 'market risk', 'counterparty credit']]]) {
+      for (const w of words) expect(step(k).say.toLowerCase(), `${k}: ${w}`).toContain(w.toLowerCase())
+    }
+    expect(step('t3').say, 'a batch runs for the accounts that have its module on, not for every book').toMatch(/module switched on/)
+  })
+})
+
 describe('how a change ships, against the repository', () => {
   it('the six checks are the six jobs of the CI workflow, by name', () => {
     const ci = fs.readFileSync(path.join(ROOT, '.github/workflows/ci.yml'), 'utf8')

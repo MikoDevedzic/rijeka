@@ -109,15 +109,15 @@ function buildStage(T, renderer, canvas, host, els, onPick) {
       add(new T.BoxGeometry(1.1, 0.7, 0.9), 0, 0.42, 0); r = 0.95
     } else if (n.shape === 'checks') {     // six lamps, each a check of its own, lit one after the other
       o.lamps = CHECKS.map((c, i) => {
-        const m = keep(new T.MeshStandardMaterial({ color: shade(c.line, 0.28), emissive: c.line, emissiveIntensity: 0, roughness: 0.4 }))
+        const m = keep(new T.MeshStandardMaterial({ color: shade(c.line, 0.2), emissive: shade(c.line, c.tint), emissiveIntensity: 0, roughness: 0.4 }))
         const geo = keep(new T.BoxGeometry(0.24, 0.95, 0.5)), mesh = new T.Mesh(geo, m); mesh.position.set(-0.75 + i * 0.3, 0.52, 0); mesh.userData.id = n.id; grp.add(mesh); hit.push(mesh)
         const em = keep(new T.LineBasicMaterial({ color: c.line, transparent: true })), e = new T.LineSegments(keep(new T.EdgesGeometry(geo)), em); e.position.copy(mesh.position); grp.add(e)
-        return { m, em, col: c.line }
+        return { m, em, col: c.line, tint: c.tint }
       })
       r = 1.25
     } else if (n.shape === 'agent') {      // a reviewer: a body, a head lit in its own colour, a ring that turns about it
       add(new T.CylinderGeometry(0.15, 0.3, 0.72, 20), 0, 0.38, 0)
-      o.orbMat = keep(new T.MeshStandardMaterial({ color: tn.line, emissive: tn.line, emissiveIntensity: 0.35, roughness: 0.3, transparent: true }))
+      o.orbMat = keep(new T.MeshStandardMaterial({ color: shade(tn.line, 0.6), emissive: tn.line, emissiveIntensity: 0.2, roughness: 0.4, transparent: true }))      // lit, it keeps its colour: it does not wash to white
       o.orb = new T.Mesh(keep(new T.SphereGeometry(0.24, 24, 16)), o.orbMat); o.orb.position.y = 1.14; o.orb.userData.id = n.id; grp.add(o.orb); hit.push(o.orb)
       o.orbit = new T.Mesh(keep(new T.TorusGeometry(0.43, 0.02, 8, 48)), keep(new T.MeshBasicMaterial({ color: tn.line, transparent: true, opacity: 0.6 }))); o.orbit.position.y = 1.14; grp.add(o.orbit)
       r = 0.5
@@ -145,7 +145,7 @@ function buildStage(T, renderer, canvas, host, els, onPick) {
     scene.add(new T.Mesh(keep(new T.TubeGeometry(curve, 56, 0.03, 6, false)), mat))
     const aura = keep(new T.MeshBasicMaterial(lit(col, 0))); scene.add(new T.Mesh(keep(new T.TubeGeometry(curve, 56, 0.13, 8, false)), aura))
     const beads = [0, 1, 2, 3, 4, 5, 6].map(() => { const s = new T.Sprite(keep(new T.SpriteMaterial({ map: glow, ...lit(col, 1) }))); s.visible = false; scene.add(s); return s })
-    return { id: e.id, flat: !!e.flat, col, curve, mat, aura, beads, phase: (i * 0.37) % 1, on: false, dim: false, half: curve.getPoint(0.5) }
+    return { id: e.id, flat: !!e.flat, col, curve, mat, aura, beads, phase: (i * 0.37) % 1, on: false, dim: false, half: curve.getPoint(e.at ?? 0.5) }
   })
   const gateEdge = edges.find(e => e.flat), chainEdge = edges.find(e => e.id === 'api_chain')
 
@@ -153,6 +153,7 @@ function buildStage(T, renderer, canvas, host, els, onPick) {
   const goalT = new T.Vector3(HOME[0], 0, HOME[1]), tgt = goalT.clone()
   let cur = null, spanX = 0, spanZ = 0, curD = reduce ? HOME_DIST : HOME_DIST * 2.1, zoom = 1, yaw = -0.16, pitch = HOME_PITCH, goalP = HOME_PITCH, turned = false
   function set(s, pickedNow) {
+    if (s !== cur) stepAt = null                                          // a step's own clock starts when the step does
     cur = s; widths.clear()
     for (const id of Object.keys(nodes)) {
       const o = nodes[id], on = !!s && s.pieces.includes(id)
@@ -219,7 +220,8 @@ function buildStage(T, renderer, canvas, host, els, onPick) {
   }
   const ease = (x) => 1 - Math.pow(1 - Math.max(0, Math.min(1, x)), 3)
   const ciTop = nodes.ci.top.clone().add(new T.Vector3(0, 0.9, 0))
-  let checkShown = -2, t0 = null
+  let checkShown = -2, t0 = null, stepAt = null
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => widths.clear()).catch(() => {})      // a name measured before its face loaded is measured again
   const frame = (ms) => {
     raf = requestAnimationFrame(frame)
     if (document.hidden) return                                         // a tab nobody is looking at draws nothing
@@ -237,16 +239,18 @@ function buildStage(T, renderer, canvas, host, els, onPick) {
     dust[0].rotation.y = t * 0.012; dust[1].rotation.y = -t * 0.008; dust[1].position.y = Math.sin(t * 0.2) * 0.4
 
     // the change, travelling past the gates; the six checks, lit one after the other
-    const run = cur && cur.gates ? (reduce ? 1 : Math.min(1, (t * 0.19) % 1.25)) : null
+    if (stepAt == null) stepAt = t
+    const ts = t - stepAt                                               // since this step began: a change sets out from the branch, the first check is the first lit
+    const run = cur && cur.gates ? (reduce ? 1 : Math.min(1, (ts * 0.19) % 1.25)) : null
     const packetX = run != null ? gateEdge.curve.getPoint(run).x : null
-    const seq = cur && cur.checks ? (reduce ? 6 : Math.floor((t * 1.25) % 8)) : null
+    const seq = cur && cur.checks ? (reduce ? 6 : Math.floor((ts * 1.25) % 8)) : null
     const lampsLit = !cur ? -1 : seq != null ? Math.min(6, seq) : cur.checked ? 6 : 0
 
     for (const id of Object.keys(nodes)) {
       const o = nodes[id], pulse = 0.5 + 0.5 * Math.sin(t * 2.6 + o.seed)
       if (o.n.agent) {
         const done = !!cur && (o.n.gate != null && packetX != null ? o.n.p[0] <= packetX + 0.1 : o.passed || (o.on && !cur.gates))
-        o.orbMat.emissiveIntensity = done ? 0.95 + 0.25 * pulse : o.dim ? 0.06 : 0.35; o.orbMat.opacity = o.dim ? 0.3 : 1
+        o.orbMat.emissiveIntensity = done ? 0.5 + 0.12 * pulse : o.dim ? 0.05 : 0.2; o.orbMat.opacity = o.dim ? 0.3 : 1
         o.orbit.material.opacity = done ? 1 : o.dim ? 0.12 : 0.6
         o.orb.position.y = 1.14 + Math.sin(t * 1.7 + o.seed) * 0.06
         o.orbit.rotation.x = 1.15 + Math.sin(t * 0.7 + o.seed) * 0.35; o.orbit.rotation.y = t * (done ? 2.6 : 0.8) + o.seed
@@ -261,13 +265,14 @@ function buildStage(T, renderer, canvas, host, els, onPick) {
       if (o.lamps) {
         o.lamps.forEach((l, i) => {
           const onL = lampsLit >= 0 && i < lampsLit, soft = lampsLit < 0
-          l.m.emissiveIntensity = onL ? 1.0 : soft ? 0.3 : 0.04; l.m.color.setHex(shade(l.col, onL ? 0.75 : soft ? 0.45 : 0.22))
+          l.m.emissiveIntensity = onL ? 0.55 : soft ? 0.16 : 0.03; l.m.color.setHex(shade(l.col, onL ? l.tint : soft ? 0.4 : 0.2))
           l.em.opacity = o.dim && !onL ? 0.3 : 1
         })
         const now = seq != null && lampsLit > 0 ? Math.min(5, lampsLit - 1) : -1
         if (now !== checkShown && els.check) {
           checkShown = now; els.check.hidden = now < 0
           if (now >= 0) { els.check.textContent = '✓ ' + CHECKS[now].name + (lampsLit === 6 ? ' · all six' : ''); els.check.style.setProperty('--c', CHECKS[now].css) }
+          widths.delete(els.check)                                      // its words changed, and so did its width
         }
       }
       if (o.drop) {                                                     // a block coming down onto the chain while a hash is anchored
@@ -408,7 +413,7 @@ export default function Architecture() {
       </div>
       <div className="mr-key" aria-label="What each colour is">
         {Object.values(KINDS).map(k => <span key={k.name}><i style={{ background: k.css }} />{k.name}</span>)}
-        <span className="more">EACH REVIEWER AND EACH CHECK HAS A COLOUR OF ITS OWN</span>
+        <span className="more">EACH REVIEWER HAS A COLOUR OF ITS OWN</span>
       </div>
 
       <div className="mr-side">
@@ -418,7 +423,7 @@ export default function Architecture() {
             {s.routes && <p className="routes">{s.routes.map(r => <code key={r}>{r}</code>)}</p>}
           </>) : (<>
             <h3>THE WHOLE MAP</h3>
-            <p>Every piece and every join. The app runs in the trader's browser; it and the public site are static files. The API is the only piece that writes to the database or to the chain.</p>
+            <p>Every piece and every join. The app runs in the trader's browser; it and the public site are static files. Trades, their legs and their events are written by the API alone, and so is everything on the chain. A firm's own reference data (its hierarchy, legal entities and counterparties) the app writes straight to the database, under row-level security.</p>
           </>)}
         </div>
         <div className="mr-card" data-testid="mr-piece">
@@ -435,7 +440,7 @@ export default function Architecture() {
         <h3>What runs where, plainly</h3>
         <p>There is one API process. Monte Carlo and full-revaluation VaR run inside the request and are rate-limited per account; a larger book moves them to a worker without changing the engines.</p>
         <p>The hosted demo prices on public-source market data rebuilt daily and, for digital assets, on a venue's option marks refreshed every ten minutes. Rates and G10 FX vol surfaces are synthetic, scaled by realised vol, and labelled as such. A self-hosted desk loads its own data and switches the feeds off.</p>
-        <p>A release reaches production only after the checks pass on the commit that ships, and the app is built from the commit the live API reports.</p>
+        <p>A release reaches production only after the checks pass on the commit that ships, and the app is built from a commit the live API is already on, or one that leaves the API as it is.</p>
       </div>
     </div>
   )

@@ -166,8 +166,14 @@ reaches the registry is brass. A line in use takes the colour of the piece that 
 of light along it; nothing in the scene pulses outward or glows in a ring. The app stands in the middle, larger
 than the rest, and keeps its plate; every other name stands without a plate and without its second line until its
 piece is in use or picked, because there are two dozen of them. How a change ships is green, and within it each
-reviewer and each of the six checks has a colour of its own, taken from the tokens (never brass), so that eight
-figures in a row can be told apart. The names are buttons set over the canvas in the interface face, so they stay
+reviewer has a colour of its own, taken from the tokens (never brass), so that eight figures in a row can be told
+apart; a reviewer's name is the smallest step of the scale (10px) and in that colour, because eight of them share
+a row. The six checks are the change's green, each lamp a step lighter, and lit one after the other: a colour a
+reviewer has would mean two things in one row. A lit head keeps its colour and does not wash to white, so that no
+pale yellow stands beside the registry's brass. A name the step does not use is dimmed but stays readable. The
+scene's ground is its own: the grid, the slabs and their edges and the dust in the air are darker and lighter
+turns of the page's green, written in the scene and nowhere else. On a narrow stage a step names only the pieces
+it uses, and the whole map names the app, the API, the database and the registry. The names are buttons set over the canvas in the interface face, so they stay
 sharp at any size and are read by a screen reader. There is no flat view to choose; where a browser cannot draw
 the scene the names stand in a row and the steps still say what happens.
 

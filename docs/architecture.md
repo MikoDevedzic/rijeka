@@ -26,7 +26,7 @@ flowchart LR
   TG[Telegram<br/>mirror of trade cards]
   APP -- "HTTPS, Bearer JWT" --> API
   APP -- "sign-in, realtime" --> AUTH
-  APP -- "realtime (RLS)" --> PG
+  APP -- "realtime, and a firm's reference data (RLS)" --> PG
   API -- "SQLAlchemy, pooler 6543" --> PG
   API -- "verifies tokens by public key" --> AUTH
   API -- "relayer (anchor, amend, terminate)" --> CHAIN
@@ -42,7 +42,9 @@ flowchart LR
 
 **The app** (`frontend/`): React 18 with Vite, a static build on Netlify. It talks to the API with the
 user's Supabase JWT and subscribes to the `trades` table over Supabase realtime (filtered by row-level
-security) so the blotter follows bookings and confirmations without a reload. Heavy libraries
+security) so the blotter follows bookings and confirmations without a reload. A firm's own reference data (its
+hierarchy, legal entities and counterparties) the app reads and writes straight through Supabase, under row-level
+security; trades, legs and events are written by the API alone. Heavy libraries
 (three.js, ExcelJS) and the secondary pages are code-split; the first screen after sign-in is the
 blotter, the command centre and the messenger. On a screen up to 640px wide the same app shows its phone view
 (`frontend/src/lib/phone.js`, `components/layout/Phone.css`, `PhoneNav.jsx`): the home, the trades, the trade window,
