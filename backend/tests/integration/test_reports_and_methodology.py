@@ -82,7 +82,7 @@ def test_risk_report_lists_what_fixes_day_by_day_and_it_adds_up_to_the_swaps_own
     """The fixings are read from the periods the valuation made, so they must agree with a pricing of the same swap:
     the fixing 01s of a floating period's days still to come add up to notional x accrual x discount factor x 1bp
     for the share of the period that is left."""
-    from datetime import date, timedelta
+    from datetime import date
     r = client.get("/api/risk/report?live=1", headers=auth_a)
     assert r.status_code == 200, r.text[:400]
     j = r.json(); fx = j["fixings"]
