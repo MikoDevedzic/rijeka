@@ -15,12 +15,15 @@ its quotes together, so a two-year position against a five-year one nets inside 
 two. A bucket carrying under a hundredth of a trade's largest bucket on the curve is not broken into its points
 (its own figure stands), unless an uneven move of it shows that points inside it cancel. A bucket's figure is still measured by moving the bucket whole, as before; its points add up to it to first
 order. For a swap what is left is the cross-gamma of a 1bp move: 0.02% of the DV01 at five years, 0.08% at thirty
-(tests/reference/test_ref_greeks.py). For an option it is more: at 1bp a cap's points were up to 14% of a bucket
-away from it on the test book, 1% at 0.1bp and 0.1% at 0.01bp (tests/integration/test_reports_and_methodology.py).
-One par quote moved alone swings the forwards on either side of it by several basis points in opposite directions,
-which is part of it; but the cap's own bucket figure also depends on the size of the bump (618 at 1bp against 845
-a basis point at 0.01bp), which smooth convexity does not explain, and the cause is not established (docs/
-model_inventory.md). An option's points are the size of each hedge, not parts that sum. For a rate curve a point is the move
+(tests/reference/test_ref_greeks.py). For a cap, floor or collar it is more: at 1bp a cap's points were up to 14%
+of a bucket away from it on the test book, 1% at 0.1bp and 0.1% at 0.01bp (tests/integration/
+test_reports_and_methodology.py). The cause is the cap's volatility lookup (pricing/cap_floor.py lookup_cap_vol),
+which reads the surface at the strike's distance from the at-the-money forward rounded to a whole bp: a 1bp move of
+the curve re-reads the volatility and a smaller move does not, so the cap's own bucket figure depends on the size
+of the bump (618 at 1bp against 845 a basis point at 0.01bp; 914 and 907 with the volatility held), and one quote
+moved alone, which moves the at-the-money forward by a fraction of a bp, sometimes carries the smile's move and
+sometimes not (docs/model_inventory.md). Until the lookup is continuous a cap's points are the size of each hedge,
+not parts that sum. For a rate curve a point is the move
 ipv.inputs.bumped makes; on a surface the ladder moves a tenor's rows together, as its buckets do, where the
 price verification moves each row. A funding level's FUND01 has one quote and no points."""
 from __future__ import annotations

@@ -16,11 +16,12 @@ bucket, and a figure did not say which instrument to hedge with.
 - **Nothing that was there moves.** A bucket is still measured by moving the bucket whole, so the totals, the
   limits, the VaR and the P&L explain are as they were. A swap's points add up to their bucket to within the
   cross-gamma of a basis point (0.02% of DV01 at five years, 0.08% at thirty). An option's do not at 1bp: on
-  the test book a cap's were up to 14% of a bucket away, 1% at a tenth of the bump and 0.1% at a hundredth. One
-  quote moved alone swings the forwards either side of it, which is part of it; the cap's own bucket figure
-  also depends on the size of the bump (618 at 1bp, 845 a basis point at 0.01bp), which was so before this
-  release and whose cause is not established (`docs/model_inventory.md`). An option's points are the size of
-  each hedge, not parts that sum.
+  the test book a cap's were up to 14% of a bucket away, 1% at a tenth of the bump and 0.1% at a hundredth. The
+  cause is older than this release: a cap's volatility is read at the strike's distance from the at-the-money
+  forward rounded to a whole basis point, so a 1bp move of the curve re-reads the volatility and a smaller
+  move does not (the cap's own bucket figure is 618 at 1bp and 845 a basis point at 0.01bp; 914 and 907 with
+  the volatility held). Not changed here: it is a pricing change for caps, floors and collars. Until then
+  their points are the size of each hedge, not parts that sum.
 - **Checked.** A single quote's figure against a QuantLib rebootstrap of the same move: 74 comparisons, the worst
   0.034% of a trade's DV01. The reference suite is 521 comparisons. Methodology v1.22 (§14).
 - **Market risk page.** Under the ladder by bucket, the ladder at each quoted tenor: every quote that carries
