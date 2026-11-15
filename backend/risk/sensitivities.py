@@ -87,9 +87,10 @@ def trade_ladder(db: Session, user: dict, trade, d: date, mkt: Market, valuer: V
             "theta": base.get("theta"), "fallback": base.get("fallback", [])}
 
 
-def book_ladder(db: Session, user: dict, trades, d: date, mkt: Market, fx) -> dict[str, Any]:
-    """Every live trade's ladder, plus totals in the reporting currency (fx: ccy -> usd rate)."""
-    valuer = Valuer(db, user)
+def book_ladder(db: Session, user: dict, trades, d: date, mkt: Market, fx, valuer: Valuer = None) -> dict[str, Any]:
+    """Every live trade's ladder, plus totals in the reporting currency (fx: ccy -> usd rate). `valuer` is shared with
+    whatever else reads the same valuations in the same report (the fixing ladder), so a trade is priced once."""
+    valuer = valuer or Valuer(db, user)
     rows, problems = [], []
     for t in trades:
         if t.status not in LIVE:

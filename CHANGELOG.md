@@ -3,6 +3,48 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.20). Commits on `main` are the detail.
 
+## 0.38.0 · 14 November 2026
+
+**Fixings: what resets, day by day.** The owner: "we have to have fixing. traders hadge this all the time. They
+have to know how much is resetting and what index for each date/date. on dashboard we can show net fixing...but
+market risk dashboard has to have this fixing risk in there."
+
+- **Market risk has a FIXINGS panel.** For each index and each coming business day: the notional whose floating
+  rate is set by that day's fixing (what the desk receives, what it pays, the net), and FIXING 01, what one basis
+  point on that one fixing is worth. A picture an index of the net over the next 92 days; the next ten business
+  days as a table, every day on request. Under it, SETTLEMENT FIXINGS: each non-deliverable forward (a currency
+  NDF, a digital-asset forward) on the date it fixes, by pair and source, with the notional that fixes and the
+  value of 1 % on the price.
+- **The home's first tab is FIXINGS**: what resets next, net by index, with the fixing 01.
+- **How it is measured** (`backend/risk/fixings.py`, in the risk report as `fixings`). Every floating period the
+  pricer values is compounded in arrears from an overnight index, so it resets on every business day it runs
+  over, each fixing counting for the calendar days to the next (a Friday's for three). Fixing 01 = notional × the
+  period's accrual a day × the days the fixing counts for × the discount factor to the payment × 1bp, signed + where
+  the desk receives the floating rate. Over a period's days it adds up to notional × accrual × discount factor ×
+  1bp. It reads the periods of the valuation the ladder has already made, so it costs no pricing and a trade the
+  desk values is a trade whose fixings are listed.
+- **Checked against the pricer.** On the local stack the fixing 01s of a booked swap's floating leg add up to the
+  same figure worked from the pricer's own cashflows (4,579.95 on both sides for a 10m five-year swap). That check
+  found the first version dropping the opening days of a period that starts on a weekend; such a period is opened
+  by the fixing of the business day before it.
+
+What it is not, and what the check of "does it all feed" found:
+
+- **Caps, floors, swaptions and options are not in it**, and the panel counts them: an option on a fixing is a
+  delta, not a notional. Option expiries are not listed.
+- **Compounding between days is left out** of fixing 01 (a fixing's effect on the interest on earlier days'
+  interest): about 1 % of the figure at 5 % over a quarter.
+- **An index is the curve a leg is projected on** (USD SOFR, EUR ESTR): a floating leg carries no index name of its
+  own, and there are no term rates.
+- **A currency NDF's fixing date does not reach the valuation**: it is valued to its settlement date, and where the
+  trade names no fixing date the panel lists it on its settlement date and says so. A currency fixing that falls on
+  a weekend is flagged. There is no store of currency fixings (only BTC, ETH and SOL have one), so a currency NDF
+  is not fixed on its fixing date.
+- **A cashflow has no "fixed" state**: realised overnight rates are read from the stored overnight quote of each
+  day, not from a table of fixings.
+- A stored report from before this release has no fixings; the home asks for the report again once, and the Risk
+  page shows them from its next run.
+
 ## 0.37.0 · 14 November 2026
 
 **Every curve has a limit, and the trader's home reads a limit on both sides: flat in the middle, short one way,

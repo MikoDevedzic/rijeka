@@ -17,6 +17,7 @@ from pnl.market import Market
 from pnl.report import REPORTING_CCY, fx_to_usd
 from risk import history as H
 from risk import limits as L
+from risk import fixings as F
 from risk import sensitivities as S
 from risk import stress as ST
 from risk import var as V
@@ -97,7 +98,9 @@ def report(db: Session, user: dict, d: Optional[date] = None) -> dict[str, Any]:
     mkt = Market(db, uid, d)
     fx = lambda ccy: fx_to_usd(mkt, ccy)
     trades = db.query(Trade).filter(Trade.user_id == uid).all()
-    lad = S.book_ladder(db, user, trades, d, mkt, fx)
+    from pnl.explain import Valuer
+    valuer = Valuer(db, user)                       # one valuation of each trade, for the ladder and for the fixings
+    lad = S.book_ladder(db, user, trades, d, mkt, fx, valuer)
     firm_id = firm_of(db, uid)
     st = settings(db, firm_id)
     tpl = template_uid(db)
@@ -112,6 +115,11 @@ def report(db: Session, user: dict, d: Optional[date] = None) -> dict[str, Any]:
            "scenarios": [{k: s[k] for k in ("id", "name", "group")} for s in ST.SCENARIOS],
            "moves": moves, "history": H.status(db, tpl) if tpl else {}, "firm_id": str(firm_id) if firm_id else None,
            "generated_at": datetime.now(timezone.utc).isoformat()}
+    try:
+        rep["fixings"] = F.book_fixings(db, user, trades, d, mkt, fx, valuer)
+    except Exception as e:              # noqa: BLE001 — the fixing ladder must not cost the day's risk report
+        db.rollback(); log.info("risk: fixings failed: %s", e)
+        rep["fixings"] = {"asof": d.isoformat(), "resets": [], "by_index": [], "settlements": [], "not_covered": {}, "problems": [{"trade_ref": None, "reason": str(e)[:160]}]}
     lims = L.list_limits(db, firm_id)
     rep["limits"] = L.evaluate(lims, rep)
     rep["standards"] = L.standards(lims)             # the size a curve is limited at until it has a limit of its own

@@ -104,7 +104,7 @@ describe("the trader's home: the risk factors", () => {
 
 describe("the trader's home: a stored report that is not the book as it stands", () => {
   const live = (id, at = '2026-11-13T10:00:00Z') => ({ id, trade_ref: `TRD-${id}`, status: 'CONFIRMED', created_at: at })
-  const rep = { date: '2026-11-13', generated_at: '2026-11-13T12:00:00Z', moves: null, ladder: { problems: [{ trade_ref: 'TRD-3' }] }, ladder_rows: [{ trade_id: 1 }, { trade_id: 2 }] }
+  const rep = { date: '2026-11-13', generated_at: '2026-11-13T12:00:00Z', moves: null, fixings: null, ladder: { problems: [{ trade_ref: 'TRD-3' }] }, ladder_rows: [{ trade_id: 1 }, { trade_id: 2 }] }
   it('is the book when every live trade is in it or named as one it could not value', () => {
     expect(staleness(rep, [live(1), live(2), live(3), { id: 9, status: 'CANCELLED', created_at: '2026-11-13T13:00:00Z' }], '2026-11-13')).toBe(null)
     expect(staleness(null, [live(1)])).toBe(null)
@@ -117,6 +117,7 @@ describe("the trader's home: a stored report that is not the book as it stands",
   it('is behind the market when the curves have a later date, and older when it was stored before it carried the moves', () => {
     expect(staleness(rep, [live(1), live(2)], '2026-11-14')).toBe('market')
     expect(staleness({ ...rep, moves: undefined }, [live(1), live(2)])).toBe('older')
+    expect(staleness({ ...rep, fixings: undefined }, [live(1), live(2)]), 'stored before the report carried the fixings').toBe('older')
   })
 })
 

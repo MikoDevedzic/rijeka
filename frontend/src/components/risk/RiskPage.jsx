@@ -10,6 +10,7 @@ import { useNavigate } from 'react-router-dom'
 import { getSessionMaybe } from '../../lib/session'
 import { productLabel } from '../../lib/labels'
 import RiskNav from './RiskNav'
+import Fixings from './Fixings'
 import '../pnl/PnlPage.css'
 import './RiskPage.css'
 
@@ -135,6 +136,11 @@ export default function RiskPage() {
             {!v.enough && <div className="pnl-foot"><em>Too little history for a meaningful VaR. The backfill fetches two years from public sources (Configurations › Market Risk › VaR settings).</em></div>}
           </section>
         </div>
+
+        <section className="pnl-panel" data-testid="risk-fixings">
+          <header><span>FIXINGS · WHAT RESETS, DAY BY DAY</span><span className="pnl-sub">net notional by index · {rep.reporting_ccy} · fixing 01 is 1bp on that day's fixing{rep.fixings?.to ? ` · to ${fmtD(rep.fixings.to)}` : ''}</span></header>
+          <Fixings fx={rep.fixings} />
+        </section>
 
         <section className="pnl-panel">
           <header><span>BACKTEST · YESTERDAY'S VAR AGAINST TODAY'S P&amp;L</span>

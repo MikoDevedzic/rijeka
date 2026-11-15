@@ -134,7 +134,8 @@ def value(db: Session, user: dict, trade, val_date: date, mkt: Market) -> dict[s
     p = price_trade(req, db, user)
     return {"npv": float(p.get("npv") or 0.0), "ccy": (p.get("npv_ccy") or p.get("currency") or trade.notional_ccy or "USD").upper(),
             "ir01": p.get("ir01"), "ir01_disc": p.get("ir01_disc"), "spot01": None, "theta": p.get("theta"),
-            "asof": {c: mkt.snapshot_date(c) for c in ids}, "fallback": fallback}
+            "asof": {c: mkt.snapshot_date(c) for c in ids}, "fallback": fallback,
+            "legs": p.get("legs")}          # the periods as they were valued: what the fixing ladder reads (risk/fixings.py)
 
 
 SWAPTIONS = ("IR_SWAPTION",)

@@ -60,8 +60,16 @@ test('the home on a monitor: the statement, the risk by tenor, what needs you an
   const trades = home.getByTestId('th-trades')
   await expect(trades.locator('tbody tr').first()).toContainText(/PENDING|CONFIRMED|LIVE/)
   const tabs = home.getByTestId('th-tabs')
-  await expect(tabs.locator('.th-tabs > [role=tab]')).toHaveText(['WHAT MOVED', 'ON CHAIN', 'RATES', 'WEEK AHEAD', 'NEWS', 'BRIEF'])
-  await expect(tabs.getByRole('tab', { name: 'WHAT MOVED' })).toHaveAttribute('aria-selected', 'true')
+  await expect(tabs.locator('.th-tabs > [role=tab]')).toHaveText(['FIXINGS', 'WHAT MOVED', 'ON CHAIN', 'RATES', 'WEEK AHEAD', 'NEWS', 'BRIEF'])
+  // what resets next is the first thing shown: the swap just booked resets on its curve's fixing every business day
+  await expect(tabs.getByRole('tab', { name: 'FIXINGS' })).toHaveAttribute('aria-selected', 'true')
+  const fix = tabs.getByTestId('fixings')
+  await expect(fix.locator('tbody tr').first()).toContainText('USD SOFR')
+  await expect(fix.locator('tbody tr').first().locator('td').nth(2), 'the net notional that resets, in millions with its sign').toHaveText(/^[+−][\d,.]+m$/)
+  await expect(fix.locator('tbody tr').first().locator('td').nth(3), 'and what 1bp on that fixing is worth').toHaveText(/^[+−][\d,]+(\.\d)?$/)
+  await expectNoHorizontalOverflow(tabs, 'the fixings in their tab')
+  await tabs.scrollIntoViewIfNeeded(); await shot(tabs, 'tab-fixings')
+  await tabs.getByRole('tab', { name: 'WHAT MOVED' }).click()
   // what the old home's LIFECYCLE card listed: the latest confirmations, each with its proof or its state
   await tabs.getByRole('tab', { name: 'ON CHAIN' }).click()
   await expect(tabs.getByTestId('th-anchors').locator('li').first().or(tabs.locator('.dh-text'))).toBeVisible({ timeout: 30_000 })
@@ -301,5 +309,39 @@ test('a curve has a limit from its first trade; its own is set on the Limits pag
   await stdIr.getByRole('button', { name: 'AS SHIPPED', exact: true }).click()
   await expect(chip).toHaveText('AS SHIPPED', { timeout: 30_000 })
   await expect(row.locator('td').nth(2)).toHaveText(say(shipped))
+  expectClean(problems)
+})
+
+test('the Market risk page lists what fixes, day by day: each index, the net that resets, the fixing 01, and the forwards that fix on a date', async ({ app, problems }) => {
+  test.setTimeout(240_000)
+  await app.setViewportSize(MONITOR)
+  await bookedSwap(app)
+  await app.goto('/risk')
+  const panel = app.getByTestId('risk-fixings')
+  await expect(panel).toContainText('FIXINGS · WHAT RESETS, DAY BY DAY', { timeout: 120_000 })
+  // the stored report may be from before the fixings were part of it: run it, as the page's own button does
+  if (!(await panel.getByTestId('fixings').count())) { await app.getByRole('button', { name: /RUN NOW|RECOMPUTE|RUN/ }).first().click() }
+  const fix = panel.getByTestId('fixings')
+  await expect(fix).toBeVisible({ timeout: 180_000 })
+  // a picture an index, and the days as a table
+  await expect(fix.locator('.fxg-ix[data-index="USD_SOFR"] svg rect').first()).toBeVisible()
+  const rows = fix.locator('table').first().locator('tbody tr')
+  await expect(rows.first()).toContainText(/(Mon|Tue|Wed|Thu|Fri) \d\d [A-Z][a-z]{2}/)
+  expect(await rows.count(), 'the next ten business days, a row an index').toBeGreaterThanOrEqual(10)
+  for (const h of ['FIXING', 'INDEX', 'RECEIVE', 'PAY', 'NET RESETTING', 'FIXING 01', 'TRADES']) await expect(fix.locator('table').first().locator('thead')).toContainText(h)
+  // a day's net is what is received less what is paid, as written
+  const cells = await rows.first().locator('td').allInnerTexts()
+  const m = (t) => (t.startsWith('−') ? -1 : 1) * Number(t.replace(/[^0-9.]/g, '')) * (t.endsWith('m') ? 1 : 1e-6)
+  expect(Math.abs(m(cells[2]) + m(cells[3]) - m(cells[4])), `${cells.slice(2, 5).join(' ')}`).toBeLessThanOrEqual(0.11)
+  // every day of the horizon on request
+  const more = fix.getByRole('button', { name: /^ALL \d+ DAYS$/ })
+  const before = await rows.count()
+  await more.click()
+  expect(await rows.count()).toBeGreaterThan(before)
+  await fix.getByRole('button', { name: 'THE NEXT 10 DAYS' }).click()
+  expect(await rows.count()).toBe(before)
+  await expect(fix).toContainText('a Friday\'s fixing counts for three days')
+  await expectNoHorizontalOverflow(panel, 'the fixings on the Market risk page')
+  await panel.scrollIntoViewIfNeeded(); await shot(panel, 'risk-fixings')
   expectClean(problems)
 })

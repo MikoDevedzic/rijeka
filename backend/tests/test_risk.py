@@ -199,3 +199,73 @@ def test_a_standard_limit_has_no_row_to_remove_and_a_kind_that_is_not_one_sets_n
     assert set(std) == set(L.STANDARD_SIZES) and all(v["built_in"] for v in std.values())
     assert all(not e["metric"].upper().startswith("STANDARD:") for e in L.evaluate(lims, _book()))
     assert "XAU" in L._FIAT and [k for k, m in L.factor_metrics({"ladder": {"spot01": {"XAU": 1.0, "SOL": 1.0}}})] == ["FX01", "CRY01"]
+
+
+# ── fixings: what resets, day by day ─────────────────────────────────────────
+
+from risk import fixings as F          # noqa: E402
+
+
+def test_a_fixing_counts_for_the_days_to_the_next_business_day_and_none_is_listed_for_a_day_already_fixed():
+    """Friday 6 Nov 2026 to Friday 13 Nov, New York: Wednesday 11 Nov is Veterans Day. Seen from Monday 9 Nov."""
+    days = F.fixing_days(date(2026, 11, 6), date(2026, 11, 13), date(2026, 11, 9), date(2027, 1, 1), "NEW_YORK")
+    assert days == [(date(2026, 11, 9), 1), (date(2026, 11, 10), 2), (date(2026, 11, 12), 1)]              # Tuesday's fixing carries the holiday
+    # seen from the Saturday, Friday's fixing (which carries the weekend) is made: the first to come is Monday's
+    assert F.fixing_days(date(2026, 11, 6), date(2026, 11, 13), date(2026, 11, 7), date(2027, 1, 1), "NEW_YORK")[0] == (date(2026, 11, 9), 1)
+    # the whole period from its start: seven calendar days in all, and the last fixing stops at the period's end
+    whole = F.fixing_days(date(2026, 11, 6), date(2026, 11, 13), date(2026, 11, 1), date(2027, 1, 1), "NEW_YORK")
+    assert whole[0] == (date(2026, 11, 6), 3) and sum(k for _, k in whole) == 7
+    assert F.fixing_days(date(2026, 11, 6), date(2026, 11, 13), date(2026, 11, 6), date(2026, 11, 9), "NEW_YORK") == [(date(2026, 11, 6), 3), (date(2026, 11, 9), 1)]   # nothing past the horizon
+    # a period whose dates are not adjusted and that opens on a Saturday (17 Feb 2029, with Presidents' Day on the Monday):
+    # its first three days are set by Friday's fixing, the day before it opens, and every day of the period is counted
+    opens = F.fixing_days(date(2029, 2, 17), date(2029, 5, 17), date(2026, 11, 2), date(2100, 1, 1), "NEW_YORK")
+    assert opens[0] == (date(2029, 2, 16), 3) and opens[1] == (date(2029, 2, 20), 1) and sum(k for _, k in opens) == (date(2029, 5, 17) - date(2029, 2, 17)).days
+    # seen from that Saturday itself, Friday's fixing is made: the three days are not listed
+    assert F.fixing_days(date(2029, 2, 17), date(2029, 5, 17), date(2029, 2, 17), date(2100, 1, 1), "NEW_YORK")[0] == (date(2029, 2, 20), 1)
+
+
+def test_a_periods_fixing_01s_add_up_to_one_basis_point_on_the_period_and_are_signed_by_the_side_of_the_float():
+    """100m, a quarter on ACT/360 (dcf 92/360), paid at a discount factor of 0.99: one bp on the period's rate is
+    100e6 x 92/360 x 0.99 x 1e-4 = 2,530.00. Worked by hand; each day is its share of the 92 days."""
+    cf = {"period_start": "2026-11-16", "period_end": "2027-02-16", "notional": 100e6, "dcf": 92 / 360, "df": 0.99, "cashflow_type": "COUPON"}
+    rec = F.period_resets(cf, {"direction": "RECEIVE", "currency": "USD", "leg_type": "FLOAT"}, "USD_SOFR", "NEW_YORK", date(2026, 11, 1), date(2027, 12, 31))
+    assert abs(sum(r["fixing01"] for r in rec) - 2530.0) < 1e-6 and sum(r["days"] for r in rec) == 92
+    assert all(r["notional"] == 100e6 and r["index"] == "USD_SOFR" and r["ccy"] == "USD" for r in rec)
+    first = rec[0]
+    assert first["date"] == date(2026, 11, 16) and first["days"] == 1 and abs(first["fixing01"] - 100e6 / 360 * 0.99 * 1e-4) < 1e-9     # 27.50 a day
+    fri = next(r for r in rec if r["date"] == date(2026, 11, 20))
+    assert fri["days"] == 3 and abs(fri["fixing01"] - 3 * first["fixing01"]) < 1e-9                                                       # a Friday carries the weekend
+    pay = F.period_resets(cf, {"direction": "PAY", "currency": "USD", "leg_type": "OIS"}, "USD_SOFR", "NEW_YORK", date(2026, 11, 1), date(2027, 12, 31))
+    assert abs(sum(r["fixing01"] for r in pay) + 2530.0) < 1e-6 and pay[0]["notional"] == -100e6                                          # paying the float: short the fixing
+    # part way through: only the days still to fix
+    later = F.period_resets(cf, {"direction": "RECEIVE", "currency": "USD", "leg_type": "FLOAT"}, "USD_SOFR", "NEW_YORK", date(2027, 2, 12), date(2027, 12, 31))
+    assert [(r["date"], r["days"]) for r in later] == [(date(2027, 2, 12), 4)]                                                              # Friday, over the weekend and Presidents' Day, to the period's end
+    assert F.period_resets({**cf, "dcf": 0}, {"direction": "PAY"}, "X", "NEW_YORK", date(2026, 11, 1), date(2027, 1, 1)) == []
+
+
+def test_a_leg_that_fixes_once_a_period_is_one_reset_and_a_fixed_leg_is_none():
+    cf = {"period_start": "2026-11-16", "period_end": "2027-02-16", "fixing_date": "2026-11-12", "notional": 50e6, "dcf": 0.25, "df": 0.98, "cashflow_type": "COUPON"}
+    one = F.period_resets(cf, {"direction": "RECEIVE", "currency": "EUR", "leg_type": "CMS"}, "EUR_ESTR", "TARGET", date(2026, 11, 2), date(2026, 12, 31))
+    assert len(one) == 1 and one[0]["date"] == date(2026, 11, 12) and abs(one[0]["fixing01"] - 50e6 * 0.25 * 0.98 * 1e-4) < 1e-9
+    assert F.period_resets(cf, {"direction": "RECEIVE", "currency": "EUR", "leg_type": "CMS"}, "EUR_ESTR", "TARGET", date(2026, 11, 13), date(2026, 12, 31)) == []      # made already
+    legs = [{"leg_id": "f", "leg_type": "FIXED", "direction": "PAY", "currency": "USD", "cashflows": [cf]},
+            {"leg_id": "o", "leg_type": "OIS", "direction": "RECEIVE", "currency": "USD", "cashflows": [cf, {**cf, "cashflow_type": "CAPLET"}]}]
+    rows = F.trade_resets(legs, {"o": {"forecast_curve_id": "usd_sofr"}}, "USD_LIBOR", date(2026, 11, 16), date(2026, 11, 20))
+    assert {r["index"] for r in rows} == {"USD_SOFR"} and [r["date"].day for r in rows] == [16, 17, 18, 19, 20]                              # the floating leg's coupon only, on its own curve
+    assert F.trade_resets(legs[1:], {}, "USD_SOFR", date(2026, 11, 16), date(2026, 11, 16))[0]["index"] == "USD_SOFR"                        # no leg record: the trade's curve
+
+
+def test_a_non_deliverable_forward_fixes_once_on_its_fixing_date_signed_by_its_side():
+    class T:                                                  # noqa: D401
+        terms = {"fixing_date": "2026-12-11"}
+    buy = F.settlement_fixing(T, {"notional": 250.0, "direction": "BUY", "settle": date(2026, 12, 15)}, "BTCUSD", "CME CF BRR", 22900.0, date(2026, 11, 13))
+    assert buy == {"date": date(2026, 12, 11), "pair": "BTCUSD", "source": "CME CF BRR", "unit": "BTC", "units": 250.0, "spot01": 22900.0, "note": ""}
+    sell = F.settlement_fixing(T, {"notional": 5e6, "direction": "SELL", "fixing_date": date(2027, 1, 4)}, "EURUSD", "", -500.0, date(2026, 11, 13))
+    assert sell["units"] == -5e6 and sell["date"] == date(2027, 1, 4) and sell["unit"] == "EUR"                                              # the terms' own date first
+    assert F.settlement_fixing(T, {"notional": 1.0, "direction": "BUY"}, "BTCUSD", "", None, date(2026, 12, 12)) is None                    # fixed already
+    # a trade that names no fixing date is listed on its settlement date and says so; a currency's on a Saturday says that too
+    class N:                                                  # noqa: D401
+        terms = {}
+    sat = F.settlement_fixing(N, {"notional": 1e7, "direction": "BUY", "settle": date(2027, 2, 13)}, "EURUSD", "WM/Reuters 4pm London", 1.0, date(2026, 11, 2))
+    assert sat["date"] == date(2027, 2, 13) and sat["note"] == "no fixing date on the trade: its settlement date; a weekend: no currency fixing is published"
+    assert F.settlement_fixing(N, {"notional": 10.0, "direction": "BUY", "fixing_date": date(2027, 2, 13)}, "BTCUSD", "CME CF BRR", 1.0, date(2026, 11, 2))["note"] == ""      # a digital asset fixes every day

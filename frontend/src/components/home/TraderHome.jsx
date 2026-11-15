@@ -13,6 +13,8 @@ import { useChatStore, selectUnreadTotal } from '../../store/useChatStore'
 import PolicyPath from './PolicyPath'
 import WeekAhead from './WeekAhead'
 import BookBrief from './BookBrief'
+import Fixings from '../risk/Fixings'
+import { any as anyFixing } from '../risk/fixing-ladder'
 import { BUCKETS, BUCKET_LABEL, bucketReach, factors, lanes, canDay, peak, carry, staleness, limitMarks, standing, railLayout, railAt, factorLimits, limitsOf, shownOn, against, scene, canLimit, statement, moved, fmt0, signed, tone } from './trader-home'
 import './TraderHome.css'
 
@@ -193,7 +195,7 @@ export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], 
             : <div className="lf-empty">{d.loading ? 'Reading the book…' : 'No trades yet. Book one from the blotter.'}</div>}
           {trades.length > 7 && <div className="th-note">the latest 7 of {trades.length}</div>}
         </div>
-        <Tabs pnlOn={pnlOn} pnl={pnl} news={d.news || []} loading={d.loading} hasTrades={trades.length > 0} life={life} explorer={explorer} demo={demo} chainEmpty={chainEmpty} navigate={navigate} />
+        <Tabs pnlOn={pnlOn} pnl={pnl} fixings={riskOn ? rep?.fixings : null} news={d.news || []} loading={d.loading} hasTrades={trades.length > 0} life={life} explorer={explorer} demo={demo} chainEmpty={chainEmpty} navigate={navigate} />
       </section>
 
       <div className="th-chain" data-testid="th-chain">
@@ -501,9 +503,10 @@ function Factors({ on, rep, list, marks, fl, any, navigate }) {
   )
 }
 
-function Tabs({ pnlOn, pnl, news, loading, hasTrades, life, explorer, demo, chainEmpty, navigate }) {
+function Tabs({ pnlOn, pnl, fixings, news, loading, hasTrades, life, explorer, demo, chainEmpty, navigate }) {
   const mv = moved(pnl.data)
-  const tabs = [pnlOn && hasTrades && ['moved', 'WHAT MOVED'], ['chain', 'ON CHAIN'], ['rates', 'RATES'], ['week', 'WEEK AHEAD'], ['news', 'NEWS'], hasTrades && ['brief', 'BRIEF']].filter(Boolean)
+  // what fixes next is first where the book has anything that fixes: it is what is hedged day to day
+  const tabs = [anyFixing(fixings) && ['fix', 'FIXINGS'], pnlOn && hasTrades && ['moved', 'WHAT MOVED'], ['chain', 'ON CHAIN'], ['rates', 'RATES'], ['week', 'WEEK AHEAD'], ['news', 'NEWS'], hasTrades && ['brief', 'BRIEF']].filter(Boolean)
   const [tab, setTab] = useState(null)
   const cur = tabs.some(t => t[0] === tab) ? tab : tabs[0][0]
   const s = pnl.data, anchors = life.data?.anchors || []
@@ -513,6 +516,10 @@ function Tabs({ pnlOn, pnl, news, loading, hasTrades, life, explorer, demo, chai
         {tabs.map(([k, l]) => <button key={k} role="tab" aria-selected={cur === k} className={`tbw-tab${cur === k ? ' is-active' : ''}`} onClick={() => setTab(k)}>{l}</button>)}
       </div>
       <div className="th-tabbody" role="tabpanel" data-tab={cur}>
+        {cur === 'fix' && <>
+          <div className="th-sub">what resets next · net notional by index, and 1bp on that day&apos;s fixing · USD</div>
+          <Fixings fx={fixings} compact onOpen={() => navigate('/risk')} />
+        </>}
         {cur === 'moved' && (
           !s ? <div className="lf-empty">{pnl.err ? `P&L unavailable (${pnl.err})` : 'Marking the book…'}</div>
           : <>

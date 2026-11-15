@@ -104,7 +104,7 @@ export function carry(rep) {
 const LIVE = new Set(['PENDING', 'CONFIRMED', 'LIVE'])           // backend/pnl/explain.py LIVE: what the ladder values
 export function staleness(rep, trades = [], marketDate = null) {
   if (!rep || !rep.date) return null
-  if (rep.moves === undefined) return 'older'
+  if (rep.moves === undefined || rep.fixings === undefined) return 'older'          // stored before the report carried the moves, or the fixings
   if (marketDate && String(marketDate).slice(0, 10) > String(rep.date).slice(0, 10)) return 'market'
   const live = (trades || []).filter(t => LIVE.has(t.status))
   const seen = new Set((rep.ladder_rows || []).map(r => String(r.trade_id)))
