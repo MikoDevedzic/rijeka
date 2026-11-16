@@ -57,8 +57,13 @@ def _fresh_user() -> None:
             c.execute(sa.text("DELETE FROM module_events WHERE firm_id = :f"), {"f": f})
             c.execute(sa.text("DELETE FROM firm_leis WHERE firm_id = :f"), {"f": f})
             c.execute(sa.text("DELETE FROM firms WHERE id = :f"), {"f": f})
+        # the desk, the book and the ticket's defaults of an earlier run too (the local database is kept between runs):
+        # a workspace is given them only when it has none
+        for kind in ("book", "desk", "firm"):
+            c.execute(sa.text("DELETE FROM org_nodes WHERE user_id = :u AND node_type = :k"), {"u": NEW_USER, "k": kind})
         c.execute(sa.text("""INSERT INTO auth.users (id, aud, role, email, raw_app_meta_data, raw_user_meta_data)
-                             VALUES (:id, 'authenticated', 'authenticated', :e, '{}'::jsonb, CAST(:m AS jsonb)) ON CONFLICT (id) DO NOTHING"""),
+                             VALUES (:id, 'authenticated', 'authenticated', :e, '{}'::jsonb, CAST(:m AS jsonb))
+                             ON CONFLICT (id) DO UPDATE SET raw_user_meta_data = EXCLUDED.raw_user_meta_data"""),
                   {"id": NEW_USER, "e": NEW_EMAIL, "m": '{"role": "trader"}'})
         c.execute(sa.text("""INSERT INTO profiles (id, trader_id, role, email, full_name, is_active) VALUES (:id, :t, 'trader', :e, 'New Desk', true)
                              ON CONFLICT (id) DO UPDATE SET role = 'trader'"""), {"id": NEW_USER, "t": NEW_TRADER, "e": NEW_EMAIL})
@@ -94,6 +99,9 @@ def test_a_new_sign_up_starts_on_the_launch_set_and_can_switch_the_rest_on(clien
     on = {k for k, v in j["modules"].items() if v}
     assert j["preset"] == "LAUNCH" and j["source"] == "firm" and on == {"CHAIN_CONFIRM", "XVA", "PROMETHEUS", "NEWS"} and j["view"] == "launch"
     assert j["can_edit"] is True and j["events"][0]["preset"] == "LAUNCH" and j["events"][0]["note"] == "new workspace"
+    # its one desk and book name no asset class (rates, currencies and digital assets are booked on one ticket), and the ticket starts on them
+    d = client.get("/api/me/booking-defaults", headers=new).json()
+    assert d["desks"] == ["TRADING"] and d["books"] == ["MAIN"] and (d["default_desk"], d["default_book"]) == ("TRADING", "MAIN")
     # signing in again does not reset what the owner then chose
     r = client.put("/api/modules", json={"modules": {**j["modules"], "PNL": True}}, headers=new)
     assert r.status_code == 200 and r.json()["modules"]["PNL"] and r.json()["preset"] == "CUSTOM"

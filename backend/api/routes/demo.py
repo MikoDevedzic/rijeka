@@ -68,6 +68,13 @@ _COPY_LATEST_PER = {
 _LICENSED_SOURCE_SQL = "upper(coalesce(source, '')) NOT LIKE 'BLOOMBERG%' AND upper(coalesce(source, '')) NOT LIKE 'BBG%'"
 
 
+# The desk and the book a new workspace starts with. They name no asset class: the workspace books rates, currencies
+# and digital assets on its one ticket, and a desk called RATES put the last two under a rates desk in every roll-up.
+# Only a new workspace gets them; an existing one keeps what it has, and its owner renames either under Configurations.
+FIRST_DESK = "TRADING"
+FIRST_BOOK = "MAIN"
+
+
 def enabled() -> bool:
     return os.getenv("RIJEKA_DEMO_PROVISION", "1").strip().lower() not in ("0", "false", "no", "off")
 
@@ -243,14 +250,14 @@ def provision(db: Session = Depends(get_db), user: dict = Depends(verify_token))
     # 3b. A desk and a book, so P&L rolls up somewhere other than UNASSIGNED; the ticket starts on them
     if db.query(OrgNode).filter(OrgNode.user_id == uid).first() is None:
         firm_node = OrgNode(id=uuid.uuid4(), parent_id=None, name=f"{trader} (DEMO)", node_type="firm", is_active=True, sort_order=0, created_by=uid, user_id=uid)
-        desk_node = OrgNode(id=uuid.uuid4(), parent_id=firm_node.id, name="RATES", node_type="desk", is_active=True, sort_order=0, created_by=uid, user_id=uid)
-        book_node = OrgNode(id=uuid.uuid4(), parent_id=desk_node.id, name="G10 RATES", node_type="book", is_active=True, sort_order=0, created_by=uid, user_id=uid)
+        desk_node = OrgNode(id=uuid.uuid4(), parent_id=firm_node.id, name=FIRST_DESK, node_type="desk", is_active=True, sort_order=0, created_by=uid, user_id=uid)
+        book_node = OrgNode(id=uuid.uuid4(), parent_id=desk_node.id, name=FIRST_BOOK, node_type="book", is_active=True, sort_order=0, created_by=uid, user_id=uid)
         # one at a time: a batched insert trips the UUID sentinel check on this driver
         for n in (firm_node, desk_node, book_node):
             db.add(n); db.flush()
         db.execute(text("UPDATE auth.users SET raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || "
-                        "jsonb_build_object('default_desk', 'RATES', 'default_book', 'G10 RATES') WHERE id = :id AND "
-                        "coalesce(raw_user_meta_data->>'default_desk', '') = ''"), {"id": uid})
+                        "jsonb_build_object('default_desk', CAST(:d AS text), 'default_book', CAST(:b AS text)) WHERE id = :id AND "
+                        "coalesce(raw_user_meta_data->>'default_desk', '') = ''"), {"id": uid, "d": FIRST_DESK, "b": FIRST_BOOK})
         created["hierarchy"] = True
 
     # 4. Market data
