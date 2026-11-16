@@ -52,6 +52,11 @@ test('methodology: the system page follows a trade, a change and the clock, name
   await expect(app.getByTestId('mr-story-change')).toHaveAttribute('aria-pressed', 'true')
   await expect(say).toContainText('1 · PROPOSE')
   await expect(app.getByTestId('mr-tour')).toHaveText('▶ FOLLOW A CHANGE')
+  // a change starts with the product lead's ranking and the project manager's record: both are named at the first step
+  await expect(say).toContainText('The product lead ranks')
+  for (const id of ['patrick', 'petra']) await expect(app.getByTestId(`mr-piece-${id}`), `${id} is drawn`).toBeVisible()
+  await app.waitForTimeout(600)
+  await stage.screenshot({ path: 'e2e/.out/shots/system-propose.png' })
   await app.getByTestId('mr-step-c2').click()
   await expect(say).toContainText('2 · THE GATES')
   const REVIEWERS = ['quinn', 'ada', 'emmy', 'iris', 'vera', 'magnus', 'nikola', 'edgar', 'marco']

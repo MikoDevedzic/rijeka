@@ -19,7 +19,7 @@ export const KINDS = {
 
 // The hosts: what stands on a slab runs there. x, z: its middle; w, d: its size; side: its name stands beside it.
 export const HOSTS = [
-  { id: 'github', name: 'GITHUB', x: -2.85, z: -9.6, w: 25.1, d: 3.6 },
+  { id: 'github', name: 'GITHUB', x: -3.55, z: -9.6, w: 26.5, d: 3.6 },
   { id: 'netlify', name: 'NETLIFY', x: -9.6, z: 3.4, w: 5.6, d: 4.4 },
   { id: 'browser', name: 'THE TRADER\'S BROWSER', x: 0, z: 5.0, w: 6.4, d: 3.6 },
   { id: 'render', name: 'RENDER', x: 0, z: -2.6, w: 7.0, d: 4.6, side: true },
@@ -74,6 +74,8 @@ export const PIECES = [
     note: 'A mirror of the messenger\'s trade cards, when a desk has it configured.' },
   { id: 'branch', kind: 'ship', name: 'A BRANCH', sub: 'one change', p: [-14.3, -9.4], shape: 'node', h: 1.15, cy: 0.5, plain: true,
     note: 'Every change is made on a branch. Nothing on a branch touches production.' },
+  { id: 'patrick', kind: 'ship', name: 'PATRICK', sub: 'Product lead', p: [-15.7, -10.2], shape: 'agent', h: 1.6, cy: 0.9, agent: true, css: 'var(--text-mute)', line: 0x8a9f94,
+    note: 'Holds the mission and ranks what would most strengthen it: what to do next, for whom, and what to stop. He proposes; the owner decides. He builds and ships nothing.' },
   { id: 'petra', kind: 'ship', name: 'PETRA', sub: 'Project manager', p: [-12.9, -10.2], shape: 'agent', h: 2.15, cy: 0.9, agent: true, css: 'var(--text-dim)', line: 0xa9b9ae,
     note: 'Records every proposal and decision, with its status, before work starts.' },
   ...GATES.map((g, i) => ({ id: g.id, kind: 'ship', name: g.name, sub: g.role, p: [-10.7 + 1.2 * i, -10.2], shape: 'agent', h: i % 2 ? 2.15 : 1.6, cy: 0.9, agent: true, gate: i, css: g.css, line: g.line, note: g.note })),
@@ -138,8 +140,8 @@ export const STORIES = [
         say: 'Every two hours the scheduler rebuilds market data from public sources and stores, one row a day, a mark for each trade, the attributed P&L, the risk report and the counterparty-credit run. The venue\'s marks are read every ten minutes; spots, news and digital-asset fixings every thirty. Prometheus reads the same tables through read-only tools.' },
   ] },
   { id: 'change', name: 'A CHANGE', follow: 'FOLLOW A CHANGE', lede: 'A change to the code on its way to production, and who looks at it on the way.', steps: [
-    { k: 'c1', name: 'PROPOSE', pieces: ['petra', 'branch'], joins: [],
-      say: 'A change starts as a recorded decision and a branch. Nothing on a branch touches production.' },
+    { k: 'c1', name: 'PROPOSE', pieces: ['patrick', 'petra', 'branch'], joins: [],
+      say: 'The product lead ranks what would most strengthen the mission, and the owner decides. A change then starts as a recorded decision and a branch. Nothing on a branch touches production.' },
     { k: 'c2', name: 'THE GATES', pieces: ['branch', ...GATES.map(g => g.id)], joins: ['gate'], gates: true,
       say: 'Each gate is a reviewer with one job, called when a change touches its area: the app in a real browser, the numbers, the models, the design, a cold read of the change, security, the architecture, the database, and a first look by someone who has never seen the app. What a gate finds is fixed or answered before the change goes on, and what it missed is written into its own instructions, so the next change is read by a reviewer that knows.' },
     { k: 'c3', name: 'SIX CHECKS', pieces: ['ci', 'main'], joins: ['ci_main'], passed: true, checks: true,

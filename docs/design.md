@@ -170,7 +170,9 @@ reviewer has a colour of its own, taken from the tokens (never brass), so that n
 apart; a reviewer's name is the smallest step of the scale (10px) and in that colour, because nine of them share
 a row, and the row has a name of its own over its middle, because a first name says nothing to someone who has
 not met its owner (set as a host's name is, a little closer, to fit the row). The tokens have nine families of
-hue besides brass and the checks' green, and the page has twelve figures, so two pairs are near each other by
+hue besides brass and the checks' green, and the page has thirteen figures (the product lead, the project
+manager, the release manager and the operations keeper are not gates and stand in the text's own greys and the
+change's green), so two pairs are near each other by
 choice and kept apart by place: the first-time visitor's teal and the browser tester's cyan stand at the two
 ends of the row, and the operations keeper's limestone stands after the release, away from the independent
 reviewer's white. The six checks are the change's green, each lamp a step lighter, and lit one after the other: a colour a

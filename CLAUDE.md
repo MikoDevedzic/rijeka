@@ -23,6 +23,7 @@ Every change goes through the same gates. Each gate has a name and an agent defi
 | **Grace** | Operations keeper | before a launch or a public post; after a change of hosting plan, host or machine size; after an outage; when a release adds work to a request or a batch | the sizes in `docs/ops/environment.md` are true; the dearest action is measured and the headroom said; the watch says nothing wrong; an outage has its account in `docs/ops/incidents.md` |
 | **Jarvis** | Release manager | every deploy | `docs/ops/release.md` followed; the commit read back from production |
 | **Petra** | Project manager | every proposal and decision | recorded in `_docs/BACKLOG.md` (local only) with its status |
+| **Patrick** | Product lead | the start of a working session, after a release, a weekly walk, before a large piece of work | he has said, ranked and argued, what would most strengthen the mission and what to stop; the owner has decided; nothing is approved because he ranked it first |
 
 A one-line hotfix asked for by name may skip Vera; it never skips lint, tests and Jarvis's checklist.
 
@@ -43,6 +44,9 @@ what changes is who runs it.
   - **Edgar** when a migration, the runner or the approved list is in the diff.
   - **Marco** before a launch or a public post, and when what a newcomer meets first changes. He is the dearest
     of the agents to run (he takes and reads a picture of every stop), so not on every change.
+  - **Patrick** when the owner asks what to do next, once a week for a walk of the product against its mission,
+    and before a piece of work larger than a few days starts. He ranks and argues; he changes nothing, and his
+    list is a proposal the project manager records.
   - **Grace** after an outage, before a launch, after a change of plan, host or size, and when a release adds
     work to a request or a batch: for the account and the measurements. The builder sets her account in
     `docs/ops/incidents.md`.
