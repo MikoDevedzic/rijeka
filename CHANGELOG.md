@@ -16,6 +16,8 @@ visitor's findings. Words only, and where an answer is drawn; nothing about sign
   that the signatures are kept and nothing is anchored (the certificate already said so after the fact; the tab
   now says it before). Until the server has answered, no chain is named. Not changed: the sign-in page, the DEMO
   badge and its footer, the roadmap and the terms name Sepolia in typed words, which is true of the hosted demo.
+  The README's first paragraph said the confirmations live today are anchored "on Ethereum"; it now says Sepolia,
+  Ethereum's test network, where the hosted demo runs, with Ethereum mainnet on the roadmap.
 - **The demo bank.** Beside a pending trade against the demo counterparty the tab said "This counterparty isn't
   on Rijeka yet" and to send it a confirmation request to sign with the command-line tool. It now says that
   this is a demo counterparty, that where the server holds a key for it, as the hosted demo does, CONFIRM signs
