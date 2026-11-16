@@ -1219,7 +1219,9 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
                 : pkg ? 'Scenario: an approximation in the browser. A package\'s figures are the engine\'s closed form over its legs, worked here; with no shock they are the legs\' values, and the engine is not asked again. Nothing is saved.'
                 : 'Scenario: an approximation in the browser: the engine\'s closed form, worked here. The engine could not be asked for this trade. Nothing is saved.'}</Note>
             </div>
-            {engineError && <div data-testid="fx-scn-error" style={{ fontSize: 12, color: 'var(--amber)', padding: '0 0 6px' }}>The engine could not price this scenario: {engineError}{styled ? '' : ' The figures shown are the closed form\'s, worked here.'}</div>}
+            {engineError && <div data-testid="fx-scn-error" style={{ fontSize: 12, color: 'var(--amber)', padding: '0 0 6px' }}>The engine could not price this scenario: {String(engineError).replace(/[.\s]+$/, '')}.{styled ? '' : ' The figures shown are the closed form\'s, worked here.'}</div>}
+            {/* a fault is said in a line, whatever the chip: APPROXIMATION alone is also a package's, which is one by design */}
+            {engine && !asks && !engineError && <div data-testid="fx-scn-not-asked" style={{ fontSize: 12, color: 'var(--amber)', padding: '0 0 6px' }}>The engine could not be asked for this trade (its quote names no rate to value against).{styled ? '' : ' The figures shown are the closed form\'s, worked here.'}</div>}
             {!engineError && cellError && <div data-testid="fx-scn-cell-error" style={{ fontSize: 12, color: 'var(--amber)', padding: '0 0 6px' }}>The engine could not price every market of this scenario, and those figures are dashes: {cellError}</div>}
             {engine && nowR.touched && <div data-testid="fx-scn-touched" style={{ fontSize: 12, color: 'var(--amber)', padding: '0 0 6px' }}>{touchedWords(quote)}</div>}
             {selected}

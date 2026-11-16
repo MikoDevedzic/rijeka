@@ -243,7 +243,7 @@ test('a forward the engine does not answer for: the closed form\'s figures, and 
   const quote = await (await priced).json()
   await win.getByRole('button', { name: 'CURVE SCENARIO', exact: true }).click()
   await expect(win.getByTestId('fx-scn-error')).toContainText('the engine is not there')
-  await expect(win.getByTestId('fx-scn-error')).toContainText('closed form')
+  await expect(win.getByTestId('fx-scn-error')).toHaveText('The engine could not price this scenario: the engine is not there. The figures shown are the closed form\'s, worked here.')
   await expect(win.getByTestId('fx-scn-engine')).toHaveText('APPROXIMATION')
   await expect(win.getByTestId('fx-scn-tab')).toHaveAttribute('data-busy', 'false')
   expect(await num(win.getByTestId('fx-scenario-npv')), 'the closed form at the ticket\'s own market').toBeCloseTo(quote.npv, 4)

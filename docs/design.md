@@ -363,7 +363,10 @@ is awaited. On a rates ticket the figures of the last answer stay until the next
 figure whose market has no answer yet is the closed form's own at that market where the trade has one (a forward,
 a European option: the same formula, so the figure follows a drag) and a dash where it has none (every other
 style); it is never the last answer's figure for another market. When the engine does not answer, or cannot be
-asked, the chip does not say it priced: APPROXIMATION over the closed form's figures, NOT PRICED over dashes. A rates ticket whose terms were changed after its price says so in amber and keeps the
+asked, the chip does not say it priced: APPROXIMATION over the closed form's figures, NOT PRICED over dashes, and
+in both cases an amber line under the title says which and why. That line is what tells a fault from a package,
+whose APPROXIMATION is by design and has no line. A trade whose quote the closed form cannot read at all has no
+scenario: the tab says so and draws nothing in its place. A rates ticket whose terms were changed after its price says so in amber and keeps the
 scenario of the terms as priced.
 
 A style is not a reason for another tab: a barrier or a touch option has the same curves, the same shocks, the
