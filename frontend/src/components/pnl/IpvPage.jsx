@@ -134,7 +134,7 @@ export default function IpvPage() {
           {input && (
             <section className="pnl-panel">
               <header><span>{input.curve_id} · VERIFY {input.kind === 'SWAPTION_VOL' || input.kind === 'FX_VOL' ? 'BY SURFACE POINT' : 'BY PILLAR'}</span>
-                <span className="pnl-sub">{KIND_LABEL[input.kind]} · {sensLabel(input.kind)} per pillar at this scope · type an override and give a reason · tolerance per pillar</span></header>
+                <span className="pnl-sub">{KIND_LABEL[input.kind]} · {sensLabel(input.kind, input.curve_id)} per pillar at this scope · type an override and give a reason · tolerance per pillar</span></header>
               {input.unladdered && <div className="pnl-note" style={{ padding: '8px 14px' }}>{input.note || 'nothing to ladder for this input'}</div>}
               {input.kind === 'SWAPTION_VOL' ? <SurfaceGrid input={input} drafts={drafts} setDrafts={setDrafts} onOverride={override} signed={signed} />
                 : input.kind === 'FX_VOL' ? <FxGrid input={input} drafts={drafts} setDrafts={setDrafts} onOverride={override} signed={signed} />
@@ -222,7 +222,7 @@ function PillarTable({ input, drafts, setDrafts, onOverride, onWithdraw, signed 
   return (
     <div className="pnl-tree">
       <div className="pnl-tr head" style={{ gridTemplateColumns: g }}>
-        <span className="pnl-tn">PILLAR</span><span className="pnl-tv">DESK</span><span className="pnl-tv">INDEP.</span><span className="pnl-tv">OVERRIDE</span><span className="pnl-tv">SHIFT</span><span className="pnl-tv">{sensLabel(input.kind)}</span><span className="pnl-tv">IMPACT</span><span className="pnl-tv">TOL</span><span className="pnl-tv" style={{ textAlign: 'left' }}>STATUS</span>
+        <span className="pnl-tn">PILLAR</span><span className="pnl-tv">DESK</span><span className="pnl-tv">INDEP.</span><span className="pnl-tv">OVERRIDE</span><span className="pnl-tv">SHIFT</span><span className="pnl-tv">{sensLabel(input.kind, input.curve_id)}</span><span className="pnl-tv">IMPACT</span><span className="pnl-tv">TOL</span><span className="pnl-tv" style={{ textAlign: 'left' }}>STATUS</span>
       </div>
       {rows.map(p => (
         <div key={p.key} className="pnl-tr d1" style={{ gridTemplateColumns: g, alignItems: 'center' }}>

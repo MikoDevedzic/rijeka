@@ -12,6 +12,7 @@ import { useNavigate } from 'react-router-dom'
 import { getSessionMaybe } from '../../lib/session'
 import RateCurveCanvas from '../market-data/RateCurveCanvas'
 import { Limits } from './RiskPage'
+import { limitStanding } from './states'
 import RiskNav from './RiskNav'
 import '../pnl/PnlPage.css'
 import './RiskPage.css'
@@ -59,6 +60,7 @@ export default function CcrPage() {
   const cur = cps.find(c => c.counterparty === sel) || cps[0]
   const t = rep?.totals || {}
   const breaches = rep?.breaches || 0
+  const standing = limitStanding(rep?.limits, breaches)
 
   return (
     <div className="pnl rk-page">
@@ -66,8 +68,10 @@ export default function CcrPage() {
       <div className="pnl-bar">
         <div className="pnl-title">COUNTERPARTY CREDIT <span className="pnl-sub">USD · netting set on shared paths · real-world exposure against credit limits</span></div>
         <div className="pnl-ctl">
-          {rep && <span className={`pnl-chip ${breaches ? 'red' : 'ok'}`}>{breaches ? `${breaches} BREACH${breaches > 1 ? 'ES' : ''}` : 'WITHIN LIMITS'}</span>}
+          {rep && <span className={`pnl-chip ${standing.tone}`} data-testid="ccr-standing">{standing.text}</span>}
           {rep?.from_store && <span className="pnl-note">stored run · {fmtD(rep.date)} · {fmtT(rep.stored_at)}</span>}
+          {/* a run computed for this look is not kept: the Collateral tab reads the stored one, and says so */}
+          {rep && !rep.from_store && cps.length > 0 && <span className="pnl-note" data-testid="ccr-not-stored">computed now, not stored · RUN NOW stores it</span>}
           <button className="pnl-btn" onClick={run} disabled={busy || job?.running}>{job?.running ? `RUNNING… ${job.done}/${job.total} ${job.current || ''}` : 'RUN NOW'}</button>
           <button className="pnl-btn ghost" onClick={() => load(true)} disabled={busy}>COMPUTE LIVE</button>
           <button className="pnl-btn ghost" onClick={() => navigate('/configurations/market-risk/limits')}>LIMITS →</button>

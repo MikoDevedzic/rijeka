@@ -17,8 +17,11 @@
 .pnl-card { background:rgba(8,23,20,0.82); border:1px solid var(--border); border-radius:3px; padding:0.8rem 1rem; display:flex; flex-direction:column; gap:0.35rem; }
 .pnl-card.meta { display:grid; grid-template-columns:auto 1fr; gap:0.3rem 0.8rem; align-content:start; }
 .pnl-card.meta b { font-family:var(--mono); font-size:0.95rem; color:var(--text); } .pnl-card.meta .warn { color:var(--amber); }
-.pnl-kl { font-family:var(--mono); font-size:0.86rem; letter-spacing:0.1em; color:var(--text-dim); }
-.pnl-big { font-family:var(--mono); font-size:1.7rem; font-weight:600; line-height:1.1; color:var(--text); }
+/* A card: its name, its figure, the line under it. `pnl-card-l/-b/-s` are the same three, as the cards of the XVA
+   reserves, IPV, Capital and Collateral pages name them: they had no rule of their own and were set in the page's
+   plain type. One rule for both names. */
+.pnl-kl, .pnl-card-l { font-family:var(--mono); font-size:0.86rem; letter-spacing:0.1em; color:var(--text-dim); }
+.pnl-big, .pnl-card-b { font-family:var(--mono); font-size:1.7rem; font-weight:600; line-height:1.1; color:var(--text); }
 .pos { color:var(--up); } .neg { color:var(--down); }
 .pnl-split { display:flex; flex-direction:column; gap:0.25rem; margin-top:0.2rem; }
 .pnl-split > div { display:grid; grid-template-columns:4.2rem 1fr 5.5rem; align-items:center; gap:0.5rem; font-family:var(--mono); font-size:0.86rem; letter-spacing:0.1em; color:var(--text-dim); }

@@ -126,3 +126,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - A column made wide enough for the figures on the stack is not a fix for a figure printed over its neighbour: the
   content sizes the column (one grid, rows on `subgrid`), and the journey gives a row a figure far larger than the
   stack's and measures that each cell still ends before the next begins.
+- A search for a name that must go is made without regard to case, over the modules that build labels as well as
+  the screens, and the unit test that forbids the name is written over the same files: the first search for SPOT01
+  left "spot01" on the IPV page. And when a page is mended, its neighbours in the picture are read too: the cards
+  beside the figure being fixed had never been styled.

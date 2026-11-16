@@ -1,6 +1,6 @@
 // pnl/ipv-page.test.js — the pure helpers behind P&L → IPV (ipv-page.js). Run: npm test.
 import { describe, it, expect } from 'vitest'
-import { counts, fmt, fmtShift, fmtSigned, fxGrid, inputRows, pillarRows, surfaceGrid, waterfall } from './ipv-page'
+import { counts, fmt, fmtShift, fmtSigned, fxGrid, inputRows, pillarRows, sensLabel, surfaceGrid, waterfall } from './ipv-page'
 
 const run = {
   date: '2026-11-03', scope_key: 'GLOBAL', status: 'OPEN', flash_usd: 184320, first_order_usd: -21450, second_order_usd: null, xva_usd: -6180, official_usd: 156690, applied_at: null,
@@ -32,6 +32,19 @@ describe('inputRows and counts', () => {
     expect(rows[1].independent).toBe('none · model IPV only')
     expect(counts(run)).toEqual({ inputs: 3, settled: 2, pending: 1, review: 1, overridden: 2, unvalued: 1 })
     expect(inputRows(null)).toEqual([])
+  })
+})
+
+describe('the name of an input\'s sensitivity', () => {
+  it('is the desk\'s: FX01 on a currency pair, CRY01 where a side is a digital asset, never spot01', () => {
+    expect(sensLabel('SPOT', 'EURUSD_SPOT')).toBe('FX01')
+    expect(sensLabel('SPOT', 'USDJPY_SPOT')).toBe('FX01')
+    expect(sensLabel('SPOT', 'BTCUSD_SPOT')).toBe('CRY01')
+    expect(sensLabel('SPOT', 'solusd_spot')).toBe('CRY01')
+    expect(sensLabel('SPOT')).toBe('FX01')
+    expect(sensLabel('RATES', 'USD_SOFR')).toBe('IR01')
+    expect(sensLabel('FX_VOL', 'EURUSD_VOL')).toBe('vega')
+    expect(inputRows({ inputs: [{ curve_id: 'BTCUSD_SPOT', kind: 'SPOT', unit: 'pct', sensitivity_total: 124564 }] })[0].sens).toBe('CRY01 +$124,564/%')
   })
 })
 

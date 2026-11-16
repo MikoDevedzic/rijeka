@@ -26,13 +26,15 @@ describe('one sensitivity, one name and one sign', () => {
     for (const [key, name] of [['STANDARD:IR01', 'STANDARD IR01'], ['EPE:ACME_BANK', 'EPE ACME BANK'], ['PFE:ACME:1-5Y', 'PFE ACME 1-5Y'], ['PFE_PEAK:ACME', 'PFE ACME'], ['KR01:USD_SOFR:1-5Y', 'USD SOFR 1-5Y'], ['VAR_99_1D', 'VAR'], ['NPV', 'NPV']]) expect(limitName(key), key).toBe(name)
     expect(limitName('STRESS:X', null)).toBe('STRESS X')
   })
-  // The old names are written on no Risk screen: a label there is one of the desk's, or the test says which file.
-  it('no Risk screen prints SPOT01, SPOT 01 or FUND01', () => {
-    const dir = new URL('.', import.meta.url)
-    const screens = readdirSync(dir).filter(f => /\.jsx$/.test(f) || f === 'limits-page.js')
+  // The old names are written on no Risk or P&L screen, in capitals or not: a label there is one of the desk's, or
+  // the test says which file. (A field of an answer, `r.spot01`, is read and not shown.)
+  it('no Risk or P&L screen prints SPOT01, SPOT 01, spot01 or FUND01', () => {
+    const here = new URL('.', import.meta.url), pnl = new URL('../pnl/', import.meta.url)
+    const files = (dir) => readdirSync(dir).filter(f => /\.jsx$/.test(f) || ['limits-page.js', 'ipv-page.js'].includes(f)).map(f => new URL(f, dir))
     const printed = (src) => src.replace(/\/\/[^\n]*|\{\/\*[\s\S]*?\*\/\}|\/\*[\s\S]*?\*\//g, '')   // comments say what the names were
       .replace(/startsWith\('SPOT01:'\)|\['SPOT01:<asset>'\]|=== 'SPOT01'/g, '')                     // the stored key, read not shown
-    const found = screens.filter(f => /SPOT ?01|FUND01/.test(printed(readFileSync(new URL(f, dir), 'utf8'))))
+    const old = /SPOT ?01|FUND01|['"`>] ?spot ?01\b/
+    const found = [...files(here), ...files(pnl)].filter(f => old.test(printed(readFileSync(f, 'utf8')))).map(f => f.pathname.split('/').slice(-2).join('/'))
     expect(found).toEqual([])
   })
 })

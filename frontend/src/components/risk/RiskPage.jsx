@@ -12,6 +12,7 @@ import { productLabel } from '../../lib/labels'
 import RiskNav from './RiskNav'
 import Fixings from './Fixings'
 import { basis, limitName, spotMeasure } from './names'
+import { limitStanding } from './states'
 import '../pnl/PnlPage.css'
 import './RiskPage.css'
 
@@ -57,6 +58,7 @@ export default function RiskPage() {
   const v = rep?.var || {}, lad = rep?.ladder || {}
   const worst = (rep?.stress || []).reduce((m, s) => s.pnl_usd < (m?.pnl_usd ?? 0) ? s : m, null)
   const breaches = rep?.breaches || 0, warnings = rep?.warnings || 0
+  const standing = limitStanding(rep?.limits, breaches, warnings)
 
   return (
     <div className="pnl rk-page">
@@ -67,7 +69,7 @@ export default function RiskPage() {
           <label>MARKET DATE
             <select value={date || ''} onChange={e => load(e.target.value)} disabled={busy}>{(rep?.dates || []).slice().reverse().map(d => <option key={d} value={d}>{fmtD(d)}</option>)}</select>
           </label>
-          {rep && <span className={`pnl-chip ${breaches ? 'red' : warnings ? 'amber' : 'ok'}`}>{breaches ? `${breaches} BREACH${breaches > 1 ? 'ES' : ''}` : warnings ? `${warnings} WARNING${warnings > 1 ? 'S' : ''}` : 'WITHIN LIMITS'}</span>}
+          {rep && <span className={`pnl-chip ${standing.tone}`} data-testid="rk-standing">{standing.text}</span>}
           {rep && <span className="pnl-note">{rep.from_store ? `stored · computed ${fmtT(rep.generated_at)}` : `live · ${fmtT(rep.generated_at)}`}</span>}
           {rep && <button className="pnl-btn" onClick={() => load(date, true)} disabled={busy}>{busy ? 'REPRICING…' : 'RECALCULATE'}</button>}
           <button className="pnl-btn ghost" onClick={() => navigate('/configurations/market-risk/limits')}>LIMITS →</button>

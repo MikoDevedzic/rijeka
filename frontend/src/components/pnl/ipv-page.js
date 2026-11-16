@@ -1,6 +1,8 @@
 // pnl/ipv-page.js — the pure parts of IpvPage.jsx: the inputs table rows, the pillar rows, the surface grid,
 // the waterfall and the formats from a GET /api/ipv/run response. No React; tested in ipv-page.test.js.
 
+import { spotMeasure } from '../risk/names'
+
 export const STATE_LABEL = { PENDING: 'PENDING', VERIFIED: 'VERIFIED', OVERRIDDEN: 'OVERRIDDEN', APPROVED: 'APPROVED', WAIVED: 'WAIVED' }
 export const STATE_COLOR = { PENDING: 'var(--text-dim)', VERIFIED: 'var(--accent)', OVERRIDDEN: 'var(--amber)', APPROVED: 'var(--accent)', WAIVED: 'var(--text-mute)' }
 export const PILLAR_COLOR = { OK: 'var(--accent)', APPROVED: 'var(--accent)', REVIEW: 'var(--red)', OVERRIDDEN: 'var(--amber)', UNVERIFIED: 'var(--text-dim)' }
@@ -27,15 +29,20 @@ export function fmtShift(v, unit) {
   const d = unit === 'pct' ? 2 : 1
   return (n > 0 ? '+' : '') + n.toFixed(d) + ' ' + (unit === 'bp' ? 'bp' : unit === 'vol_bp' ? 'bp' : unit === 'vol_pt' ? 'pt' : '%')
 }
-export function sensLabel(kind) {
-  return kind === 'RATES' || kind === 'FUNDING' ? 'IR01' : kind === 'SPOT' ? 'spot01' : 'vega'
+// The name of an input's sensitivity, as every other screen has it (risk/names.js): a spot's is FX01 on a currency
+// pair and CRY01 where either side is a digital asset (BTCUSD_SPOT), never "spot01".
+export function sensLabel(kind, curveId = '') {
+  if (kind === 'RATES' || kind === 'FUNDING') return 'IR01'
+  if (kind !== 'SPOT') return 'vega'
+  const pair = String(curveId).toUpperCase().replace(/_SPOT$/, '')
+  return [pair.slice(0, 3), pair.slice(3, 6)].some(a => a.length === 3 && spotMeasure(a)[1] === 'CRY01') ? 'CRY01' : 'FX01'
 }
 
 // The inputs table: one row per input, with the counts the controller reads first.
 export function inputRows(run) {
   return (run?.inputs || []).map(i => ({
     curve_id: i.curve_id, kind: i.kind, kindLabel: KIND_LABEL[i.kind] || i.kind, unit: i.unit, trades: i.trades, state: i.state,
-    sensitivity: i.sensitivity_total, sens: `${sensLabel(i.kind)} ${fmtSigned(i.sensitivity_total)}/${i.unit === 'pct' ? '%' : i.unit === 'vol_pt' ? 'pt' : 'bp'}`,
+    sensitivity: i.sensitivity_total, sens: `${sensLabel(i.kind, i.curve_id)} ${fmtSigned(i.sensitivity_total)}/${i.unit === 'pct' ? '%' : i.unit === 'vol_pt' ? 'pt' : 'bp'}`,
     desk: i.desk_snapshot_date ? `snapshot ${i.desk_snapshot_date}` : 'no snapshot',
     independent: i.has_independent ? i.independent_source : (i.unladdered ? 'nothing to verify' : 'none · model IPV only'),
     review: i.review || 0, overridden: i.overridden || 0, impact: i.first_order || 0, pillars: i.pillars?.length || 0, decision: i.decision || null,
