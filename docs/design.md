@@ -284,6 +284,13 @@ a small square before the label (`RiskMark`); the figure keeps the colour of its
 colour of the factor it mainly carries. The purpose is to be read without being told: the IR01 of a swap, an
 option and a digital-asset forward is one colour because it is one risk, and it adds across the book.
 
+**One name and one sign.** A spot delta is FX01 on a currency and CRY01 on a digital asset (the value for +1% of
+spot); the forward basis of a digital asset is CRYBASIS01 (the value for +1bp a year of basis); a curve's is
+IR01. A screen never writes SPOT01, "spot 01" or FUND01, and never prints the key a limit is stored under
+(`SPOT01:BTC`): the Risk pages read the names from `frontend/src/components/risk/names.js`, which takes them
+from the home's, and a limit is named by `limitName`. Where a row carries more than one figure, each is on a
+line of its own with its name after it.
+
 ## Figures that move
 
 A figure that arrives or changes rolls to its value and flashes once (`components/common/Roll.jsx`,

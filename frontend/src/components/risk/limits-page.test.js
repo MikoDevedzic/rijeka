@@ -19,7 +19,8 @@ const REP = {
 describe('the Limits page', () => {
   it('names the factor a limit is on, where it is on a total', () => {
     expect(factorOf('IR01:USD_SOFR')).toEqual({ name: 'USD SOFR', measure: 'IR01', unit: 'per bp' })
-    expect(factorOf('spot01:btc')).toMatchObject({ name: 'BTC', measure: 'SPOT 01' })
+    expect(factorOf('spot01:btc')).toMatchObject({ name: 'BTC', measure: 'CRY01', unit: 'per 1%' })   // the desk's name, not the stored key's
+    expect(factorOf('SPOT01:EUR')).toMatchObject({ name: 'EUR', measure: 'FX01' })
     expect(factorOf('VEGA:USD_SWVOL_ATM')).toMatchObject({ name: 'USD swaptions', unit: 'per bp of vol' })
     expect(factorOf('VEGA:EURUSD_VOL')).toMatchObject({ name: 'EURUSD', unit: 'per vol point' })
     expect(factorOf('CRYBASIS01:BTC_FUNDING')).toMatchObject({ name: 'BTC', measure: 'CRYBASIS01' })
@@ -27,8 +28,8 @@ describe('the Limits page', () => {
   })
   it('has one row for each curve the book carries, with its own limit or the standard one', () => {
     const rows = curveRows(REP)
-    expect(rows.map(r => [r.metric, r.standard, r.limit])).toEqual([['CRYBASIS01:BTC_FUNDING', true, 10000], ['IR01:USD_SOFR', true, 50000], ['SPOT01:BTC', false, 40000], ['VEGA:USD_SWVOL_ATM', true, 25000]])
-    expect(rows[2]).toMatchObject({ name: 'BTC', used: 82.47, set_by: 'MIKO', warn_pct: 90 })
+    expect(rows.map(r => [r.metric, r.standard, r.limit])).toEqual([['SPOT01:BTC', false, 40000], ['CRYBASIS01:BTC_FUNDING', true, 10000], ['IR01:USD_SOFR', true, 50000], ['VEGA:USD_SWVOL_ATM', true, 25000]])
+    expect(rows[0]).toMatchObject({ name: 'BTC', used: 82.47, set_by: 'MIKO', warn_pct: 90 })
     expect(curveRows(null)).toEqual([])
   })
   it('lists the rest apart: VaR, a bucket, a desk\'s; never a standard one', () => {

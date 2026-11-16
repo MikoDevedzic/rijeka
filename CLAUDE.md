@@ -120,3 +120,6 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   refresh, not a second fetch of the same address (the phone's strip read the stored report where the trader's
   home asks for the live one after a booking). And a changelog names the screens a change changes after reading
   where the component is rendered, not from memory.
+- When a figure is renamed, or its sign turned, the old name is searched for on every screen in the same change,
+  and the name is read from one module by all of them: the basis was renamed on the ticket and the home and
+  left under its old name and sign on the Risk page.

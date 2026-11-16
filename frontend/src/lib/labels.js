@@ -46,7 +46,7 @@ export const SENSITIVITY_LABELS = {
   IR01_DISC: 'IR01 DISC',
   FX01:      'FX01',
   CRY01:     'CRY01',
-  FUND01:    'FUND01',
+  CRYBASIS01: 'CRYBASIS01',
   VEGA:      'VEGA',
   THETA:     'THETA',
   GAMMA:     'GAMMA',

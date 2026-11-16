@@ -11,6 +11,7 @@ import { getSessionMaybe } from '../../lib/session'
 import { productLabel } from '../../lib/labels'
 import RiskNav from './RiskNav'
 import Fixings from './Fixings'
+import { basis, limitName, spotMeasure } from './names'
 import '../pnl/PnlPage.css'
 import './RiskPage.css'
 
@@ -82,7 +83,7 @@ export default function RiskPage() {
           <Card label={`VAR ${pct(v.confidence)} · ${v.horizon_days}D`} big={fmt(v.var_h)} sub={`ES ${fmt(v.es_h)} · ${pct(v.secondary_confidence)} VaR ${fmt(v.var_1d_secondary)}`}
                 note={v.enough ? `${v.observations} days · ${fmtD(v.window_from)} → ${fmtD(v.window_to)}` : `only ${v.observations} days of history · needs ${v.min_observations}`} warn={!v.enough} />
           <Card label="IR01 · ALL CURVES" big={sgn(lad.ir01_usd)} sub={`per bp · ${lad.bump_bp}bp bump`} note={`${(lad.ladder || []).length} curves`} />
-          <Card label="FX01 · CRY01" big={Object.entries(lad.spot01 || {}).map(([a, x]) => `${a} ${sgn(x)}`).join(' · ') || '—'} sub="PV for +1% spot" note={`by asset${lad.fund01_usd ? ` · FUND01 ${sgn(lad.fund01_usd)}` : ''}`} />
+          <Card label="FX01 · CRY01" big={Object.entries(lad.spot01 || {}).map(([a, x]) => `${a} ${sgn(x)}`).join(' · ') || '—'} sub="PV for +1% spot" note={`by asset${basis(lad, '_usd') ? ` · CRYBASIS01 ${sgn(basis(lad, '_usd'))}` : ''}`} />
           {(lad.vega || []).length > 0 && <Card label="VEGA · FX VOL" big={sgn(lad.vega_usd)} sub="PV for +1 vol point" note={(lad.vega || []).map(v => v.curve.replace('_VOL', '')).join(' · ')} />}
           <Card label="WORST STRESS" big={worst ? sgn(worst.pnl_usd) : '—'} sub={worst?.name || ''} note={`${(rep.stress || []).length} scenarios`} warn={worst && worst.pnl_usd < 0} />
           <Card label="NPV" big={sgn(lad.npv_usd)} sub={`${(rep.ladder_rows || []).length} trades${lad.problems?.length ? ` · ${lad.problems.length} not priced` : ''}`} note={`${lad.valuations} valuations`} />
@@ -98,10 +99,15 @@ export default function RiskPage() {
             <div className="rk-h">BY TRADE</div>
             <div className="rk-rows">
               {(rep.ladder_rows || []).map(r => (
-                <div key={r.trade_id} className="rk-row">
+                <div key={r.trade_id} className="rk-row rk-trade">
                   <span className="rk-ref">{r.trade_ref}<small>{productLabel(r.instrument)} · {r.desk} / {r.book}</small></span>
-                  <span className={`pnl-tv ${tone(r.ir01)}`}>{sgn(r.ir01)} <small>IR01</small>{r.fund01_total ? <> · {sgn(r.fund01_total)} <small>FUND01</small></> : null}</span>
-                  <span className="pnl-tv">{Object.entries(r.spot01).map(([a, x]) => `${a} ${sgn(x)}`).join(' ') || '—'} <small>SPOT01</small></span>
+                  {/* The names and the sign the home and the ticket use (risk/names.js); each figure on a line of its own,
+                      so a second one is never printed over the column beside it. */}
+                  <span className="pnl-tv" data-testid="rk-trade-rates">
+                    <span className={`rk-fig ${tone(r.ir01)}`}>{sgn(r.ir01)} <small>IR01</small></span>
+                    {basis(r) ? <span className={`rk-fig ${tone(basis(r))}`}>{sgn(basis(r))} <small>CRYBASIS01</small></span> : null}
+                  </span>
+                  <span className="pnl-tv" data-testid="rk-trade-spot">{Object.entries(r.spot01 || {}).length ? Object.entries(r.spot01).map(([a, x]) => <span key={a} className={`rk-fig ${tone(x)}`}>{a} {sgn(x)} <small>{spotMeasure(a)[1]}</small></span>) : '—'}</span>
                   <span className={`pnl-tv ${tone(r.npv)}`}>{sgn(r.npv)} {r.ccy}</span>
                 </div>
               ))}
@@ -157,7 +163,7 @@ export default function RiskPage() {
           </section>
           <section className="pnl-panel">
             <header><span>LIMITS</span><span className="pnl-sub">{rep.limits?.length ? `${rep.limits.length} set` : 'none set'}</span></header>
-            <Limits rows={rep.limits || []} tables={rep.tables} canWrite={rep.can_write} onConfigure={() => navigate('/configurations/market-risk/limits')} />
+            <Limits rows={rep.limits || []} scenarios={rep.stress || []} tables={rep.tables} canWrite={rep.can_write} onConfigure={() => navigate('/configurations/market-risk/limits')} />
           </section>
         </div>
 
@@ -286,12 +292,12 @@ function Stress({ rows }) {
   )
 }
 
-export function Limits({ rows, tables, canWrite, onConfigure }) {
+export function Limits({ rows, scenarios = [], tables, canWrite, onConfigure }) {
   return (
     <div className="rk-limits">
       {rows.map(l => (
         <div key={l.id} className={`rk-lim ${String(l.status).toLowerCase()}`}>
-          <span className="rk-lm">{l.metric}<small>{l.scope === 'ALL' ? 'book' : `${l.scope.toLowerCase()} ${l.scope_name}`}{l.note ? ` · ${l.note}` : ''}</small></span>
+          <span className="rk-lm" title={l.metric}>{limitName(l.metric, scenarios)}<small>{l.scope === 'ALL' ? 'book' : `${l.scope.toLowerCase()} ${l.scope_name}`}{l.note ? ` · ${l.note}` : ''}</small></span>
           <span className="rk-lbar"><i style={{ width: `${Math.min(100, l.utilisation_pct || 0)}%` }} /><s style={{ left: `${Math.min(100, l.warn_pct)}%` }} /></span>
           <span className="pnl-tv">{l.value == null ? '—' : fmt(l.value)} <small>/ {fmt(l.limit)}</small></span>
           <span className={`pnl-chip ${l.status === 'BREACH' ? 'red' : l.status === 'WARN' ? 'amber' : l.status === 'OK' ? 'ok' : ''}`} title={l.note_eval || ''}>{l.status === 'NA' ? 'N/A' : `${l.status} ${l.utilisation_pct != null ? `${l.utilisation_pct.toFixed(0)}%` : ''}`}</span>

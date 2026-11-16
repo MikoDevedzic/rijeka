@@ -454,7 +454,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       spot01: `NPV(F·1.01) − NPV\nthe forward moves one for one with spot; the discounting does not`,
       vega: `NPV(σ + 1pt) − NPV\nrepriced at ${fmt(r.vol_pct + 1, 2)}%`,
       ir01: crypto ? `NPV(DF_${qc}·e^(−1bp·T), F·e^(+1bp·T)) − NPV\nthe ${qc} curve alone: the forward up by the carry, DF down` : `IR01 ${qc} + IR01 ${r.base_currency}\n+1bp on each curve, repriced`,
-      crybasis01: `NPV − NPV(F·e^(−1bp·T))\n+1bp a year on the forward basis: −1bp on the carry rate, the ${qc} curve held (−FUND01)`,
+      crybasis01: `NPV − NPV(F·e^(−1bp·T))\n+1bp a year on the forward basis: −1bp on the carry rate, the ${qc} curve held`,
       theta: `NPV(T − 1/365) − NPV\nsame spot, curves and vol, one calendar day later`,
     }
   }
@@ -494,7 +494,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       { label: sensLabel(DELTA_LABEL(crypto)), value: money(spot01(r)), colorBy: sgn(spot01(r)), math: `±N·F·DF_${qc}·1%\nexact: a forward is linear in spot` },
       ...(crypto
         ? [{ label: sensLabel('IR01'), value: money(ir01(r)), colorBy: sgn(ir01(r)), math: `±N·K·DF_${qc}·[1 − e^(−1bp·T)]\nthe ${qc} discounting curve alone` },
-           { label: sensLabel('CRYBASIS01'), value: money(crybasis01(r)), colorBy: sgn(crybasis01(r)), math: `±N·F·DF_${qc}·[1 − e^(−1bp·T)]\n+1bp a year on the forward basis: −1bp on the carry rate, the ${qc} curve held (−FUND01)` }]
+           { label: sensLabel('CRYBASIS01'), value: money(crybasis01(r)), colorBy: sgn(crybasis01(r)), math: `±N·F·DF_${qc}·[1 − e^(−1bp·T)]\n+1bp a year on the forward basis: −1bp on the carry rate, the ${qc} curve held` }]
         // a currency pair: each currency's curve on its own (their sum reads as zero when the two offset)
         : [{ label: sensLabel(`${qc} IR01`, SENS_UNITS.IR01), value: money(ir01Disc(r)), colorBy: sgn(ir01Disc(r)), math: `±N·[(F·e^(+1bp·τ) − K)·DF_${qc}·e^(−1bp·T) − (F − K)·DF_${qc}]\nthe ${qc} curve alone · τ spot date to settlement, T today to settlement` },
            { label: sensLabel(`${r.base_currency} IR01`, SENS_UNITS.IR01), value: money(ir01Base(r)), colorBy: sgn(ir01Base(r)), math: `±N·F·[e^(−1bp·τ) − 1]·DF_${qc}\nthe ${r.base_currency} curve alone · τ spot date to settlement` }]),

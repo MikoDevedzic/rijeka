@@ -15,6 +15,16 @@
 .rk-row.dim { color:var(--text-dim); }
 .rk-ref { display:flex; flex-direction:column; font-family:var(--mono); font-size:0.86rem; color:var(--text); } .rk-ref small { font-size:0.86rem; letter-spacing:0.08em; color:var(--text-mute); }
 .rk-row .pnl-tv small { color:var(--text-mute); font-size:0.86rem; letter-spacing:0.1em; }
+/* BY TRADE: a name, the rates figures, the spot figures, the value. Each figure is on a line of its own and its column
+   is wide enough for the longest name (CRYBASIS01), so none is printed over the column beside it; on a phone the
+   name and the value share a line and the figures the next. */
+.rk-row.rk-trade { grid-template-columns:1fr 160px 168px 126px; align-items:start; }
+.rk-fig { display:block; } .rk-fig.pos { color:var(--up); } .rk-fig.neg { color:var(--down); }
+@media (max-width:640px) {
+  .rk-row.rk-trade { grid-template-columns:1fr 1fr; }
+  .rk-trade > :nth-child(4) { grid-row:1; grid-column:2; }
+  .rk-trade > :nth-child(2) { text-align:left; }
+}
 .rk-hist { width:100%; } .rk-bin.neg { fill:var(--down); opacity:0.75; } .rk-bin.pos { fill:var(--up); opacity:0.65; }
 .rk-varline { stroke:var(--amber); stroke-width:1.5; stroke-dasharray:4 3; } .rk-zero { stroke:var(--border-hi); }
 .rk-varline2 { stroke:var(--amber); stroke-width:1; stroke-dasharray:1 3; opacity:0.8; } .rk-bin.exc { fill:var(--red); opacity:1; }

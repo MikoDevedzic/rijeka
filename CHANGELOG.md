@@ -3,6 +3,31 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.24). Commits on `main` are the detail.
 
+## 0.42.6 · 15 November 2026
+
+**One sensitivity, one name and one sign.** The next of the first-time visitor's findings. No figure is computed
+differently; three screens say the same figures under the names the home and the ticket already use.
+
+- **The Risk page's rows by trade.** A spot delta was written SPOT01 there and FX01 or CRY01 on the home and the
+  ticket; the forward basis of a digital asset was written FUND01 there, with the opposite sign to the
+  CRYBASIS01 of the home and the ticket (FUND01 is the value for +1bp on the carry rate, CRYBASIS01 for +1bp of
+  basis: one is the negative of the other). The rows now say FX01, CRY01 and CRYBASIS01, with the home's sign;
+  a report stored before the rename is read by the negative of its old figure. The card over the ladder says
+  the book's basis the same way.
+- **A figure is no longer printed over the column beside it.** The basis was written after the IR01 on one line
+  and ran over the asset's name in the next column. Each figure of a row is on a line of its own, in its sign's
+  colour, and the columns are wide enough for the longest name; on a phone the name and the value share a line
+  and the figures take the next.
+- **A limit is named, not keyed.** The limits list on the Risk and Counterparty Credit pages, and the Limits
+  page's list and picker, printed the key a limit is stored under (`SPOT01:BTC`, `CRYBASIS01:BTC_FUNDING`).
+  They now name it as the home does (BTC CRY01, BTC CRYBASIS01); the key is the hover text. The Limits page's
+  table wrote "SPOT 01" and "spot 01"; it writes FX01 or CRY01.
+- The ticket's hover text for CRYBASIS01 no longer mentions the old name.
+- The names are read from one module (`frontend/src/components/risk/names.js`), a unit test fails if a Risk
+  screen writes an old one, and a journey compares the rows with the report the API sent, at a monitor, a
+  narrow window and a phone. The rule is in `docs/design.md` (Risk factors) and the lesson in the design
+  keeper's definition.
+
 ## 0.42.5 · 15 November 2026
 
 **What a first-time visitor could not work out, first part.** Marco walked every screen as someone who had never

@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSessionMaybe } from '../../lib/session'
 import { curveRows, otherLimits, standardRows, parseSize, KIND_NAME } from './limits-page'
+import { limitName } from './names'
 import '../pnl/PnlPage.css'
 import './RiskPage.css'
 
@@ -61,7 +62,7 @@ export function LimitsPage() {
           <div className="rk-limits">
             {otherLimits(rep).map(l => (
               <div key={l.id} className={`rk-lim ${String(l.status).toLowerCase()}`} style={{ gridTemplateColumns: '1fr 10rem 9rem 7rem auto' }}>
-                <span className="rk-lm">{l.metric}<small>{l.scope === 'ALL' ? 'book' : `${l.scope.toLowerCase()} ${l.scope_name}`} · warn at {l.warn_pct}% · set by {l.set_by || '—'}{l.note ? ` · ${l.note}` : ''}</small></span>
+                <span className="rk-lm" title={l.metric}>{limitName(l.metric, meta?.scenarios)}<small>{l.scope === 'ALL' ? 'book' : `${l.scope.toLowerCase()} ${l.scope_name}`} · warn at {l.warn_pct}% · set by {l.set_by || '—'}{l.note ? ` · ${l.note}` : ''}</small></span>
                 <span className="rk-lbar"><i style={{ width: `${Math.min(100, l.utilisation_pct || 0)}%` }} /><s style={{ left: `${Math.min(100, l.warn_pct)}%` }} /></span>
                 <span className="pnl-tv">{l.value == null ? '—' : fmt(l.value)} <small>/ {fmt(l.limit)}</small></span>
                 <span className={`pnl-chip ${l.status === 'BREACH' ? 'red' : l.status === 'WARN' ? 'amber' : l.status === 'OK' ? 'ok' : ''}`}>{l.status === 'NA' ? 'N/A' : `${l.status} ${l.utilisation_pct != null ? `${l.utilisation_pct.toFixed(0)}%` : ''}`}</span>
@@ -75,7 +76,7 @@ export function LimitsPage() {
           <header><span>SET A LIMIT</span><span className="pnl-sub">{canWrite ? `your role: ${String(rep.role).toUpperCase()}` : 'needs the RISK or ADMIN role, or firm admin'}</span></header>
           <div className="pnl-cards" style={{ gridTemplateColumns: '2fr 1fr 1.4fr 1fr 1fr' }}>
             <label className="pnl-card"><span className="pnl-kl">METRIC</span>
-              <select style={inp} value={form.metric} onChange={set('metric')}>{(meta?.metrics || []).map(m => <option key={m} value={m}>{m}</option>)}</select>
+              <select style={inp} value={form.metric} onChange={set('metric')}>{(meta?.metrics || []).map(m => <option key={m} value={m}>{limitName(m, meta?.scenarios)}</option>)}</select>
               <span className="pnl-note">{metricHelp(form.metric, meta)}</span></label>
             <label className="pnl-card"><span className="pnl-kl">SCOPE</span>
               <select style={inp} value={form.scope} onChange={set('scope')}><option value="ALL">BOOK TOTAL</option><option value="DESK">DESK</option><option value="BOOK">BOOK</option></select></label>
