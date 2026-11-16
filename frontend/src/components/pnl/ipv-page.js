@@ -37,6 +37,14 @@ export const isBasis = (kind, curveId = '') => {
   const m = /^([A-Z0-9]+)_FUNDING$/.exec(String(curveId).toUpperCase())
   return !!m && spotMeasure(m[1])[1] === 'CRY01'
 }
+// What an input is, in words. A digital asset's funding input (BTC_FUNDING) is the rate the ticket and the pair's
+// page call the IMPLIED BTC RATE: this page called it a "funding level", a third name for the one input. A
+// currency's flat rate keeps the engine's word.
+export const kindLabel = (kind, curveId = '') => {
+  if (!isBasis(kind, curveId)) return KIND_LABEL[kind] || kind
+  return `implied ${String(curveId).toUpperCase().replace(/_FUNDING$/, '')} rate`
+}
+
 // The name of an input's sensitivity, as every other screen has it (risk/names.js): a spot's is FX01 on a currency
 // pair and CRY01 where either side is a digital asset (BTCUSD_SPOT), never "spot01"; a digital asset's funding
 // level's is CRYBASIS01, never IR01.
@@ -57,7 +65,7 @@ export const sensValue = (kind, curveId, v) => (v == null || !isBasis(kind, curv
 // The inputs table: one row per input, with the counts the controller reads first.
 export function inputRows(run) {
   return (run?.inputs || []).map(i => ({
-    curve_id: i.curve_id, kind: i.kind, kindLabel: KIND_LABEL[i.kind] || i.kind, unit: i.unit, trades: i.trades, state: i.state,
+    curve_id: i.curve_id, kind: i.kind, kindLabel: kindLabel(i.kind, i.curve_id), unit: i.unit, trades: i.trades, state: i.state,
     sensitivity: sensValue(i.kind, i.curve_id, i.sensitivity_total),
     sens: `${sensLabel(i.kind, i.curve_id)} ${fmtSigned(sensValue(i.kind, i.curve_id, i.sensitivity_total))}/${i.unit === 'pct' ? '%' : i.unit === 'vol_pt' ? 'pt' : 'bp'}`,
     desk: i.desk_snapshot_date ? `snapshot ${i.desk_snapshot_date}` : 'no snapshot',

@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSessionMaybe } from '../../lib/session'
 import PnlNav from './PnlNav'
-import { KIND_LABEL, PILLAR_COLOR, STATE_COLOR, counts, errorMessage, fmtQuote, fmtShift, fmtSigned, fxGrid, inputRows, isBasis, pillarRows, sensLabel, surfaceGrid, waterfall } from './ipv-page'
+import { PILLAR_COLOR, STATE_COLOR, counts, errorMessage, fmtQuote, fmtShift, fmtSigned, fxGrid, inputRows, isBasis, kindLabel, pillarRows, sensLabel, surfaceGrid, waterfall } from './ipv-page'
 import './PnlPage.css'
 import '../risk/RiskPage.css'
 
@@ -110,7 +110,7 @@ export default function IpvPage() {
         </div>
 
         <section className="pnl-panel">
-          <header><span>MARKET DATA INPUTS THE BOOK DEPENDS ON</span><span className="pnl-sub">one row per curve, surface, spot or funding level the trades in scope read · click a row to verify its pillars</span></header>
+          <header><span>MARKET DATA INPUTS THE BOOK DEPENDS ON</span><span className="pnl-sub">one row per curve, surface, spot, funding level or implied rate the trades in scope read · click a row to verify its pillars</span></header>
           <div className="pnl-tree">
             <div className="pnl-tr head" style={{ gridTemplateColumns: '14rem 5rem 12rem 11rem 13rem minmax(8rem, 1fr) 8rem' }}>
               <span className="pnl-tn">INPUT</span><span className="pnl-tv">TRADES</span><span className="pnl-tv">SENSITIVITY</span><span className="pnl-tv dim" style={{ textAlign: 'left' }}>DESK MARK</span><span className="pnl-tv dim" style={{ textAlign: 'left' }}>INDEPENDENT</span><span className="pnl-tv" style={{ textAlign: 'left' }}>STATE</span><span className="pnl-tv">IPV IMPACT</span>
@@ -134,7 +134,7 @@ export default function IpvPage() {
           {input && (
             <section className="pnl-panel">
               <header><span>{input.curve_id} · VERIFY {input.kind === 'SWAPTION_VOL' || input.kind === 'FX_VOL' ? 'BY SURFACE POINT' : 'BY PILLAR'}</span>
-                <span className="pnl-sub">{KIND_LABEL[input.kind]} · {sensLabel(input.kind, input.curve_id)} per pillar at this scope · type an override and give a reason · tolerance per pillar</span></header>
+                <span className="pnl-sub">{kindLabel(input.kind, input.curve_id)} · {sensLabel(input.kind, input.curve_id)} per pillar at this scope · type an override and give a reason · tolerance per pillar</span></header>
               {isBasis(input.kind, input.curve_id) && <div className="pnl-note" data-testid="ipv-basis-note" style={{ padding: '8px 14px', lineHeight: 1.6 }}>CRYBASIS01 is the value of +1 bp a year on the forward basis, as on the ticket and the Risk page. That is −1 bp on the funding level quoted here, so on these rows IMPACT = −CRYBASIS01 × SHIFT.</div>}
               {input.unladdered && <div className="pnl-note" style={{ padding: '8px 14px' }}>{input.note || 'nothing to ladder for this input'}</div>}
               {input.kind === 'SWAPTION_VOL' ? <SurfaceGrid input={input} drafts={drafts} setDrafts={setDrafts} onOverride={override} signed={signed} />

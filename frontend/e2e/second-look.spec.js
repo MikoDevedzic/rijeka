@@ -27,6 +27,10 @@ test('the blotter\'s rail on a short window: NEW TRADE in view, the roadmap\'s a
     await expect(f).toBeDisabled()
   }
   await expect(rail.locator('.bl-filter-btn', { hasText: /^RATES/ })).toBeEnabled()
+  // STORE says WORKING on every trade of this book: the column and its filter are not there to say it
+  await expect(app.locator('.bl-root thead th', { hasText: /^STORE$/ })).toHaveCount(0)
+  await expect(rail.locator('.bl-section-lbl', { hasText: 'STORE' })).toHaveCount(0)
+  await expect(app.locator('.bl-root thead th', { hasText: /^UTI$/ })).toHaveCount(1)
 
   // TOTAL = PENDING + CONFIRMED + LIVE + CLOSED (CLOSED is on the rail only when there is one)
   const n = async (loc) => Number((await loc.textContent()).replace(/\D/g, ''))
@@ -96,7 +100,14 @@ test('the Risk page keeps a vega per vol point and a vega per basis point of nor
   if (fx.length && rates.length) {
     await expect(card).toContainText(`FX ${signed(sum(fx))} · RATES ${signed(sum(rates))}`)
     await expect(card).toContainText('per vol pt · per bp normal vol')
-    await expect(card, 'the two are not added').not.toContainText(signed(rep.ladder.vega_usd))
+    await expect(card, 'the two are not added').not.toContainText(signed(sum(vega)))
+    // a report computed since 0.46.5 gives the two totals itself, and no longer one that adds them (a report stored
+    // before it has the old figure and not the new ones: the card works from the rows either way)
+    if (rep.ladder.vega_point_usd != null) {
+      expect(rep.ladder.vega_point_usd).toBeCloseTo(sum(fx), 6)
+      expect(rep.ladder.vega_normal_bp_usd).toBeCloseTo(sum(rates), 6)
+      expect(rep.ladder.vega_usd).toBeUndefined()
+    }
     // a name is not parted from its own figure where the line breaks
     for (const pair of await card.locator('.pnl-big span span').all()) expect(await pair.evaluate(el => el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).fontSize)), 'a name and its figure on one line').toBeLessThan(2)
   } else await expect(card).toContainText(fx.length ? 'PV for +1 vol point' : 'PV for +1 bp of normal vol')

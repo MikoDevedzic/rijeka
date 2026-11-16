@@ -43,6 +43,12 @@ BUMP_BP = 1.0
 VOL_BUMP = 100.0        # in the bump unit (bp/100): one volatility point on a {PAIR}_VOL surface, 1bp of normal vol on a swaption grid
 
 
+def _normal_vol(curve_id: str) -> bool:
+    """A surface quoted in basis points of normal vol ({CCY}_SWVOL_ATM, swaptions), not in vol points ({PAIR}_VOL):
+    the two names pnl/market.py is_vol_surface knows."""
+    return str(curve_id).endswith("_SWVOL_ATM")
+
+
 def _bumped(quotes: list[dict], lo: float, hi: float, bp: float) -> list[dict]:
     target = [{**q, "rate": float(q["rate"]) + bp / 100.0} for q in quotes]
     return _bucket_quotes(quotes, target, lo, hi)
@@ -200,7 +206,7 @@ def book_ladder(db: Session, user: dict, trades, d: date, mkt: Market, fx, value
     by_fund: dict[str, float] = {}
     pts: dict[str, dict[str, dict[str, float]]] = {"kr01": {}, "vega": {}}
     spot01: dict[str, float] = {}
-    npv_usd = ir01_usd = vega_usd = fund01_usd = 0.0
+    npv_usd = ir01_usd = fund01_usd = 0.0
     unconverted: set[str] = set()
     for r in rows:
         k = fx(r["ccy"])
@@ -215,7 +221,6 @@ def book_ladder(db: Session, user: dict, trades, d: date, mkt: Market, fx, value
         for cid, buckets in (r.get("vega") or {}).items():
             for b, v in buckets.items():
                 by_vol.setdefault(cid, {})[b] = by_vol.setdefault(cid, {}).get(b, 0.0) + v * k
-                vega_usd += v * k
         for kind, curves in (r.get("points") or {}).items():
             for cid, by_point in curves.items():
                 for p, v in by_point.items():
@@ -235,7 +240,11 @@ def book_ladder(db: Session, user: dict, trades, d: date, mkt: Market, fx, value
     vega_ladder = [{"curve": cid, "buckets": {b: by_vol[cid].get(b, 0.0) for b, *_ in BUCKETS} | ({"FLAT": by_vol[cid]["FLAT"]} if "FLAT" in by_vol[cid] else {}),
                     "total": sum(by_vol[cid].values()), "points": _points("vega", cid)} for cid in sorted(by_vol)]
     return {"rows": rows, "ladder": ladder, "spot01": spot01, "npv_usd": npv_usd, "ir01_usd": ir01_usd, "valuations": valuer.calls,
-            "vega": vega_ladder, "vega_usd": vega_usd, "vol_bump": "1 vol point (FX) · 1bp normal vol (swaptions)",
+            # The book's vega by how its vol is quoted: a pair's surface is bumped a vol point, a swaption surface a basis
+            # point of normal vol, so the two are two totals. (One `vega_usd` added them until 0.46.5; no screen read it.)
+            "vega": vega_ladder, "vega_point_usd": sum(r["total"] for r in vega_ladder if not _normal_vol(r["curve"])),
+            "vega_normal_bp_usd": sum(r["total"] for r in vega_ladder if _normal_vol(r["curve"])),
+            "vol_bump": "1 vol point (FX) · 1bp normal vol (swaptions)",
             "fund01": by_fund, "fund01_usd": fund01_usd,
             "crybasis01": {cid: 0.0 - v for cid, v in by_fund.items()}, "crybasis01_usd": 0.0 - fund01_usd,
             "problems": problems, "unconverted": sorted(unconverted), "bump_bp": BUMP_BP, "buckets": [b[0] for b in BUCKETS]}

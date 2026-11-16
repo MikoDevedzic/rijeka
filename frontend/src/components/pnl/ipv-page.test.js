@@ -1,6 +1,6 @@
 // pnl/ipv-page.test.js — the pure helpers behind P&L → IPV (ipv-page.js). Run: npm test.
 import { describe, it, expect } from 'vitest'
-import { counts, fmt, fmtShift, fmtSigned, fxGrid, inputRows, isBasis, pillarRows, sensLabel, sensValue, surfaceGrid, waterfall } from './ipv-page'
+import { counts, fmt, fmtShift, fmtSigned, fxGrid, inputRows, isBasis, kindLabel, pillarRows, sensLabel, sensValue, surfaceGrid, waterfall } from './ipv-page'
 
 const run = {
   date: '2026-11-03', scope_key: 'GLOBAL', status: 'OPEN', flash_usd: 184320, first_order_usd: -21450, second_order_usd: null, xva_usd: -6180, official_usd: 156690, applied_at: null,
@@ -62,6 +62,12 @@ describe('a quote as the page prints it', () => {
 describe('a digital asset\'s funding level: one name and one sign with the rest of the app', () => {
   it('is CRYBASIS01, never IR01; a currency\'s flat rate and a rate curve stay IR01', () => {
     expect(sensLabel('FUNDING', 'BTC_FUNDING')).toBe('CRYBASIS01')
+    // the input itself is named as the ticket names it; a currency's flat rate keeps the engine's word
+    expect(kindLabel('FUNDING', 'BTC_FUNDING')).toBe('implied BTC rate')
+    expect(kindLabel('FUNDING', 'sol_funding')).toBe('implied SOL rate')
+    expect(kindLabel('FUNDING', 'EUR_FLAT')).toBe('funding level')
+    expect(kindLabel('RATES', 'USD_SOFR')).toBe('rate curve')
+    expect(inputRows({ inputs: [{ curve_id: 'BTC_FUNDING', kind: 'FUNDING', pillars: [] }] })[0].kindLabel).toBe('implied BTC rate')
     expect(sensLabel('FUNDING', 'eth_funding')).toBe('CRYBASIS01')
     expect(sensLabel('FUNDING', 'SOL_FUNDING')).toBe('CRYBASIS01')
     expect(sensLabel('FUNDING', 'EUR_FLAT')).toBe('IR01')                    // a currency's flat rate is a rate

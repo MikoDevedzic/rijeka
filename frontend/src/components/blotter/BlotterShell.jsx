@@ -127,6 +127,10 @@ export default function BlotterShell() {
   const count = (s) => trades.filter(t => t.status === s).length
   const live = count('LIVE'), pending = count('PENDING'), confirmed = count('CONFIRMED')
   const closed = trades.length - live - pending - confirmed            // matured, terminated, cancelled: so that the summary adds up
+  // STORE (working, production, history) is where a trade's record is kept. Every trade is booked WORKING and nothing
+  // on the desk moves one yet, so a column that says WORKING on every row, and a filter with two answers that are
+  // always empty, told a reader nothing. Both are shown from the first trade that is kept anywhere else.
+  const stores = trades.some(t => t.store && t.store !== 'WORKING')
   // a status no button names (DEFAULTED, or one a later release adds) gets a button while a trade carries it
   const statuses = [...STATUSES, ...[...new Set(trades.map(t => t.status).filter(Boolean))].filter(s => !STATUSES.includes(s)).sort()]
 
@@ -176,8 +180,8 @@ export default function BlotterShell() {
           )
         })}
 
-        <div className="bl-section-lbl">STORE</div>
-        {['ALL', ...STORES].map(s => (
+        {stores && <div className="bl-section-lbl">STORE</div>}
+        {stores && ['ALL', ...STORES].map(s => (
           <button
             key={s}
             className={`bl-filter-btn ${filters.store === s || (!filters.store && s === 'ALL') ? 'active' : ''}`}
@@ -275,13 +279,13 @@ export default function BlotterShell() {
                   <th>TENOR</th>
                   <TH col="trade_date"   label="DATE" sortCol={sortCol} sortDir={sortDir} onSort={sort} />
                   <TH col="status"       label="STATUS" sortCol={sortCol} sortDir={sortDir} onSort={sort} />
-                  <th>STORE</th>
+                  {stores && <th>STORE</th>}
                   <th title="Unique Transaction Identifier: the same on both parties' bookings">UTI</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={13} className="bl-empty">
+                  <tr><td colSpan={stores ? 13 : 12} className="bl-empty">
                     {trades.length === 0 ? 'NO TRADES — CLICK + NEW TRADE TO BEGIN' : 'NO TRADES MATCH FILTERS'}
                   </td></tr>
                 ) : rows.map(t => {
@@ -340,9 +344,9 @@ export default function BlotterShell() {
                         <span className="bl-status-dot" style={st.hollow ? { border: `1px solid ${st.c}` } : { background: st.c }} />
                         <span className="bl-status-txt" style={{ color: st.c }}>{st.l}</span>
                       </td>
-                      <td>
+                      {stores && <td>
                         <span className="bl-store-txt">{sr.l}</span>
-                      </td>
+                      </td>}
                       <td className="bl-td-dim bl-td-sm" title={t.uti || ''}>{shortUti(t.uti)}</td>
                     </tr>
                   )

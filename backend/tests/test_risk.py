@@ -1,6 +1,8 @@
 """Market risk: VaR quantiles and simulation, limit evaluation, stress shifts, route guards."""
 from datetime import date
 
+import pytest
+
 from risk import limits as L
 from risk import stress as ST
 from risk import var as V
@@ -429,3 +431,24 @@ def test_the_books_points_are_summed_in_the_reporting_currency_nearest_first(mon
     assert [(p["tenor"], p["bucket"], round(p["value"], 9)) for p in sofr["points"]] == [("2Y", "1-5Y", -0.8), ("5Y", "1-5Y", 4.5)]
     assert round(sofr["buckets"]["1-5Y"], 9) == 3.7 == round(sum(p["value"] for p in sofr["points"]), 9)
     assert [(p["tenor"], p["years"], round(p["value"], 9)) for p in out["vega"][0]["points"]] == [("1Y", 1.0, 8.8)]
+
+
+def test_the_books_vega_is_two_totals_by_how_its_vol_is_quoted(monkeypatch):
+    """A pair's surface is bumped a vol point and a swaption surface a basis point of normal vol: the book's vega is
+    a total of each, in the reporting currency, and no single figure adds the two."""
+    from risk import sensitivities as S
+    rows = iter([
+        {"ccy": "EUR", "npv": 0.0, "ir01": 0.0, "kr01": {}, "spot01": {}, "fund01": {}, "vega": {"EURUSD_VOL": {"0-1Y": 8.0}}},
+        {"ccy": "USD", "npv": 0.0, "ir01": 0.0, "kr01": {}, "spot01": {}, "fund01": {}, "vega": {"BTCUSD_VOL": {"0-1Y": 100.0, "1-5Y": 20.0}}},
+        {"ccy": "USD", "npv": 0.0, "ir01": 0.0, "kr01": {}, "spot01": {}, "fund01": {}, "vega": {"USD_SWVOL_ATM": {"1-5Y": 1500.0}}},
+    ])
+    monkeypatch.setattr(S, "trade_ladder", lambda *a, **k: next(rows))
+    t = type("T", (), {"status": "CONFIRMED", "trade_ref": "x"})
+    out = S.book_ladder(None, {"sub": "u"}, [t, t, t], None, None, lambda c: {"USD": 1.0, "EUR": 1.1}[c], valuer=type("V", (), {"calls": 0})())
+    assert out["vega_point_usd"] == pytest.approx(8.0 * 1.1 + 120.0)
+    assert out["vega_normal_bp_usd"] == pytest.approx(1500.0)
+    assert "vega_usd" not in out
+    assert S._normal_vol("USD_SWVOL_ATM") and not S._normal_vol("EURUSD_VOL") and not S._normal_vol("BTCUSD_VOL")
+    # every surface the ladder knows is in exactly one of the two
+    from pnl.market import is_vol_surface
+    assert all(is_vol_surface(c) for c in ("USD_SWVOL_ATM", "EURUSD_VOL"))

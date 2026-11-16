@@ -156,7 +156,8 @@ row of the risk column; on the blotter, the last rows' right-hand cells).
 is in the mute colour, and carries the word ROADMAP as the Configurations rail writes it (interface face, 10px
 capitals, 0.06em, weight 600). It is never a filter that answers with an empty page. It becomes live when a trade
 carries the class. A rail whose filters do not all fit scrolls them and fades its foot while more is below; what
-is under them (the summary, NEW TRADE) does not move.
+is under them (the summary, NEW TRADE) does not move. A column that would say one thing on every row, and its
+filter, are not shown until a row says another (the blotter's STORE, WORKING on every trade).
 
 ## Buttons, fields, rows
 

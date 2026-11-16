@@ -3,6 +3,25 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.28). Commits on `main` are the detail.
 
+## 0.46.5 · 16 November 2026
+
+**Three things the second cold read found that 0.46.4 left as they were.**
+
+- **The blotter's STORE column** said WORKING on every trade, and its filter had two answers that were always
+  empty: nothing on the desk moves a trade to another store yet. The column and the filter are shown from the
+  first trade that is kept anywhere else.
+- **One name for a digital asset's rate input on the IPV page.** The ticket and the pair's page call it the
+  IMPLIED BTC RATE; the IPV page called the same input a "funding level". It reads "implied BTC rate" there now. A
+  currency's flat rate keeps its name. (Its sensitivity was already CRYBASIS01 on every screen.)
+- **The risk report's vega is two totals.** `ladder.vega_usd` added vega per vol point to vega per basis point of
+  normal vol. The report now gives `vega_point_usd` and `vega_normal_bp_usd`, and not their sum. No screen read
+  the old figure.
+
+Still as it was: a currency forward's and a European option's scenario are the browser's closed form and say
+APPROXIMATION. Pricing them with the engine, as every other style is, is being built as a change of its own.
+
+Tests: the blotter and IPV journeys hold the two screens to this; unit tests for the name and the two totals.
+
 ## 0.46.4 · 16 November 2026
 
 **What a second cold read of the released desk found, mended.** A first-time visitor's walk through 0.46.1 (every
