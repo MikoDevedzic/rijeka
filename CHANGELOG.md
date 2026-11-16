@@ -9,11 +9,14 @@ methodology document carries its own version (v1.24). Commits on `main` are the 
 seen the app and reported what confused him. Two things that made one book or one ticket say two different things
 are put right. No price changes.
 
-- **One book, one set of numbers.** The home a phone keeps, and the one a role without a home of its own sees,
-  showed the book's NPV, IR01, spot deltas and theta as each pricer's own figures added up, as of today. The Risk
+- **One book, one set of numbers.** The home a phone keeps showed the book's NPV, IR01, spot deltas and theta as
+  each pricer's own figures added up, as of today. The Risk
   page and the trader's home read the risk report: its ladder, on its market date. Whoever opened both saw two
-  IR01s and two NPVs for one book. Where the firm has market risk on, the home's four figures are now the
-  report's, with its date and its currency said; where it has not, they are as they were.
+  IR01s and two NPVs for one book. Where the firm has market risk on, the phone's four figures are now the
+  report's, read as the trader's home reads it (the stored report at once, the live one once after a booking),
+  with its date and its currency said; while it is on its way or cannot be had, the cells are empty and not the
+  other sum. Where the firm has not market risk on, they are as they were. The brief under them still tells the
+  pricers' own figures: that is not changed here.
 - **A scenario starts from the curve the ticket priced on.** The curve scenario tab showed the quotes the app
   ships with unless that curve's own page had been opened first: a five-year par of 3.643% beside a ticket priced
   at 3.480%. It now reads the firm's saved snapshot.

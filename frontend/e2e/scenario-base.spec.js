@@ -2,6 +2,7 @@
 // the store holds those until a curve's own page has been opened: a scenario opened first showed them, beside a
 // ticket priced on the firm's saved snapshot (Marco, 15 November 2026).
 import { test, expect, expectClean, API } from './fixtures.js'
+import { RATES_CURVES } from '../src/data/ratesCurves.js'
 
 test('a swap\'s curve scenario starts from the saved snapshot, not from the quotes the app ships with', async ({ app, problems }) => {
   const asked = app.waitForResponse(r => r.url().startsWith(API) && /\/api\/market-data\/snapshots\/USD_SOFR\/latest$/.test(r.url()))
@@ -13,6 +14,9 @@ test('a swap\'s curve scenario starts from the saved snapshot, not from the quot
   await win.getByRole('button', { name: 'CURVE SCENARIO', exact: true }).click()
   const snap = await (await asked).json()
   expect(snap.exists, 'the stack has a saved SOFR snapshot').toBe(true)
+  // the journey says something only where the saved snapshot is not the curve the app ships with
+  const shipped = RATES_CURVES.find(c => c.id === 'USD_SOFR').instruments.find(i => i.tenor === '5Y').quote
+  expect(Math.abs(Number(snap.quotes.find(q => q.tenor === '5Y').rate) - Number(shipped)), 'the stack\'s snapshot differs from the shipped quotes').toBeGreaterThan(0.01)
   for (const tenor of ['1Y', '5Y', '10Y']) {
     const quote = snap.quotes.find(q => q.tenor === tenor)
     expect(quote, `${tenor} is quoted`).toBeTruthy()

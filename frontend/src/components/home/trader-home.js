@@ -106,8 +106,8 @@ export function carry(rep) {
   return xs.length ? xs.reduce((a, b) => a + b, 0) : null
 }
 
-// The book in four figures, from the risk report: what the home's strip shows on a phone and to a role with no home
-// of its own yet. They are the Risk page's own figures, on its date and from its ladder, in the report's currency,
+// The book in four figures, from the risk report: what the home's strip shows on a phone (a monitor has the
+// trader's home). They are the Risk page's own figures, on its date and from its ladder, in the report's currency,
 // so that one book has one set of numbers on every screen. Until 0.42.5 the strip read the brief's fact sheet:
 // the book valued today on each pricer's own figures, a different sum on a different day (IR01 14,226 against the
 // ladder's 10,176 on the integration book; Marco, 15 November 2026). Null where there is no report to read.

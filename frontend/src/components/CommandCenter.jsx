@@ -10,6 +10,7 @@ import Lifecycle from './home/Lifecycle'
 import PnlTile from './home/PnlTile'
 import TraderHome from './home/TraderHome'
 import { bookStrip } from './home/trader-home'
+import { useRisk } from './home/use-risk'
 import { usePhone } from '../lib/phone'
 import { useModulesStore } from '../store/useModulesStore'
 import WeekAhead from './home/WeekAhead'
@@ -268,7 +269,7 @@ function DeskHome({ demo, navigate }) {
             <Kpi label="CONFIRMED" value={confirmed} tone={confirmed ? 'accent' : ''} loading={d.loading} />
             <div className="dh-kpi"><span className="dh-kpi-l">GROSS NOTIONAL</span><span className="dh-kpi-v small">{d.loading ? '…' : Object.entries(notional).map(([c, n]) => `${c} ${fmtM(n)}`).join(' · ') || '—'}</span></div>
           </div>
-          {trades.length > 0 && <RiskStrip sheet={sheet} riskOn={modules.MARKET_RISK !== false} />}
+          {trades.length > 0 && <RiskStrip sheet={sheet} riskOn={modules.MARKET_RISK !== false} trades={trades} marketDate={d.sofr?.valuation_date} known={!d.loading} />}
           {trades.length > 0 && modules.PNL !== false && <PnlTile />}
           <Ladder trades={trades} />
           <ul className="dh-list">
@@ -309,33 +310,31 @@ function DeskHome({ demo, navigate }) {
   )
 }
 
-// The desk's numbers: book NPV, IR01, FX01/CRY01 and theta. Where the firm has market risk on, they are the stored
-// risk report's (home/trader-home.js bookStrip): the same figures, on the same date, as the Risk page and the
-// trader's home, so one book has one set of numbers on every screen. Where it has not, they are the brief's fact
-// sheet (backend/prometheus/book_brief.py): the book valued today on each pricer's own figures. Nothing is
-// computed here but the sums.
-function RiskStrip({ sheet, riskOn }) {
-  const [rep, setRep] = useState(null)
-  useEffect(() => {
-    if (!riskOn) return undefined
-    let dead = false
-    get('/api/risk/report').then(j => { if (!dead) setRep(j) }).catch(() => { if (!dead) setRep(false) })      // no answer: the brief's figures, said to be so
-    return () => { dead = true }
-  }, [riskOn])
-  const b = riskOn ? bookStrip(rep) : null
-  if (b) {
-    const one = (v) => v == null ? '—' : `${b.ccy} ${fmtN(v)}`, tone = (v) => v == null || v === 0 ? '' : v > 0 ? 'pos' : 'neg'
-    const spots = Object.entries(b.spot01)
+// The desk's numbers on a phone's home: book NPV, IR01, FX01/CRY01 and theta. Where the firm has market risk on,
+// they are the risk report's (home/trader-home.js bookStrip), read as the trader's home on a monitor reads it
+// (home/use-risk.js: the stored report at once, the live one once when a trade was booked or the market moved
+// on since): the same figures, on the same date, as that home and the Risk page, so one book has one set of
+// numbers on every screen. While the report is on its way, or when it cannot be had, the cells are empty: the
+// other sum is not shown in its place. Where the firm has not market risk on there is no report to disagree
+// with, and they are the brief's fact sheet (backend/prometheus/book_brief.py): the book valued today on each
+// pricer's own figures. Nothing is computed here but the sums.
+const figure = (v) => v == null ? '—' : Math.round(v) === 0 ? '0' : `${v < 0 ? '−' : ''}${fmtN(Math.abs(v))}`      // a true minus, as the trader's home writes one
+function RiskStrip({ sheet, riskOn, trades, marketDate, known }) {
+  const risk = useRisk(riskOn, trades, marketDate, known)
+  if (riskOn) {
+    const b = bookStrip(risk.data), wait = !b && risk.loading
+    const cell = (v) => b ? figure(v) : wait ? '…' : '—', tone = (v) => !b || v == null || Math.round(v) === 0 ? '' : v > 0 ? 'pos' : 'neg'
+    const spots = b ? Object.entries(b.spot01) : [], ccy = b?.ccy || 'USD'
     return (
-      <div className="rk" aria-label="Book risk" data-testid="rk" data-from="risk-report">
-        <div><span className="dh-kpi-l">BOOK NPV</span><b className={tone(b.npv)} data-testid="rk-npv">{one(b.npv)}</b><small>ON {fmtD(b.date).toUpperCase()}</small></div>
-        <div><span className="dh-kpi-l">IR01</span><b data-testid="rk-ir01">{b.ir01 == null ? '—' : fmtN(b.ir01)}</b><small>{b.ccy} PER BP · ALL CURVES</small></div>
-        <div><span className="dh-kpi-l">FX01 · CRY01</span><b data-testid="rk-spot01">{spots.length ? spots.map(([a, v]) => `${a} ${fmtN(v)}`).join(' · ') : '—'}</b><small>{b.ccy} FOR +1% SPOT</small></div>
-        <div><span className="dh-kpi-l">THETA</span><b className={tone(b.theta)} data-testid="rk-theta">{one(b.theta)}</b><small>ONE DAY'S CARRY</small></div>
+      <div className="rk" aria-label="Book risk" data-testid="rk" data-from={b ? 'risk-report' : wait ? 'waiting' : 'none'}>
+        {/* the currency is said once a figure, in its label, and the figure stands bare: all four the same way */}
+        <div><span className="dh-kpi-l">BOOK NPV · {ccy}</span><b className={tone(b?.npv)} data-testid="rk-npv">{cell(b?.npv)}</b><small>{b ? `ON ${fmtD(b.date).toUpperCase()}` : wait ? 'MEASURING' : 'NO RISK REPORT'}</small></div>
+        <div><span className="dh-kpi-l">IR01 · {ccy}</span><b data-testid="rk-ir01">{cell(b?.ir01)}</b><small>PER BP</small></div>
+        <div><span className="dh-kpi-l">FX01/CRY01 · {ccy}</span><b data-testid="rk-spot01">{b ? (spots.length ? spots.map(([a, v]) => <span key={a} className="rk-line">{a} {figure(v)}</span>) : '—') : cell(null)}</b><small>FOR +1% SPOT</small></div>
+        <div><span className="dh-kpi-l">THETA · {ccy}</span><b className={tone(b?.theta)} data-testid="rk-theta">{cell(b?.theta)}</b><small>ONE DAY'S CARRY</small></div>
       </div>
     )
   }
-  if (riskOn && rep === null) return <div className="rk" aria-label="Book risk" data-testid="rk" data-from="waiting" />      // the report is on its way: not the other sum in the meantime
   const t = sheet?.totals
   const money = (o) => { const e = Object.entries(o || {}); return e.length ? e.map(([c, v]) => `${c} ${fmtN(v)}`).join(' · ') : '—' }
   const sign = (o) => { const vs = Object.values(o || {}); return !vs.length ? '' : vs.every(v => v >= 0) ? 'pos' : vs.every(v => v <= 0) ? 'neg' : '' }

@@ -182,6 +182,10 @@ it uses, and the whole map names the app, the API, the database and the registry
 sharp at any size and are read by a screen reader. There is no flat view to choose; where a browser cannot draw
 the scene the names stand in a row and the steps still say what happens.
 
+On the phone home's four-figure strip a figure stands bare and its currency is said once, in the figure's own
+label ("IR01 · USD"), the same way for all four; a negative takes a true minus and the coral; each asset of the
+spot deltas has a line of its own, so that nothing breaks in the middle of a number.
+
 ## Legs
 
 DETAILS of a currency or digital-asset trade is a table of legs (`trade-window/FxLegs.jsx`, `fx-legs.js`): one row

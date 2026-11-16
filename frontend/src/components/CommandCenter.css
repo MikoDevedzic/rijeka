@@ -252,6 +252,7 @@
 .rk > div { background:var(--bg); padding:0.45rem 0.6rem; display:flex; flex-direction:column; gap:0.15rem; min-width:0; }
 .rk b { font-family:var(--mono); font-size:0.86rem; font-weight:600; color:var(--text); line-height:1.25; overflow-wrap:anywhere; }
 .rk b.pos { color:var(--up); } .rk b.neg { color:var(--red); }
+.rk b .rk-line { display:block; white-space:nowrap; }      /* a spot delta an asset, each on a line of its own */
 .rk small { font-family:var(--mono); font-size:0.86rem; letter-spacing:0.08em; color:var(--text-mute); }
 
 /* meeting-dated pricing under the policy path */
