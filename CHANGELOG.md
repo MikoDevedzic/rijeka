@@ -3,6 +3,18 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.26). Commits on `main` are the detail.
 
+## 0.44.1 · 16 November 2026
+
+**A product lead among the roles.** Every role so far guards something that exists: the numbers, the look, the
+database, the release. None asked what the platform should do next to serve its mission. Patrick does: he holds
+the mission as the README states it, ranks what would most strengthen it (for whom, at what cost, on what
+evidence), says what to stop, and looks at a large piece of work before it starts. He proposes and the owner
+decides; he builds nothing, ships nothing and writes nothing public. The role is in `.claude/agents/patrick.md`
+and the gates table; the system page draws him at the first step of a change, before the project manager's
+record, on a GitHub slab made a little wider to hold him. No figure and no screen of the desk changes.
+
+---
+
 ## 0.44.0 · 16 November 2026
 
 **An option of any style has the scenario tab every other trade has.** What 0.43.0 left outside the one shape:
