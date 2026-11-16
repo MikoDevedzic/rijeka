@@ -69,7 +69,7 @@ class CurrencyForwardResult:
     # One risk taxonomy across products (the swap carries NPV, IR01, IR01_DISC, THETA):
     ir01: float = 0.0               # +1 bp on every rate curve = ir01_disc + ir01_base
     ir01_disc: float = 0.0          # +1 bp on the discount (quote / settlement) curve only
-    ir01_base: float = 0.0          # +1 bp on the base-currency curve (crypto: the funding rate, FUND01)
+    ir01_base: float = 0.0          # +1 bp on the base-currency curve (crypto: the funding rate; the desk shows its negative as CRYBASIS01)
     spot01: float = 0.0             # dNPV for +1 % spot: FX01 for a pair, CRY01 for a digital asset
     theta: float = 0.0              # one day's carry: NPV one day later, same spot and curves
     t_spot: float = 0.0             # T_s: valuation date to the spot date the forward is carried from; 0 when spot settles at once

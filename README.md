@@ -27,7 +27,7 @@ Named after a village in Bosnia (*rijeka* means "river" in Bosnian, Croatian and
 Hosted demo at [app.rijeka.app](https://app.rijeka.app); the in-app **ROADMAP** is the honest status of every item (DONE means in the code and tested).
 
 - **Pricing.** OIS bootstrap per currency (SOFR, €STR, SONIA, SARON, TONA, AONIA, CORRA); IRS, OIS and basis swaps; European swaptions (Bachelier on a β=0 SABR surface); caps, floors and collars; Bermudans on a Hull-White trinomial tree; FX spot, forwards and NDFs on the G10 pairs and non-deliverable forwards on BTC, ETH and SOL on one interest-rate-parity model; FX and digital-asset options in six styles (European, American, digital, barrier, double barrier, touch) on one engine, each against its QuantLib counterpart.
-- **Risk.** Key-rate IR01 ladders by bump-and-reprice with FX01 / CRY01, FUND01 and vega; historical-simulation VaR by full revaluation with the curves, spots and volatility surfaces as factors, the ladder VaR alongside; named stress; backtesting (Basel traffic light, Kupiec); limits with utilisation and breaches.
+- **Risk.** Key-rate IR01 ladders by bump-and-reprice with FX01 / CRY01, CRYBASIS01 and vega; historical-simulation VaR by full revaluation with the curves, spots and volatility surfaces as factors, the ladder VaR alongside; named stress; backtesting (Basel traffic light, Kupiec); limits with utilisation and breaches.
 - **Valuation adjustments (XVA).** CVA, DVA, FVA (the funding cost FCA and the funding benefit FBA), ColVA, MVA and KVA under CSA presets with a margin period of risk; initial margin as an amount you set or the engine's own estimate (ISDA SIMM is licensed and is not implemented).
 - **Counterparty credit.** Netting sets on shared Hull-White and lognormal paths, real-world calibration from public history with historical block sampling, the CSA on the netted value, EE / EPE / PFE and credit limits.
 - **P&L.** Attribution by sequential full revaluation (carry, cash, curves by bucket, spot, points, vol, residual), day / MTD / YTD, trader and controller sign-off, XVA P&L.
@@ -110,7 +110,7 @@ see [SELF-HOSTING.md](SELF-HOSTING.md). The full schema is in
 
 **Institutional quality, open access.** The same mathematics used at tier-1 banks, available to anyone.
 
-**One taxonomy.** IR01 not DV01; FX01 on a pair and CRY01 on a digital asset; on a digital asset IR01 is discounting only and FUND01 the funding rate; one aggregation.
+**One taxonomy.** IR01 not DV01; FX01 on a pair and CRY01 on a digital asset; on a digital asset IR01 is discounting only and CRYBASIS01 the forward basis; one aggregation.
 
 **Audit-ready.** Every snapshot is stamped with its source and provenance; calibrations are stored with their fit diagnostics; every pricing change ships with a test and a before/after number.
 
@@ -147,9 +147,9 @@ One set of names on every ticket. Rate factors are per basis point; spot factors
 | Factor | Rates (IRS, swaption, cap/floor) | FX forward / NDF | Crypto forward | FX option | Crypto option |
 |--------|-----------------------------------|------------------|----------------|-----------|---------------|
 | NPV | settlement currency | quote currency | USD | quote currency | USD |
-| IR01 | +1 bp on every rate curve | = IR01 DISC + IR01 BASE | = IR01 DISC + FUND01 | = IR01 DISC + IR01 BASE | IR01 DISC only |
+| IR01 | +1 bp on every rate curve | = IR01 DISC + IR01 BASE | IR01 DISC only | = IR01 DISC + IR01 BASE | IR01 DISC only |
 | IR01 DISC | +1 bp on the discount curve only | +1 bp on the quote (settlement) curve | +1 bp on the USD curve | +1 bp on the quote curve | +1 bp on the USD curve |
-| IR01 BASE / FUND01 | — | +1 bp on the base-currency curve | +1 bp on the asset funding rate | +1 bp on the base curve | FUND01: +1 bp on the funding rate, reported apart |
+| IR01 BASE / CRYBASIS01 | — | +1 bp on the base-currency curve | CRYBASIS01: +1 bp a year on the forward basis (a long forward gains), reported apart | +1 bp on the base curve | CRYBASIS01: +1 bp a year on the forward basis, reported apart |
 | FX01 / CRY01 | — | PV for +1 % spot | PV for +1 % spot | FX01 | CRY01 |
 | VEGA | swaption / cap surface, +1 bp normal vol | — | — | +1 vol point | +1 vol point |
 | THETA | one day's carry | one day's carry | one day's carry | one calendar day | one calendar day |

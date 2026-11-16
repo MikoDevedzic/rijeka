@@ -519,7 +519,7 @@ tells the operator.
 
 1. **Price.** The ticket posts terms to `/price` (rates) or `/api/currency/forward/price` and `/api/currency/option/price` (FX and digital
    assets); the pricer bootstraps the account's latest snapshot (cached per curve, date and quotes)
-   and returns NPV, the sensitivities in the desk's taxonomy (IR01, IR01 DISC, FX01 / CRY01, FUND01,
+   and returns NPV, the sensitivities in the desk's taxonomy (IR01, IR01 DISC, FX01 / CRY01, CRYBASIS01,
    vega, theta, gamma) and the cashflows.
 2. **Book.** `POST /api/book/trade` writes the trade, its legs and the BOOKED event in one transaction
    (idempotent by key). A product trade (FX, digital asset, option) is one block of terms, no legs.

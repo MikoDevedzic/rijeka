@@ -69,11 +69,11 @@ PRODUCTS = [
      "replication": "xlsx"},
     {"id": "crypto_ndf", "name": "Crypto NDF", "group": "FX & digital assets", "section": "12",
      "default": "BTC/USD · 10 BTC · 3-month non-deliverable forward · strike at the forward",
-     "formula": "F = S·DF_BTC(T)/DF_USD(T) (cash-and-carry with a BTC funding rate, the same model as an FX forward); NPV = (F − K)·N·DF_USD(T); CRY01, IR01 (discounting) and FUND01 beside the engine's",
+     "formula": "F = S·DF_BTC(T)/DF_USD(T) (cash-and-carry with a BTC funding rate, the same model as an FX forward); NPV = (F − K)·N·DF_USD(T); CRY01, IR01 (discounting) and CRYBASIS01 beside the engine's",
      "replication": "xlsx"},
     {"id": "crypto_ndo", "name": "Crypto NDO (European option)", "group": "FX & digital assets", "section": "12",
      "default": "BTC/USD · 10 BTC · 3-month call · strike at the forward · ATM vol from the BTCUSD surface (60% without one) · funding 3%",
-     "formula": "Black-76 on the forward F = S·e^(−r_c·T)/DF_USD: C = DF_USD·[F·N(d₁) − K·N(d₂)]; CRY01, IR01 (discounting), FUND01 and vega beside the engine's",
+     "formula": "Black-76 on the forward F = S·e^(−r_c·T)/DF_USD: C = DF_USD·[F·N(d₁) − K·N(d₂)]; CRY01, IR01 (discounting), CRYBASIS01 and vega beside the engine's",
      "replication": "xlsx"},
     {"id": "crypto_option_styles", "name": "Crypto option styles: digital, barrier, touch, double barrier", "group": "FX & digital assets", "section": "13",
      "default": "BTC/USD · 3 months · digitals USD 100k / 1 BTC · the eight single barriers at ±15% with a rebate · touches · double knock-out and knock-in",
@@ -451,14 +451,14 @@ def crypto_ndf_workbook(mkt: Market):
     r = _forward_engine_rows(ws, mkt, base="BTC", quote="USD", S=spot_px, N=10, T=T, base_rate=r_btc, K_cell="B12", npv_cell="B13", k_off=-1000.0, crypto=True, row0=16)
     _widths(ws, [62, 18, 18, 14])
     W.ticket(wb, "ANALYTICS", [("NET NPV", "Inputs!B18", "#,##0.00", "USD, at the yellow strike"), ("CRY01", "Inputs!B19", "#,##0.00", "PV for +1% spot"),
-                               ("IR01 (DISC)", "Inputs!B20", "#,##0.0000", "+1bp on the USD curve"), ("FUND01", "Inputs!B21", "#,##0.0000", "+1bp on the funding rate")])
+                               ("IR01 (DISC)", "Inputs!B20", "#,##0.0000", "+1bp on the USD curve"), ("CRYBASIS01", "Inputs!B21", "#,##0.0000", "+1bp a year on the forward basis")])
     W.ticket(wb, "MARKET", [("SPOT", "Inputs!B1", "#,##0.00", "USD per BTC"), ("FAIR FORWARD", "Inputs!B8", "#,##0.00", "cash-and-carry"), ("DF USD", "Inputs!B5", "0.000000", "to settlement"),
                             ("FUNDING RATE", "Inputs!B6", "0.00%", "continuous, p.a.")])
     for sym, notn, ref, note, fmt in [("T", "(settlement − valuation)/365", "Inputs!B4", "ACT/365", "0.0000"), ("DF_USD", "from the SOFR curve, log-linear", "Inputs!B5", "", "0.000000"),
                                       ("DF_BTC", "exp(−r_c·T)", "Inputs!B7", "the funding rate as the base rate", "0.000000"), ("F", "S·DF_BTC/DF_USD", "Inputs!B8", "cash-and-carry forward", "#,##0.00"),
                                       ("NPV", "(F − K)·N·DF_USD", "Inputs!B13", "", "#,##0.00"), ("CRY01", "N·S·DF_BTC·1%", "Inputs!B19", "exact: a forward is linear in spot", "#,##0.00"),
                                       ("IR01", "−N·K·[DF_USD·e^(−1bp·T) − DF_USD]", "Inputs!B20", "the discounting curve alone", "#,##0.0000"),
-                                      ("FUND01", "N·S·[DF_BTC·e^(−1bp·T) − DF_BTC]", "Inputs!B21", "the funding rate", "#,##0.0000")]:
+                                      ("CRYBASIS01", "−N·S·[DF_BTC·e^(−1bp·T) − DF_BTC]", "Inputs!B21", "+1bp a year on the forward basis: the funding rate −1bp, to first order", "#,##0.0000")]:
         W.derive(wb, sym, notn, ref, note, fmt)
     return wb, r.npv
 
@@ -467,21 +467,29 @@ def _forward_engine_rows(ws, mkt: Market, *, base: str, quote: str, S: float, N:
                          k_off: float, crypto: bool, row0: int):
     """Beneath a forward's formula block: the engine's NPV and sensitivities at an off-market strike, with the
     sheet's closed forms beside them. NPV = N·(S·DF_b − K·DF_q): FX01/CRY01 = N·S·DF_b·1 %; IR01 on the discounting
-    curve = −N·K·ΔDF_q for +1bp; the base curve's (FUND01 on a digital asset) = N·S·ΔDF_b for +1bp."""
+    curve = −N·K·ΔDF_q for +1bp; the base curve's = N·S·ΔDF_b for +1bp. On a digital asset that row is CRYBASIS01, the
+    desk's name on every screen: the value for +1bp a year on the forward basis, which the engine reports as the
+    negative of the +1bp bump of the asset's rate (api/routes/currencies.py: crybasis01), so the sheet's row is
+    −N·S·ΔDF_b and the engine's beside it −ir01_base."""
     t = (T - mkt.valuation_date).days / 365.0
     F = S * math.exp(-base_rate * t) / mkt.curve.df(T)
     K = F + k_off
     r = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=N, forward_rate=K, spot=S, valuation_date=mkt.valuation_date,
                                settlement_date=T, quote_curve=mkt.curve, base_rate=base_rate, direction="BUY")
     ws[K_cell] = K
-    delta, fund = ("CRY01", "FUND01") if crypto else ("FX01", f"IR01 BASE ({base})")
+    delta, fund = ("CRY01", "CRYBASIS01") if crypto else ("FX01", f"IR01 BASE ({base})")
     ws.cell(row=row0, column=1, value=f"Engine comparison at K = F {k_off:+,.4g} (the yellow strike above)").font = Font(bold=True)
     _hdr(ws, row0 + 1, ["", "Formulas", "Rijeka engine", "Difference"])
     _ref_cell(ws, row0 + 2, f"NPV ({quote})", f"={npv_cell}", r.npv)
     _ref_cell(ws, row0 + 3, f"{delta}: NPV for +1% spot = N·S·DF_{base}·1%", "=B2*B1*0.01*B7", getattr(r, "spot01", None) if getattr(r, "spot01", None) is not None else r.delta_quote_per_pct)
     _ref_cell(ws, row0 + 4, f"IR01{' (discounting)' if crypto else ' ' + quote + ' curve'}: −N·K·[DF_{quote}·e^(−1bp·T) − DF_{quote}]", f"=-B2*{K_cell}*(B5*EXP(-0.0001*B4)-B5)", r.ir01_disc, "#,##0.0000")
-    _ref_cell(ws, row0 + 5, f"{fund}: N·S·[DF_{base}·e^(−1bp·T) − DF_{base}]", "=B2*B1*(B7*EXP(-0.0001*B4)-B7)", r.ir01_base, "#,##0.0000")
-    ws.cell(row=row0 + 7, column=1, value=("On a digital asset IR01 is the discounting sensitivity alone and FUND01 the funding rate's; " if crypto else "IR01 is the sum of both curves' rows; ")
+    if crypto:      # +1bp a year on the basis: the negative of the asset-rate bump, in the sheet as in the engine
+        _ref_cell(ws, row0 + 5, f"{fund} (+1bp a year on the forward basis): −N·S·[DF_{base}·e^(−1bp·T) − DF_{base}]", "=-B2*B1*(B7*EXP(-0.0001*B4)-B7)",
+                  0.0 - r.ir01_base, "#,##0.0000")
+    else:
+        _ref_cell(ws, row0 + 5, f"{fund}: N·S·[DF_{base}·e^(−1bp·T) − DF_{base}]", "=B2*B1*(B7*EXP(-0.0001*B4)-B7)", r.ir01_base, "#,##0.0000")
+    ws.cell(row=row0 + 7, column=1, value=("On a digital asset IR01 is the discounting sensitivity alone; CRYBASIS01 is the forward basis's, the value for +1bp a year on the basis "
+                   "(a long forward gains), which is the negative of +1bp on the funding rate; " if crypto else "IR01 is the sum of both curves' rows; ")
             + "a forward is linear in spot, so the +1% row is exact (no gamma).")
     return r
 
@@ -549,7 +557,7 @@ FX_CASE = dict(pair="EURUSD", base="EUR", quote="USD", spot=FX_SPOT, base_rate=F
 CRYPTO_CASE = dict(pair="BTCUSD", base="BTC", quote="USD", spot=65_000.0, base_rate=0.03, base_rate_label="BTC funding rate (cont., p.a.)",
                    notional=10.0, vol_default=0.60, settle_lag=1, spot_fmt="#,##0.00", barrier_pct=0.15, payout=100_000.0, rebate=100.0,
                    rate_note="The funding (lending or staking) rate is the digital asset's base rate: F = S·e^(−r_c·T)/DF_USD, the cash-and-carry forward.",
-                   delta="CRY01", funding="FUND01")
+                   delta="CRY01", funding="CRYBASIS01")
 
 
 def _N(x: str) -> str:
@@ -624,7 +632,8 @@ def _option_workbook(mkt: Market, case: dict):
          + ("The digital asset's funding rate is its base rate: one engine with the FX option." if crypto else "")),
         (f"Delta ({case['delta']}): forward delta Φ(d₁) and the spot position in {base} = Φ(d₁)·DF_{quote}·F/S·N. Vega: the engine reprices at σ + 1 point; the analytic "
          "N·DF·F·n(d₁)·√T_e·0.01 is shown beside it (the gap is volga over the one-point move). "
-         + ("IR01 on a digital asset is the discounting curve's sensitivity alone; the funding rate's is FUND01." if crypto else "IR01 is the sum of both curves' sensitivities.")),
+         + ("IR01 on a digital asset is the discounting curve's sensitivity alone; the forward basis's is CRYBASIS01, the value for +1bp a year on the basis: "
+            "the negative of +1bp on the funding rate." if crypto else "IR01 is the sum of both curves' sensitivities.")),
         case["rate_note"],
         ("The canonical on-chain record is the CRYPTO_OPTION product (NDO) in chain/canonical.py (ISDA Digital Asset Derivatives Definitions fields)." if crypto
          else "The canonical on-chain record is the FX_OPTION product in chain/canonical.py (ISDA FX and Currency Option Definitions fields)."),
@@ -653,9 +662,11 @@ def _option_workbook(mkt: Market, case: dict):
     _ref_cell(ws, 15, f"{'IR01 (discounting, ' + quote + ' +1bp)' if crypto else 'IR01 ' + quote + ' curve (+1bp)'}: F up by the carry, DF down",
               f"=Notl*DFq*EXP(-0.0001*Ts)*B2*(Fwd*EXP(0.0001*(Ts-1/365*0))*{_N('B2*((LN(Fwd*EXP(0.0001*Ts)/B1)+0.5*Sigma^2*Te)/SqT)')}-B1*{_N('B2*((LN(Fwd*EXP(0.0001*Ts)/B1)+0.5*Sigma^2*Te)/SqT-SqT)')})-B8",
               res.ir01_disc, "#,##0.0000")
-    _ref_cell(ws, 16, f"{case['funding']} ({base} +1bp): F down by the carry",
-              f"=Notl*DFq*B2*(Fwd*EXP(-0.0001*Ts)*{_N('B2*((LN(Fwd*EXP(-0.0001*Ts)/B1)+0.5*Sigma^2*Te)/SqT)')}-B1*{_N('B2*((LN(Fwd*EXP(-0.0001*Ts)/B1)+0.5*Sigma^2*Te)/SqT-SqT)')})-B8",
-              res.ir01_base, "#,##0.0000")
+    base_bump = f"Notl*DFq*B2*(Fwd*EXP(-0.0001*Ts)*{_N('B2*((LN(Fwd*EXP(-0.0001*Ts)/B1)+0.5*Sigma^2*Te)/SqT)')}-B1*{_N('B2*((LN(Fwd*EXP(-0.0001*Ts)/B1)+0.5*Sigma^2*Te)/SqT-SqT)')})-B8"
+    if crypto:      # the desk's name and sign: +1bp a year on the forward basis is the negative of the asset-rate bump, in the sheet as in the engine
+        _ref_cell(ws, 16, f"{case['funding']} (+1bp a year on the forward basis): −[NPV with the {base} rate +1bp − NPV]", f"=-({base_bump})", 0.0 - res.ir01_base, "#,##0.0000")
+    else:
+        _ref_cell(ws, 16, f"{case['funding']} ({base} +1bp): F down by the carry", f"={base_bump}", res.ir01_base, "#,##0.0000")
     ws["A18"] = f"Put–call parity check: C − P = DF_{quote}·(F − K)·N"; ws["B18"] = f"=Notl*DFq*((Fwd*{_N('B3')}-B1*{_N('B4')})-(B1*{_N('-B4')}-Fwd*{_N('-B3')}))-Notl*DFq*(Fwd-B1)"; ws["B18"].number_format = "0.000000"
     ws["A20"] = ("Sold option: the same numbers with the opposite sign. The premium is a cash flow on its payment date, not part of the value once paid. "
                  "The rate rows assume the carry runs over T_s from the valuation date, as the engine does without a spot lag" + (" (a digital asset settles its spot the next day)." if crypto else "."))
@@ -665,7 +676,7 @@ def _option_workbook(mkt: Market, case: dict):
     W.ticket(wb, "ANALYTICS", [("OPTION NPV", "European!B8", "#,##0.00", f"{quote}, bought"), ("DELTA", "European!B11", "#,##0.0000", f"spot position in {base}"),
                                (delta, "European!B12", "#,##0.00", "PV for +1% spot, repriced"), ("VEGA / 1PT", "European!B14", "#,##0.00", "repriced at σ + 1 point"),
                                ("IR01" + (" (DISC)" if crypto else " " + quote), "European!B15", "#,##0.0000", f"+1bp on the {quote} curve"),
-                               (fund, "European!B16", "#,##0.0000", "+1bp on the funding rate" if crypto else f"+1bp on the {base} curve"),
+                               (fund, "European!B16", "#,##0.0000", "+1bp a year on the forward basis" if crypto else f"+1bp on the {base} curve"),
                                ("FORWARD DELTA", "European!B10", "0.0%", "Φ(d₁), premium-excluded")])
     W.ticket(wb, "MARKET", [("SPOT", "Inputs!B1", case["spot_fmt"], f"{quote} per {base}"), ("FORWARD TO SETTLEMENT", "Inputs!B10", case["spot_fmt"], "S·DF_b/DF_q"),
                             ("STRIKE", "European!B1", case["spot_fmt"], "at the forward unless changed"), ("VOL", "Inputs!B11", "0.00%", "lognormal, the surface's ATM"),
@@ -684,7 +695,8 @@ def _option_workbook(mkt: Market, case: dict):
                                       (delta, "NPV(F·1.01) − NPV", "European!B12", "the forward moves with spot, the discounting does not", "#,##0.00"),
                                       ("vega", "NPV(σ + 0.01) − NPV", "European!B14", "repriced; the analytic N·DF·F·n(d₁)·√T_e·0.01 on B13", "#,##0.00"),
                                       ("IR01", "NPV(F·e^(1bp·T_s), DF·e^(−1bp·T_s)) − NPV", "European!B15", f"+1bp on the {quote} curve: the forward up by the carry, the discount factor down", "#,##0.0000"),
-                                      (fund, "NPV(F·e^(−1bp·T_s)) − NPV", "European!B16", "+1bp on the base rate: the forward down by the carry", "#,##0.0000")]:
+                                      (fund, "−[NPV(F·e^(−1bp·T_s)) − NPV]" if crypto else "NPV(F·e^(−1bp·T_s)) − NPV", "European!B16",
+                                       "+1bp a year on the forward basis: the negative of the funding rate +1bp" if crypto else "+1bp on the base rate: the forward down by the carry", "#,##0.0000")]:
         W.derive(wb, sym, notn, ref, note, fmt)
     # Scenario: NPV against spot, by the same closed form, with the payoff at expiry beside it
     sc = wb.create_sheet("Scenario")

@@ -1,7 +1,31 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.27). Commits on `main` are the detail.
+methodology document carries its own version (v1.28). Commits on `main` are the detail.
+
+## 0.46.3 · 16 November 2026
+
+**One name for a digital asset's basis sensitivity, wherever it is read.** The ticket, the home, the Risk pages and
+the methodology have called it CRYBASIS01 since 9 November: the change in value for +1 bp a year on the forward
+basis, a long forward positive. The README, the glossary, three other documents, two lines of the in-app roadmap
+and the Excel replications still called it FUND01, the earlier name, which is the same sensitivity with the other
+sign (+1 bp on the asset's rate). A reader who came from the README to a ticket met two names and two signs for
+one number.
+
+- **The Excel replications of the digital-asset forward and option** carry CRYBASIS01: the row, the ANALYTICS
+  card and the derivation. The sheet's formula is the negative of the asset-rate bump, as the engine's own figure
+  is, so the sheet and the engine beside it agree as before; the number in that row changes its sign and its
+  name, nothing else. A currency pair's workbook keeps IR01 BASE.
+- **The README's taxonomy table** names CRYBASIS01, and no longer says a digital-asset forward's IR01 is the sum
+  of the discounting and the funding sensitivities: on a digital asset IR01 is the discounting curve's alone, as
+  the ticket has shown since 2 November. The market-risk note no longer says BTC01 for a spot delta.
+- **The glossary** has a row for `crybasis01`, and says of `fund01` that the API still returns it for readers
+  written before 9 November and that nothing prints it.
+- No figure on any screen changes. Methodology v1.28 (two sentences and a line of its history). A test holds
+  that no digital-asset workbook says FUND01, that the forward's row is the engine's CRYBASIS01 and positive for a
+  long forward, and that a currency pair's workbook is untouched.
+
+---
 
 ## 0.46.2 · 16 November 2026
 

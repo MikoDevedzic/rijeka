@@ -881,7 +881,8 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
                forward_beyond_quotes=f_beyond,
                model="F = S·DF_base/DF_quote from the spot date (parity) or S + quoted points (market); NPV_quote = ±N_base·(F−K)·DF_quote; ACT/365")
     # the desk's taxonomy: on a digital asset IR01 is the discounting curve's sensitivity alone and the
-    # funding rate's is FUND01; on a currency pair both legs are rate curves and IR01 is their sum
+    # forward basis's is CRYBASIS01 (the negative of the asset-rate bump, kept as fund01 for older readers); on a
+    # currency pair both legs are rate curves and IR01 is their sum
     # the curves the price was built on, pillar by pillar (a flat rate has none of its own: its name is in base_discounting)
     out["curves"] = {"quote": {"id": st["quote_curve"], "pillars": curve_points(q_curve, val_date)},
                      "base": ({"id": st["base_curve"], "pillars": curve_points(kw["base_curve"], val_date)} if kw.get("base_curve") is not None else None)}
@@ -916,7 +917,7 @@ def _price(db: Session, user_id: str, pair: str, *, shape: str, base_notional: f
 def crybasis01(fund01: Optional[float]) -> Optional[float]:
     """CRYBASIS01: the change in value for +1 bp a year on the forward basis (forward over spot, annualised), spot
     and the USD curve unchanged; a long forward is positive. Under both the quoted points and the parity forward,
-    +1 bp of basis is −1 bp of the base (funding) rate at a fixed USD rate, so it is −FUND01 (owner, 9 Nov 2026)."""
+    +1 bp of basis is −1 bp of the base (funding) rate at a fixed USD rate, so it is the negative of the asset-rate bump, which the API keeps as fund01 (owner, 9 Nov 2026)."""
     return None if fund01 is None else 0.0 - float(fund01)
 
 
@@ -1048,7 +1049,8 @@ def _price_option(db: Session, user_id: str, pair: str, *, option_type: str, bas
     out.update(style=spec.style, payout=spec.payout, payout_currency=spec.payout_currency, barrier_type=spec.barrier_type, barrier=spec.barrier,
                lower=spec.lower, upper=spec.upper, rebate=spec.rebate, touch_type=spec.touch_type, pay_at_hit=spec.pay_at_hit)
     # the desk's taxonomy: on a digital asset IR01 is the discounting curve's sensitivity alone and the
-    # funding rate's is FUND01; on a currency pair both curves are rates and IR01 is their sum
+    # forward basis's is CRYBASIS01 (the negative of the asset-rate bump, kept as fund01 for older readers); on a
+    # currency pair both curves are rates and IR01 is their sum
     out["fund01"] = out["ir01_base"] if crypto else None
     out["crybasis01"] = crybasis01(out["fund01"])
     if crypto:

@@ -24,7 +24,7 @@ its own door so nobody has to guess.
 - **No silent methodology changes.** If a formula changes, `docs/methodology/rijeka_methodology.tex`
   changes in the same pull request, and the known-limitations section is updated if a limitation is
   removed or added.
-- **One risk vocabulary.** `IR01`, `IR01_DISC`, `FX01` / `CRY01`, `FUND01`, `VEGA`, `THETA`, `GAMMA`: the one table is [docs/glossary.md](docs/glossary.md). Not PV01, not DV01.
+- **One risk vocabulary.** `IR01`, `IR01_DISC`, `FX01` / `CRY01`, `CRYBASIS01`, `VEGA`, `THETA`, `GAMMA`: the one table is [docs/glossary.md](docs/glossary.md). Not PV01, not DV01.
 - **Nothing in the app may depend on Rijeka's servers to verify a confirmation.** The verifier stays
   self-contained.
 

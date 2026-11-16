@@ -12,7 +12,8 @@ what the app shows.
 | `ir01` | IR01 | PV change for +1 bp on every rate curve the trade is valued on. On a digital asset: the discounting curve alone. |
 | `ir01_disc` | IR01 DISC | +1 bp on the discount curve only. |
 | `ir01_base` | IR01 BASE | +1 bp on the base-currency curve of a currency pair. |
-| `fund01` | FUND01 | +1 bp on a digital asset's funding rate; reported beside IR01, never summed into it. |
+| `crybasis01` | CRYBASIS01 | The change in value for +1 bp a year on a digital asset's forward basis (forward over spot, annualised), spot and the USD curve unchanged; a long forward gains. Reported beside IR01, never summed into it. The one name for this on every screen, report and Excel export. |
+| `fund01` | (not shown) | +1 bp on a digital asset's funding rate: the same sensitivity with the other sign (`crybasis01` = −`fund01`). The API still returns the field, for readers written before 9 November 2026; nothing prints it. |
 | `spot01` | FX01 / CRY01 | PV for +1 % spot: FX01 on a currency pair, CRY01 on a digital asset. `SPOT01:<asset>` in the limits catalogue. |
 | `vega` | VEGA | PV for +1 vol point (FX, digital assets) or +1 bp of normal vol (swaptions, caps), by surface and bucket on the ladder. |
 | `theta` | THETA | One calendar day's carry. |

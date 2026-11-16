@@ -333,3 +333,47 @@ def test_hw1f_mc_matches_the_route_loop():
     assert abs(sim.paths[:, 0].mean()) < 1.5e4                                                   # a par swap is worth ~0 at the first step
     rng = np.random.default_rng(1); z0 = rng.standard_normal(4000)
     assert np.allclose(sim.z[:, 0], z0) and np.allclose(sim.x[:, 0], sig * math.sqrt((1 - math.exp(-2 * a * DT)) / (2 * a)) * z0)
+
+
+def test_a_digital_assets_workbooks_name_the_basis_as_the_screens_do():
+    """One sensitivity, one name and one sign wherever a reader meets it. The screens say CRYBASIS01 (the value for
+    +1bp a year on the forward basis, a long forward positive) since 9 November 2026; the Excel exports went on
+    saying FUND01 (+1bp on the asset's rate, the other sign) until 16 November. The sheet's row is the negative of
+    the asset-rate bump, as the engine's own figure is (api/routes/currencies.py: crybasis01)."""
+    import math
+    from api.routes.currencies import crybasis01
+    mkt = _mkt()
+
+    def cells(wb):
+        return [(ws.title, c.coordinate, c.value) for ws in wb.worksheets for row in ws.iter_rows() for c in row if isinstance(c.value, str)]
+
+    for product in ("crypto_ndf", "crypto_ndo", "crypto_option_styles"):
+        wb = load_workbook(io.BytesIO(rep.build(product, mkt)[0]))
+        text = cells(wb)
+        assert not [t for t in text if "FUND01" in t[2]], product                                   # the older name is nowhere a reader looks
+        if product != "crypto_option_styles":
+            assert [t for t in text if "CRYBASIS01" in t[2]], product
+
+    # the forward: the sheet's formula, evaluated here from the sheet's own inputs, is the engine's CRYBASIS01
+    wb = load_workbook(io.BytesIO(rep.build("crypto_ndf", mkt)[0]))
+    ws = wb["Inputs"]
+    row = next(c.row for c in ws["A"] if isinstance(c.value, str) and c.value.startswith("CRYBASIS01"))
+    assert ws.cell(row=row, column=2).value == "=-B2*B1*(B7*EXP(-0.0001*B4)-B7)"
+    engine = ws.cell(row=row, column=3).value
+    assert isinstance(engine, (int, float)) and engine > 0                                           # a long forward gains when the basis widens
+    N, spot, T, df_btc = ws["B2"].value, ws["B1"].value, ws["B4"].value, ws["B7"].value
+    if all(isinstance(v, (int, float)) for v in (N, spot, T, df_btc)):                               # inputs that are values, not formulas
+        assert -N * spot * (df_btc * math.exp(-0.0001 * T) - df_btc) == pytest.approx(engine, rel=1e-9)
+    # and it is the route's own definition of the figure: the negative of the asset-rate bump
+    assert crybasis01(-engine) == pytest.approx(engine)
+
+    # the option: the engine's cell beside the row is positive for a bought call, and the row is the negative of the rate bump
+    wb = load_workbook(io.BytesIO(rep.build("crypto_ndo", mkt)[0]))
+    ws = wb["European"]
+    assert ws["A16"].value.startswith("CRYBASIS01 (+1bp a year on the forward basis)") and ws["B16"].value.startswith("=-(")
+    assert isinstance(ws["C16"].value, (int, float)) and ws["C16"].value > 0
+    # a currency pair keeps its own name and sign: the base curve's IR01
+    wb = load_workbook(io.BytesIO(rep.build("fx_option", mkt)[0]))
+    assert wb["European"]["A16"].value.startswith("IR01 BASE") and wb["European"]["B16"].value.startswith("=Notl")
+    wb = load_workbook(io.BytesIO(rep.build("fx_forward", mkt)[0]))
+    assert [c.value for c in wb["Inputs"]["A"] if isinstance(c.value, str) and c.value.startswith("IR01 BASE (EUR)")]
