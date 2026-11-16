@@ -10,19 +10,27 @@ visitor's findings. Words only, and where an answer is drawn; nothing about sign
 
 - **One name for the chain.** The confirm tab said "the Sepolia registry" on its empty page and "the
   TradeConfirmationRegistry on Ethereum" beside the button, and the home drew the registry's node as "Ethereum"
-  under a badge that said Sepolia. The app now asks the server which chain it anchors on and says that: "on
-  Sepolia, Ethereum's test network" on the hosted demo, "on Ethereum" where a self-host runs it there, and, on a
-  server with no chain configured, that the signatures are kept and nothing is anchored (the certificate already
-  said so after the fact; the tab now says it before).
+  under a badge that said Sepolia. The confirm tab, the home's step, its diagram and its start-up line now ask
+  the server which chain it anchors on, once a page load, and say that: "on Sepolia, Ethereum's test network"
+  on the hosted demo, "on Ethereum" where a self-host runs it there, and, on a server with no chain configured,
+  that the signatures are kept and nothing is anchored (the certificate already said so after the fact; the tab
+  now says it before). Until the server has answered, no chain is named. Not changed: the sign-in page, the DEMO
+  badge and its footer, the roadmap and the terms name Sepolia in typed words, which is true of the hosted demo.
 - **The demo bank.** Beside a pending trade against the demo counterparty the tab said "This counterparty isn't
-  on Rijeka yet" and to send it a confirmation request to sign with the command-line tool. Rijeka holds the demo
-  counterparty's key and signs for it; the tab says that, and that the certificate is marked a demo and not
-  bilateral. A real counterparty is told what it was told before.
+  on Rijeka yet" and to send it a confirmation request to sign with the command-line tool. It now says that
+  this is a demo counterparty, that where the server holds a key for it, as the hosted demo does, CONFIRM signs
+  for it too, and that the certificate is then marked a demo and not bilateral. A demo entity that has
+  registered a wallet of its own, and a real counterparty, are told what they were told before.
 - **VERIFY's answer comes into view.** It was drawn under the certificate, below the fold of the tab, so pressing
-  VERIFY seemed to do nothing. It is scrolled into view when it arrives, clear of the ticket's footer.
+  VERIFY seemed to do nothing. When it arrives the ticket is scrolled to it, clear of the ticket's footer; an
+  answer already there when the tab is opened again moves nothing.
+- **The home's diagram of a confirmation.** Its first label was cut at the left edge ("canonical record" lost
+  its first letters) and its last stood against the right. The end nodes stand further in; on a phone, where
+  the lines under the four names do not fit side by side, the diagram keeps the names.
 - The naming rule is one function with its cases tested (`frontend/src/lib/network.js`), and a journey gives the
-  tab each server (Sepolia, Ethereum, no chain) and each counterparty (the demo bank, a real one) and measures
-  the answer against the footer. The lessons are in the reviewer's and the browser tester's definitions.
+  tab each server (Sepolia, Ethereum, no chain) and each counterparty (the demo bank, a demo entity with its own
+  wallet, a real one), measures the answer against the footer and the diagram's labels against its edges. The
+  lessons are in the reviewer's and the browser tester's definitions.
 
 ## 0.42.7 · 15 November 2026
 

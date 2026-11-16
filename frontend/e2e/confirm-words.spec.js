@@ -13,7 +13,7 @@ test('the confirm tab names the chain the server is on, and says who signs for t
   await expect(win).not.toContainText('Registry on Ethereum.')
   // the demo bank: Rijeka signs for it, and says so; it is not a firm that "isn't on Rijeka yet"
   const why = win.getByTestId('send-why-not')
-  await expect(why).toContainText('This is the demo counterparty. Rijeka holds its key and signs for it when you confirm below')
+  await expect(why).toContainText('This is a demo counterparty: its LEI begins DEMO. Where the server holds a key for it, as the hosted demo does, CONFIRM below signs for it too')
   await expect(why).not.toContainText(/isn.t on Rijeka|command-line/)
   await win.screenshot({ path: 'e2e/.out/shots/confirm-words-pending.png' })
 
@@ -50,5 +50,55 @@ test('a server with no chain, or on Ethereum itself, is worded as that', async (
   win = await bookedSwap(app)
   await expect(win).toContainText('in the TradeConfirmationRegistry on Ethereum. From that block')
   await expect(win.getByTestId('send-why-not')).toContainText("This counterparty isn't on Rijeka yet. Their countersignature has to come from their own system")
+
+  // a demo entity that has registered a wallet of its own signs for itself: the server will not, and the note does not say it will
+  await app.unroute('**/trades/*/send-status')
+  await app.route('**/trades/*/send-status', async route => {
+    const res = await route.fetch(); const j = await res.json()
+    j.counterparty = { ...j.counterparty, lei: 'DEMO0000RIJEKABANK01', on_network: false, has_signer: true }; j.reason = "This counterparty isn't on Rijeka yet."
+    await route.fulfill({ response: res, json: j })
+  })
+  win = await bookedSwap(app)
+  await expect(win.getByTestId('send-why-not')).toContainText('Their countersignature has to come from their own system')
+  await expect(win.getByTestId('send-why-not')).not.toContainText('signs for it')
+  expectClean(problems)
+})
+
+// The home's small diagram of a confirmation ends at the registry, and says which chain it is on. Its last node is 36px
+// from the edge: a name longer than "Ethereum" was cut off there.
+for (const [status, label, step] of [
+  [{ anchored: true, chain_id: 11155111 }, 'Sepolia', "Confirm it on Sepolia from the trade's CONFIRM tab"],
+  [{ anchored: true, chain_id: 8453 }, 'chain 8453', "Confirm it on chain 8453 from the trade's CONFIRM tab"],
+  [{ anchored: false, chain_id: 0, registry: null }, 'no chain', "Confirm it from the trade's CONFIRM tab"],
+]) test(`the home names the chain as the confirm tab does: ${label}`, async ({ app, problems }) => {
+  await app.setViewportSize({ width: 1440, height: 900 })
+  await chain(app, status)
+  await app.route('**/api/trades/', route => route.fulfill({ json: [] }))          // an empty book: the diagram stands where the trades' chain would
+  await app.route('**/api/desk/lifecycle', async route => { const res = await route.fetch(); const j = await res.json(); for (const k of Object.keys(j)) if (Array.isArray(j[k])) j[k] = []; await route.fulfill({ response: res, json: j }) })      // and nothing confirmed yet
+  await app.goto('/command-center')
+  const home = app.getByTestId('trader-home')
+  await expect(home.locator('.dh-step', { hasText: 'Confirm it' })).toHaveText(new RegExp(step.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), { timeout: 30_000 })
+  await home.getByRole('tab', { name: 'ON CHAIN' }).click()
+  const svg = home.locator('.dh-chain svg')
+  await expect(svg).toContainText(label, { timeout: 30_000 })
+  await expect(svg).not.toContainText('Ethereum')
+  const fits = () => svg.evaluate(el => {
+    const b = el.getBoundingClientRect(), ts = [...el.querySelectorAll('text')].map(t => ({ s: t.textContent, r: t.getBoundingClientRect() }))
+    const past = ts.filter(t => t.r.left < b.left - 0.5 || t.r.right > b.right + 0.5).map(t => t.s)
+    const over = ts.flatMap((a, i) => ts.slice(i + 1).filter(c => Math.abs(a.r.top - c.r.top) < 2 && a.r.left < c.r.right && c.r.left < a.r.right).map(c => `${a.s} / ${c.s}`))
+    return { past, over }
+  })
+  expect(await fits(), 'a label of the diagram runs past its edge, or over the next').toEqual({ past: [], over: [] })
+  await expect(svg, 'the first label is whole').toContainText('canonical record')
+  await home.locator('.dh-chain').screenshot({ path: `e2e/.out/shots/home-chain-${label.replace(/\W+/g, '-')}.png` })
+  // on a phone the diagram keeps its four names and drops the lines under them, which do not fit side by side
+  await app.setViewportSize({ width: 390, height: 844 })
+  await app.goto('/command-center')                      // the phone's home is another page of the app: load it as a phone would
+  const small = app.locator('.dh-chain svg').first()
+  if (await small.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false)) {
+    expect(await small.evaluate(el => { const b = el.getBoundingClientRect(), ts = [...el.querySelectorAll('text')].map(t => ({ s: t.textContent, r: t.getBoundingClientRect() })); return { past: ts.filter(t => t.r.left < b.left - 0.5 || t.r.right > b.right + 0.5).map(t => t.s), over: ts.flatMap((a, i) => ts.slice(i + 1).filter(c => Math.abs(a.r.top - c.r.top) < 2 && a.r.left < c.r.right && c.r.left < a.r.right).map(c => `${a.s} / ${c.s}`)) } }), 'the diagram on a phone').toEqual({ past: [], over: [] })
+    await small.scrollIntoViewIfNeeded()
+    await app.screenshot({ path: `e2e/.out/shots/home-chain-phone-${label.replace(/\W+/g, '-')}.png` })
+  } else test.info().annotations.push({ type: 'not on this stack', description: 'the phone home did not show the diagram' })
   expectClean(problems)
 })

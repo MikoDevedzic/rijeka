@@ -8,14 +8,15 @@ import { chainName } from './wallet'
 
 const TESTNETS = new Set([11155111, 17000, 5])
 
-// What to call it: `name` for a label (SEPOLIA), `where` for a sentence ("on Sepolia, Ethereum's test network").
-// Not yet known (null) is not the same as none configured: until the answer is in, a sentence says "on chain".
+// What to call it: `name` for a sentence's noun (Sepolia), `short` for a label with little room, `where` for the end
+// of a sentence ("on Sepolia, Ethereum's test network"). Not yet known (no answer, or the request failed) is not the
+// same as none configured: until the answer is in, a sentence names no chain at all (`where` is empty).
 export function networkOf(status) {
-  if (!status) return { known: false, anchored: null, name: null, where: 'on chain' }
-  if (!status.anchored || status.chain_id == null) return { known: true, anchored: false, name: null, where: null }
-  const id = Number(status.chain_id), name = chainName(id)
-  const where = TESTNETS.has(id) ? `on ${name}, Ethereum's test network` : id === 31337 ? 'on a local test chain' : `on ${name}`
-  return { known: true, anchored: true, name, where, testnet: TESTNETS.has(id) }
+  if (!status) return { known: false, anchored: null, name: null, short: null, where: '' }
+  if (!status.anchored || !status.chain_id) return { known: true, anchored: false, name: null, short: null, where: null }
+  const id = Number(status.chain_id), name = chainName(id), local = id === 31337
+  const where = TESTNETS.has(id) ? `on ${name}, Ethereum's test network` : local ? 'on a local test chain' : `on ${name}`
+  return { known: true, anchored: true, name, short: local ? 'local' : name, where, testnet: TESTNETS.has(id) }
 }
 
 // An LEI that begins DEMO is a demo entity's: the server's demo key signs for it (backend/api/routes/chain.py).

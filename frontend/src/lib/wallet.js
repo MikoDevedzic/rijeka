@@ -53,5 +53,5 @@ export async function personalSign(address, message) {
 export const sameAddress = (a, b) => !!a && !!b && a.toLowerCase() === b.toLowerCase()
 export const shortAddress = (a) => a ? a.slice(0, 6) + '…' + a.slice(-4) : ''
 
-const CHAINS = { 1: 'Ethereum', 11155111: 'Sepolia', 31337: 'local test chain' }
+const CHAINS = { 1: 'Ethereum', 11155111: 'Sepolia', 17000: 'Holesky', 5: 'Goerli', 31337: 'local test chain' }
 export const chainName = (id) => CHAINS[id] || `chain ${id}`

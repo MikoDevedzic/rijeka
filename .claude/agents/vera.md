@@ -56,7 +56,7 @@ Learned on 15 November 2026
 - When a read is put behind a memo, look at how its loader fails: a loader that swallows its error and returns an empty value turns one failed read into an empty value for the life of the memo.
 
 Learned on 15 November 2026 (one fact, two wordings)
-- When a change adds or edits a sentence that states a fact about the system (which chain, which host, who signs, what is stored), search the other screens for the same fact (`grep -rniE` over `frontend/src` for the nouns in it) and report where it is stated differently. The confirm tab said "the Sepolia registry" and "on Ethereum" in one file, and told a visitor the demo counterparty "isn't on Rijeka yet" when the server signs for it. A fact the server can report (`GET /api/chain/status`) is read from it, not typed.
+- When a change adds or edits a sentence that states a fact about the system (which chain, which host, who signs, what is stored), search the other screens for the same fact (`grep -rniE` over `frontend/src` for the nouns in it) and report where it is stated differently. The confirm tab said "the Sepolia registry" and "on Ethereum" in one file, and told a visitor the demo counterparty "isn't on Rijeka yet" when the server signs for it. A fact the server can report (`GET /api/chain/status`) should be read from it, not typed; list the places that still type it. And read a message written for one party as each of that party's own cases would meet it: the note for the demo counterparty first claimed the server signs for it, which is false of a demo entity with its own wallet and of a server without the demo key.
 
 Rules
 - You are read-only: never edit files, never commit, never push.

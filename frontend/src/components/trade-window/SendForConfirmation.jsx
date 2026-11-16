@@ -22,14 +22,17 @@ export function SendForConfirmation({ s, compact = false }) {
   const sent = status.sent?.length > 0
 
   if (status.status === 'CONFIRMED') return null   // the parent shows the attestation
-  // The demo counterparty (an LEI that begins DEMO) is not a firm that has yet to join: Rijeka holds its key and signs
-  // for it, and the certificate says so. Telling a visitor it "isn't on Rijeka yet" and to send it a request to sign
-  // with a command-line tool was true of a real counterparty and wrong of this one.
+  // A demo counterparty (an LEI that begins DEMO) is not a firm that has yet to join: where the server holds a key for
+  // it, as the hosted demo does, CONFIRM signs for it and the certificate says so. Telling a visitor it "isn't on
+  // Rijeka yet" and to send it a request to sign with a command-line tool was true of a real counterparty and wrong
+  // of this one. The note claims no more than the page can know: it does not say the key is held on this server, and
+  // a demo entity that has registered a wallet of its own (has_signer) signs for itself and is told the general case.
   if (!status.counterparty?.on_network) return compact ? null : (
     <div className="tbw-mut" data-testid="send-why-not" style={{ fontSize: 12, lineHeight: 1.5, maxWidth: 520 }}>
-      {isDemoLei(status.counterparty?.lei) && status.status === 'PENDING'
-        ? 'This is the demo counterparty. Rijeka holds its key and signs for it when you confirm below, so the certificate is '
-          + 'marked a demo and not bilateral. A real counterparty signs for itself: on Rijeka, or from its own system.'
+      {isDemoLei(status.counterparty?.lei) && !status.counterparty?.has_signer && status.status === 'PENDING'
+        ? 'This is a demo counterparty: its LEI begins DEMO. Where the server holds a key for it, as the hosted demo does, '
+          + 'CONFIRM below signs for it too, and the certificate is marked a demo and not bilateral. A real counterparty '
+          + 'signs for itself: on Rijeka, or from its own system.'
         : <>{status.reason} Their countersignature has to come from their own system: confirm below, or send them the
           confirmation request to sign with the command-line tool.</>}
     </div>

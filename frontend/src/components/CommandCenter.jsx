@@ -18,7 +18,8 @@ import RoleSwitch from './layout/RoleSwitch'
 import { DeskNoteHome } from './layout/DeskNote'
 import { useVisibleNav } from './layout/useVisibleNav'
 import { getSessionMaybe } from '../lib/session'
-import { useNetwork } from '../lib/chain-status'
+import { chainStatus, useNetwork } from '../lib/chain-status'
+import { networkOf } from '../lib/network'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
 import './CommandCenter.css'
@@ -167,7 +168,7 @@ function DeskHome({ demo, navigate }) {
       step('sofr',   get('/api/market-data/snapshots/USD_SOFR/latest'),      v => v?.exists ? `${fmtD(v.valuation_date)} · ${v.quotes?.length || 0} points` : 'no snapshot'),
       step('vol',    get('/api/market-data/snapshots/USD_SWVOL_ATM/latest'), v => v?.exists ? `${v.quotes?.length || 0} points` : 'no snapshot'),
       step('trades', get('/api/trades/'),                                     v => `${v?.length || 0} trades · ${(v || []).filter(t => t.status === 'CONFIRMED').length} confirmed`),
-      step('chain',  get('/api/chain/status'),                                v => v?.anchored ? `${v.chain_id === 11155111 ? 'Sepolia' : 'chain ' + v.chain_id} · ${v.registry?.slice(0, 8)}…${v.registry?.slice(-4)}` : 'off-chain'),
+      step('chain',  chainStatus(),                                           v => v?.anchored ? `${networkOf(v).name} · ${v.registry?.slice(0, 8)}…${v.registry?.slice(-4)}` : 'off-chain'),      // the one request every screen shares
       step('news',   get('/api/news/items?limit=40').then(v => {
         // The room carries every headline; the desk home shows the ones tagged to a market.
         const tagged = (v || []).filter(n => (n.tags || []).length)
@@ -240,7 +241,7 @@ function DeskHome({ demo, navigate }) {
     <div className="dh-path">
       <span className="dh-path-k">START HERE</span>
       <Step n="1" done={trades.length > 0} text={`Book a swap${demo?.counterparty ? ` against ${demo.counterparty.name}` : ''}, an FX forward or a BTC forward`} onClick={() => navigate('/blotter')} />
-      <Step n="2" done={confirmed > 0} text={`Confirm it on ${net.name || 'chain'} from the trade's CONFIRM tab`} onClick={() => navigate('/blotter')} />
+      <Step n="2" done={confirmed > 0} text={`Confirm it${net.name ? ` on ${net.name}` : ''} from the trade's CONFIRM tab`} onClick={() => navigate('/blotter')} />
       <Step n="3" done={false} text="Verify the proof pack, trusting nothing of ours" href="https://rijeka.app/verify" />
     </div>
   )
@@ -438,8 +439,11 @@ function ChainDiagram() {
   const net = useNetwork()          // the registry's node says the chain it is on, as the confirm tab does
   const ref = useRef(null); const W = useSize(ref); const H = 96
   if (!W) return <div ref={ref} className="dh-chain" />
-  const n = 4, cx = i => 36 + i * ((W - 72) / (n - 1))
-  const nodes = [['TRADE', 'canonical record'], ['keccak256', 'trade hash'], ['A · B', 'EIP-712 signatures'], ['REGISTRY', net.anchored === false ? 'no chain configured' : net.name ? (net.testnet ? `${net.name} testnet` : net.name) : 'on chain']]
+  // The end nodes stand far enough from the edges for the labels centred under them ("canonical record" was cut at the
+  // left edge, 36px in). Where the diagram is too narrow for the second lines side by side (a phone), it keeps the names.
+  const wide = W >= 600, pad = wide ? 68 : 40
+  const n = 4, cx = i => pad + i * ((W - 2 * pad) / (n - 1))
+  const nodes = [['TRADE', 'canonical record'], ['keccak256', 'trade hash'], ['A · B', 'EIP-712 signatures'], ['REGISTRY', net.anchored === false ? 'no chain' : net.short || 'on chain']]
   return (
     <div ref={ref} className="dh-chain">
       <svg width={W} height={H}>
@@ -450,7 +454,7 @@ function ChainDiagram() {
             {i === n - 1 ? <rect x={cx(i) - 14} y={20} width={28} height={28} rx={3} className="dh-node block" filter="url(#dhGlow2)" />
                          : <circle cx={cx(i)} cy={34} r={i === 2 ? 13 : 11} className={`dh-node${i === 2 ? ' sig' : ''}`} filter="url(#dhGlow2)" />}
             <text x={cx(i)} y={70} className="dh-node-l" textAnchor="middle">{a}</text>
-            <text x={cx(i)} y={84} className="dh-ax" textAnchor="middle">{b}</text>
+            {wide && <text x={cx(i)} y={84} className="dh-ax" textAnchor="middle">{b}</text>}
           </g>
         ))}
       </svg>

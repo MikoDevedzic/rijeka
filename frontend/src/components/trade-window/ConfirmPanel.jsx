@@ -64,9 +64,19 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
   const [showTerminate, setShowTerminate] = useState(false)
   const [reason, setReason] = useState('')
   // VERIFY's answer is drawn under the certificate, which is taller than the tab: it is brought into view when it
-  // arrives, clear of the ticket's footer and its tabs, which stay in place over what scrolls (the scroll margins)
-  const verdict = useRef(null)
-  useEffect(() => { if (verifyResult && !verifyResult.info) verdict.current?.scrollIntoView({ block: 'nearest' }) }, [verifyResult])
+  // arrives. Only then (an answer already there when the tab is opened again moves nothing), and only the ticket is
+  // scrolled, never the page behind it; CLEAR keeps the answer off the ticket's footer and its tabs, which stay in
+  // place over what scrolls.
+  const verdict = useRef(null), answered = useRef(verifyResult)
+  useEffect(() => {
+    const fresh = verifyResult !== answered.current
+    answered.current = verifyResult
+    const el = verdict.current, box = el?.closest('.tbw-window')
+    if (!fresh || !verifyResult || verifyResult.info || !el || !box) return
+    const CLEAR = 88, b = box.getBoundingClientRect(), r = el.getBoundingClientRect()
+    if (r.bottom > b.bottom - CLEAR) box.scrollTop += r.bottom - (b.bottom - CLEAR)
+    else if (r.top < b.top + CLEAR) box.scrollTop -= (b.top + CLEAR) - r.top
+  }, [verifyResult])
   if (!attestation) return null
   const att = attestation.attestation
   const onChain = attestation.on_chain
@@ -182,7 +192,7 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
         </div>
       )}
       {vr && !vr.info && (
-        <div ref={verdict} data-testid="confirm-verify-result" style={{ scrollMarginBottom: 88, scrollMarginTop: 88, marginTop: 10, padding: '8px 10px', borderRadius: 'var(--r-1)', fontSize: 12, fontFamily: MONO,
+        <div ref={verdict} data-testid="confirm-verify-result" style={{ marginTop: 10, padding: '8px 10px', borderRadius: 'var(--r-1)', fontSize: 12, fontFamily: MONO,
           background: 'var(--bg)', border: '1px solid ' + (vr.error ? 'var(--red)' : vOk ? 'var(--green)' : 'var(--amber)'),
           color: vr.error ? 'var(--red)' : vOk ? 'var(--green)' : 'var(--amber)', lineHeight: 1.7 }}>
           {vr.error ? ('Verify failed: ' + vr.error) : (<>
@@ -245,7 +255,8 @@ function ConfirmBody({
   // The chain this server anchors on, named as it is (lib/chain-status.js): Sepolia is Ethereum's test network, and
   // a server with no chain configured anchors nothing, which the copy says before the certificate has to.
   const net = useNetwork()
-  const registry = `the TradeConfirmationRegistry ${net.where}`
+  const on = net.where ? ` ${net.where}` : ''                 // no chain is named until the server has said which
+  const registry = `the TradeConfirmationRegistry${on}`
   // A transaction in flight for this trade (a 202 from CONFIRM ON-CHAIN, or found again after a reload).
   const anchor = useAnchoring(pendingId, confirming, onRemoteConfirmed)
   const anchoring = !!anchor?.pending
@@ -264,7 +275,7 @@ function ConfirmBody({
             Price the ticket and press BOOK TRADE. The booked trade appears here with its canonical
             record, keccak256 hash and EIP-712 signatures, and {net.anchored === false
               ? 'this tab has both sides sign it. This server has no chain configured, so nothing is anchored.'
-              : `this tab walks it to the registry ${net.where}.`}
+              : `this tab walks it to the registry${on}.`}
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center', marginTop: 10 }}>
             {['BOOK', 'SIGN', 'COUNTERSIGN', 'ANCHOR', 'PROOF LINK'].map((step, i, arr) => (
