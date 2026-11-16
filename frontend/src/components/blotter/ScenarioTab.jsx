@@ -12,6 +12,7 @@
 
 import { loadThree, legacyRenderer, LEGACY_LIGHT } from '../../lib/three'
 import React, { useState, useRef, useEffect } from 'react'
+import useMarketDataStore from '../../store/useMarketDataStore'
 
 // The curve payload for /price/preview: today's stored quotes unless a shocked set is given.
 const curveObj = (curveId, quotes = []) => ({ curve_id: curveId, quotes, interp_method: 'LogLinearDiscount' })
@@ -60,6 +61,13 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
   }
   const CAP=300, BPpx=0.4
   const curveId = CCY_CURVE[ccy]||'USD_SOFR'
+  // A scenario starts from the curve the ticket priced on: the firm's saved snapshot. The store holds the quotes the
+  // app ships with until a curve's own page has been opened, so a scenario opened first showed those (a five-year
+  // par of 3.643% beside a ticket priced at 3.480%; Marco, 15 November 2026). The snapshot is asked for once a
+  // curve; quotes a user is editing on the curve's page are theirs and are not read over.
+  const loadLatestSnapshot = useMarketDataStore(s => s.loadLatestSnapshot)
+  const snapshotKnown = useMarketDataStore(s => !!s.snapshotSaved?.[curveId])
+  useEffect(() => { if (!snapshotKnown) loadLatestSnapshot(curveId) }, [curveId, snapshotKnown, loadLatestSnapshot])
 
   // Refs
   const canvasRef    = useRef(null)
@@ -1115,7 +1123,7 @@ export default function ScenarioTab({ ccy, index, dir, struct, effDate, matDate,
               const df=Math.exp(-shocked/100*yr)
               const shiftClr=shBp>0?'var(--red)':shBp<0?'var(--blue)':'var(--text-dim)'
               return(
-                <div key={t} style={{display:'grid',gridTemplateColumns:'30px 76px 58px 72px 1fr',alignItems:'center',gap:'6px',
+                <div key={t} data-testid={`sc-par-${t}`} data-market={marketBase} style={{display:'grid',gridTemplateColumns:'30px 76px 58px 72px 1fr',alignItems:'center',gap:'6px',
                   padding:'3px 0',borderBottom:'1px solid var(--border)'}}>
                   <span style={{fontSize:'0.8125rem',fontWeight:700,color:'var(--accent)',fontFamily:'var(--mono)'}}>{t}</span>
                   <input type='text' defaultValue={base.toFixed(4)}

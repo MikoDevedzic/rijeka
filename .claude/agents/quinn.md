@@ -65,6 +65,7 @@ Learned on 14 November 2026
 - A stand-in for a library is written from the library's source, not from how the code under test hopes it behaves: the chat store's test client made a new channel on every call, where realtime-js returns the one it already has under that name, so the rebuild that would never join passed its test. Vera found it by reading the library (0.34.0). And a failed local run is kept (its results folder copied) before it is run again.
 
 Learned on 15 November 2026
+- A screen that shows market data is held to what the API prices on, not only to itself: the scenario tab drew the quotes the app ships with beside a ticket priced on the saved snapshot, and every journey that opened it passed, because none compared its rates with the snapshot's (`e2e/scenario-base.spec.js` does now). Marco found it by reading two numbers on one ticket.
 - A page with a form beside a drawing: type in the form with the drawing fed live data and check the drawing is not started again (an object built per draw and handed to an effect restarts it at every key).
 - CI runs in UTC, and so did every journey: a calendar day read as a moment (`new Date('2026-11-14')`) is a day early for everyone west of UTC, and no journey could see it. A date shown on a screen is checked in a journey that sets a western time zone (`test.use({ timezoneId: 'America/Los_Angeles' })`, `e2e/dates.spec.js`); Marco found it on a machine in New York.
 
