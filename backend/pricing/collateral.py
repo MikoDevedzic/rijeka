@@ -16,6 +16,8 @@ firm adds with its own legal findings; nothing here names an issuer.
 """
 from __future__ import annotations
 
+import math
+import re
 from dataclasses import dataclass, field, replace
 from typing import Optional
 
@@ -388,8 +390,37 @@ SEED: dict[str, Instrument] = {i.code: i for i in (
 )}
 
 
+# What a firm may type into an instrument or a schedule. An instrument is shared by the whole firm and feeds every
+# yield, carry and regime computed from it, so a number is finite and in range and a text has an end: one value
+# that is not a number (JSON admits NaN, and so does a numeric column) would otherwise spoil the firm's figures.
+NAME_MAX, NOTE_MAX, REF_MAX = 200, 2000, 64
+YIELD_BP_MAX = 10_000.0                       # a yield or a spread of at most 100 %, either way
+CHAIN_ID_MAX = 2 ** 31 - 1                    # the column is an integer
+WEIGHT_MAX = 1e12
+_CURRENCY = re.compile(r"^[A-Z0-9]{2,10}$")
+_ADDRESS = re.compile(r"^[\x21-\x7e]{1,100}$")   # a token's address on whatever chain: printable, unbroken, bounded
+
+
+def _number(v, what: str, lo: float, hi: float) -> float:
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        raise ValueError(f"{what} must be a number")
+    if not math.isfinite(x) or not (lo <= x <= hi):
+        raise ValueError(f"{what} must be between {lo:g} and {hi:g}")
+    return x
+
+
+def _text(v, what: str, limit: int) -> str:
+    s = str(v)
+    if len(s) > limit:
+        raise ValueError(f"{what} is at most {limit} characters")
+    return s
+
+
 def instrument_from_row(d: dict, firm: bool = True) -> Instrument:
-    """An Instrument from a request body or a database row; validates the class, rail and yield kind."""
+    """An Instrument from a request body or a database row; validates the class, rail and yield kind, that every
+    number is finite and in range and every text bounded. A stored row that fails is skipped by its reader."""
     cls = str(d.get("cls") or d.get("class") or "").upper()
     if cls not in CATALOGUE:
         raise ValueError(f"unknown collateral class {cls or '(blank)'}")
@@ -403,12 +434,25 @@ def instrument_from_row(d: dict, firm: bool = True) -> Instrument:
     if not code or len(code) > 32:
         raise ValueError("code is required (up to 32 characters)")
     hc = d.get("csa_haircut_pct")
-    if hc is not None and not (0.0 <= float(hc) <= 100.0):
-        raise ValueError("csa_haircut_pct must be between 0 and 100")
-    return Instrument(code, str(d.get("name") or code), cls, str(d.get("currency") or "USD").upper(), str(d.get("issuer") or "—"), rail, yk,
-                      (str(d["yield_ref"]) if d.get("yield_ref") else None), float(d.get("yield_bp") or 0.0),
-                      (int(d["chain_id"]) if d.get("chain_id") is not None and str(d["chain_id"]) != "" else None), (str(d["token_address"]) if d.get("token_address") else None),
-                      (float(hc) if hc is not None else None), bool(d.get("active", True)), firm, str(d.get("note") or ""))
+    hc = _number(hc, "csa_haircut_pct", 0.0, 100.0) if hc is not None and str(hc) != "" else None
+    currency = str(d.get("currency") or "USD").upper()
+    if not _CURRENCY.match(currency):
+        raise ValueError("currency is 2 to 10 letters or digits")
+    yield_bp = _number(d.get("yield_bp") if d.get("yield_bp") not in (None, "") else 0.0, "yield_bp", -YIELD_BP_MAX, YIELD_BP_MAX)
+    chain_id = d.get("chain_id")
+    if chain_id is not None and str(chain_id) != "":
+        chain = _number(chain_id, "chain_id", 1, CHAIN_ID_MAX)
+        if chain != int(chain):
+            raise ValueError("chain_id must be a whole number")
+        chain_id = int(chain)
+    else:
+        chain_id = None
+    token = str(d["token_address"]).strip() if d.get("token_address") else None
+    if token is not None and not _ADDRESS.match(token):
+        raise ValueError("token_address is up to 100 printable characters with no spaces")
+    return Instrument(code, _text(d.get("name") or code, "name", NAME_MAX), cls, currency, _text(d.get("issuer") or "—", "issuer", NAME_MAX), rail, yk,
+                      (_text(d["yield_ref"], "yield_ref", REF_MAX) if d.get("yield_ref") else None), yield_bp, chain_id, token,
+                      hc, bool(d.get("active", True)), firm, _text(d.get("note") or "", "note", NOTE_MAX))
 
 
 # ── Schedules: the CSA's eligible-collateral annex ──────────────────────────
@@ -445,7 +489,8 @@ def schedule_from_request(d: Optional[dict], instruments: dict[str, Instrument])
         hc = e.get("csa_haircut_pct")
         lim = e.get("limit_pct")
         elig.append({"instrument": code, "vm": bool(e.get("vm", True)), "im": bool(e.get("im", True)),
-                     "csa_haircut_pct": (float(hc) if hc is not None and str(hc) != "" else None), "limit_pct": (float(lim) if lim is not None and str(lim) != "" else None)})
+                     "csa_haircut_pct": (_number(hc, f"eligible {code}: csa_haircut_pct", 0.0, 100.0) if hc is not None and str(hc) != "" else None),
+                     "limit_pct": (_number(lim, f"eligible {code}: limit_pct", 0.0, 100.0) if lim is not None and str(lim) != "" else None)})
     if not elig:
         raise ValueError("eligible: at least one instrument")
 
@@ -456,7 +501,12 @@ def schedule_from_request(d: Optional[dict], instruments: dict[str, Instrument])
             code = str(code).upper()
             if code not in seen:
                 raise ValueError(f"{key}: {code} is not on the eligible list")
-            w = float(w)
+            try:
+                w = float(w)
+            except (TypeError, ValueError):
+                raise ValueError(f"{key}: the weight of {code} must be a number")
+            if not math.isfinite(w) or w > WEIGHT_MAX:
+                raise ValueError(f"{key}: the weight of {code} must be a finite number")
             if w < 0:
                 raise ValueError(f"{key}: weights must be non-negative")
             if w > 0:
@@ -469,7 +519,7 @@ def schedule_from_request(d: Optional[dict], instruments: dict[str, Instrument])
     rail = str(body.get("rail") or "bilateral").lower()
     if rail not in RAILS:
         raise ValueError(f"rail must be one of {', '.join(RAILS)}")
-    return Schedule(elig, comp("posted"), comp("received"), rail, (str(body["effective_from"]) if body.get("effective_from") else None), str(body.get("note") or ""))
+    return Schedule(elig, comp("posted"), comp("received"), rail, (str(body["effective_from"]) if body.get("effective_from") else None), _text(body.get("note") or "", "note", NOTE_MAX))
 
 
 def regime_from_schedule(sched: Schedule, csa: CSA, instruments: dict[str, Instrument], name: str = "COUNTERPARTY",

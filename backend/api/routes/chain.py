@@ -678,7 +678,7 @@ def reconcile_anchor(trade_id: str, db: Session = Depends(get_db), user: dict = 
     {pending: false, applied: true, status: CONFIRMED, trade, legs, event_id} once it is written;
     {pending: false, failed: true, reason} when the transaction reverted or was dropped (the trade stays PENDING);
     {pending: false, status} when nothing is in flight."""
-    user_id = user.get("sub")
+    user_id = _check_write_role(user)       # it may write the CONFIRMED transition: not for a viewer, as every route that writes a trade's state
     trade = db.query(Trade).filter(Trade.id == _parse_trade_uuid(trade_id), Trade.user_id == user_id).first()
     if trade is None:
         raise HTTPException(status_code=404, detail="Trade not found")

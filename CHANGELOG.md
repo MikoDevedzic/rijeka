@@ -3,6 +3,28 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.27). Commits on `main` are the detail.
 
+## 0.44.3 · 16 November 2026
+
+**What a firm types into its collateral is checked before the tables that keep it exist.** Two migrations are
+being put to the owner (a firm's own collateral instruments and schedules; a confirmation finished in the
+background when a block is slow). The database keeper and the security reviewer read both files and the code they
+switch on; this is what they asked for in the code first. Nothing changes on the hosted demo until a migration is
+approved: without its table each feature answers as it does today.
+
+- **Collateral inputs.** An instrument is shared by a whole firm and feeds every yield, carry and regime made from
+  it. Its numbers are now finite and in range (a yield or spread within 100 % either way, a haircut and a limit
+  between 0 and 100, a chain id that fits its column, a schedule's weights finite) and its texts have an end (a
+  name or issuer of 200 characters, a note of 2,000, a token address of 100 printable characters). A value that is
+  not a number, which JSON admits and a numeric column stores, is refused; a stored row that fails the rule is
+  skipped by its reader.
+- **Reconcile needs a write role.** `POST /api/chain/reconcile/{trade_id}` can write a trade's CONFIRMED
+  transition once the registry has it, and now asks for the role every other route that writes a trade's state
+  asks for.
+- **The presence check for the collateral tables** looks in the application's own schema, not for a table of that
+  name anywhere.
+
+---
+
 ## 0.44.2 · 16 November 2026
 
 **A collar is priced on the ticket's own periods.** The collar ticket sends its payment frequency; the pricing

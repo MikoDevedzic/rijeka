@@ -19,7 +19,9 @@ TABLES = ("collateral_instruments", "collateral_schedules")
 def tables_present(db) -> bool:
     if "present" not in _tables:
         try:
-            n = db.execute(text("SELECT count(*) FROM information_schema.tables WHERE table_name IN ('collateral_instruments', 'collateral_schedules')")).scalar()
+            # the two tables of this application's own schema, not a table of the same name in another one
+            n = db.execute(text("SELECT count(*) FROM information_schema.tables WHERE table_schema = current_schema() "
+                                "AND table_name IN ('collateral_instruments', 'collateral_schedules')")).scalar()
             if int(n or 0) != len(TABLES):
                 return False
             _tables["present"] = True

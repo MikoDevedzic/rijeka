@@ -267,3 +267,7 @@ def test_reconcile_route_is_owner_only_and_reports_the_anchor(world, monkeypatch
     assert r.json() == {"pending": False, "applied": False, "status": "CONFIRMED"}
     db.query = lambda model: _TQ(None)
     assert c.post(f"/api/chain/reconcile/{uuid.uuid4()}").status_code == 404
+    # the route may write the CONFIRMED transition: a viewer is refused before anything is read, as on every route that writes a trade's state
+    db.query = lambda model: _TQ(w.trade)
+    app.dependency_overrides[CH.verify_token] = lambda: {"sub": uid, "user_metadata": {"role": "viewer"}}
+    assert c.post(f"/api/chain/reconcile/{w.trade.id}").status_code == 403

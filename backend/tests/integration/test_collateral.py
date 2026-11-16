@@ -24,6 +24,16 @@ def test_instruments_seed_and_a_firm_row(client, auth_a, auth_b):
     # validation
     assert client.post("/api/collateral/instruments", json={"code": "X", "cls": "NOPE"}, headers=auth_a).status_code == 422
     assert client.post("/api/collateral/instruments", json={"code": "X", "cls": "CASH", "yield_kind": "GUESS"}, headers=auth_a).status_code == 422
+    # a number that is not one (JSON admits the literal, and a numeric column stores it) is refused and nothing is kept:
+    # an instrument is the whole firm's, and every yield, carry and regime made from it would be spoiled
+    raw = {**auth_a, "Content-Type": "application/json"}
+    for body in ('{"code":"NANX","cls":"CASH","yield_kind":"FIXED","yield_bp":NaN}', '{"code":"NANX","cls":"CASH","yield_kind":"FIXED","yield_bp":Infinity}',
+                 '{"code":"NANX","cls":"CASH","csa_haircut_pct":NaN}', '{"code":"NANX","cls":"CASH","chain_id":99999999999}'):
+        r = client.post("/api/collateral/instruments", content=body, headers=raw)
+        assert r.status_code == 422, (body, r.status_code, r.text[:200])
+    assert client.post("/api/collateral/instruments", json={"code": "NANX", "cls": "CASH", "name": "n" * 201}, headers=auth_a).status_code == 422
+    listed = client.get("/api/collateral/instruments", headers=auth_a).json()["instruments"]
+    assert "NANX" not in {i["code"] for i in listed} and all(i["yield_today_bp"] is None or i["yield_today_bp"] == i["yield_today_bp"] for i in listed)
     # a seed entry can be overridden (deactivated) but not removed
     assert client.delete("/api/collateral/instruments/USDT", headers=auth_a).status_code == 404
     r = client.post("/api/collateral/instruments", json={"code": "USDT", "name": "Tether USD", "cls": "STABLECOIN", "rail": "on_chain", "active": False}, headers=auth_a)
