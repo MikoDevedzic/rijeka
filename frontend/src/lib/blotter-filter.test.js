@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { passesFilters } from './blotter-filter'
+import { passesFilters, storesShown } from './blotter-filter'
 
 const t = { trade_ref: 'TRD-1', uti: 'UTI9', status: 'PENDING', asset_class: 'CRYPTO', store: 'WORKING', counterparty: { name: 'RIJEKA DEMO BANK AG' }, instrument_type: 'CRYPTO_NDF', structure: 'DOUBLE_BARRIER', desk: 'Macro' }
 
@@ -20,3 +20,16 @@ describe('the blotter\'s filters', () => {
     expect(passesFilters(t, { search: 'nothing like it' })).toBe(false)
   })
 })
+
+describe('the STORE column is shown only when it has two things to say', () => {
+  it('is not shown while every trade is kept WORKING, or there is none', () => {
+    expect(storesShown([])).toBe(false)
+    expect(storesShown(undefined)).toBe(false)
+    expect(storesShown([{ store: 'WORKING' }, { store: 'WORKING' }, { store: null }, {}])).toBe(false)
+  })
+  it('is shown from the first trade kept anywhere else', () => {
+    expect(storesShown([{ store: 'WORKING' }, { store: 'PRODUCTION' }])).toBe(true)
+    expect(storesShown([{ store: 'HISTORY' }])).toBe(true)
+  })
+})
+

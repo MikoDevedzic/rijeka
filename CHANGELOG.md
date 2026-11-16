@@ -20,7 +20,8 @@ methodology document carries its own version (v1.28). Commits on `main` are the 
 Still as it was: a currency forward's and a European option's scenario are the browser's closed form and say
 APPROXIMATION. Pricing them with the engine, as every other style is, is being built as a change of its own.
 
-Tests: the blotter and IPV journeys hold the two screens to this; unit tests for the name and the two totals.
+Tests: unit tests for the column's rule, the name and the two totals; the blotter journey holds the column to the
+book it reads, and the IPV journey reads the name where the book has a digital asset.
 
 ## 0.46.4 · 16 November 2026
 

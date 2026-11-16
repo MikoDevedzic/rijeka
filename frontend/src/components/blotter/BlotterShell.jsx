@@ -11,6 +11,7 @@ import ContextMenu from '../common/ContextMenu'
 import { rowMenu } from './row-menu'
 import { readPackageTag } from '../trade-window/fx-legs'
 import { usePhone } from '../../lib/phone'
+import { storesShown } from '../../lib/blotter-filter'
 
 const TH = ({ col, label, sortCol, sortDir, onSort }) => (
   <th className={sortCol === col ? 'th-sort' : ''} onClick={() => onSort(col)}>
@@ -127,10 +128,9 @@ export default function BlotterShell() {
   const count = (s) => trades.filter(t => t.status === s).length
   const live = count('LIVE'), pending = count('PENDING'), confirmed = count('CONFIRMED')
   const closed = trades.length - live - pending - confirmed            // matured, terminated, cancelled: so that the summary adds up
-  // STORE (working, production, history) is where a trade's record is kept. Every trade is booked WORKING and nothing
-  // on the desk moves one yet, so a column that says WORKING on every row, and a filter with two answers that are
-  // always empty, told a reader nothing. Both are shown from the first trade that is kept anywhere else.
-  const stores = trades.some(t => t.store && t.store !== 'WORKING')
+  const stores = storesShown(trades)                   // the STORE column and its filter: lib/blotter-filter.js
+  // a store filter left on when the last trade kept elsewhere is gone would hide every row with no button to clear it
+  useEffect(() => { if (!stores && filters.store && filters.store !== 'ALL') setFilter('store', '') }, [stores, filters.store, setFilter])
   // a status no button names (DEFAULTED, or one a later release adds) gets a button while a trade carries it
   const statuses = [...STATUSES, ...[...new Set(trades.map(t => t.status).filter(Boolean))].filter(s => !STATUSES.includes(s)).sort()]
 

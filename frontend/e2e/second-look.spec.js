@@ -10,7 +10,9 @@ const signed = (n) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${whole(n)}`
 
 test('the blotter\'s rail on a short window: NEW TRADE in view, the roadmap\'s asset classes not offered, a summary that adds up', async ({ app, problems }) => {
   await app.setViewportSize({ width: 1440, height: 760 })
+  const read = app.waitForResponse(r => /\/trades\?select=/.test(r.url()) && r.request().method() === 'GET' && r.ok(), { timeout: 60_000 })
   await app.goto('/blotter')
+  const book = await (await read).json()
   const rail = app.locator('.bl-left')
   const btn = rail.locator('.bl-new-trade-btn')
   await expect(btn).toBeVisible()
@@ -27,10 +29,13 @@ test('the blotter\'s rail on a short window: NEW TRADE in view, the roadmap\'s a
     await expect(f).toBeDisabled()
   }
   await expect(rail.locator('.bl-filter-btn', { hasText: /^RATES/ })).toBeEnabled()
-  // STORE says WORKING on every trade of this book: the column and its filter are not there to say it
-  await expect(app.locator('.bl-root thead th', { hasText: /^STORE$/ })).toHaveCount(0)
-  await expect(rail.locator('.bl-section-lbl', { hasText: 'STORE' })).toHaveCount(0)
+  // STORE: where every trade of the book is kept WORKING, the column and its filter are not there to say it; a book
+  // with a trade kept elsewhere (the API takes a store on a booking) shows both
+  const elsewhere = Array.isArray(book) && book.some(t => t.store && t.store !== 'WORKING') ? 1 : 0
+  await expect(app.locator('.bl-root thead th', { hasText: /^STORE$/ })).toHaveCount(elsewhere)
+  await expect(rail.locator('.bl-section-lbl', { hasText: 'STORE' })).toHaveCount(elsewhere)
   await expect(app.locator('.bl-root thead th', { hasText: /^UTI$/ })).toHaveCount(1)
+  expect(await app.locator('.bl-root thead th').count(), 'a head cell for every body cell').toBe(await app.locator('.bl-root tbody tr').first().locator('td').count())
 
   // TOTAL = PENDING + CONFIRMED + LIVE + CLOSED (CLOSED is on the rail only when there is one)
   const n = async (loc) => Number((await loc.textContent()).replace(/\D/g, ''))

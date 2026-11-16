@@ -16,3 +16,10 @@ export function passesFilters(t, filters = {}, theirRef = null) {
   }
   return true
 }
+
+// Whether the blotter shows its STORE column and filter. STORE (working, production, history) is where a trade's
+// record is kept; every trade is booked WORKING and nothing on the desk moves one yet, so a column that says WORKING
+// on every row, and a filter with two answers that are always empty, told a reader nothing. Both are shown from the
+// first trade that is kept anywhere else (the API takes a store on a booking, so such a trade can exist).
+export const storesShown = (trades) => (trades || []).some(t => !!t?.store && t.store !== 'WORKING')
+
