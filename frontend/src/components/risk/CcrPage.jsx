@@ -32,6 +32,9 @@ async function api(path, opts = {}) {
   return j
 }
 
+// a trade's kind in the words the blotter uses: the engine's type (FORWARD, FX_OPTION) is not a product's name
+const kindWords = (k) => ({ SWAP: 'swap', FORWARD: 'forward', FX_OPTION: 'option', OPTION: 'option', SWAPTION: 'swaption', CAP: 'cap', FLOOR: 'floor' }[String(k).toUpperCase()] || String(k).toLowerCase().replace(/_/g, ' '))
+
 export default function CcrPage() {
   const navigate = useNavigate()
   const [rep, setRep] = useState(null)
@@ -127,9 +130,11 @@ export default function CcrPage() {
                 <div><span>IM₀</span><b>{cur.csa_model.im_exchanged ? fmt(cur.exposure.im0_usd) : 'none'}</b></div>
                 <div><span>COLLATERAL NOW</span><b>{fmt(cur.exposure.collateral_now_usd)}</b></div>
               </div>
-              <div className="rk-h">TRADES IN THE NETTING SET</div>
+              <div className="rk-h">TRADES IN THE NETTING SET<span className="pnl-sub" data-testid="ccr-trades-note" style={{ marginLeft: 10 }}>valued on {fmtD(rep.date)} by the credit model at the start of its paths</span></div>
+              <div className="pnl-note" style={{ padding: '2px 0 6px', lineHeight: 1.5 }}>A trade's value here is the credit model's own, analytic under Hull-White with its simpler conventions (no payment lag, no spot lag). It is the exposure's starting point, not the trade's mark: the mark is the pricer's, on the ticket and on the Market Risk and P&L pages, and the two differ by a small part of the value.</div>
+              <div className="rk-row dim" style={{ gridTemplateColumns: '1fr 7rem 9rem 8rem' }}><span>TRADE</span><span className="pnl-tv">KIND</span><span className="pnl-tv">MODEL VALUE · USD</span><span className="pnl-tv">MATURITY</span></div>
               <div className="rk-rows">
-                {cur.trades_today.map(x => <div key={x.trade_ref} className="rk-row" style={{ gridTemplateColumns: '1fr 7rem 9rem 8rem' }}><span className="rk-ref">{x.trade_ref}</span><span className="pnl-tv dim">{x.kind}</span><span className={`pnl-tv ${tone(x.mtm_usd)}`}>{sgn(x.mtm_usd)}</span><span className="pnl-tv dim">{fmtD(x.maturity)}</span></div>)}
+                {cur.trades_today.map(x => <div key={x.trade_ref} className="rk-row" style={{ gridTemplateColumns: '1fr 7rem 9rem 8rem' }}><span className="rk-ref">{x.trade_ref}</span><span className="pnl-tv dim">{kindWords(x.kind)}</span><span className={`pnl-tv ${tone(x.mtm_usd)}`}>{sgn(x.mtm_usd)}</span><span className="pnl-tv dim">{fmtD(x.maturity)}</span></div>)}
                 {(cur.options || []).map((o, i) => <div key={`${o.trade_ref}-${i}`} className="rk-row dim" style={{ gridTemplateColumns: '1fr 3fr' }}><span className="rk-ref">{o.trade_ref}</span><span className="pnl-tv" style={{ textAlign: 'left' }}>{o.side === 'SHORT' ? 'short ' : ''}{o.kind.toLowerCase()} · strike {o.strike_text || `${(o.strike * 100).toFixed(3)}%`} · vol {o.vol_pct != null ? `${o.vol_pct.toFixed(2)}%` : `${o.vol_bp.toFixed(1)}bp`} · {o.vol_source}{o.expiry ? ` · expiry ${o.expiry}` : ''}</span></div>)}
                 {(cur.skipped || []).map(s => <div key={s.trade_ref} className="rk-row dim" style={{ gridTemplateColumns: '1fr 3fr' }}><span className="rk-ref">{s.trade_ref}</span><span className="pnl-tv" style={{ textAlign: 'left' }}>not simulated: {s.reason}</span></div>)}
               </div>

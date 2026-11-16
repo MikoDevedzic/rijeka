@@ -303,6 +303,9 @@ function SignOff({ rep, role, canControl, onSign, busy }) {
   const [comment, setComment] = useState('')
   const signs = rep.signoffs || []
   const traderDone = signs.some(s => s.role === 'TRADER'), ctlDone = signs.some(s => s.role === 'CONTROLLER')
+  // the day as it stands against the day as last signed (the sign-off records `totals.dod`)
+  const today = Number(rep.totals?.dod), lastSigned = [...signs].reverse().map(x => x.usd_signed).find(v => v != null)
+  const moved = lastSigned != null && Number.isFinite(today) && Math.abs(today - lastSigned) >= 1 ? today - lastSigned : null
   const twoPerson = rep.signoff_policy !== 'SINGLE'
   const iSignedAsTrader = signs.some(s => s.role === 'TRADER' && s.signer_user_id === me)
   const blocked = twoPerson && iSignedAsTrader && !ctlDone
@@ -314,6 +317,10 @@ function SignOff({ rep, role, canControl, onSign, busy }) {
         <li className={rep.status === 'FINAL' ? 'done' : ''}><i>{rep.status === 'FINAL' ? '✓' : rep.signoff_policy === 'SINGLE' ? '2' : '3'}</i><span>FINAL: visible to management with the comments</span></li>
       </ol>
       <div className="pnl-note">Sign-off policy: {rep.signoff_policy === 'SINGLE' ? 'SINGLE · one signature finalises the day' : 'TWO-PERSON · trader, then a different controller'} · set under Configurations › P&amp;L &amp; Control › Conventions</div>
+      {/* a signature is of the day as it stood when it was made. Where the day has since moved (trades booked or
+          changed for that date, the day run again), the page says so: three different figures for one day, and
+          nothing to say which was signed, was what a first-time reader met */}
+      {moved != null && <div className="pnl-note" data-testid="pnl-signed-moved" style={{ color: 'var(--amber)', lineHeight: 1.5 }}>The last signature is of a day's P&amp;L of {sgn(lastSigned)} USD. The day now reads {sgn(today)}: it has moved by {sgn(moved)} since it was signed (trades booked or changed for this date, or the day run again). The signature stands for what was signed; sign again to sign the day as it is now.</div>}
       {signs.length > 0 && <ul className="pnl-comments">
         {signs.map((s, i) => <li key={i}><span className="pnl-grp mk">{s.role}</span><b>{s.by}</b><em>{s.at ? new Date(s.at).toLocaleString() : ''}</em>{s.usd_signed != null && <small>signed {sgn(s.usd_signed)} USD</small>}{s.comment && <p>{s.comment}</p>}</li>)}
       </ul>}

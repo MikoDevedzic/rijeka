@@ -12,7 +12,8 @@
 // sections/<name>.jsx at that point.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useState } from 'react'
+import React, { useContext, useState } from 'react'
+import { TicketCcy, inCcy } from './ticket-ccy'
 import { useModulesStore } from '../../store/useModulesStore'
 import { Keycap } from '../common/Shortcuts'
 import { useFieldLabel } from '../../lib/a11y'
@@ -276,6 +277,7 @@ export function OptionFeeBlock({ spec, state, update }) {
 // ── AnalyticsBlock (metrics grid + collapsible breakdown table) ─────────────
 
 export function AnalyticsBlock({ descriptor, result, pricing, error }) {
+  const ccy = useContext(TicketCcy)                      // the figures are the trade's own currency's, and say so
   const [open, setOpen] = useState(true)
   const [math, setMath] = useState(false)      // SHOW MATH: each card annotated with the formula it came from
 
@@ -298,7 +300,7 @@ export function AnalyticsBlock({ descriptor, result, pricing, error }) {
     )
   }
 
-  const metrics   = descriptor.analytics.metrics(result) || []
+  const metrics   = (descriptor.analytics.metrics(result) || []).map(m => ({ ...m, value: inCcy(m.value, ccy) }))
   const breakdown = descriptor.analytics.breakdown(result)
 
   return (
@@ -339,7 +341,7 @@ export function AnalyticsBlock({ descriptor, result, pricing, error }) {
                       // a NOTE column is the note of the value before it: behind its mark, or written out with NOTES on
                       if (isNoteColumn(breakdown.columns[ci])) return null
                       const note = isNoteColumn(breakdown.columns[ci + 1]) ? row[ci + 1] : null
-                      return <td key={ci} className={ci > 0 && /\d/.test(labelText(cell)) ? 'tbw-mono' : undefined}>{cell}<Note inline>{note}</Note></td>
+                      return <td key={ci} className={ci > 0 && /\d/.test(labelText(cell)) ? 'tbw-mono' : undefined}>{inCcy(cell, ccy)}<Note inline>{note}</Note></td>
                     })}
                   </tr>
                 ))}
@@ -377,7 +379,8 @@ export function TradeFooter({
   stale = false,                                       // a price is owed: these figures are for the terms before the last change
   bookWord = 'BOOK TRADE',                             // a package of legs says how many it books
 }) {
-  const metrics = result ? (descriptor.footer.metrics(result, state) || []) : []
+  const ccy = useContext(TicketCcy)
+  const metrics = result ? (descriptor.footer.metrics(result, state) || []).map(m => ({ ...m, value: inCcy(m.value, ccy) })) : []
   const structLabel = descriptor.footer.structureLabel(state)
 
   return (
@@ -485,7 +488,7 @@ function fmtN(v) {
   return Math.round(Number(v)).toLocaleString('en-US')
 }
 
-function fmtPnl(v) {
+function fmtPnlUsd(v) {
   if (v == null) return '\u2014'
   const n = Math.round(Number(v))
   // a figure that rounds to nothing is nothing: no sign in front of the zero
@@ -527,6 +530,7 @@ function CashflowSummaryCard({ label, value, colorKey }) {
 }
 
 function CapletTable({ result, ccy }) {
+  const ticketCcy = useContext(TicketCcy); const fmtPnl = (v) => inCcy(fmtPnlUsd(v), ticketCcy)
   const caplets = result.caplets || result.cap?.caplets || []
   const npv     = result.npv != null ? result.npv : result.net_npv
   const premiumPct = result.premium_pct != null ? result.premium_pct : result.net_pct
@@ -644,6 +648,7 @@ function CapletTable({ result, ccy }) {
 }
 
 function SwapCashflowTables({ result, productKey, state }) {
+  const ticketCcy = useContext(TicketCcy); const fmtPnl = (v) => inCcy(fmtPnlUsd(v), ticketCcy)
   const legs   = result.legs || []
   const npv    = result.npv
   const ccy    = state.ccy || 'USD'

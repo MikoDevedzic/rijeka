@@ -19,6 +19,7 @@
 //     passes it back via onChange. Keeps migration simple.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { TicketCcy } from './ticket-ccy'
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react'
 import { usePhone, useStackedTables } from '../../lib/phone'
 import { priced } from '../../lib/activity'
@@ -240,6 +241,13 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   const isCurrency                     = assetClass === 'FX' || assetClass === 'CRYPTO'
   const fxRef                          = useRef(null)
   const winRef                         = useRef(null)
+  // A ticket that opens takes the focus, and gives it back to what opened it when it closes. (It was announced as a
+  // dialog and the keyboard stayed on the blotter behind it: Tab walked seventy rows the ticket was standing on.)
+  useEffect(() => {
+    const opener = document.activeElement
+    winRef.current?.focus({ preventScroll: true })
+    return () => { if (opener && opener !== document.body && document.contains(opener)) opener.focus?.({ preventScroll: true }) }
+  }, [])
   const phoneView = usePhone()
   const soloTicket = isSoloTicket()                    // this page is a ticket's own window (/ticket): no second pop-out
   useStackedTables(winRef, phoneView)                 // a phone reads a wide table downwards (lib/phone.js, Phone.css)
@@ -1184,6 +1192,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   }
 
   return (
+    <TicketCcy.Provider value={isCurrency ? 'USD' : (state.ccy || 'USD')}>
     <div
       ref={winRef}
       className="tbw-window"
@@ -1191,6 +1200,10 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       aria-label={viewMode || bookedTrade ? `Trade ${bookedTrade?.trade_ref || bookedTrade?.id || ''}`.trim() : 'New trade'}
       style={{ left: pos.x + 'px', top: pos.y + 'px' }}
       onMouseDown={handleWindowMouseDown}
+      tabIndex={-1}
+      // Escape closes a booked trade's ticket: nothing typed is lost with it. A new ticket is not closed by a key
+      // (an unbooked ticket lost to a stray key is the worse fault), nor is one closed from inside a field.
+      onKeyDown={(e) => { if (e.key === 'Escape' && viewMode && onClose && !e.defaultPrevented && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) onClose() }}
     >
       <div className="tbw-header">
         <div className="tbw-traffic-lights">
@@ -1493,6 +1506,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         onCancel={onClose}
       />
     </div>
+    </TicketCcy.Provider>
   )
 }
 

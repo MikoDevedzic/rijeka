@@ -48,9 +48,20 @@ test('the blotter by keyboard: a row opens its trade, a column sorts, every box 
   await app.keyboard.press('Enter')
   const win = app.getByRole('dialog', { name: `Trade ${ref}` })
   await expect(win, 'the ticket is a dialog named for its trade').toBeVisible({ timeout: 30_000 })
-  // Space on the row's own box ticks the box and opens nothing more
+  // the ticket has the keyboard: Tab goes on inside it, not through the rows behind it
+  expect(await app.evaluate(() => !!document.activeElement?.closest('.tbw-window')), 'the focus is in the ticket').toBe(true)
+  for (let i = 0; i < 6; i++) await app.keyboard.press('Tab')
+  expect(await app.evaluate(() => !!document.activeElement?.closest('.tbw-window')), 'six Tabs later it still is').toBe(true)
+  // Escape closes a booked trade's ticket (not from inside a field), and the focus is back on its row
+  await win.locator('.tbw-title').click()
+  await app.keyboard.press('Escape')
+  await expect(app.locator('.tbw-window')).toHaveCount(0)
+  await row.focus(); await app.keyboard.press('Enter')
+  await expect(win).toBeVisible({ timeout: 30_000 })
   await win.getByTestId('tbw-close').click()
   await expect(app.locator('.tbw-window')).toHaveCount(0)
+  await expect(row, 'the focus is back on the row that opened it').toBeFocused()
+  // Space on the row's own box ticks the box and opens nothing more
   await app.getByRole('checkbox', { name: `Select ${ref}` }).focus(); await app.keyboard.press(' ')
   await expect(app.getByRole('checkbox', { name: `Select ${ref}` })).toBeChecked()
   await expect(app.locator('.tbw-window')).toHaveCount(0)
@@ -61,6 +72,10 @@ test('a new ticket is a named dialog and every field in it has a name', async ({
   await app.goto('/blotter')
   await app.getByText('+ NEW TRADE').first().click()
   const win = app.getByRole('dialog', { name: 'New trade' })
+  await expect(win).toBeVisible()
+  // a new ticket takes the focus too, and Escape does not close it: an unbooked ticket is not lost to a key
+  expect(await app.evaluate(() => !!document.activeElement?.closest('.tbw-window')), 'the focus is in the new ticket').toBe(true)
+  await app.keyboard.press('Escape')
   await expect(win).toBeVisible()
   const found = {}
   for (const [asset, product] of [['RATES', null], ['RATES', /^IR SWAPTION$/i], ['RATES', /^INTEREST RATE CAP$/i], ['RATES', /^INTEREST RATE COLLAR$/i],

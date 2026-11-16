@@ -57,7 +57,9 @@
 
 .tbw-window input:hover:not(:disabled),
 .tbw-window select:hover:not(:disabled) { border-color: var(--btn-bd-hover); }
-/* focus is the app's own ring (index.css :focus-visible); nothing here takes it away */
+/* focus is the app's own ring (index.css :focus-visible); nothing here takes it away, but for the window itself:
+   it takes the focus when it opens so that Tab goes on inside it, and a ring round the whole window says nothing */
+.tbw-window:focus { outline: none; }
 
 .tbw-window input.tbw-mono,
 .tbw-window .tbw-mono {
