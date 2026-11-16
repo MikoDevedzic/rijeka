@@ -90,6 +90,10 @@ class _UnhandledToJson:
 
 
 app.add_middleware(_UnhandledToJson)
+# What each account does, by day (activity/): counted after the response, outside every route. Added after the
+# handler above so that it sees the status that handler answers with; CORS, added next, wraps both.
+from activity.recorder import ActivityRecorder  # noqa: E402
+app.add_middleware(ActivityRecorder)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=sorted({
@@ -157,6 +161,16 @@ def _apply_approved_migrations():
             migrate.run(engine)
     except Exception as e:           # noqa: BLE001 — the class only: a driver's message can name the host
         logging.getLogger("rijeka.migrate").error("migrations: the start-up hook failed (%s)", type(e).__name__)
+
+
+@app.on_event("shutdown")
+def _flush_activity():
+    # the last half minute of the activity counters (activity/store.py); never stops a shutdown
+    try:
+        from activity import store
+        store.flush()
+    except Exception:                # noqa: BLE001
+        pass
 
 
 @app.on_event("startup")

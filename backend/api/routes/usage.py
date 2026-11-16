@@ -8,6 +8,8 @@ POST /api/public/hit        the app's beacon: {event, route, release}. Public, �
 GET  /api/ops/usage         signed-in: the last 14 days per day — visitors, views, sign-ups
                             started (beacon), accounts created (auth.users), trades booked,
                             confirmations, anchors (trade_events) — and totals.
+GET  /api/ops/adoption      admin: who came, who came back and what they used, per account (activity/):
+                            weeks, the funnel, cohorts, features, and each account's own row.
 Hits are stored in usage_hits (docs/migrations/2026-10-31_usage.sql); without the table they
 are counted in memory and the page says so. The funnel's later steps come from the trading
 tables themselves, so they need no beacon and survive restarts regardless.
@@ -170,3 +172,47 @@ def usage(db: Session, today: Optional[date] = None, days: int = DAYS) -> dict[s
 def ops_usage(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     require_admin(db, user)                     # platform-wide numbers, not one account's
     return usage(db)
+
+
+# ── adoption: per account ────────────────────────────────────────────────────
+# Accounts are the people who signed up: not the journeys' test accounts, and not the platform's own admins, whose
+# use of the desk is the operator's and would be counted as adoption otherwise.
+ACCOUNTS_SQL = ("SELECT u.id, u.email, u.created_at, f.name FROM auth.users u "
+                "LEFT JOIN profiles p ON p.id = u.id LEFT JOIN firm_members m ON m.user_id = u.id LEFT JOIN firms f ON f.id = m.firm_id "
+                "WHERE u.email NOT LIKE '%@rijeka.test' AND coalesce(lower(p.role), '') <> 'admin'")
+BOOKED_SQL = ("SELECT user_id, created_at::date, count(*), min(created_at) FROM trades "
+              "WHERE coalesce(trade_ref, '') NOT LIKE 'TEST-%' GROUP BY 1, 2")
+CONFIRMED_SQL = ("SELECT e.user_id, e.tx_time::date, count(*), min(e.tx_time) FROM trade_events e JOIN trades t ON t.id = e.trade_id "
+                 "WHERE e.event_type = 'CONFIRMED' AND coalesce(t.trade_ref, '') NOT LIKE 'TEST-%' GROUP BY 1, 2")
+ADOPTION_DAYS = 12 * 7 + 28
+
+
+def _rows(db: Session, sql: str) -> list:
+    try:
+        return list(db.execute(text(sql)).all())
+    except Exception as e:                # noqa: BLE001
+        log.warning("adoption read failed: %s", type(e).__name__); db.rollback()
+        return []
+
+
+def adoption(db: Session, today: Optional[date] = None) -> dict[str, Any]:
+    from activity import store
+    from activity.adoption import summarise
+    today = today or datetime.now(timezone.utc).date()
+    accounts = [{"id": r[0], "email": r[1], "created_at": r[2], "firm": r[3]} for r in _rows(db, ACCOUNTS_SQL)]
+    per_day = lambda rows: [{"user_id": r[0], "day": r[1], "n": int(r[2]), "first_at": r[3]} for r in rows if r[0] is not None]   # noqa: E731
+    body = summarise(accounts, store.rows_since(db, today - timedelta(days=ADOPTION_DAYS)),
+                     per_day(_rows(db, BOOKED_SQL)), per_day(_rows(db, CONFIRMED_SQL)),
+                     today, tracking_since=store.first_day(db), recording=store.table_present(db))
+    body["note"] = ("Accounts are sign-ups, without test accounts and the platform's admins. Bookings and confirmations are counted from the "
+                    "trading tables and go back to the first trade; every other kind of activity is counted from the day the activity "
+                    "table was applied. An account is active on a day it made any signed-in request that was answered.")
+    if not body["recording"]:
+        body["note"] += " The activity table is not applied (docs/migrations/2026-11-16_activity.sql): nothing but bookings and confirmations is recorded."
+    return body
+
+
+@router.get("/api/ops/adoption")
+def ops_adoption(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    require_admin(db, user)
+    return adoption(db)

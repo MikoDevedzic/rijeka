@@ -154,6 +154,8 @@ OPTIONAL_MIGRATIONS = (
      "collateral.store", "tables_present"),
     ("pending_anchors", "2026-11-11_pending_anchors.sql (or the pending_anchors section of 2026-11-03_jobs.sql)",
      "a confirm that hands a slow block to ANCHORING instead of waiting in the request", "chain.pending", "tables_present"),
+    ("activity", "2026-11-16_activity.sql", "what each account does, by day, for the operator's Adoption view (nothing is recorded without it)",
+     "activity.store", "table_present"),
     ("jobs", "2026-11-03_jobs.sql (jobs and worker_heartbeat)",
      "heavy runs on the worker; apply only when the worker is alive, or runs queue for nobody", "jobs.queue", "tables_present"),
     ("fixings", "2026-11-10_fixings.sql", "stored fixings for digital assets; without it an expired trade is valued on the stored spot, flagged provisional",

@@ -27,7 +27,7 @@ from typing import Optional
 
 import httpx
 import jwt
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Request
 from jwt import PyJWK, PyJWTError
 
 log = logging.getLogger("rijeka.auth")
@@ -121,7 +121,7 @@ async def optional_token(authorization: Optional[str] = Header(None)) -> Optiona
     return await verify_token(authorization)
 
 
-async def verify_token(authorization: Optional[str] = Header(None)) -> dict:
+async def verify_token(authorization: Optional[str] = Header(None), request: Request = None) -> dict:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing auth")
     token = authorization.split(" ", 1)[1].strip()
@@ -147,4 +147,7 @@ async def verify_token(authorization: Optional[str] = Header(None)) -> dict:
     meta["role"] = role
     payload["user_metadata"] = meta
     payload["role"] = role
+    if request is not None:
+        # the verified account of this request, for the activity record (activity/recorder.py): the id only
+        request.state.rijeka_account = str(payload["sub"])
     return payload

@@ -3,6 +3,36 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.27). Commits on `main` are the detail.
 
+## 0.45.0 · 16 November 2026
+
+**What each account does, by day: the operator's Adoption view.** The usage counts say how many visitors came,
+under a hash that changes every day and belongs to no account, so they could not say which accounts came back,
+how long an account took from sign-up to its first trade, or what it used. The API now counts that per account,
+and Configurations → SYSTEM shows it to the admin role.
+
+- **What is recorded.** For each account and day (UTC): that it was active, and which of a fixed list of things
+  it did (priced, ran a scenario or an XVA simulation, booked, confirmed, opened the risk, P&L, IPV or collateral
+  views, saved market data, used the assistant, sent a message, read the methodology), how many times, and the
+  first and last time. Nothing of a request is read: no body, no query, no id. It is counted in one place, outside
+  every route, after the request was answered, for the account the token check verified; the request never waits
+  for it (counters in memory, written at most every 30 seconds).
+- **Nothing is recorded until its table is applied** (`docs/migrations/2026-11-16_activity.sql`, one new table,
+  row-level security on, read and written by the API alone). Until then the view shows what the trading tables
+  already hold: bookings and confirmations.
+- **The Adoption panel** (admin role): of all accounts, how many came back on a later day, priced, booked, ran XVA
+  and confirmed, and the median time from sign-up to the first booked trade; the last eight weeks of accounts
+  created, active, and active from an earlier week; each week's new accounts one, two and three weeks on; what was
+  used in the last 28 days by accounts and times; and each account's own row. Test accounts and the platform's
+  admins are not counted as accounts.
+- **Said where a visitor reads it.** The Privacy Notice (version 1.2) has a paragraph on activity by account, and
+  the sign-up page says that Rijeka counts which features an account uses, never what is entered.
+- `GET /api/ops/health` lists the table under `schema` as `activity`. Unit tests hold the list (each line names a
+  route the API has), the buffer and the figures; an integration test holds that an answered request is counted
+  for its account and a refused one is not, and that the read-out is the admin's; a journey holds the panel and
+  that a trader is shown none.
+
+---
+
 ## 0.44.9 · 16 November 2026
 
 **A new workspace's desk and book name no asset class.** A new workspace was given one desk called RATES with one

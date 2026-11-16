@@ -100,7 +100,7 @@ export default function SignupPage() {
         {error && <div className="au-error">{error}</div>}
         <SubmitBtn state={btnState} labels={{ idle: 'CREATE ACCOUNT', loading: 'CREATING…', success: 'CONFIRMED ✓' }} />
       </form>
-      <p className="au-alt" style={{ fontSize: 12 }}>By creating an account you agree to the <Link to="/terms" target="_blank">Terms of Service</Link> and the <Link to="/privacy" target="_blank">Privacy Notice</Link>.</p>
+      <p className="au-alt" style={{ fontSize: 12 }}>By creating an account you agree to the <Link to="/terms" target="_blank">Terms of Service</Link> and the <Link to="/privacy" target="_blank">Privacy Notice</Link>. Rijeka counts which features an account uses, never what you enter.</p>
     </AuthScene>
   )
 }

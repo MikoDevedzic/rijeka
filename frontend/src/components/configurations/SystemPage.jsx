@@ -7,6 +7,7 @@
 // ────────────────────────────────────────────────────────────────────────────────────
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '../../store/useAuthStore'
+import AdoptionPanel from './AdoptionPanel'
 import '../pnl/PnlPage.css'
 import '../risk/RiskPage.css'
 
@@ -85,6 +86,8 @@ export default function SystemPage() {
             <div className="pnl-foot">{u.note} Hits are kept in {u.hits_stored_in}.</div>
           </>)}
         </section>
+
+        <AdoptionPanel role={role} />
 
         <section className="pnl-panel" style={{ maxWidth: 980 }}>
           <header><span>BROWSER ERRORS · LAST 24 HOURS</span><span className="pnl-sub">{ce ? `${ce.last_24h} reports · ${ce.distinct} distinct · ${ce.kept} kept in memory` : 'not reported by this API'}</span></header>

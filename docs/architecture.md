@@ -96,7 +96,7 @@ options on the paths), `pnl/` (marks, attribution, XVA P&L), `collateral/` (the 
 yields derived from them, the ticket's collateral onto a CSA, the book's collateral page; `docs/collateral.md`), `chain/` (canonical record, EIP-712
 signing, attestation, keys, lifecycle guard, Telegram), `settlement/` (the fixings store and the one settlement rule), `market_data/` (public-source demo feed, the venue adapter
 `deribit.py` for digital-asset vols and forwards, policy path, calendar), `news/`, `prometheus/` (read-only assistant and book brief), `methodology/` (Excel
-replications). `scheduler.py` runs the batches in-process (digital-asset marks every 10 minutes; digital-asset fixings, news,
+replications), `activity/` (what each account does, by day; below). `scheduler.py` runs the batches in-process (digital-asset marks every 10 minutes; digital-asset fixings, news,
 summaries and spots every 30 minutes; demo market data, end-of-day P&L, market risk and counterparty
 credit every 2 hours) and moves the `release` branch after a deploy.
 The vol regimes' parameters (six per asset) are dated constants in `pricing/vol_regimes.py`, fitted by
@@ -431,6 +431,34 @@ the sandbox was made for. In a firm with colleagues, and on a firm deployment, o
 before it the trigger took the role from the client's sign-up metadata); provisioning raises it to trader; where
 `RIJEKA_DEMO_PROVISION` is on a user may switch their own role among trader, controller, risk and management
 (`api/routes/me.py`), and only an admin assigns the admin role, or any role on a firm deployment.
+
+## What an account does: the activity record
+
+Usage counts (`api/routes/usage.py`, `usage_hits`) say how many visitors came, under a hash that changes every day
+and belongs to no account. They cannot say which accounts came back or what an account used. `activity/` can.
+
+- **Where it is counted.** One place, outside every route: `activity/recorder.py`, an ASGI layer added in `main.py`
+  inside CORS. The token check (`middleware/auth.py: verify_token`) leaves the verified account's id on the request;
+  when the response has gone out below 400 the recorder adds one to that account's counters for the day. No route
+  calls it and none can forget it. A request with no verified account is nobody's activity.
+- **What is counted.** Every answered signed-in request is `seen`. `activity/events.py` is a fixed list, by method
+  and path family, of what else a request is: priced, scenario, XVA, capital, booked, confirmed, lifecycle, verified,
+  the risk, P&L, IPV, collateral and cashflow views, market data and static data saved, the assistant, chat, the
+  methodology. The detail is one of a fixed list of words (rates, currency, crypto ...). Nothing of the request is
+  read: not its body, not its query, not an id in its path. The operator's, the public and the schedulers' routes
+  (`/api/ops`, `/api/public`, `/tick`) are no account's activity. A unit test fails when a line of the list names a
+  route the API no longer has.
+- **Where it is kept.** `activity_daily` (`docs/migrations/2026-11-16_activity.sql`): one row per account, day
+  (UTC), event and detail, with the count and the first and last time. Counters are held in memory
+  (`activity/store.py`) and written in one statement at most every 30 seconds, off the request path, and when the
+  API stops; a process that dies loses at most that. **Without the table nothing is recorded**: the flush drops what
+  it holds. The presence check never remembers a no. Row-level security is on with no policy; only the API reads
+  and writes it.
+- **Who reads it.** `GET /api/ops/adoption`, admin role, shown on Configurations → SYSTEM (`AdoptionPanel.jsx`):
+  the funnel, eight weeks of created, active and returning accounts, each week's new accounts one to three weeks
+  on, what was used in the last 28 days, and each account's row. `activity/adoption.py` is the pure function that
+  makes those figures. Bookings and confirmations are read from `trades` and `trade_events` themselves, never from
+  the counters, so they go back to the first trade; test accounts and the platform's admins are not accounts.
 
 ## Data flow of a trade
 
