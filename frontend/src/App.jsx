@@ -17,6 +17,7 @@ import SignupPage       from './components/auth/SignupPage'
 import ConfirmPage      from './components/auth/ConfirmPage'
 import ResetPage        from './components/auth/ResetPage'
 import CommandCenter    from './components/CommandCenter'
+import PageHeading       from './components/common/PageHeading'
 import AppBar           from './components/layout/AppBar'
 import CfgNav           from './components/layout/CfgNav'
 import BlotterShell     from './components/blotter/BlotterShell'
@@ -67,7 +68,7 @@ function BlotterLayout() {
   return (
     <div className="app-frame" style={{display:'flex',height:'100vh',flexDirection:'column'}}>
       <AppBar />
-      <div style={{flex:1,overflow:'hidden'}}><InLayout><Suspense fallback={<Loading />}><AuthGuard /></Suspense></InLayout></div>
+      <main style={{flex:1,overflow:'hidden'}}><InLayout><Suspense fallback={<Loading />}><AuthGuard /></Suspense></InLayout></main>
     </div>
   )
 }
@@ -162,7 +163,7 @@ function ModuleEditors({ children }) {
 // one below still catches a failure of a layout itself, and is the one that counts the view.
 function InLayout({ children }) {
   const { pathname } = useLocation()
-  return <ErrorBoundary scope="page" resetKey={pathname}>{children}</ErrorBoundary>
+  return <><PageHeading /><ErrorBoundary scope="page" resetKey={pathname}>{children}</ErrorBoundary></>
 }
 
 function PageBoundary({ children }) {

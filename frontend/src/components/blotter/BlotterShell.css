@@ -104,8 +104,11 @@
                         of half-lit rows behind a moving pointer and four times the painting */
 }
 /* the trade under the pointer: a band, a rule at its edge, its text at full strength; the selected one in brass */
-.bl-row:hover { background: var(--row-hover); }
-.bl-row:hover td { color: var(--text-hi); }
+.bl-row:hover, .bl-row:focus-visible { background: var(--row-hover); }
+.bl-row:hover td, .bl-row:focus-visible td { color: var(--text-hi); }
+/* a row reached by the keyboard: the band the pointer gives it, and the app's ring inside the row's own edge */
+.bl-row:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
+.bl-table th:focus-visible { outline: 1px solid var(--accent); outline-offset: -2px; color: var(--text); }
 .bl-row-selected { background: var(--row-sel) !important; }
 .bl-row-selected > td:first-child { box-shadow: inset 3px 0 0 var(--accent) !important; }
 .bl-table td { height: 32px; padding: 0 8px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

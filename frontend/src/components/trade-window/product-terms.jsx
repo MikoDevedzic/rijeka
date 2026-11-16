@@ -30,6 +30,7 @@
 
 import React, { useEffect, useRef } from 'react'
 import LegEmbeddedOptions from './LegEmbeddedOptions'
+import { useFieldLabel } from '../../lib/a11y'
 import { getSessionMaybe } from '../../lib/session'
 import { SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS } from './product-defaults'
 
@@ -121,7 +122,8 @@ function Row({ cols = 6, children }) {
 }
 
 function Field({ label, children }) {
-  return <div><div className="tbw-lbl">{label}</div>{children}</div>
+  const [ref, id] = useFieldLabel()                      // the caption names the controls under it (lib/a11y.jsx)
+  return <div ref={ref}><div className="tbw-lbl" id={id}>{label}</div>{children}</div>
 }
 
 function LegHeader({ label, dirLabel, dirColor }) {

@@ -12,9 +12,12 @@ import { rowMenu } from './row-menu'
 import { readPackageTag } from '../trade-window/fx-legs'
 import { usePhone } from '../../lib/phone'
 import { storesShown } from '../../lib/blotter-filter'
+import { pressKey } from '../../lib/a11y'
 
+// a column that sorts: pressed by pointer or by Enter or Space, and it says which way it is sorted
 const TH = ({ col, label, sortCol, sortDir, onSort }) => (
-  <th className={sortCol === col ? 'th-sort' : ''} onClick={() => onSort(col)}>
+  <th scope="col" className={sortCol === col ? 'th-sort' : ''} onClick={() => onSort(col)} tabIndex={0} onKeyDown={pressKey(() => onSort(col))}
+      aria-sort={sortCol === col ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} title={`Sort by ${label.toLowerCase()}`}>
     {label}{sortCol === col ? (sortDir === 'asc' ? ' ↑' : ' ↓') : ''}
   </th>
 )
@@ -240,6 +243,7 @@ export default function BlotterShell() {
       <div className="bl-centre">
         <div className="bl-centre-header">
           <input
+            aria-label="Search the blotter"
             className="bl-search"
             placeholder={phone ? 'Search trades' : 'Search — ref, their ref, UTI, counterparty, instrument...'}
             value={filters.search || ''}
@@ -261,7 +265,7 @@ export default function BlotterShell() {
               <thead>
                 <tr>
                   <th style={{width:'32px',padding:'0 8px'}}>
-                    <input type='checkbox'
+                    <input type='checkbox' aria-label="Select every trade shown"
                       style={{cursor:'pointer',accentColor:'var(--accent)'}}
                       checked={selectedIds.size > 0 && rows.every(r => selectedIds.has(r.id))}
                       onChange={e => {
@@ -271,17 +275,17 @@ export default function BlotterShell() {
                     />
                   </th>
                   <TH col="trade_ref"    label="REF" sortCol={sortCol} sortDir={sortDir} onSort={sort} />
-                  <th>CLASS</th>
+                  <th scope="col">CLASS</th>
                   <TH col="instrument_type" label="INSTRUMENT" sortCol={sortCol} sortDir={sortDir} onSort={sort} />
-                  <th>STRUCTURE</th>
-                  <th>COUNTERPARTY</th>
-                  <th title="The counterparty's own trade ref for this trade">THEIR REF</th>
+                  <th scope="col">STRUCTURE</th>
+                  <th scope="col">COUNTERPARTY</th>
+                  <th scope="col" title="The counterparty's own trade ref for this trade">THEIR REF</th>
                   <TH col="notional" label="NOTIONAL" sortCol={sortCol} sortDir={sortDir} onSort={sort} />
-                  <th>TENOR</th>
+                  <th scope="col">TENOR</th>
                   <TH col="trade_date"   label="DATE" sortCol={sortCol} sortDir={sortDir} onSort={sort} />
                   <TH col="status"       label="STATUS" sortCol={sortCol} sortDir={sortDir} onSort={sort} />
-                  {stores && <th>STORE</th>}
-                  <th title="Unique Transaction Identifier: the same on both parties' bookings">UTI</th>
+                  {stores && <th scope="col">STORE</th>}
+                  <th scope="col" title="Unique Transaction Identifier: the same on both parties' bookings">UTI</th>
                 </tr>
               </thead>
               <tbody>
@@ -301,9 +305,10 @@ export default function BlotterShell() {
                       onClick={() => useBookingStore.getState().open(t)}
                       onContextMenu={e => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, id: t.id }) }}
                       aria-haspopup="menu"
+                      tabIndex={0} onKeyDown={pressKey(() => useBookingStore.getState().open(t))}
                     >
                       <td style={{width:'32px',padding:'0 8px'}} onClick={e=>e.stopPropagation()}>
-                        <input type='checkbox'
+                        <input type='checkbox' aria-label={`Select ${t.trade_ref || 'this trade'}`}
                           style={{cursor:'pointer',accentColor:'var(--accent)'}}
                           checked={isChecked}
                           onChange={e => {

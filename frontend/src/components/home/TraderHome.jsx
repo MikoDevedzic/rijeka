@@ -15,6 +15,7 @@ import BookBrief from './BookBrief'
 import Fixings from '../risk/Fixings'
 import { BUCKETS, BUCKET_LABEL, bucketReach, factors, lanes, peak, carry, limitMarks, standing, more, factorLimits, limitsOf, shownOn, against, scene, canLimit, columns, laneMarks, markFigure, laneFigures, figureAt, statement, moved, fmt0, signed, tone } from './trader-home'
 import { useGet, useRisk } from './use-risk'
+import { pressKey } from '../../lib/a11y'
 import './TraderHome.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -103,7 +104,8 @@ export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], 
             {actions.slice(0, NEEDS).map((a, i) => {
               const [chip, tn] = KIND[a.kind] || [a.kind, '']
               return (
-                <li key={i} className={a.href || a.chat ? 'go' : ''} onClick={() => go(a)}>
+                <li key={i} className={a.href || a.chat ? 'go' : ''} onClick={() => go(a)}
+                    {...(a.href || a.chat ? { tabIndex: 0, role: 'button', onKeyDown: pressKey(() => go(a)) } : {})}>
                   <span className={`lf-chip ${tn}`}>{chip}</span>
                   <span className="lf-t"><b>{a.title}</b><small>{a.detail}</small></span>
                   <span className="lf-when">{a.since ? ago(a.since) : ''}</span>

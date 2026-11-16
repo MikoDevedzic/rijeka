@@ -301,7 +301,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           </Note></SectionHeader>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 100px', gap:'4px', marginBottom:'6px' }}>
             <TipLabel tipKey='fxVol' tip={tip} untip={untip} style={{ alignSelf:'center' }}>Vol % override</TipLabel>
-            <input type='text' inputMode='decimal' value={volPct} onChange={e => setVolPct(e.target.value)}
+            <input type='text' inputMode='decimal' aria-label='Vol % override' value={volPct} onChange={e => setVolPct(e.target.value)}
               placeholder={res?.params?.vol_pct != null ? Number(res.params.vol_pct).toFixed(2) : 'surface'}
               style={{ ...INP, textAlign:'right', color: volPct ? 'var(--text-hi)' : 'var(--text-dim)', borderColor: volPct ? 'var(--border-hi)' : 'var(--border)' }} />
           </div>

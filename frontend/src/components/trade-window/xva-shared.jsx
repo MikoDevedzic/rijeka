@@ -67,12 +67,12 @@ export function PathsWwrSliders({ paths, setPaths, wwr, setWwr, tip, untip, path
     <>
       <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px' }}>
         <TipLabel tipKey={pathsTip} tip={tip} untip={untip} style={{ whiteSpace:'nowrap', marginBottom:0 }}>PATHS</TipLabel>
-        <input type='range' min='500' max='5000' step='500' value={paths} onChange={e=>setPaths(parseInt(e.target.value))} style={{flex:1,accentColor:'var(--text-dim)'}}/>
+        <input type='range' aria-label='Paths' min='500' max='5000' step='500' value={paths} onChange={e=>setPaths(parseInt(e.target.value))} style={{flex:1,accentColor:'var(--text-dim)'}}/>
         <span style={{fontSize:'0.8125rem',color:'var(--text-hi)',fontFamily:'var(--mono)',minWidth:'40px',textAlign:'right'}}>{paths.toLocaleString()}</span>
       </div>
       {multiplier && <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px' }}>
         <TipLabel tipKey='wwr' tip={tip} untip={untip} style={{ whiteSpace:'nowrap', marginBottom:0 }}>WWR ×</TipLabel>
-        <input type='range' min='1.0' max='2.0' step='0.1' value={wwr} onChange={e=>setWwr(parseFloat(e.target.value))} style={{flex:1,accentColor:'var(--text-dim)'}}/>
+        <input type='range' aria-label='Wrong-way risk multiplier' min='1.0' max='2.0' step='0.1' value={wwr} onChange={e=>setWwr(parseFloat(e.target.value))} style={{flex:1,accentColor:'var(--text-dim)'}}/>
         <span style={{fontSize:'0.8125rem',color:'var(--text-hi)',fontFamily:'var(--mono)',minWidth:'30px',textAlign:'right'}}>{wwr.toFixed(1)}</span>
       </div>}
     </>
@@ -153,7 +153,7 @@ function SpreadRow({ label, values, onChange, tipKey, tip, untip }) {
             letterSpacing:'0.02em', borderBottom:'1px dotted var(--border-glow)',
             cursor:'help', paddingBottom:'1px', whiteSpace:'nowrap' }}>{label}</div>
         {TENORS_6.map(t => (
-          <input key={t} type='text' inputMode='decimal'
+          <input key={t} type='text' inputMode='decimal' aria-label={`${label} ${t}`}
             placeholder='—' defaultValue={values?.[t]||''}
             onBlur={e => onChange(t, e.target.value)}
             style={{ ...INP, textAlign:'right', padding:'4px 6px', fontSize:'0.875rem',
@@ -214,7 +214,7 @@ export function SettlementBlock({ settlement, setSettlement, imExchanged, setImE
         {fields.map(({label,val,set,tk,ph})=>(
           <div key={label} style={{display:'contents'}}>
             <TipLabel tipKey={tk} tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>{label}</TipLabel>
-            <input type='text' value={val} placeholder={ph} onChange={e=>set(e.target.value)} style={{...INP,textAlign:'right'}}/>
+            <input type='text' aria-label={label} value={val} placeholder={ph} onChange={e=>set(e.target.value)} style={{...INP,textAlign:'right'}}/>
           </div>
         ))}
       </div>
@@ -298,12 +298,12 @@ export function AssumptionsBlock({ lgd, setLgd, fbaRatio, setFbaRatio, hurdle, s
         {rows.map(({label,val,set,tk,placeholder,testId,bad})=>(
           <div key={label} style={{display:'contents'}}>
             <TipLabel tipKey={tk} tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>{label}</TipLabel>
-            <input type='text' value={val} onChange={e=>set(e.target.value)} placeholder={placeholder} data-testid={testId} aria-invalid={bad || undefined}
+            <input type='text' aria-label={label} value={val} onChange={e=>set(e.target.value)} placeholder={placeholder} data-testid={testId} aria-invalid={bad || undefined}
               style={{...INP,textAlign:'right',...(bad ? {borderColor:'var(--red)',color:'var(--red)'} : {})}}/>
           </div>
         ))}
         <TipLabel tipKey='capModel' tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>Capital model</TipLabel>
-        <select value={capModel} onChange={e=>setCapModel(e.target.value)} style={{...INP,cursor:'pointer'}}>
+        <select aria-label='Capital model' value={capModel} onChange={e=>setCapModel(e.target.value)} style={{...INP,cursor:'pointer'}}>
           <option value='sa_ccr'>SA-CCR</option>
           <option value='cem'>CEM</option>
           <option value='imm'>IMM</option>

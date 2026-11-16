@@ -159,6 +159,20 @@ carries the class. A rail whose filters do not all fit scrolls them and fades it
 is under them (the summary, NEW TRADE) does not move. A filter whose every answer but one is always empty is not
 shown until a second answer exists (the blotter's STORE).
 
+## Without a mouse, without the page
+
+Every screen is held to these (`frontend/src/lib/a11y.js`, the journey `e2e/keyboard.spec.js`):
+
+- **Whatever is pressed is reached by Tab and pressed by Enter or Space.** A button is one already. A table row or a
+  list item that is pressed (a blotter row, a NEEDS YOU item, a column that sorts) has `tabIndex`, a key handler
+  (`pressKey`) and the same band the pointer gives it, with the app's ring.
+- **Every field has a name.** The caption over a field names it (`useFieldLabel` in the ticket's field wrappers);
+  a field with no caption has an `aria-label`. A placeholder or a tooltip is not a name.
+- **A window says it is one.** The ticket is `role="dialog"` with the trade's reference, or "New trade".
+- **A page says which page it is** in one first heading (`PageHeading`, read and not drawn, where the top bar
+  already shows it) and has one `main`.
+- **Focus is always shown**: the app's ring, or the row's band and rule where a ring would be cut by the table.
+
 ## Buttons, fields, rows
 
 **A table's columns.** A column that would say one thing on every row is not shown; it is shown from the first row

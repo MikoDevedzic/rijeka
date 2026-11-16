@@ -1,3 +1,4 @@
+import PageHeading from './common/PageHeading'
 import RijekaLogo from './brand/RijekaLogo'
 import { Keycap } from './common/Shortcuts'
 import { shortcutForPath } from '../lib/shortcuts'
@@ -65,7 +66,7 @@ export default function CommandCenter() {
         </div>
       </div>
 
-      <DeskHome demo={demo} navigate={navigate} />
+      <main><PageHeading /><DeskHome demo={demo} navigate={navigate} /></main>
     </div>
   )
 }

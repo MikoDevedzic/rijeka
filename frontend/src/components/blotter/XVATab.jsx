@@ -482,7 +482,7 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
               <TipLabel tipKey={tk} tip={tip} untip={untip} style={{ alignSelf:'center' }}>{label}</TipLabel>
               <div style={{ display:'flex', alignItems:'center', gap:'3px' }}>
                 {set ? (
-                  <input type='text' value={val} onChange={e=>set(e.target.value)}
+                  <input type='text' aria-label={label} value={val} onChange={e=>set(e.target.value)}
                     style={{ ...INP, textAlign:'right', color: val&&val!=='—'?'var(--text-hi)':'var(--text-dim)' }} />
                 ) : (
                   <div style={{ ...INP, textAlign:'right', color:'var(--text-dim)' }}>{val}</div>

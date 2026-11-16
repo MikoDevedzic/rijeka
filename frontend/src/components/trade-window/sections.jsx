@@ -15,6 +15,7 @@
 import React, { useState } from 'react'
 import { useModulesStore } from '../../store/useModulesStore'
 import { Keycap } from '../common/Shortcuts'
+import { useFieldLabel } from '../../lib/a11y'
 import { Note, NotesToggle } from '../common/Note'
 
 const isNoteColumn = (c) => /^NOTES?$/i.test(String(c || ''))
@@ -432,9 +433,10 @@ export function TradeFooter({
 // ── Shared primitives ───────────────────────────────────────────────────────
 
 function Field({ label, children }) {
+  const [ref, id] = useFieldLabel()                      // the caption names the controls under it (lib/a11y.jsx)
   return (
-    <div>
-      <div className="tbw-lbl">{label}</div>
+    <div ref={ref}>
+      <div className="tbw-lbl" id={id}>{label}</div>
       {children}
     </div>
   )

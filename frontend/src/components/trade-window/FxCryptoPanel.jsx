@@ -17,6 +17,7 @@
 import { createPortal } from 'react-dom'
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
 import { sourceShort, isVenue } from '../market-data/fx-source'
+import { useFieldLabel } from '../../lib/a11y'
 import { getSessionSafe } from '../../lib/session'
 import { AnalyticsBlock } from './sections'
 
@@ -52,12 +53,15 @@ const Fld = ({ label, flex = 1, children }) => <div style={{ flex, minWidth: 0 }
 const Row = ({ children }) => <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>{children}</div>
 // One cell of a terms row: a label that stays on one line (the whole of it in the title when it is cut short) over
 // its control. Every cell of a row is built this way, so the controls of a row start on the same line.
-const Cell = ({ label, sub, children }) => (
-  <div className="tbw-fx-cell">
-    <div className="tbw-lbl tbw-fx-lbl" title={sub ? `${label} · ${sub}` : label}>{label}{sub ? <span className="tbw-mut"> · {sub}</span> : null}</div>
-    {children}
-  </div>
-)
+const Cell = ({ label, sub, children }) => {
+  const [ref, id] = useFieldLabel()                      // the caption names the controls under it (lib/a11y.jsx)
+  return (
+    <div className="tbw-fx-cell" ref={ref}>
+      <div className="tbw-lbl tbw-fx-lbl" id={id} title={sub ? `${label} · ${sub}` : label}>{label}{sub ? <span className="tbw-mut"> · {sub}</span> : null}</div>
+      {children}
+    </div>
+  )
+}
 
 const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, onError, valuationSlot = null }, ref) {
   const crypto = ac === 'CRYPTO'
@@ -530,7 +534,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
     <div className="tbw-fx-row" data-fx-row="settles-on" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start', marginTop: 10 }}>
       <div className="tbw-fx-cell" style={{ flex: '0 1 300px' }}>
         <div className="tbw-lbl tbw-fx-lbl">FIXING SOURCE</div>
-        <select data-testid="settles-on" value={settle.source} onChange={e => setSettleSrc(e.target.value)}>
+        <select data-testid="settles-on" aria-label="Fixing source" value={settle.source} onChange={e => setSettleSrc(e.target.value)}>
           {settleOptions.map(s => <option key={s.source} value={s.source}>{settlementLabel(s)}</option>)}
         </select>
       </div>
@@ -538,7 +542,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
         <div className="tbw-fx-cell" style={{ flex: '0 1 150px' }}>
           <div className="tbw-lbl tbw-fx-lbl">FIXING DATE</div>
           {/* bound to the date that will be booked: a typed date is held inside its limits as it is typed, and again on blur */}
-          <input type="date" data-testid="fixing-date" value={fixingShown || ''} min={earliestFixingDate({ today: todayIso }) || undefined} max={settlesShown || undefined}
+          <input type="date" data-testid="fixing-date" aria-label="Fixing date" value={fixingShown || ''} min={earliestFixingDate({ today: todayIso }) || undefined} max={settlesShown || undefined}
                  title="after today, up to the settlement date; the forward is priced to this date"
                  onChange={e => setFixEdit(clampFixingDate({ date: e.target.value, settlementDate: settlesShown, today: todayIso }) || '')}
                  onBlur={() => { if (fixEdit) setFixEdit(clampFixingDate({ date: fixEdit, settlementDate: settlesShown, today: todayIso }) || '') }} />

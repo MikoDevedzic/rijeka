@@ -1187,6 +1187,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     <div
       ref={winRef}
       className="tbw-window"
+      role="dialog" aria-modal="false"
+      aria-label={viewMode || bookedTrade ? `Trade ${bookedTrade?.trade_ref || bookedTrade?.id || ''}`.trim() : 'New trade'}
       style={{ left: pos.x + 'px', top: pos.y + 'px' }}
       onMouseDown={handleWindowMouseDown}
     >

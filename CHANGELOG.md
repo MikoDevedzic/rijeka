@@ -3,6 +3,27 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.29). Commits on `main` are the detail.
 
+## 0.47.2 · 16 November 2026
+
+**The desk without a mouse, and for a reader who does not see the page.** A first read of five screens for this
+found that a trade could not be opened from the blotter by keyboard, that the ticket was not announced as a window
+and a dozen of its fields had no name, and that no page said in a heading which page it was.
+
+- **The blotter by keyboard.** A row is a stop on the way through the page, shows where the focus is, and Enter or
+  Space opens its trade. A column that sorts is pressed the same way and says which way it is sorted. Each row's
+  box, the box that selects all and the search field have names.
+- **What needs you, on the home**, is pressed by Enter or Space as by a click.
+- **The ticket is a dialog with a name** ("New trade", or the trade's reference). Every field on it is named by the
+  caption over it: on every product's TRADE tab, and on the XVA tab with its model inputs (25 of those had none).
+- **Every page says which page it is** in a first heading, read and not drawn, and marks its main content.
+
+Not changed: Escape does not close a ticket (an unbooked ticket lost to a stray key is the worse fault; CANCEL
+and CLOSE are reached by Tab). A blotter of many trades is as many stops; moving between rows by the arrow keys is
+not built. Contrast was measured roughly and nothing fell below 4.5 to 1; that wants a second measure.
+
+Tests: a keyboard journey (`keyboard.spec.js`): the blotter, every product's ticket and its tabs with no unnamed
+field, the home's items, the heading and the main landmark on five pages; unit tests for the two helpers.
+
 ## 0.47.1 · 16 November 2026
 
 **The public register is read once a minute, whatever length is asked for.** `GET /api/public/confirmations` kept
