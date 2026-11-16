@@ -123,3 +123,6 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - When a figure is renamed, or its sign turned, the old name is searched for on every screen in the same change,
   and the name is read from one module by all of them: the basis was renamed on the ticket and the home and
   left under its old name and sign on the Risk page.
+- A column made wide enough for the figures on the stack is not a fix for a figure printed over its neighbour: the
+  content sizes the column (one grid, rows on `subgrid`), and the journey gives a row a figure far larger than the
+  stack's and measures that each cell still ends before the next begins.

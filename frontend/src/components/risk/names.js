@@ -13,5 +13,6 @@ export const basis = (x, key = '_total') => {
   const now = x?.[`crybasis01${key}`], was = x?.[`fund01${key}`]
   return now != null ? Number(now) : was != null ? 0 - Number(was) : 0
 }
-// A limit's name without its scope (the row writes the scope beneath).
-export const limitName = (metric, scenarios = []) => limitLabel({ metric }, scenarios)
+// A limit's name without its scope (the row writes the scope beneath). It is the home's name for it; a key the home
+// has no name for (a standard size, a credit measure) is written in words, without its colons and underscores.
+export const limitName = (metric, scenarios = []) => limitLabel({ metric: String(metric || '').toUpperCase() }, scenarios || []).replace(/[:_]+/g, ' ').trim()

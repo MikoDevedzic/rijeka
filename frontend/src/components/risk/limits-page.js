@@ -23,7 +23,7 @@ export function curveRows(rep) {
 }
 // The firm's other limits: every stored one that is not a curve's total (VaR, a stress loss, a bucket, a desk's or a book's).
 export const otherLimits = (rep) => (rep?.limits || []).filter(l => !l.standard && !(String(l.scope || 'ALL').toUpperCase() === 'ALL' && factorOf(l.metric)))
-export const KIND_NAME = { IR01: 'A curve · IR01', FX01: 'A currency · FX01', CRY01: 'A digital asset · CRY01', VEGA: 'A volatility surface · vega', CRYBASIS01: 'A forward basis · CRYBASIS01' }
+export const KIND_NAME = { IR01: 'A curve · IR01', FX01: 'A currency · FX01', CRY01: 'A digital asset · CRY01', VEGA: 'A volatility surface · VEGA', CRYBASIS01: 'A forward basis · CRYBASIS01' }
 export const standardRows = (rep) => Object.keys(KIND_NAME).map(k => rep?.standards?.[k]).filter(Boolean)
 // A size as typed ("25,000", "25 000", "2.5e4"): a positive number, or null.
 export const parseSize = (s) => { const n = Number(String(s ?? '').replace(/[,\s_]/g, '')); return Number.isFinite(n) && n > 0 ? n : null }

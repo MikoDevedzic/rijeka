@@ -32,13 +32,32 @@ test('the Risk page names a spot delta and a basis as the home does, with the ho
 
   await app.screenshot({ path: 'e2e/.out/shots/risk-names-page.png', fullPage: true })
   // no figure is printed over the column beside it, on a monitor, a narrow window or a phone
-  for (const width of [1440, 1000, 390]) {
+  const trades = app.locator('.rk-trades')
+  const wide = () => rows.evaluateAll(els => els.flatMap(el => [...el.querySelectorAll('.pnl-tv')].filter(c => c.scrollWidth - c.clientWidth > 1).map(c => `${el.querySelector('.rk-ref')?.firstChild?.textContent}: ${c.textContent}`)))
+  for (const width of [1440, 1000, 390, 320]) {
     await app.setViewportSize({ width, height: 900 })
-    const over = await rows.evaluateAll(els => els.flatMap(el => [...el.querySelectorAll('.pnl-tv')].filter(c => c.scrollWidth - c.clientWidth > 1).map(c => `${el.querySelector('.rk-ref')?.firstChild?.textContent}: ${c.textContent}`)))
-    expect(over, `figures wider than their cell at ${width}px`).toEqual([])
-    expect(await app.locator('.rk-rows').first().evaluate(el => el.scrollWidth - el.clientWidth), `the rows are wider than the panel at ${width}px`).toBeLessThanOrEqual(1)
-    await app.locator('.rk-rows').first().screenshot({ path: `e2e/.out/shots/risk-by-trade-${width}.png` })
+    expect(await wide(), `figures wider than their cell at ${width}px`).toEqual([])
+    expect(await trades.evaluate(el => el.scrollWidth - el.clientWidth), `the rows are wider than the panel at ${width}px`).toBeLessThanOrEqual(1)
+    expect(await trades.evaluate(el => Math.round(el.getBoundingClientRect().right) - document.documentElement.clientWidth), `the rows run past the screen at ${width}px`).toBeLessThanOrEqual(0)
+    await rows.filter({ hasText: based[0].trade_ref }).first().scrollIntoViewIfNeeded()
+    await app.screenshot({ path: `e2e/.out/shots/risk-by-trade-${width}.png` })
   }
+  // ... nor would the largest book's be: a column is as wide as the widest figure in it. A row is given figures far
+  // larger than the stack's (ten-figure values, an eight-figure basis) and every cell still holds its own.
+  await app.setViewportSize({ width: 1440, height: 900 })
+  const big = rows.filter({ hasText: based[0].trade_ref }).first()
+  await big.evaluate(el => {
+    const figs = el.querySelectorAll('.rk-fig')
+    figs[1].textContent = '−12,345,678 CRYBASIS01'           // the basis
+    figs[2].textContent = 'BTC +9,876,543,210 CRY01'         // the spot delta
+    el.lastElementChild.textContent = '+1,234,567,890 JPY'   // the value
+  })
+  expect(await wide(), 'a far larger figure is wider than its cell').toEqual([])
+  const edges = await big.evaluate(el => [...el.children].map(c => { const r = document.createRange(); r.selectNodeContents(c); const b = r.getBoundingClientRect(); return [Math.round(b.left), Math.round(b.right)] }))
+  for (let i = 1; i < edges.length; i++) expect(edges[i][0], `column ${i + 1} begins after column ${i} ends (${JSON.stringify(edges)})`).toBeGreaterThanOrEqual(edges[i - 1][1])
+  await big.screenshot({ path: 'e2e/.out/shots/risk-by-trade-large.png' })
+  await app.reload()
+  await expect(rows.first()).toBeVisible({ timeout: 60_000 })
   await app.setViewportSize({ width: 1440, height: 900 })
   // a limit is named as the home names it, not by the key it is stored under
   await expect(page.locator('.rk-limits')).not.toContainText(/SPOT01:|CRYBASIS01:|IR01:/)

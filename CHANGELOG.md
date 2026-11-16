@@ -16,16 +16,17 @@ differently; three screens say the same figures under the names the home and the
   the book's basis the same way.
 - **A figure is no longer printed over the column beside it.** The basis was written after the IR01 on one line
   and ran over the asset's name in the next column. Each figure of a row is on a line of its own, in its sign's
-  colour, and the columns are wide enough for the longest name; on a phone the name and the value share a line
-  and the figures take the next.
+  colour, and a column is as wide as the widest figure in it, whatever the size of the book; on a phone a row is
+  one stack, the name and the value on a line and each figure under them.
 - **A limit is named, not keyed.** The limits list on the Risk and Counterparty Credit pages, and the Limits
   page's list and picker, printed the key a limit is stored under (`SPOT01:BTC`, `CRYBASIS01:BTC_FUNDING`).
-  They now name it as the home does (BTC CRY01, BTC CRYBASIS01); the key is the hover text. The Limits page's
-  table wrote "SPOT 01" and "spot 01"; it writes FX01 or CRY01.
+  They now name it as the home does (BTC CRY01, BTC CRYBASIS01; a bucket's limit by its curve and bucket); a
+  key the home has no name for, a standard size or a credit measure, is written in words without its colons.
+  The key is the hover text. The Limits page's table wrote "SPOT 01" and "spot 01"; it writes FX01 or CRY01.
 - The ticket's hover text for CRYBASIS01 no longer mentions the old name.
 - The names are read from one module (`frontend/src/components/risk/names.js`), a unit test fails if a Risk
   screen writes an old one, and a journey compares the rows with the report the API sent, at a monitor, a
-  narrow window and a phone. The rule is in `docs/design.md` (Risk factors) and the lesson in the design
+  narrow window and two phone widths, and with figures far larger than the stack's. The rule is in `docs/design.md` (Risk factors) and the lesson in the design
   keeper's definition.
 
 ## 0.42.5 · 15 November 2026

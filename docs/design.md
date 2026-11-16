@@ -289,7 +289,10 @@ spot); the forward basis of a digital asset is CRYBASIS01 (the value for +1bp a 
 IR01. A screen never writes SPOT01, "spot 01" or FUND01, and never prints the key a limit is stored under
 (`SPOT01:BTC`): the Risk pages read the names from `frontend/src/components/risk/names.js`, which takes them
 from the home's, and a limit is named by `limitName`. Where a row carries more than one figure, each is on a
-line of its own with its name after it.
+line of its own with its name after it, in the colour of its sign. A table of such rows is one grid whose rows
+take their columns from it (`subgrid`), so a column is as wide as its widest figure and none is printed over
+the next; a least width is given in px (the root is fixed at 14px; the px scale is for type, not for widths).
+On a phone such a row is one stack: the name and the value on a line, each figure under them.
 
 ## Figures that move
 

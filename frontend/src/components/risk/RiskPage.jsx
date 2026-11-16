@@ -97,7 +97,7 @@ export default function RiskPage() {
             <Points title="VEGA AT EACH QUOTED TENOR" unit={`${rep.reporting_ccy} per vol point, or per bp of normal vol`} rows={lad.vega || []} />
             {(lad.unconverted || []).length > 0 && <div className="pnl-note">Unconverted currencies (no spot saved): {lad.unconverted.join(', ')}</div>}
             <div className="rk-h">BY TRADE</div>
-            <div className="rk-rows">
+            <div className="rk-rows rk-trades">
               {(rep.ladder_rows || []).map(r => (
                 <div key={r.trade_id} className="rk-row rk-trade">
                   <span className="rk-ref">{r.trade_ref}<small>{productLabel(r.instrument)} · {r.desk} / {r.book}</small></span>
@@ -107,10 +107,12 @@ export default function RiskPage() {
                     <span className={`rk-fig ${tone(r.ir01)}`}>{sgn(r.ir01)} <small>IR01</small></span>
                     {basis(r) ? <span className={`rk-fig ${tone(basis(r))}`}>{sgn(basis(r))} <small>CRYBASIS01</small></span> : null}
                   </span>
-                  <span className="pnl-tv" data-testid="rk-trade-spot">{Object.entries(r.spot01 || {}).length ? Object.entries(r.spot01).map(([a, x]) => <span key={a} className={`rk-fig ${tone(x)}`}>{a} {sgn(x)} <small>{spotMeasure(a)[1]}</small></span>) : '—'}</span>
+                  <span className={`pnl-tv${Object.entries(r.spot01 || {}).length ? '' : ' rk-none'}`} data-testid="rk-trade-spot">{Object.entries(r.spot01 || {}).length ? Object.entries(r.spot01).map(([a, x]) => <span key={a} className={`rk-fig ${tone(x)}`}>{a} {sgn(x)} <small>{spotMeasure(a)[1]}</small></span>) : '—'}</span>
                   <span className={`pnl-tv ${tone(r.npv)}`}>{sgn(r.npv)} {r.ccy}</span>
                 </div>
               ))}
+            </div>
+            <div className="rk-rows">
               {(lad.problems || []).map(p => <div key={p.trade_ref} className="rk-row dim"><span className="rk-ref">{p.trade_ref}</span><span className="pnl-tv" style={{ gridColumn: '2 / -1', textAlign: 'left' }}>not priced: {p.reason}</span></div>)}
             </div>
           </section>

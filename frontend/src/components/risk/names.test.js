@@ -21,6 +21,10 @@ describe('one sensitivity, one name and one sign', () => {
     expect(limitName('CRYBASIS01:BTC_FUNDING')).toBe('BTC CRYBASIS01')
     expect(limitName('IR01:USD_SOFR')).toBe('IR01 USD SOFR')
     expect(limitName('STRESS:PARALLEL_UP_100', [{ id: 'PARALLEL_UP_100', name: 'Rates +100bp' }])).toBe('STRESS RATES +100BP')
+    expect(limitName('spot01:btc')).toBe('BTC CRY01')
+    // a key the home has no name for is still written in words: no colon, no underscore
+    for (const [key, name] of [['STANDARD:IR01', 'STANDARD IR01'], ['EPE:ACME_BANK', 'EPE ACME BANK'], ['PFE:ACME:1-5Y', 'PFE ACME 1-5Y'], ['PFE_PEAK:ACME', 'PFE ACME'], ['KR01:USD_SOFR:1-5Y', 'USD SOFR 1-5Y'], ['VAR_99_1D', 'VAR'], ['NPV', 'NPV']]) expect(limitName(key), key).toBe(name)
+    expect(limitName('STRESS:X', null)).toBe('STRESS X')
   })
   // The old names are written on no Risk screen: a label there is one of the desk's, or the test says which file.
   it('no Risk screen prints SPOT01, SPOT 01 or FUND01', () => {
