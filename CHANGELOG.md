@@ -3,6 +3,22 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.27). Commits on `main` are the detail.
 
+## 0.44.7 · 16 November 2026
+
+**The messenger opens by itself after a sign-in.** Prometheus, the support room and the rooms with other desks
+were behind one bare star at the corner of the screen, which someone new did not find.
+
+- **Open once, where it was left.** After a sign-in the messenger is open, on a monitor. It moves by its title
+  bar and is resized from its corner, as before, and is where it was last left. Closed, it stays closed: another
+  page or a reload does not open it again, and the next sign-in does. Not on a phone, where an open messenger is
+  the whole screen, and not while it stands in a window of its own.
+- **The button at the corner says CHAT** under its star, a little larger and a little brighter.
+- A journey signs in fresh, finds the messenger open, drags it, closes it, reloads and finds it closed and, opened
+  again, where it was left; another holds that a phone is not greeted. The other journeys run as a session
+  already greeted.
+
+---
+
 ## 0.44.6 · 16 November 2026
 
 **What a first-time visitor reads: the door, the blotter's filter, the IPV tables; and a release under an open

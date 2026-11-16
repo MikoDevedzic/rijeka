@@ -82,9 +82,14 @@ export const test = base.extend({
   app: [async ({ page, who, problems }, use) => {
     const session = sessions()[who]
     if (!session) throw new Error(`no session for ${who}: run e2e/serve.sh`)
-    await page.addInitScript(([key, value]) => {
-      try { window.sessionStorage.setItem(key, value); window.sessionStorage.setItem('rijeka.booted', '1') } catch { /* a page without storage */ }
-    }, ['sb-stack-auth-token', JSON.stringify(session)])
+    // (the messenger opens by itself once after a sign-in, src/lib/greeting.js: a journey's session has already been
+    // greeted, so no journey starts under an open messenger; the one that tests the greeting takes the mark away)
+    await page.addInitScript(([key, value, greeted]) => {
+      try {
+        window.sessionStorage.setItem(key, value); window.sessionStorage.setItem('rijeka.booted', '1')
+        if (window.sessionStorage.getItem('rijeka.messenger.greeted') == null && !window.__greetMe) window.sessionStorage.setItem('rijeka.messenger.greeted', greeted)
+      } catch { /* a page without storage */ }
+    }, ['sb-stack-auth-token', JSON.stringify(session), `${session.user?.id}|${session.user?.last_sign_in_at || ''}`])
 
     // The stack's addresses are wired on the browser context, not the page, so a window the app opens itself (the
     // messenger, a ticket in its own window) reaches the stack as the page does.

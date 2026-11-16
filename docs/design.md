@@ -135,6 +135,11 @@ than its column cuts them with an ellipsis and keeps them whole in its title; it
 said only of the engine and the standard, which are under Apache-2.0. A sentence that lists asset classes says
 which are live and which are next.
 
+**The messenger is met, not found.** It opens once after a sign-in, where it was last left, and never again until
+the next sign-in once it is closed; on a phone it is not opened for the user. The button at the corner carries its
+star and, under it, the word for what it opens (CHAT, 10px, in the text's high colour): a glyph alone is not a
+label.
+
 ## Buttons, fields, rows
 
 Three things a user does to the screen, each with one look everywhere (`index.css`, the block "What can be

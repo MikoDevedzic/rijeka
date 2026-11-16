@@ -8,6 +8,7 @@ import NewsCard from './NewsCard'
 import { broadcast, onBroadcast, popOutMessenger, focusMessengerWindow, MESSENGER_PATH } from '../../lib/windows'
 import { getSessionSafe } from '../../lib/session'
 import { TONES, VOLUMES, playTone, askDesktop, desktopState } from '../../lib/chatAlerts'
+import { GREETED_KEY, greetKey, shouldGreet } from '../../lib/greeting'
 import './Messenger.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -117,6 +118,18 @@ export default function Messenger() {
 
   useEffect(() => { if (session) init() }, [session, init])
 
+  // Once after a sign-in the messenger opens by itself, where it was last left (lib/greeting.js): the button at the
+  // corner is not found by someone who has not been told it is there.
+  const hiddenHere = HIDDEN_ON.includes(location.pathname)
+  const signIn = greetKey(session)
+  useEffect(() => {
+    let seen = null
+    try { seen = window.sessionStorage.getItem(GREETED_KEY) } catch { /* no storage: it opens on each load */ }
+    if (!shouldGreet({ key: signIn, seen, width: window.innerWidth, hidden: hiddenHere, poppedOut, open: useChatStore.getState().open })) return
+    try { window.sessionStorage.setItem(GREETED_KEY, signIn) } catch { /* as above */ }
+    useChatStore.setState({ open: true })
+  }, [signIn, hiddenHere, poppedOut])
+
   // Track the popped-out messenger window, if there is one.
   useEffect(() => {
     let lastSeen = 0
@@ -136,7 +149,7 @@ export default function Messenger() {
     return () => { off(); clearInterval(t); window.removeEventListener('message', onDock) }
   }, [setPoppedOut])
 
-  if (!session || HIDDEN_ON.includes(location.pathname)) return null
+  if (!session || hiddenHere) return null
   const launch = () => {
     if (poppedOut && focusMessengerWindow()) return
     setPoppedOut(false)
@@ -150,7 +163,8 @@ export default function Messenger() {
       {!covered && (
         <button className={`ms-launcher${poppedOut ? ' out' : ''}${alerting ? ' alert' : ''}`} onClick={launch}
                 title={poppedOut ? 'Messenger is open in its own window — bring it forward' : 'Messages and Prometheus'}>
-          ✦{unread > 0 && <span className="ms-launcher-badge">{badge(unread)}</span>}
+          <span className="ms-launcher-star" aria-hidden="true">✦</span><span className="ms-launcher-word">CHAT</span>
+          {unread > 0 && <span className="ms-launcher-badge">{badge(unread)}</span>}
         </button>
       )}
     </>
