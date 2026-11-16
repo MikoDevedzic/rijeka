@@ -133,6 +133,19 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - Before a screen says "not known", read the code that produces the figure and list every way it comes back
   empty (not asked for, asked and failed, asked and truly nothing): the first rule for the Collateral tab called a
   counterparty with no trades "not yet run", and a limit that could not be valued "within limits".
+- A checkpoint commit is staged by explicit path like any other: `git add -A` was typed for a local commit in a
+  worktree and was refused by the guard, rightly.
+- A tab rebuilt for one product family is rebuilt from what the other family's tab already is, with the pieces
+  shared (one chart for a curve and a vol, one size for a result's figure), and the first run on the stack's own
+  data decides what is shown: thirty quoted tenors made a column no one could read.
+- A scenario input that a product's pricer does not read is refused by the route and not offered by the screen: a
+  Bermudan's vol shift was taken, did nothing, and showed a vega times the shock beside a change of zero.
+- A screen that reads market data does not keep a failed or empty answer (the rule for presence checks holds in the
+  browser too), and a tab that reprices sends the request the price on screen answered, not the form as it stands.
+- Before a design review of two screens that should match, their pictures are put side by side and the differences
+  listed by the builder: a brass label, two colours for one surface and a box on one tab only were all in pictures
+  already looked at one by one.
+- A date written into a document is the day's date where the work is done (`date`), not the server's clock's.
 - A fact the server reports (the chain it anchors on) is asked of the server where a screen states it, through one
   function that words it; a name typed into copy is wrong on the next host, and the places that still type it are
   listed in the changelog. A message written for the general case is read once as each special party sees it (the

@@ -257,6 +257,14 @@ elsewhere. `fixing_default` stays the benchmark for older web clients. Not done 
 status, and no settlement event is written (the P&L explain shows the amount leaving as carry, with no cash line);
 that is a separate change because it writes into every account each day.
 
+The CURVE SCENARIO tab of a rates ticket (`trade-window/RatesScenario.jsx`, `rates-scenario.js`) asks the pricing
+routes themselves: the ticket's own request, with the scenario's shifts added (`shift_flat_bp` and `shift_bp` on a
+curve of `/price/preview`; `curve_flat_bp`, `curve_shift_bp` and `vol_shift_bp` on `/api/price/swaption`, `/cap`,
+`/floor` and `/collar`). The server moves the quotes it builds the curve from and the vol it prices at
+(`pricer.py` `_curve_shift`), within bounds, and with none set answers as it always has; a dozen such requests
+follow a shock (the market, each shocked curve alone, all together, a ladder), a quarter of a second after the
+last change. No new route, table or setting.
+
 The CURVE SCENARIO tab of a currency or digital-asset ticket (`trade-window/FxScenarioChart.jsx`,
 `fx-scenario.js`) draws the pair's recent fixings and its forward curve, lets the curve be dragged by tenor or as a
 whole, and reprices in the browser with the pricer's own closed form and the backend's interpolation of forward

@@ -26,15 +26,17 @@
 // do there). Each plot's wrapper carries data-ready, and so does the block: "true" once
 // the panel's requests have settled and both plots have drawn.
 // ────────────────────────────────────────────────────────────────────────────────────
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
+import { PLOT_BOX, PLOT_TITLE } from './xva-shared'
 import { isoDate, valueRange } from './fx-scenario'
-import { deltaRange, pillars, shockedVol, smileCurve, smileVol, surfaceReading, termCurve, volGeometry } from './fx-vol'
+import ScenarioCurve from './ScenarioCurve'
+import { deltaRange, pillars, shockedVol, smileCurve, smileVol, surfaceReading, volGeometry } from './fx-vol'
 
 const C = {
   bg: '#102723', grid: 'rgba(67,84,74,0.9)', axis: '#7b9388', label: '#8a9f94', hi: '#f6f1e4',
   curve: '#d9b25c', curveRgb: '217,178,92', call: '#8fc1e6', put: '#E06C75', strike: '#e9975a',
 }
-const FONT = '10px JetBrains Mono, IBM Plex Mono, ui-monospace, monospace'
+const FONT = '11px JetBrains Mono, IBM Plex Mono, ui-monospace, monospace'      // the size the chart beside it sets its words at
 const HEIGHT = 220
 
 const fin = (v) => typeof v === 'number' && Number.isFinite(v)
@@ -66,12 +68,18 @@ function line(ctx, pts, style, width, dash) {
   ctx.strokeStyle = style; ctx.lineWidth = width; ctx.setLineDash(dash || []); ctx.stroke(); ctx.setLineDash([])
 }
 // the base dashed, and once the slider has moved it the shocked curve solid over it: FxScenarioChart's forward curve
-function baseAndShocked(ctx, base, shocked, moved) {
+function baseAndShocked(ctx, base, shocked, moved, color = C.curve) {
   ctx.lineJoin = 'round'; ctx.lineCap = 'round'
-  line(ctx, base, moved ? C.label : C.curve, moved ? 1.2 : 1.8, [5, 4])
+  line(ctx, base, moved ? C.label : color, moved ? 1.2 : 1.8, [5, 4])
   if (!moved) return
-  line(ctx, shocked, `rgba(${C.curveRgb},0.18)`, 6)
-  line(ctx, shocked, C.curve, 1.8)
+  ctx.globalAlpha = 0.18; line(ctx, shocked, color, 6); ctx.globalAlpha = 1
+  line(ctx, shocked, color, 1.8)
+}
+// A colour given as a token (var(--rf-vol)) as the canvas needs it: the value the page has for it now.
+function tokenColour(color) {
+  const m = /^var\((--[\w-]+)\)$/.exec(String(color || '').trim())
+  if (!m || typeof document === 'undefined') return color || C.curve
+  return getComputedStyle(document.documentElement).getPropertyValue(m[1]).trim() || C.curve
 }
 const point = (ctx, x, y, r, fill, stroke) => {
   ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fillStyle = fill; ctx.fill()
@@ -93,65 +101,11 @@ const clip = (ctx, geo) => { ctx.save(); ctx.beginPath(); ctx.rect(geo.left - 6,
 
 // ── the term structure ───────────────────────────────────────────────────────────────
 
-const TICK_FIRST = ['1Y', '1M', '3M', '6M', '2Y', '1W', '2M', '9M']
-
-function drawTerm(ctx, W, H, { reading, vpt, expiryDate }) {
-  const { pillars: ps, T, quoteVol } = reading
-  const maxT = Math.max(ps[ps.length - 1].t, T * 1.05)
-  const curve = termCurve(ps, maxT, [T])
-  if (!curve) return false
-  const shift = vpt / 100, moved = vpt !== 0
-  const smiled = ps.some(p => p.smile)
-  const dotVol = shockedVol(quoteVol, vpt)
-  const range = valueRange([...curve.flatMap(p => [p.atm, p.atm + shift, ...(smiled ? [p.call + shift, p.put + shift] : [])]), dotVol].map(pct))
-  const geo = range && volGeometry({ width: W, height: H, xMax: maxT, vMin: range.vMin, vMax: range.vMax, sqrt: true })
-  if (!geo) return false
-  const { xs, ys, left, right, top, bottom } = geo
-  axes(ctx, geo, range)
-
-  // time axis: the quoted tenors, on a square-root scale from today
-  ctx.textAlign = 'center'; ctx.textBaseline = 'top'
-  // where two tenors would print over each other at the short end, the more familiar one is named
-  const placed = []
-  const rank = (p) => { const i = TICK_FIRST.indexOf(p.tenor); return i < 0 ? TICK_FIRST.length : i }
-  ps.filter(p => p.t <= maxT).sort((a, b) => rank(a) - rank(b) || a.t - b.t).forEach(p => {
-    const x = xs(p.t)
-    if (placed.some(q => Math.abs(q - x) < 30)) return
-    placed.push(x)
-    vline(ctx, geo, x, 'rgba(67,84,74,0.6)')
-    const w = ctx.measureText(p.tenor).width
-    ctx.fillStyle = C.label; ctx.fillText(p.tenor, Math.max(left + w / 2, Math.min(right - w / 2, x)), bottom + 7)
-  })
-
-  // the option's expiry, named above the plot
-  const xe = xs(T)
-  vline(ctx, geo, xe, 'rgba(246,241,228,0.45)', 1, [4, 3])
-  const text = `EXPIRY ${isoDate(expiryDate)}`.trim()        // ISO, like every date the tabs print
-  ctx.textBaseline = 'bottom'; ctx.fillStyle = C.hi; ctx.fillText(text, inX(geo, xe, ctx.measureText(text).width), top - 6)
-
-  clip(ctx, geo)
-  const path = (key, by) => curve.map(p => [xs(p.t), ys(pct(p[key] + by))])
-  if (smiled) {
-    line(ctx, path('call', shift), C.call, 1)
-    line(ctx, path('put', shift), C.put, 1)
-  }
-  baseAndShocked(ctx, path('atm', 0), path('atm', shift), moved)
-  ps.forEach(p => {
-    if (p.t > maxT) return
-    if (moved) point(ctx, xs(p.t), ys(pct(p.atm)), 1.8, C.label)
-    point(ctx, xs(p.t), ys(pct(p.atm + shift)), 3.2, C.curve)
-  })
-  ctx.restore()
-
-  mark(ctx, geo, xe, pct(dotVol), `${reading.override ? 'override ' : ''}${num(pct(dotVol), 2)} %`, reading.override)
-  return true
-}
-
 // ── the smile at the option's expiry ─────────────────────────────────────────────────
 
 const DELTA_TICKS = [[0.9, '10P'], [0.75, '25P'], [0.5, 'ATM'], [0.25, '25C'], [0.1, '10C']]
 
-function drawSmile(ctx, W, H, { reading, vpt, dp }) {
+function drawSmile(ctx, W, H, { reading, vpt, dp, ink = C.curve }) {
   const { at, delta, quoteVol, override, atForward, K, surfaceVol } = reading
   const { lo, hi } = deltaRange(delta)
   const curve = smileCurve(at, lo, hi)
@@ -186,12 +140,12 @@ function drawSmile(ctx, W, H, { reading, vpt, dp }) {
 
   clip(ctx, geo)
   const path = (by) => curve.map(p => [xs(p.delta), ys(pct(p.vol + by))])
-  baseAndShocked(ctx, path(0), path(shift), moved)
+  baseAndShocked(ctx, path(0), path(shift), moved, ink)
   // the three quotes interpolated to this expiry; a surface with no smile quoted has only its ATM
   ;(at.smile ? [0.75, 0.5, 0.25] : [0.5]).forEach(d => {
     const v = smileVol(at.atm, at.rr, at.bf, d)
     if (moved) point(ctx, xs(d), ys(pct(v)), 1.8, C.label)
-    point(ctx, xs(d), ys(pct(v + shift)), d === 0.5 ? 4 : 3.2, C.curve, d === 0.5 ? C.hi : null)
+    point(ctx, xs(d), ys(pct(v + shift)), d === 0.5 ? 4 : 3.2, ink, d === 0.5 ? C.hi : null)
   })
   ctx.restore()
 
@@ -200,6 +154,7 @@ function drawSmile(ctx, W, H, { reading, vpt, dp }) {
 }
 
 // ── one plot: a canvas that redraws on every render and on every resize ──────────────
+
 
 function Plot({ testId, title, draw, model, ready, onDrawn }) {
   const wrapRef = useRef(null)
@@ -235,8 +190,8 @@ function Plot({ testId, title, draw, model, ready, onDrawn }) {
 
   return (
     <div style={{ minWidth: 0 }}>
-      <div style={{ fontSize: '0.76rem', letterSpacing: '0.12em', color: 'var(--text-dim)', fontFamily: 'var(--mono)', marginBottom: 4 }}>{title}</div>
-      <div style={{ border: '1px solid var(--border)', borderRadius: 2, background: C.bg, overflow: 'hidden' }}>
+      <div style={PLOT_TITLE}>{title}</div>
+      <div style={PLOT_BOX}>
         <div ref={wrapRef} data-testid={testId} data-plot="true" data-ready="false" style={{ position: 'relative', width: '100%', height: HEIGHT, minWidth: 0 }}>
           <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', display: 'block' }} />
         </div>
@@ -248,17 +203,21 @@ function Plot({ testId, title, draw, model, ready, onDrawn }) {
 // ── the block ────────────────────────────────────────────────────────────────────────
 
 const sw = (style) => <span aria-hidden="true" style={{ display: 'inline-block', width: 18, height: 0, verticalAlign: 'middle', marginRight: 6, ...style }} />
-const legendRow = { display: 'flex', flexWrap: 'wrap', gap: '4px 18px', marginTop: 6, fontSize: '0.72rem', color: 'var(--text-dim)', fontFamily: 'var(--mono)' }
+const legendRow = { display: 'flex', flexWrap: 'wrap', gap: '4px 18px', marginTop: 6, fontSize: 11, color: 'var(--text-dim)', fontFamily: 'var(--mono)' }
 const legend = { display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }
 const words = { ...legend, whiteSpace: 'normal', color: 'var(--text-mute)', fontFamily: 'var(--sans)' }
-const muted = { fontSize: '0.72rem', color: 'var(--text-mute)', lineHeight: 1.5, marginTop: 8 }
+const muted = { fontSize: 11, color: 'var(--text-mute)', lineHeight: 1.5, marginTop: 8 }
 const signed = (v, d = 2) => `${v > 0 ? '+' : ''}${num(v, d)}`
 
 // quote     the priced option                         surface   the pairs row's vol_surface, or null when none is stored
 // vpt       the VOL slider, in vol points             dp        decimals of the pair's price, for the strike
 // ready     the panel's requests have settled         headerStyle  the panel's section header
-export default function FxVolSurface({ quote, surface, pair, vpt = 0, dp = 2, ready, headerStyle }) {
+// `vpt`: the vol shock the option sees (the flat shock and, tenor by tenor, the surface's own, read at its expiry);
+// `flat`, `own` ({tenor → points}) and `onPoint(tenor, points)`: the shocks as the tab holds them, for the term
+// structure, whose tenors are dragged as a rate curve's pillars are (ScenarioCurve.jsx, the chart every product uses).
+export default function FxVolSurface({ quote, surface, pair, vpt = 0, flat = vpt, own = null, onPoint = null, bound = 10, color = 'var(--rf-vol)', disabled = false, dp = 2, ready, headerStyle }) {
   const blockRef = useRef(null)
+  const ink = useMemo(() => tokenColour(color), [color])          // the smile is drawn on a canvas, which cannot read a token
   const reading = surfaceReading(quote, surface)
   // "true" on the block only when both plots say so, read after each of them draws
   const sync = () => {
@@ -279,31 +238,44 @@ export default function FxVolSurface({ quote, surface, pair, vpt = 0, dp = 2, re
   }
 
   const { at, quoteVol, surfaceVol, override, differs, diffPts, sameSurface, delta, atForward, where } = reading
-  const moved = vpt !== 0
+  const mine = own || {}
+  const pointed = Object.values(mine).some(v => Number(v))
+  const moved = vpt !== 0 || flat !== 0 || pointed
   const smiled = reading.pillars.some(p => p.smile)
-  const model = { reading, vpt, dp, expiryDate: quote.expiry_date }
+  const termPoints = reading.pillars.map(p => ({ id: p.tenor, t: p.t, v: pct(p.atm), label: p.tenor }))
+  const shiftOf = (id) => flat + (Number(mine[id]) || 0)
+  const wing = (delta) => reading.pillars.map(p => (p.smile ? pct(smileVol(p.atm, p.rr, p.bf, delta)) + shiftOf(p.tenor) : NaN))
+  const dotVol = pct(shockedVol(reading.quoteVol, vpt))
+  const model = { reading, vpt, dp, expiryDate: quote.expiry_date, ink }
   return (
     <div ref={blockRef} data-testid="fx-vol-surface" data-ready="false" style={{ minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div style={headerStyle}>VOL SURFACE · {pair}</div>
-        <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)' }}>{surface.label || surface.source || ''}</div>
+        <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>{surface.label || surface.source || ''}</div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '12px 20px' }}>
         <div style={{ minWidth: 0 }}>
-          <Plot testId="fx-vol-term" title="TERM STRUCTURE" draw={drawTerm} model={model} ready={ready} onDrawn={sync} />
+          <div style={PLOT_TITLE}>TERM STRUCTURE</div>
+          <div data-testid="fx-vol-term" data-plot="true" data-ready="true" style={{ minWidth: 0 }}>
+            <ScenarioCurve points={termPoints} own={mine} flat={flat} shockAt={(p) => shiftOf(p.id)} onPoint={(id, v) => onPoint?.(id, v)} disabled={disabled || !onPoint}
+              scale={1} bound={bound} step={0.25} decimals={1} width={460} height={HEIGHT} color={color} testId="fx-vol-term-curve"
+              mark={{ t: reading.T, label: `EXPIRY ${isoDate(quote.expiry_date)}`.trim() }} dot={{ t: reading.T, v: dotVol, label: `${reading.override ? 'override ' : ''}${num(dotVol, 2)} %` }}
+              lines={smiled ? [{ values: wing(0.25), color: C.call }, { values: wing(0.75), color: C.put }] : []}
+              ariaLabel="The vol surface at the money, by tenor: market against scenario" />
+          </div>
           <div style={legendRow}>
-            <span style={legend}>{sw({ borderTop: `2px dashed ${moved ? C.label : C.curve}` })}{moved ? 'BASE ATM' : 'ATM'}</span>
-            {moved && <span style={legend}>{sw({ borderTop: `2px solid ${C.curve}` })}SHOCKED</span>}
+            <span style={legend}>{sw({ borderTop: '2px dashed var(--text-dim)' })}{moved ? 'ATM AT THE MARKET' : 'ATM'}</span>
+            {moved && <span style={legend}>{sw({ borderTop: `2px solid ${color}` })}SHOCKED</span>}
             {smiled && <span style={legend}>{sw({ borderTop: `1px solid ${C.call}` })}25-DELTA CALL</span>}
             {smiled && <span style={legend}>{sw({ borderTop: `1px solid ${C.put}` })}25-DELTA PUT</span>}
-            <span style={legend}>{sw({ width: 8, height: 8, borderRadius: 8, border: `2px solid ${C.strike}`, background: override ? 'transparent' : C.hi })}{override ? 'THE OVERRIDE VOL' : atForward ? 'THE VOL AT THE FORWARD' : 'THE VOL AT THE STRIKE'}</span>
+            <span style={legend}>{sw({ width: 8, height: 8, borderRadius: 8, background: 'var(--amber)' })}{override ? 'THE OVERRIDE VOL' : atForward ? 'THE VOL AT THE FORWARD' : 'THE VOL AT THE STRIKE'}</span>
           </div>
         </div>
         <div style={{ minWidth: 0 }}>
           <Plot testId="fx-vol-smile" title={`SMILE AT EXPIRY · ${quote.expiry_date || ''}`} draw={drawSmile} model={model} ready={ready} onDrawn={sync} />
           <div style={legendRow}>
-            <span style={legend}>{sw({ borderTop: `2px dashed ${moved ? C.label : C.curve}` })}{moved ? 'BASE SMILE' : 'SMILE'}</span>
-            {moved && <span style={legend}>{sw({ borderTop: `2px solid ${C.curve}` })}SHOCKED</span>}
+            <span style={legend}>{sw({ borderTop: `2px dashed ${moved ? 'var(--text-dim)' : color}` })}{moved ? 'SMILE AT THE MARKET' : 'SMILE'}</span>
+            {moved && <span style={legend}>{sw({ borderTop: `2px solid ${color}` })}SHOCKED</span>}
             <span style={legend}>{sw({ borderTop: `2px dashed ${C.strike}` })}{atForward ? 'THE FORWARD' : 'THE STRIKE'}{fin(delta) ? ` · call delta ${num(delta, 2)}` : ''}</span>
             <span style={words}>Strikes rise from left to right: the forward delta of a call runs from 0.90 (10P, the 10-delta put) to 0.10 (10C).</span>
           </div>
@@ -323,7 +295,9 @@ export default function FxVolSurface({ quote, surface, pair, vpt = 0, dp = 2, re
       </div>
       {moved && (
         <div data-testid="fx-vol-shock-note" style={{ ...muted, marginTop: 2 }}>
-          The shocked curve is the surface moved in parallel by {signed(vpt)} points, which is what the repricing does; the {atForward ? 'forward' : 'strike'} is drawn at its unshocked delta.
+          {pointed
+            ? <>The surface is moved by the flat shock and, tenor by tenor, by its own; at this expiry that is {signed(vpt)} points, read on the line between the two tenors around it, and the option is repriced at its vol moved by as much. The {atForward ? 'forward' : 'strike'} is drawn at its unshocked delta.</>
+            : <>The shocked curve is the surface moved in parallel by {signed(vpt)} points, which is what the repricing does; the {atForward ? 'forward' : 'strike'} is drawn at its unshocked delta.</>}
         </div>
       )}
     </div>

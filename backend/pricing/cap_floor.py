@@ -240,6 +240,17 @@ class CapFloorResult:
     error:         Optional[str] = None
 
 
+VOL_FLOOR_BP = 0.01      # a shifted vol is never zero or negative: the Bachelier formulas divide by it
+
+
+def shifted_vol_bp(vol_bp: float, shift_bp: float) -> float:
+    """The vol a leg is priced at after a scenario's parallel shift, in bp of normal vol. No shift returns the
+    vol untouched (not even rounded), so a price without a scenario is the price it always was."""
+    if not shift_bp:
+        return vol_bp
+    return max(float(vol_bp) + float(shift_bp), VOL_FLOOR_BP)
+
+
 def price_cap(
     notional:      float,
     cap_rate:      float,          # absolute cap rate in decimal
@@ -250,6 +261,9 @@ def price_cap(
     fallback_vol_bp: float = 85.0,
     freq_per_year: int = 4,
     vol_override_bp: Optional[float] = None,  # explicit vol override, skips surface
+    vol_shift_bp: float = 0.0,                 # a scenario: the vol as read (or overridden), moved by this many bp
+    vol_atm_forward: Optional[float] = None,   # a scenario that moves the curve: the ATM forward the trade's place on the
+                                               # surface is read at (the unmoved curve's), so the curve does not move it along the smile
 ) -> CapFloorResult:
     """Price a cap as sum of Bachelier call caplets."""
     spot_date = valuation_date + timedelta(days=2)
@@ -277,11 +291,12 @@ def price_cap(
     else:
         vol_bp, vol_tier = lookup_cap_vol(
             strike_rate=cap_rate,
-            atm_forward=atm_forward,
+            atm_forward=atm_forward if vol_atm_forward is None else vol_atm_forward,
             cap_tenor_y=tenor_y,
             surface_rows=surface_rows,
             fallback_vol_bp=fallback_vol_bp,
         )
+    vol_bp = shifted_vol_bp(vol_bp, vol_shift_bp)
     sigma = vol_bp / 10000.0
 
     # Price caplets (use T_start = period start date as Bachelier expiry — SOFR in-arrears convention)
@@ -349,6 +364,9 @@ def price_floor(
     fallback_vol_bp: float = 85.0,
     freq_per_year: int = 4,
     vol_override_bp: Optional[float] = None,  # explicit vol override
+    vol_shift_bp: float = 0.0,                 # a scenario: the vol as read (or overridden), moved by this many bp
+    vol_atm_forward: Optional[float] = None,   # a scenario that moves the curve: the ATM forward the trade's place on the
+                                               # surface is read at (the unmoved curve's), so the curve does not move it along the smile
 ) -> CapFloorResult:
     """Price a floor as sum of Bachelier put floorlets."""
     spot_date = valuation_date + timedelta(days=2)
@@ -372,12 +390,13 @@ def price_floor(
     else:
         vol_bp, vol_tier = lookup_cap_vol(
             strike_rate=floor_rate,
-            atm_forward=atm_forward,
+            atm_forward=atm_forward if vol_atm_forward is None else vol_atm_forward,
             cap_tenor_y=tenor_y,
             surface_rows=surface_rows,
             fallback_vol_bp=fallback_vol_bp,
             is_floor=True,
         )
+    vol_bp = shifted_vol_bp(vol_bp, vol_shift_bp)
     sigma = vol_bp / 10000.0
 
     npv, caplets = 0.0, []
@@ -417,6 +436,8 @@ def price_collar(
     surface_rows: list[dict],
     fallback_vol_bp: float = 85.0,
     freq_per_year: int = 4,
+    vol_shift_bp: float = 0.0,          # a scenario: both legs' vols, as read from the surface, moved by this many bp
+    vol_atm_forward: Optional[float] = None,   # ... and read at this ATM forward, when the scenario moves the curve
 ) -> dict:
     """
     Price a collar = long cap + short floor (from buyer's perspective).
@@ -424,9 +445,9 @@ def price_collar(
     Positive net = pay premium (cap > floor cost).
     """
     cap_result   = price_cap(notional, cap_rate, tenor_y, discount_curve,
-                             valuation_date, surface_rows, fallback_vol_bp, freq_per_year)
+                             valuation_date, surface_rows, fallback_vol_bp, freq_per_year, vol_shift_bp=vol_shift_bp, vol_atm_forward=vol_atm_forward)
     floor_result = price_floor(notional, floor_rate, tenor_y, discount_curve,
-                               valuation_date, surface_rows, fallback_vol_bp, freq_per_year)
+                               valuation_date, surface_rows, fallback_vol_bp, freq_per_year, vol_shift_bp=vol_shift_bp, vol_atm_forward=vol_atm_forward)
 
     net_npv     = cap_result.npv - floor_result.npv
     net_pct     = cap_result.premium_pct - floor_result.premium_pct

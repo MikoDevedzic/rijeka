@@ -74,6 +74,11 @@ Learned on 15 November 2026 (the journey that checked nothing)
 - A picture taken before a change is not evidence about the change: retake every picture a brief names after the last edit to the screen it shows.
 - `toBeInViewport()` says the browser's window holds a thing, not that a person can see it: a bar that stays in place over what scrolls (the ticket's footer, its tabs) covers it. Where a thing is brought into view inside a window with such a bar, measure its box against the bar's, and look at the picture: VERIFY's answer passed "in viewport" with all but its first line under the footer.
 
+Learned on 15 November 2026 (the scenario tab that priced something else)
+- Press every control on a tab and check that something answers: a request goes out, or a figure moves. The cap's volatility buttons on the old CURVE SCENARIO tab were wired to nothing in the ticket, and no journey pressed them.
+- On a product's tab, check that a figure is that product's: compare it with the ticket's own price for that product (the request it sends, the route it calls). The scenario tab of a cap repriced a swap with the cap's dates, and showed its value and IR01 under the cap.
+- A tab that every product has is walked on every product, not on the first: one journey a product, with the same steps.
+
 Rules
 - Never run journeys against app.rijeka.app or the hosted API. Never enter real credentials anywhere.
 - Do not edit product code to make a journey pass. You may fix a journey whose selector went stale because the product legitimately changed, and say so.

@@ -39,7 +39,7 @@ import {
 } from './sections'
 import DetailsPanel from './details-panel'
 import XvaPanel      from './xva-panel'
-import ScenarioPanel from './scenario-panel'
+import RatesScenario from './RatesScenario'
 // Sprint 12 item 3: CONFIRM tab panel + lifecycle client
 import { ConfirmPanel } from './ConfirmPanel'
 import { executeBooking, buildBookingBody, confirmTrade, cancelTrade, confirmTradeOnChain, bookPackage, confirmPackageOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, partialTerminate, recordKnock, INDEX_CURVE } from './booking'
@@ -479,6 +479,9 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   const [productState, setProductState] = useState(() => (viewMode && !view0.assetClass.match(/FX|CRYPTO/))
     ? viewProductState(initialTrade, []) : {})
   const [result, setResult]             = useState(null)
+  // the request `result` answers (a rates ticket): the CURVE SCENARIO tab shocks these terms, not the form as it now
+  // stands, so its value with nothing shocked is the value on screen
+  const [pricedPayload, setPricedPayload] = useState(null)
   const [pricing, setPricing]           = useState(false)
   const [awaitingPar, setAwaitingPar]   = useState(null)    // the product whose PRICE click is held while its par rate solves (null: none)
   const [error, setError]               = useState('')
@@ -672,6 +675,12 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   const sessionCacheRef = useRef(null)
   const abortRef        = useRef(null)
 
+  // The curve list every pricing request of a rates ticket carries; the CURVE SCENARIO tab sends the same one, so a
+  // scenario with nothing shocked is the ticket's own request.
+  const pricingCurves = useMemo(() => {
+    const curveId = CCY_CURVE[state.ccy] || 'USD_SOFR'
+    return [{ curve_id: curveId, quotes: [], interp_method: curveInterp?.[curveId] || 'LogLinearDiscount' }]
+  }, [state.ccy, curveInterp])
   const handlePrice = useCallback(async () => {
     if (pricing) return
     // A fixed leg whose coupon is still blank is waiting for the par solve. Pricing now would strike it at 0 %.
@@ -691,12 +700,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
                                   product.pricing.timeoutMs || 30000)
 
     try {
-      const curveId  = CCY_CURVE[state.ccy] || 'USD_SOFR'
-      const curves   = [{
-        curve_id: curveId,
-        quotes: [],
-        interp_method: curveInterp?.[curveId] || 'LogLinearDiscount',
-      }]
+      const curves   = pricingCurves
 
       // Session with 5s deadline + cache fallback (copied pattern from Sprint 9.1)
       const session = await getSessionWithCache(sessionCacheRef)
@@ -726,13 +730,16 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             data = { ...opt, legs: booked.legs, curve_mode: booked.curve_mode, trade_id: booked.trade_id }
           } catch (e) { console.warn('[tw] swaption revaluation fell back to the booked legs', e) }
         }
+        setPricedPayload({ ...product.pricing.buildPayload(state), curves })
         setResult(product.pricing.parseResponse(data))
         return
       }
 
       const endpoint = typeof product.pricing.endpoint === 'function'
         ? product.pricing.endpoint(state) : product.pricing.endpoint
-      const data = await post(endpoint, { ...product.pricing.buildPayload(state), curves })
+      const sent = { ...product.pricing.buildPayload(state), curves }
+      const data = await post(endpoint, sent)
+      setPricedPayload(sent)
       setResult(product.pricing.parseResponse(data))
     } catch (e) {
       if (e?.name === 'AbortError') setError('Pricing request aborted')
@@ -741,7 +748,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       clearTimeout(abortTimer)
       setPricing(false)
     }
-  }, [pricing, product, productKey, state, viewMode, isCurrency, initialTrade, curveInterp])
+  }, [pricing, product, productKey, state, viewMode, isCurrency, initialTrade, pricingCurves])
 
   // PRICE was held for the par solve: price the moment the coupon is there; give up with the reason if the solve
   // fails or does not answer in ten seconds.
@@ -1414,12 +1421,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
 
       {tabsVisited['CURVE SCENARIO'] && !isCurrency && (
         <div style={{ display: activeTab === 'CURVE SCENARIO' ? 'block' : 'none' }}>
-          <ScenarioPanel
-            productKey={productKey}
-            state={state}
-            direction={direction}
-            result={result}
-          />
+          <RatesScenario product={product} productKey={productKey} state={state} result={result} payload={pricedPayload} active={activeTab === 'CURVE SCENARIO'} curves={pricingCurves} booked={!!viewMode} />
         </div>
       )}
 

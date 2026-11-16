@@ -219,7 +219,7 @@ function blocks(text, ctx) {
 // placed here on purpose. `ok`: compared with an outside source; otherwise an outside validator is still wanted.
 const PLACES = [
   ['OIS curve bootstrap', 's2'], ['Schedules, day counts, fixings', 's3'], ['Tenor, spot and expiry dates', 's12'], ['IRS, OIS, basis swaps', 's4'],
-  ['Key-rate ladder', 's14'], ['SA-CCR by asset class', 's16'], ['European swaption', 's5'], ['β=0 SABR surface', 's5'], ['Caps, floors, collars', 's6'],
+  ['Key-rate ladder', 's14'], ['SA-CCR by asset class', 's16'], ['European swaption', 's5'], ['β=0 SABR surface', 's5'], ['Caps, floors, collars', 's6'], ['Scenario shifts of a rates ticket', 's6'],
   ['Bermudan swaption', 's7'], ['HW1F calibration', 's8'], ['Exposure, CSA, margin period of risk', 's9'], ['XVA waterfall', 's10'], ['P&L attribution', 's11'],
   ['FX spot, forwards, NDFs', 's12'], ['Forward beyond the last quoted tenor', 's12'], ['Crypto NDF', 's12'], ["A currency NDF's fixing", 's12'], ['Digital-asset vol surface and forward points', 's13'], ['Settlement of digital-asset forwards', 's13'], ['Barriers watched between', 's13'],
   ['Scenario tab in the browser', 's13'], ['FX option, European', 's13'], ['FX option styles', 's13'], ['Crypto options', 's13'],

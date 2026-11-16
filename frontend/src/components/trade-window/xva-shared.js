@@ -143,6 +143,12 @@ export const XVA_BAND = { display:'grid', gridTemplateColumns:'minmax(0, 1.25fr)
 // (xva-shared.jsx; a cell is about 76px at the window's own width; DM Mono advances 0.6em). Both rows are sized from the same
 // figures, so the run and the on-chain row are always alike.
 export const moneySize = (texts) => { const n = Math.max(0, ...texts.map(t => String(t ?? '').length)); return n <= 9 ? 13.5 : n <= 10 ? 12.5 : n <= 11 ? 11.5 : 11 }
+// The size of a money figure in a scenario tab's result table, on every product (FxTabs.jsx, RatesScenario.jsx): the
+// table's own largest.
+export const RESULT_FIG = moneySize([])
+// A chart on a scenario tab, on every product: its title (a label: 11px, the interface face) and the box it is drawn in.
+export const PLOT_TITLE = { fontSize: 11, letterSpacing: '0.08em', color: 'var(--text-mute)', fontFamily: 'var(--sans)', fontWeight: 500, margin: '2px 0 4px' }
+export const PLOT_BOX = { border: '1px solid var(--border)', borderRadius: 'var(--r-1)', background: 'var(--panel)', overflow: 'hidden' }
 
 // 23vh: on a laptop (900 high) the chart and its two readout lines are 207px, which leaves the results, the curves
 // and the incremental charge above the fold after a run with the on-chain comparison; it was 27vh (243px) until 0.30.1
