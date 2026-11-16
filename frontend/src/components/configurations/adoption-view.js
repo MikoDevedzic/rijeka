@@ -9,7 +9,7 @@ const STEP_SAYS = {
   priced: 'pressed PRICE in a trade window', booked: 'booked a trade', xva: 'ran an XVA simulation', confirmed: 'confirmed a trade',
 }
 const EVENT = {
-  view: 'OPENED', priced: 'PRICED', scenario: 'SCENARIO', xva: 'XVA', booked: 'BOOKED', confirmed: 'CONFIRMED',
+  view: 'OPENED', priced: 'PRICED', xva: 'XVA', booked: 'BOOKED', confirmed: 'CONFIRMED',
   lifecycle: 'AMENDED · TERMINATED', verified: 'VERIFIED A RECORD', risk: 'RISK', pnl: 'P&L', ipv: 'IPV',
   saved: 'SAVED', assistant: 'PROMETHEUS', chat: 'CHAT',
 }

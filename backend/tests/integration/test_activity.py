@@ -68,9 +68,11 @@ def test_a_row_goes_with_its_account_and_a_row_for_no_account_costs_only_itself(
     gone = str(uuid.uuid4())
     _sql("INSERT INTO auth.users (id, aud, role, email, raw_app_meta_data, raw_user_meta_data) "
          "VALUES (:id, 'authenticated', 'authenticated', :e, '{}'::jsonb, '{}'::jsonb)", id=gone, e=f"{gone[:8]}@rijeka.test")
-    store.add(gone, "view", "blotter")
-    assert store.flush()["written"] == 1 and _counters(gone) == {("view", "blotter"): 1}
-    _sql("DELETE FROM auth.users WHERE id = :id", id=gone)
+    try:
+        store.add(gone, "view", "blotter")
+        assert store.flush()["written"] == 1 and _counters(gone) == {("view", "blotter"): 1}
+    finally:
+        _sql("DELETE FROM auth.users WHERE id = :id", id=gone)                   # whatever happened above, the stack keeps no stray account
     assert _counters(gone) == {}                                             # deleted with the account
     # its token may outlive it for an hour: its row is refused by the table, the other account's is still written
     store.add(gone, "view", "blotter"); store.add(USER_A, "view", "blotter")

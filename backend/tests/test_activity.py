@@ -29,7 +29,6 @@ def _clean():
     ("POST", "/api/xva/simulate", ("xva", "rates")),
     ("POST", "/api/xva/currency-option", ("xva", "fx or crypto")),
     ("POST", "/api/xva/incremental", ("xva", "incremental")),
-    ("POST", "/api/currency/option/scenario", ("scenario", "option")),
     ("POST", "/api/book/trade", ("booked", "")),
     ("POST", f"/api/chain/confirm/{ID}", ("confirmed", "")),
     ("POST", "/api/chain/confirm-package", ("confirmed", "")),
@@ -51,6 +50,8 @@ def test_a_deliberate_act_is_plain_from_its_route(method, path, want):
     # a keystroke is not a price: PRICE is told by the browser, never read from these
     ("POST", "/price"), ("POST", "/price/preview"), ("POST", "/api/price/fees"), ("POST", "/api/price/par-rate"),
     ("POST", "/api/currency/forward/price"), ("POST", "/api/currency/option/price"),
+    # the scenario tab asks the engine by itself when it is opened: opening a tab is not running a scenario
+    ("POST", "/api/currency/option/scenario"), ("POST", "/api/currency/option/ladder"),
     # a scheduler's own call, the operator's and the public routes
     ("POST", "/api/pnl/eod/tick"), ("POST", "/api/market-data/demo/tick"), ("POST", "/api/news/tick"),
     ("GET", "/api/ops/health"), ("POST", "/api/public/hit"), ("POST", "/api/me/activity"),

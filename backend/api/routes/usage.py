@@ -184,6 +184,12 @@ async def me_activity(request: Request, user: dict = Depends(verify_token)):
     is reduced to its family and is not stored. Never an error for the app: an unknown event is answered and dropped."""
     from activity import store
     from activity.events import told
+    try:
+        declared = int(request.headers.get("content-length") or 0)
+    except ValueError:
+        declared = 0
+    if declared > 1024:                   # said to be too long: not read at all
+        return {"accepted": False}
     raw = await request.body()
     if len(raw) > 1024:
         return {"accepted": False}
@@ -237,8 +243,8 @@ def adoption(db: Session, today: Optional[date] = None) -> dict[str, Any]:
     body["unread"] = unread                # what could not be read just now: the figures are short by it, not zero
     body["dropped"] = store.status(db)["dropped"]
     body["note"] = ("Accounts are sign-ups, without test accounts and the platform's admins. An account is active on a day it did something "
-                    "deliberate: opened a page, pressed PRICE, ran, saved, sent, booked or confirmed; what the app asks for by itself is not "
-                    "counted. Came back means active 24 hours or more after it was first active. Bookings and confirmations are counted from "
+                    "deliberate: opened a page (loading the app again counts), pressed PRICE, ran, saved, sent, booked or confirmed; what the "
+                    "app asks for by itself is not counted. Came back means active 24 hours or more after it was first active. Bookings and confirmations are counted from "
                     "the trading tables and go back to the first trade; everything else is counted from the day the activity table was applied.")
     if not body["recording"]:
         body["note"] += " The activity table is not applied (docs/migrations/2026-11-16_activity.sql): nothing but bookings and confirmations is recorded."

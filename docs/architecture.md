@@ -447,7 +447,7 @@ chat's, the home page reading the risk report), and none of that is activity.
 - **From the API, what a route alone makes plain.** `activity/recorder.py`, an ASGI layer added in `main.py` inside
   CORS and outside every route: the token check (`middleware/auth.py: verify_token`) leaves the verified account's
   id on the request, and when the response has gone out below 400 the recorder asks `activity/events.py: classify`
-  whether the method and path are a deliberate act: a scenario or an XVA run, a booking, a confirmation, an
+  whether the method and path are a deliberate act: an XVA run, a booking, a confirmation, an
   amendment or termination, a verification, an IPV or P&L run or sign-off, limits, collateral, market data or a
   counterparty saved, a counterparty credit run, the assistant asked, a message or a trade card sent. No read (GET)
   is on the list. Nothing of the request is read: not its body, not its query, not an id in its path. A unit test

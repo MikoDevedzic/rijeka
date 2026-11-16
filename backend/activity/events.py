@@ -27,8 +27,8 @@ from typing import Optional
 _RULES: list[tuple[frozenset[str], re.Pattern, str, str]] = [(frozenset(m.split("|")), re.compile(p), e, d) for m, p, e, d in [
     # a scheduler's own call is nobody's activity
     ("GET|POST|PUT|PATCH|DELETE", r"^/api/[a-z-]+(/[a-z-]+)*/tick$", "", ""),
-    # what a trade costs
-    ("POST", r"^/api/currency/option/(scenario|ladder)$", "scenario", "option"),
+    # what a trade costs (a scenario is not here: the scenario tab asks the engine by itself when it is opened and
+    # whenever the ticket changes, so its route says nothing of a person)
     ("POST", r"^/api/xva/incremental$", "xva", "incremental"),
     ("POST", r"^/api/xva/currency(-option|-package)?$", "xva", "fx or crypto"),
     ("POST", r"^/api/xva/(simulate|calibrate)$", "xva", "rates"),
@@ -66,7 +66,7 @@ PAGES: tuple[tuple[str, str], ...] = (
 ASSETS: tuple[str, ...] = ("rates", "fx", "crypto")
 
 VIEW, PRICED = "view", "priced"
-KINDS: tuple[str, ...] = (VIEW, PRICED, "scenario", "xva", "booked", "confirmed", "lifecycle", "verified", "ipv", "pnl", "risk",
+KINDS: tuple[str, ...] = (VIEW, PRICED, "xva", "booked", "confirmed", "lifecycle", "verified", "ipv", "pnl", "risk",
                           "saved", "assistant", "chat")
 
 

@@ -14,8 +14,7 @@ and Configurations → SYSTEM shows it to the admin role.
   minute, the chat asks every few seconds, the home page reads the risk report), and a ticket prices as it is
   typed; none of that is recorded. The app says two things to the API when signed in: a page was opened (kept as
   the kind of page, never its address) and PRICE was pressed in a trade window (kept as the ticket's asset class).
-  The API records the rest when it carries out a request whose route alone is a deliberate act: a scenario or an
-  XVA run, a booking, a confirmation, an amendment or termination, a verification, an IPV or P&L run or sign-off,
+  The API records the rest when it carries out a request whose route alone is a deliberate act: an XVA run, a booking, a confirmation, an amendment or termination, a verification, an IPV or P&L run or sign-off,
   a save of limits, collateral, market data or a counterparty, a counterparty credit run, a question to the
   assistant, a message or a trade card. No body, no query and no id is read, and the request never waits
   (counters in memory, written at most every 30 seconds).
