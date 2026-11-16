@@ -150,7 +150,7 @@ test('methodology: a section reads as the document does, with its evidence, a wo
   await expect(app).toHaveURL(/\/methodology\/13$/)
   await expect(app.locator('.ab-link', { hasText: 'METHODOLOGY' }), 'the top bar still says where you are').toHaveClass(/is-on/)
   await expect(app.getByRole('heading', { level: 1, name: 'FX options' })).toBeVisible()
-  await expect(app.getByTestId('mr-evidence').getByTestId('mr-model')).toHaveCount(8)      // 6 until 0.30.0 added the row for barriers watched between dates; 7 until 0.44.0 added an option of any style under a scenario
+  await expect(app.getByTestId('mr-evidence').getByTestId('mr-model')).toHaveCount(9)      // 6 until 0.30.0 added the row for barriers watched between dates; 7 until 0.44.0 added an option of any style under a scenario; 8 until 0.47.0 added a forward and a European option priced by the engine
   // the syllabus opens the section's own parts, and the pager walks on
   await rail.getByTestId('mr-go-17').click()
   await expect(rail.locator('.mr-sub')).toHaveCount(5)
