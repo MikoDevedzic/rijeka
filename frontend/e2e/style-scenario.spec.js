@@ -138,6 +138,7 @@ for (const [name, product, route, priceRoute] of [
     await expect(win.getByTestId('fx-scn-engine')).toHaveText('ENGINE PRICED')
     await expect(win.getByTestId('fx-scenario-banner')).toContainText(/the engine prices the (trade|option) there/)
     await expect(win).not.toContainText('APPROXIMATION')
+    await app.screenshot({ path: `e2e/.out/shots/scenario-engine-${route.split('/')[0]}.png` })
     // with no shock the engine's figure is the ticket's own: the same number, not one near it
     const body = asked.request().postDataJSON(), values = (await asked.json()).values
     expect(body.states.length).toBeGreaterThan(0)
@@ -246,6 +247,7 @@ test('a forward the engine does not answer for: the closed form\'s figures, and 
   await expect(win.getByTestId('fx-scn-engine')).toHaveText('APPROXIMATION')
   await expect(win.getByTestId('fx-scn-tab')).toHaveAttribute('data-busy', 'false')
   expect(await num(win.getByTestId('fx-scenario-npv')), 'the closed form at the ticket\'s own market').toBeCloseTo(quote.npv, 4)
+  await app.screenshot({ path: 'e2e/.out/shots/scenario-engine-silent.png' })
   expectClean(problems.filter(p => !/503/.test(String(p))))
 })
 
