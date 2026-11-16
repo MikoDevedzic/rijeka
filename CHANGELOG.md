@@ -3,6 +3,21 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.27). Commits on `main` are the detail.
 
+## 0.46.1 · 16 November 2026
+
+**Two migrations approved for production: the activity record and the health record.** No code changes; the
+deployed API applies each when it starts (`backend/db/migrate.py`) and `GET /api/ops/health` reports the outcome
+under `migrations` and `schema`. Both create one new, empty table with row-level security on and no policy, written
+only by the API, and each refers to the account it belongs to.
+
+- **`2026-11-16_activity.sql`**: `activity_daily`. With it the API starts counting, per account and day, what each
+  account does on purpose (0.45.0), and the Adoption panel has more to show than bookings and confirmations. Rows
+  are deleted with their account.
+- **`2026-11-16_health.sql`**: `health_events`. With it the problems people hit are kept for 30 days and the
+  operator is told of them (0.46.0). When an account is deleted its problems stay, without the account.
+
+---
+
 ## 0.46.0 · 16 November 2026
 
 **The operator is told when a user hits a problem.** An error in someone's browser was a line in the API's memory,
