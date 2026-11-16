@@ -7,6 +7,7 @@
 // one only when EVERY leg is priced for the terms it shows: a sum with a leg missing is not the package's.
 import { daysBetween, interpPoints, reprice, settledState, shockAtTime } from './fx-scenario'
 import { crybasis01 } from './fx-ticket'
+import { shockAtTime as shockOnPoints } from './rates-scenario'
 
 const finite = (x) => typeof x === 'number' && Number.isFinite(x)
 const num = (x) => (x == null || x === '' ? null : (finite(Number(x)) ? Number(x) : null))
@@ -138,13 +139,15 @@ export const closedForm = (q) => !!q && (q.shape !== 'OPTION' || !q.style || q.s
 // One scenario as each leg sees it. The scenario is made on the first leg's screen: a spot shock, a flat shock on
 // each rate curve and on the vol, shocks on single pillars, and moves of the forward curve's tenors. A leg that
 // settles on another date reads the same curves at ITS date: the points moved at its own days from spot, each
-// rate curve's pillar shocks at its own time (shockAtTime, the engine's own interpolation).
+// rate curve's pillar shocks at its own time (shockAtTime, the engine's own interpolation), and an option leg the
+// vol surface's tenor shocks at its own expiry (on the line between the two tenors around it).
 //   scenario: { spotPct, quoteBp, baseBp, volPts, pip, crypto,
 //               moved: { tenor: points }, tenorDays, lag,                    the forward curve as dragged and shifted:
 //                                                                            EVERY tenor of the curve, an unmoved one at 0
 //                                                                            (one left out is read as not on the curve,
 //                                                                            and its neighbours' moves are spread over it)
-//               quotePillars, quoteOwn, basePillars, baseOwn }                the pillar shocks of each rate curve
+//               quotePillars, quoteOwn, basePillars, baseOwn,                 the pillar shocks of each rate curve
+//               volPillars: [{ id, t }], volOwn: { id: points } }             the vol surface's tenors and their own shocks
 // Null for a leg the closed form does not price, or whose settlement cannot be placed on the curve.
 export function legShocks(q, s) {
   if (!closedForm(q) || !s) return null
@@ -155,7 +158,8 @@ export function legShocks(q, s) {
   if (dPoints == null) return null
   const quoteBp = (s.quoteBp || 0) + shockAtTime(s.quotePillars, s.quoteOwn, T)
   const baseBp = s.crypto ? -(s.baseBp || 0) : (s.baseBp || 0) + shockAtTime(s.basePillars, s.baseOwn, T)
-  return { spotPct: s.spotPct || 0, quoteBp, baseBp, volPts: s.volPts || 0, dPoints, pip: s.pip }
+  const volPts = (s.volPts || 0) + (q.shape === 'OPTION' && s.volPillars?.length && finite(q.t_expiry) ? shockOnPoints({ flat: 0, own: s.volOwn }, s.volPillars, q.t_expiry) : 0)
+  return { spotPct: s.spotPct || 0, quoteBp, baseBp, volPts, dPoints, pip: s.pip }
 }
 
 const FACTORS = ['spotPct', 'quoteBp', 'baseBp', 'volPts', 'dPoints']

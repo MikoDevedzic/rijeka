@@ -6,13 +6,13 @@
 // and the tabs stay mounted once visited. A request that follows the quote therefore has
 // to know three things: whether its tab is the one showing, whether the quote on screen
 // is still being repriced (stale), and whether it already holds the answer for exactly
-// this quote. Asked blindly, the style ladder alone is 46 option prices on the server
-// for every landed quote.
+// this quote. Asked blindly, an option's scenario alone is some fifteen prices on the
+// server for every landed quote.
 //
 //   marketKey          the stored market a quote priced on: the pairs answer is read once for it
-//   ladderBody / Key   the engine's ladder request for a quote, and its identity
-//   ladderWanted       whether to ask for a ladder now
-//   ladderShown        the ladder to draw, whether it is being replaced, and an error
+//   scenarioTerms      an option's terms as the engine's scenario route takes them
+//   scenarioRequest    one request for every figure a scenario shows, a market priced once however many names read it
+//   scenarioRead       what a name reads from the answers held, and whether it answers the request on screen
 //   xvaTermsKey        the terms an XVA run takes from a quote
 //   xvaResultMatches   whether a result on screen was simulated for the quote on screen
 // ────────────────────────────────────────────────────────────────────────────────────
@@ -29,34 +29,49 @@ export function marketKey(quote) {
   return [quote.pair, orNull(quote.vol_snapshot), orNull(quote.vol_marks), points].join('|')
 }
 
-// The body of POST /api/currency/option/ladder for a priced option: every style repriced by the engine on a
-// grid of spot and vol shocks.
-export function ladderBody(quote) {
+// ── an option the engine prices under a scenario (POST /api/currency/option/scenario) ──
+// The option's terms as that route takes them: the style and its levels, the years to expiry the quote reports, and
+// the spot it was priced at (the side of a barrier the market stands on).
+export function scenarioTerms(quote) {
   if (!quote) return null
   return {
-    pair: quote.pair, option_type: quote.option_type, base_notional: quote.base_notional, expiry_date: quote.expiry_date, settlement_date: quote.settlement_date,
-    strike: quote.strike, direction: quote.direction, valuation_date: quote.valuation_date, spot: quote.spot, settlement_type: quote.settlement_type,
-    style: quote.style, payout: quote.payout, payout_currency: quote.payout_currency, barrier_type: quote.barrier_type, barrier: quote.barrier,
-    lower: quote.lower, upper: quote.upper, rebate: quote.rebate || 0, touch_type: quote.touch_type, pay_at_hit: !!quote.pay_at_hit,
+    option_type: quote.option_type, direction: quote.direction, base_notional: quote.base_notional, strike: orNull(quote.strike), t_expiry: quote.t_expiry, spot: quote.spot,
+    style: quote.style, payout: orNull(quote.payout), payout_currency: quote.payout_currency || 'QUOTE', barrier_type: orNull(quote.barrier_type), barrier: orNull(quote.barrier),
+    lower: orNull(quote.lower), upper: orNull(quote.upper), rebate: quote.rebate || 0, touch_type: orNull(quote.touch_type), pay_at_hit: !!quote.pay_at_hit,
   }
 }
 
-// A ladder belongs to the request that produced it: two quotes that would send the same body share one ladder.
-export const ladderKey = (quote) => (quote ? JSON.stringify(ladderBody(quote)) : null)
+const stateId = (s) => [s.spot, s.forward, s.df_quote, s.vol_pct].join('|')
+const usableState = (s) => !!s && [s.spot, s.forward, s.df_quote, s.vol_pct].every(v => typeof v === 'number' && Number.isFinite(v) && v > 0)
 
-// Ask for a ladder only when the tab is showing, the quote is not being repriced, and neither a ladder nor a
-// failure is already held for this request (a failed request is not repeated until the quote changes).
-export function ladderWanted({ active, stale, key, heldKey, failedKey } = {}) {
-  return !!active && !stale && key != null && key !== heldKey && key !== failedKey
+// One request for every figure a scenario shows. `named`: [[name, state]], a state being { spot, forward, df_quote,
+// vol_pct } (fx-scenario.js shockedState). Two names on the same market share one valuation; a name with no usable
+// state is left out and reads as nothing. Returns { key, body, index: name -> place in the answer's values }, or
+// null when there is nothing to ask.
+export function scenarioRequest(quote, named) {
+  const terms = scenarioTerms(quote)
+  if (!terms || !Array.isArray(named)) return null
+  const states = [], at = new Map(), index = {}
+  for (const [name, s] of named) {
+    if (!usableState(s)) continue
+    const id = stateId(s)
+    if (!at.has(id)) { at.set(id, states.length); states.push({ spot: s.spot, forward: s.forward, df_quote: s.df_quote, vol_pct: s.vol_pct }) }
+    index[name] = at.get(id)
+  }
+  if (!states.length) return null
+  const body = { ...terms, states }
+  return { key: JSON.stringify(body), body, index }
 }
 
-// What the ladder's place shows. The last ladder that came back stays while the next is on its way or the quote
-// is stale (`updating`); an error is shown only for the request on screen.
-//   held    { key, data } of the last ladder          failed  { key, message } of the last failure
-export function ladderShown({ key, held, failed, stale } = {}) {
-  const error = failed && failed.key === key ? failed.message : null
-  const ladder = held ? held.data : null
-  return { ladder, error, updating: !!ladder && !error && (!!stale || held.key !== key) }
+// What a name reads from the answers held. `held`: { key, index, values } of the last answer. For the request on
+// screen it is that answer's own value; while the next is on its way the last answer's value under the same name
+// stays (`current: false`: the tab's chip says it is repricing); a name the last answer did not carry reads as nothing.
+//   -> { npv, touched, error, current } | null
+export function scenarioRead(held, key, name) {
+  if (!held || !held.index || !(name in held.index)) return null
+  const v = held.values?.[held.index[name]]
+  if (!v) return null
+  return { npv: typeof v.npv === 'number' && Number.isFinite(v.npv) ? v.npv : null, touched: v.touched === true, error: v.error || null, current: held.key === key }
 }
 
 // The terms POST /api/xva/currency and /api/xva/currency-option take from the ticket, as the quote carries

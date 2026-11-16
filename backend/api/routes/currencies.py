@@ -39,7 +39,7 @@ from middleware.auth import verify_token
 from api.routes._errors import internal
 from pricing.currency_forward import price_currency_forward
 from pricing.fx_option import price_fx_option
-from pricing.fx_exotic import ExoticSpec, price_exotic
+from pricing.fx_exotic import METHOD as STYLE_METHOD, ExoticSpec, price_exotic, scenario_npv
 from pricing.fx_vol import TENOR_YEARS as VOL_TENORS, lookup_vol, parse_surface, quotes_from_grid
 from api.routes.crypto import (ASSETS as CRYPTO_ASSETS, fetch_spot as fetch_crypto_spot, latest_snapshot, _quote, _require_trader)
 
@@ -1124,6 +1124,66 @@ def option_ladder(req: OptionLadderRequest, db: Session = Depends(get_db), user:
         rows.append(row)
     return {"pair": pair, "style": base["style"], "base_npv": base["npv"], "base_vol_pct": vol0, "spot": S0, "spot_shocks_pct": req.spot_shocks_pct[:15],
             "vol_shocks_pts": req.vol_shocks_pts[:7], "rows": rows, "spot01": base["spot01"], "vega": base["vega"]}
+
+
+STYLE_FIELDS = ("style", "payout", "payout_currency", "barrier_type", "barrier", "lower", "upper", "rebate", "touch_type", "pay_at_hit")
+SCENARIO_STATES_MAX = 40
+
+
+class OptionStateIn(BaseModel):
+    """A market an option is valued at: the inputs the pricer itself takes."""
+    spot: float = Field(..., gt=0, le=1e12)
+    forward: float = Field(..., gt=0, le=1e12, description="to the settlement date")
+    df_quote: float = Field(..., gt=0, le=10, description="the quote currency's discount factor to the settlement date")
+    vol_pct: float = Field(..., gt=0, le=1000, description="vol points")
+
+
+class OptionScenarioRequest(BaseModel):
+    option_type: str = Field("CALL", description="CALL | PUT on the base currency")
+    direction: str = Field("BUY", description="BUY | SELL of the option")
+    base_notional: float = Field(..., gt=0)
+    strike: Optional[float] = Field(None, gt=0)
+    t_expiry: float = Field(..., gt=0, le=60, description="years to expiry, ACT/365, as the priced quote reports it")
+    spot: float = Field(..., gt=0, le=1e12, description="the spot the ticket was priced at: the side of a barrier the market stands on")
+    style: str = Field("EUROPEAN", description="EUROPEAN | AMERICAN | DIGITAL | BARRIER | DOUBLE_BARRIER | TOUCH")
+    payout: Optional[float] = Field(None, gt=0)
+    payout_currency: str = "QUOTE"
+    barrier_type: Optional[str] = None
+    barrier: Optional[float] = Field(None, gt=0)
+    lower: Optional[float] = Field(None, gt=0)
+    upper: Optional[float] = Field(None, gt=0)
+    rebate: float = Field(0.0, ge=0)
+    touch_type: Optional[str] = None
+    pay_at_hit: bool = False
+    states: list[OptionStateIn] = Field(..., min_length=1, max_length=SCENARIO_STATES_MAX)
+
+
+@router.post("/option/scenario")
+def option_scenario(req: OptionScenarioRequest, user: dict = Depends(verify_token)):
+    """An option of any style valued at each of a list of markets, for the ticket's scenario tab: the pricer the
+    ticket was priced with (pricing/fx_exotic.py), at a spot, a forward, a discount factor and a vol the caller
+    names. Nothing is read from the stored market and nothing is saved: the tab works out what its shocks do to
+    those four inputs, as it does for a European option, and the engine prices the style there. A spot at or
+    beyond a barrier is valued as touched, and the answer says so (`touched`)."""
+    if str(req.direction).upper() not in ("BUY", "SELL"):
+        raise HTTPException(status_code=422, detail="direction must be BUY or SELL")
+    spec = spec_from({k: getattr(req, k) for k in STYLE_FIELDS}, req.option_type, req.strike)
+    try:
+        spec.validate(req.spot)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    values = []
+    for s in req.states:
+        try:
+            npv, hit = scenario_npv(spec, base_notional=req.base_notional, spot=s.spot, forward=s.forward, df_quote=s.df_quote, t_expiry=req.t_expiry,
+                                    vol=s.vol_pct / 100.0, direction=req.direction, spot_ref=req.spot)
+            if not math.isfinite(npv):
+                raise ArithmeticError("not a finite value")
+            values.append({"npv": npv, "touched": hit})
+        except (ValueError, ArithmeticError) as e:
+            # one market the pricer cannot value is that cell's answer, not the request's: the rest are still priced
+            values.append({"npv": None, "touched": False, "error": str(e) if isinstance(e, ValueError) else "outside what the pricer can value"})
+    return {"style": spec.style, "method": STYLE_METHOD[spec.style], "values": values}
 
 
 class FlatRateRequest(BaseModel):

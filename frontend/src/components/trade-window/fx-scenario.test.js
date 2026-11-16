@@ -835,3 +835,97 @@ describe('a rate curve shocked point by point', () => {
     expect(tenorLabel(0)).toBe(''); expect(tenorLabel(NaN)).toBe('')
   })
 })
+
+describe('shockedState: the market a scenario leaves a trade on', () => {
+  const opt = { shape: 'OPTION', direction: 'BUY', option_type: 'CALL', base_notional: 1e6, spot: 1.16, forward: 1.165, df_quote: 0.98, t_settle: 0.5, t_expiry: 0.49, t_spot: 0.0055,
+    strike: 1.17, vol_pct: 8.5, vol: 0.0850004 }
+  it('with no shock it is the quote\'s own market, and the vol is the one the pricer took, unrounded', async () => {
+    const { shockedState } = await import('./fx-scenario')
+    expect(shockedState(opt)).toEqual({ spot: 1.16, forward: 1.165, df_quote: 0.98, vol_pct: 0.0850004 * 100 })
+    expect(shockedState({ ...opt, vol: undefined }).vol_pct).toBe(8.5)                               // an answer without it: the points it reports
+  })
+  it('it is the market the closed form prices on: the same forward, to the last digit, under every shock', async () => {
+    const { shockedState } = await import('./fx-scenario')
+    const shocks = { spotPct: 2.5, quoteBp: 40, baseBp: -15, volPts: 1.25, dPoints: 12, pip: 1e-4 }
+    const st = shockedState(opt, shocks)
+    expect(st.forward).toBe(reprice(opt, shocks).forward)
+    expect(st.spot).toBeCloseTo(1.16 * 1.025, 12)
+    expect(st.df_quote).toBeCloseTo(0.98 * Math.exp(-0.004 * 0.5), 12)                               // the quote curve's shock, to the settlement date
+    expect(st.vol_pct).toBeCloseTo(8.50004 + 1.25, 10)
+    // and the closed form is that market priced: Garman-Kohlhagen at the state's forward and discount factor
+    expect(reprice(opt, shocks).npv).toBeCloseTo(1e6 * gk(st.forward, 1.17, 0.49, (8.5 + 1.25) / 100, true, st.df_quote), 6)
+  })
+  it('a vol shocked below nothing stops at a hundredth of a point; a forward has no vol', async () => {
+    const { shockedState } = await import('./fx-scenario')
+    expect(shockedState(opt, { volPts: -50 }).vol_pct).toBe(0.01)
+    expect(shockedState({ shape: 'FORWARD', spot: 1.16, forward: 1.165, df_quote: 0.98, t: 0.5 }).vol_pct).toBe(null)
+  })
+  it('null when the quote does not carry a market, or a shock is not a number', async () => {
+    const { shockedState } = await import('./fx-scenario')
+    expect(shockedState(null)).toBe(null)
+    expect(shockedState({ ...opt, df_quote: null })).toBe(null)
+    expect(shockedState(opt, { spotPct: NaN })).toBe(null)
+    expect(shockedState(opt, { spotPct: -100 })).toBe(null)                                          // a spot of nothing is not a market
+  })
+})
+
+describe('styleSettlement: what an option of each style pays on a fixing (backend/settlement/rule.py option_amount)', () => {
+  const base = { shape: 'OPTION', direction: 'BUY', option_type: 'CALL', base_notional: 10, base_currency: 'BTC', quote_currency: 'USD', spot: 100000 }
+  const at = async (q, fixing, strike = 110000) => (await import('./fx-scenario')).styleSettlement({ ...base, ...q }, { strike, fixing, refSpot: 100000 })
+  it('a plain option pays on the fixing alone, American as European', async () => {
+    expect(await at({ style: 'EUROPEAN' }, 115000)).toEqual({ kind: 'plain', amount: 50000 })
+    expect(await at({ style: 'AMERICAN', option_type: 'PUT', direction: 'SELL' }, 105000)).toEqual({ kind: 'plain', amount: -50000 })
+    expect(await at({}, 100000)).toEqual({ kind: 'plain', amount: 0 })
+  })
+  it('a digital pays its payout on the right side of the strike: an amount of quote, or an amount of base at the fixing', async () => {
+    expect(await at({ style: 'DIGITAL', payout: 25000 }, 110001)).toEqual({ kind: 'plain', amount: 25000 })
+    expect(await at({ style: 'DIGITAL', payout: 25000 }, 110000)).toEqual({ kind: 'plain', amount: 0 })           // at the strike is not above it
+    expect(await at({ style: 'DIGITAL', payout: 2, payout_currency: 'BASE', option_type: 'PUT', direction: 'SELL' }, 100000)).toEqual({ kind: 'plain', amount: -200000 })
+  })
+  it('a knock-out pays as the plain option if never touched and its rebate if touched; a knock-in the other way round', async () => {
+    const out = { style: 'BARRIER', barrier_type: 'UP_OUT', barrier: 130000, rebate: 500 }
+    expect(await at(out, 120000)).toEqual({ kind: 'path', never: 100000, touched: 5000, certain: false, atTouch: true })
+    expect(await at(out, 131000)).toMatchObject({ certain: true, touched: 5000 })                                 // the fixing is beyond the barrier: it traded
+    expect(await at({ ...out, barrier_type: 'UP_IN' }, 120000)).toEqual({ kind: 'path', never: 5000, touched: 100000, certain: false, atTouch: false })
+    expect(await at({ style: 'BARRIER', barrier_type: 'DOWN_OUT', barrier: 90000, option_type: 'PUT' }, 90000)).toMatchObject({ certain: true, touched: 0, never: 200000, atTouch: false })   // no rebate: nothing was paid at the touch
+    expect(await at({ style: 'DOUBLE_BARRIER', barrier_type: 'KNOCK_OUT', lower: 90000, upper: 130000 }, 89000)).toMatchObject({ certain: true, touched: 0 })
+    expect(await at({ style: 'DOUBLE_BARRIER', barrier_type: 'KNOCK_IN', lower: 90000, upper: 130000, direction: 'SELL' }, 120000)).toEqual({ kind: 'path', never: 0, touched: -100000, certain: false, atTouch: false })
+  })
+  it('a one-touch pays if its level traded, a no-touch if it never did; the level\'s side is the priced spot\'s', async () => {
+    const one = { style: 'TOUCH', touch_type: 'ONE_TOUCH', barrier: 120000, payout: 25000 }
+    expect(await at({ ...one, pay_at_hit: true }, 110000, null)).toEqual({ kind: 'path', never: 0, touched: 25000, certain: false, atTouch: true })
+    expect(await at(one, 120000, null)).toEqual({ kind: 'path', never: 0, touched: 25000, certain: true, atTouch: false })
+    expect(await at({ ...one, barrier: 90000 }, 110000, null)).toMatchObject({ certain: false })                  // a level below the priced spot: a fixing above it has not reached it
+    expect(await at({ ...one, touch_type: 'NO_TOUCH', direction: 'SELL' }, 110000, null)).toEqual({ kind: 'path', never: -25000, touched: 0, certain: false, atTouch: false })
+    expect(await at({ style: 'TOUCH', touch_type: 'DOUBLE_NO_TOUCH', lower: 90000, upper: 120000, payout: 25000 }, 125000, null)).toMatchObject({ certain: true, touched: 0, never: 25000 })
+    expect(await at({ style: 'TOUCH', touch_type: 'DOUBLE_ONE_TOUCH', lower: 90000, upper: 120000, payout: 25000 }, 100000, null)).toMatchObject({ never: 0, touched: 25000, certain: false })
+  })
+  it('null when the terms or the fixing are not there to read: never a figure put in their place', async () => {
+    expect(await at({ style: 'BARRIER', barrier_type: 'UP_OUT' }, 120000)).toBe(null)                              // no barrier level
+    expect(await at({ style: 'DIGITAL' }, 120000)).toBe(null)                                                     // no payout
+    expect(await at({ style: 'EUROPEAN' }, 120000, null)).toBe(null)                                              // no strike
+    expect(await at({ style: 'EUROPEAN' }, null)).toBe(null)
+    const { styleSettlement } = await import('./fx-scenario')
+    expect(styleSettlement({ ...base, style: 'TOUCH', touch_type: 'ONE_TOUCH', barrier: 120000, payout: 1 }, { fixing: 110000 })).toBe(null)   // a single level and no spot to say its side
+    expect(styleSettlement({ ...base, shape: 'FORWARD' }, { strike: 1, fixing: 1 })).toBe(null)
+  })
+})
+
+describe('touchedWords: what a touched option is worth, as the engine values it', () => {
+  it('names the style\'s own outcome', async () => {
+    const { touchedWords } = await import('./fx-scenario')
+    const o = (q) => touchedWords({ shape: 'OPTION', ...q })
+    expect(o({ style: 'BARRIER', barrier_type: 'UP_OUT', rebate: 0 })).toContain('knocked out, and is worth nothing')
+    expect(o({ style: 'BARRIER', barrier_type: 'DOWN_OUT', rebate: 500 })).toContain('its rebate, paid at the touch')
+    expect(o({ style: 'DOUBLE_BARRIER', barrier_type: 'KNOCK_OUT', rebate: 500 })).toContain('worth nothing')           // a double barrier has no rebate
+    expect(o({ style: 'BARRIER', barrier_type: 'UP_IN' })).toContain('knocked in, and is valued as the plain option')
+    expect(o({ style: 'DOUBLE_BARRIER', barrier_type: 'KNOCK_IN' })).toContain('knocked in')
+    expect(o({ style: 'TOUCH', touch_type: 'ONE_TOUCH', pay_at_hit: true })).toContain('its payout, paid at the touch')
+    expect(o({ style: 'TOUCH', touch_type: 'ONE_TOUCH', pay_at_hit: false })).toContain('discounted from settlement')
+    expect(o({ style: 'TOUCH', touch_type: 'DOUBLE_ONE_TOUCH', pay_at_hit: true })).toContain('discounted from settlement')   // as the pricer values it
+    expect(o({ style: 'TOUCH', touch_type: 'NO_TOUCH' })).toContain('worth nothing')
+    expect(o({ style: 'TOUCH', touch_type: 'DOUBLE_NO_TOUCH' })).toContain('worth nothing')
+    expect(o({ style: 'AMERICAN' })).toBe(null)
+    expect(touchedWords(null)).toBe(null)
+  })
+})

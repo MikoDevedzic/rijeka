@@ -186,6 +186,21 @@ describe('one scenario over every leg', () => {
     // a flat shock is added to it
     expect(legShocks(strip[1], s({ quoteBp: 10, quotePillars: pillars, quoteOwn: { '2027-02-10': 50 } })).quoteBp).toBeCloseTo(10 + mid, 9)
   })
+  it('a tenor of the vol surface reaches each option leg at its own expiry; a forward leg has no vol to move', () => {
+    const tenors = [{ id: '1M', t: 30 / 365 }, { id: '3M', t: 90 / 365 }]
+    const opt = (t_expiry) => ({ shape: 'OPTION', style: 'EUROPEAN', direction: 'BUY', option_type: 'CALL', base_notional: 5, spot: 100, forward: 101, df_quote: 0.99, strike: 101,
+      t_settle: t_expiry, t_expiry, vol_pct: 50, valuation_date: '2026-11-10', settlement_date: '2026-12-10' })
+    const scen = s({ volPts: 1, volPillars: tenors, volOwn: { '3M': 2 } })
+    expect(legShocks(opt(30 / 365), scen).volPts).toBeCloseTo(1, 9)             // on the untouched tenor: the flat shock alone
+    expect(legShocks(opt(90 / 365), scen).volPts).toBeCloseTo(3, 9)             // on the shocked tenor: both
+    expect(legShocks(opt(60 / 365), scen).volPts).toBeCloseTo(2, 9)             // half way between them: on the line
+    expect(legShocks(opt(2), scen).volPts).toBeCloseTo(3, 9)                    // beyond the last tenor: its shock
+    expect(legShocks(strip[0], scen).volPts).toBe(1)                            // a forward leg carries the flat shock it never uses
+    expect(legShocks(opt(60 / 365), s({ volPts: 1 })).volPts).toBe(1)           // no tenors sent: the flat shock, as before
+    // and the leg is repriced at that vol
+    const leg = opt(60 / 365)
+    expect(repricePackage([leg], scen).npv).toBeCloseTo(reprice(leg, { volPts: 2 }).npv, 9)
+  })
   it('a digital asset\'s basis shock is the negative of its carry rate; a currency pair\'s base rate is itself', () => {
     expect(legShocks(strip[0], s({ baseBp: 25 })).baseBp).toBe(-25)
     expect(legShocks(strip[0], s({ baseBp: 25, crypto: false })).baseBp).toBe(25)

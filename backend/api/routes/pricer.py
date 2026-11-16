@@ -1175,11 +1175,6 @@ def price_swaption_route(
     # The Bachelier HW1F cross-check is N/A here (the tree IS HW1F, so
     # cross-checking it against itself is meaningless).
     if (req.structure or "EUROPEAN").upper() == "BERMUDAN":
-        if req.vol_shift_bp:
-            # the tree is priced at the Hull-White model's own volatility: a shift of the surface would be taken,
-            # do nothing, and be reported as a volatility with no value. A scenario moves a Bermudan's curve.
-            raise HTTPException(status_code=422, detail="A Bermudan swaption is priced on the Hull-White tree at the model's own "
-                                                        "volatility: a scenario moves its curve, not a vol (vol_shift_bp).")
         if not req.exercise_schedule_y or len(req.exercise_schedule_y) < 1:
             raise HTTPException(
                 status_code=422,
@@ -1196,7 +1191,13 @@ def price_swaption_route(
             )
 
         a_dec     = float(hw1f_a)
-        sigma_dec = float(hw1f_sig) / 10000.0   # bp → decimal
+        # The tree is priced at the Hull-White model's own volatility, one number: a scenario's vol shift moves that
+        # σ, in basis points, floored as every shifted vol is. It is not a shift of the swaption surface (that would
+        # be the model calibrated again to the moved surface); the answer names the σ it priced at, and the vega
+        # beside it is the value of a basis point of the same σ.
+        from pricing.cap_floor import shifted_vol_bp
+        sigma_bp  = shifted_vol_bp(float(hw1f_sig), req.vol_shift_bp or 0.0)
+        sigma_dec = sigma_bp / 10000.0          # bp → decimal
 
         n_periods = int(round(req.tenor_y / req.pay_freq_y))
         pay_times = [req.expiry_y + (k + 1) * req.pay_freq_y for k in range(n_periods)]
@@ -1265,8 +1266,8 @@ def price_swaption_route(
             "discount_check_max_relerr": getattr(base, "discount_check_max_relerr", None),
             "tenor_calibration_warning": getattr(base, "tenor_calibration_warning", None),
             # HW1F params used (echoed back for transparency)
-            "hw1f_params":               {"a": a_dec, "sigma_bp": float(hw1f_sig)},
-            "vol_bp":                    float(hw1f_sig),   # echo for UI consistency
+            "hw1f_params":               {"a": a_dec, "sigma_bp": sigma_bp},
+            "vol_bp":                    sigma_bp,          # the σ the tree was priced at (the model's, moved by a scenario's shift)
             # Bachelier-style fields not applicable on the tree path
             "hw1f_vol_bp":               None,
             "hw1f_npv":                  None,

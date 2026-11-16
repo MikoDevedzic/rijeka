@@ -1,6 +1,6 @@
 // Which request an answer on a currency ticket's tabs belongs to (fx-requests.js). The quotes are made up.
 import { describe, it, expect } from 'vitest'
-import { marketKey, ladderBody, ladderKey, ladderWanted, ladderShown, xvaTermsKey, xvaResultMatches } from './fx-requests'
+import { marketKey, scenarioTerms, scenarioRequest, scenarioRead, xvaTermsKey, xvaResultMatches } from './fx-requests'
 
 const option = (o = {}) => ({
   pair: 'BTCUSD', shape: 'OPTION', base_currency: 'BTC', quote_currency: 'USD', option_type: 'CALL', direction: 'BUY', base_notional: 10,
@@ -40,45 +40,50 @@ describe('marketKey: the stored market a quote priced on', () => {
   })
 })
 
-describe('the style ladder: which quote it belongs to', () => {
-  it('ladderBody is the engine\'s request for the quote', () => {
-    const b = ladderBody(option({ style: 'BARRIER', barrier_type: 'UP_OUT', barrier: 130000, rebate: undefined, pay_at_hit: undefined }))
-    expect(b).toMatchObject({ pair: 'BTCUSD', option_type: 'CALL', base_notional: 10, strike: 110000, spot: 104000, style: 'BARRIER', barrier_type: 'UP_OUT', barrier: 130000, rebate: 0, pay_at_hit: false })
-    expect(Object.keys(b)).toHaveLength(20)
-    expect(ladderBody(null)).toBe(null)
+describe('a styled option under a scenario: what the engine is asked, and what a figure reads', () => {
+  const barrier = option({ style: 'BARRIER', barrier_type: 'UP_OUT', barrier: 130000, rebate: undefined, pay_at_hit: undefined, t_expiry: 0.0822 })
+  const market = { spot: 104000, forward: 104250, df_quote: 0.9967, vol_pct: 48.5 }
+  const up = { spot: 109200, forward: 109462.5, df_quote: 0.9967, vol_pct: 48.5 }
+  it('scenarioTerms is the option as the route takes it: its style and levels, the years to expiry, the spot it was priced at', () => {
+    const b = scenarioTerms(barrier)
+    expect(b).toMatchObject({ option_type: 'CALL', direction: 'BUY', base_notional: 10, strike: 110000, t_expiry: 0.0822, spot: 104000, style: 'BARRIER', barrier_type: 'UP_OUT', barrier: 130000, rebate: 0, pay_at_hit: false, payout_currency: 'QUOTE' })
+    expect(Object.values(b).includes(undefined)).toBe(false)             // JSON would drop an undefined and the key would differ
+    expect('pair' in b || 'npv' in b || 'vol_pct' in b).toBe(false)       // nothing of the market: that is in the states
+    expect(scenarioTerms(null)).toBe(null)
   })
-  it('ladderKey: the same request is the same ladder, whatever else the quote carries', () => {
-    const k = ladderKey(option())
-    expect(ladderKey(option({ npv: 1, vol_pct: 50, forward: 105000 }))).toBe(k)        // the request sends none of these
-    expect(ladderKey(option({ strike: 120000 }))).not.toBe(k)
-    expect(ladderKey(option({ spot: 104100 }))).not.toBe(k)
-    expect(ladderKey(option({ direction: 'SELL' }))).not.toBe(k)
-    expect(ladderKey(null)).toBe(null)
+  it('scenarioRequest prices a market once however many names read it', () => {
+    const r = scenarioRequest(barrier, [['now', market], ['only:spot', up], ['only:vol', market], ['lad:spot:0', market], ['lad:spot:5', up]])
+    expect(r.body.states).toEqual([market, up])
+    expect(r.index).toEqual({ now: 0, 'only:spot': 1, 'only:vol': 0, 'lad:spot:0': 0, 'lad:spot:5': 1 })
+    expect(r.key).toBe(JSON.stringify(r.body))
+    expect(r.body.style).toBe('BARRIER')
   })
-  it('ladderWanted: only for the showing tab, a settled quote, and a request not yet answered', () => {
-    const k = ladderKey(option())
-    expect(ladderWanted({ active: true, stale: false, key: k, heldKey: null, failedKey: null })).toBe(true)
-    expect(ladderWanted({ active: false, stale: false, key: k })).toBe(false)                   // the tab is not showing
-    expect(ladderWanted({ active: true, stale: true, key: k })).toBe(false)                     // the quote is being repriced
-    expect(ladderWanted({ active: true, stale: false, key: k, heldKey: k })).toBe(false)        // once per quote
-    expect(ladderWanted({ active: true, stale: false, key: k, failedKey: k })).toBe(false)      // a failure is not repeated
-    expect(ladderWanted({ active: true, stale: false, key: k, heldKey: ladderKey(option({ strike: 1 })) })).toBe(true)
-    expect(ladderWanted({ active: true, stale: false, key: null })).toBe(false)
-    expect(ladderWanted()).toBe(false)
+  it('a name with no usable market is left out; with none left there is nothing to ask', () => {
+    const r = scenarioRequest(barrier, [['now', market], ['only:vol', { ...market, vol_pct: null }], ['only:fwd', null], ['lad:spot:-100', { ...market, spot: 0 }]])
+    expect(Object.keys(r.index)).toEqual(['now'])
+    expect(scenarioRequest(barrier, [['now', null]])).toBe(null)
+    expect(scenarioRequest(barrier, [])).toBe(null)
+    expect(scenarioRequest(null, [['now', market]])).toBe(null)
   })
-  it('ladderShown: the last ladder stays while the next is on its way or the quote is stale', () => {
-    const a = ladderKey(option()), b = ladderKey(option({ strike: 120000 }))
-    const held = { key: a, data: { rows: [] } }
-    expect(ladderShown({ key: a, held, failed: null, stale: false })).toEqual({ ladder: held.data, error: null, updating: false })
-    expect(ladderShown({ key: b, held, failed: null, stale: false })).toEqual({ ladder: held.data, error: null, updating: true })      // a new quote, its ladder not back yet
-    expect(ladderShown({ key: a, held, failed: null, stale: true })).toEqual({ ladder: held.data, error: null, updating: true })       // terms changed, no new quote yet
-    expect(ladderShown({ key: a, held: null, failed: null, stale: false })).toEqual({ ladder: null, error: null, updating: false })    // the first ladder: nothing to keep
+  it('another scenario, or other terms, is another request', () => {
+    const k = scenarioRequest(barrier, [['now', market]]).key
+    expect(scenarioRequest(barrier, [['now', up]]).key).not.toBe(k)
+    expect(scenarioRequest({ ...barrier, barrier: 131000 }, [['now', market]]).key).not.toBe(k)
+    expect(scenarioRequest({ ...barrier, npv: 1, forward: 1 }, [['now', market]]).key).toBe(k)        // the request sends neither
   })
-  it('ladderShown: an error belongs to the request on screen only', () => {
-    const a = ladderKey(option()), b = ladderKey(option({ strike: 120000 }))
-    const held = { key: a, data: { rows: [] } }
-    expect(ladderShown({ key: b, held, failed: { key: b, message: 'ladder 500' }, stale: false })).toEqual({ ladder: held.data, error: 'ladder 500', updating: false })
-    expect(ladderShown({ key: a, held, failed: { key: b, message: 'ladder 500' }, stale: false })).toEqual({ ladder: held.data, error: null, updating: false })
+  it('scenarioRead: the answer under a name, and whether it answers the request on screen', () => {
+    const r = scenarioRequest(barrier, [['now', market], ['only:spot', up]])
+    const held = { key: r.key, index: r.index, values: [{ npv: 31250.5, touched: false }, { npv: 20, touched: true }] }
+    expect(scenarioRead(held, r.key, 'now')).toEqual({ npv: 31250.5, touched: false, error: null, current: true })
+    expect(scenarioRead(held, r.key, 'only:spot')).toEqual({ npv: 20, touched: true, error: null, current: true })
+    expect(scenarioRead(held, 'another request', 'now')).toEqual({ npv: 31250.5, touched: false, error: null, current: false })   // the last answer stays while the next is out
+    expect(scenarioRead(held, r.key, 'lad:spot:5')).toBe(null)                                         // a name the last answer did not carry
+    expect(scenarioRead(null, r.key, 'now')).toBe(null)
+  })
+  it('scenarioRead: a market the pricer could not value reads as no figure, with its reason', () => {
+    const held = { key: 'k', index: { now: 0, x: 1 }, values: [{ npv: null, touched: false, error: 'outside what the pricer can value' }] }
+    expect(scenarioRead(held, 'k', 'now')).toEqual({ npv: null, touched: false, error: 'outside what the pricer can value', current: true })
+    expect(scenarioRead(held, 'k', 'x')).toBe(null)                                                    // an answer shorter than its index
   })
 })
 

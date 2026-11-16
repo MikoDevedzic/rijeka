@@ -392,6 +392,61 @@ def price_exotic(spec: ExoticSpec, *, base_notional: float, spot: float, forward
                         method=METHOD[spec.style])
 
 
+# ── one state of a scenario ──────────────────────────────────────────────────
+def beyond_barrier(spec: ExoticSpec, spot: float, spot_ref: float) -> bool:
+    """Whether `spot` stands at or beyond a barrier of the option. A single touch level has no side of its own:
+    the market's spot the option was priced at (`spot_ref`) says which side it stands on."""
+    if spec.style == "BARRIER":
+        return spot >= spec.barrier if spec.barrier_type.startswith("UP") else spot <= spec.barrier
+    if spec.style == "DOUBLE_BARRIER" or (spec.style == "TOUCH" and spec.touch_type.startswith("DOUBLE")):
+        return spot >= spec.upper or spot <= spec.lower
+    if spec.style == "TOUCH":
+        return spot >= spec.barrier if spec.barrier > spot_ref else spot <= spec.barrier
+    return False
+
+
+def value_touched(spec: ExoticSpec, S: float, r: float, rb: float, sigma: float, T: float, df_settle_extra: float = 1.0) -> float:
+    """The holder's value at the moment spot stands at or beyond the barrier, in value()'s units, with what the
+    touch pays counted in. It is the limit of value() as spot comes to the barrier, so a scenario's value does not
+    jump when a shock carries spot across: a knock-out is its rebate (a double barrier has none), paid then; a
+    knock-in is the plain option at that spot; a one-touch is its payout, paid then or discounted from settlement;
+    a no-touch is nothing. A double one-touch is valued paid at settlement, as value() values it."""
+    if spec.style in ("BARRIER", "DOUBLE_BARRIER"):
+        if spec.barrier_type.endswith("OUT"):
+            return float(spec.rebate or 0.0) if spec.style == "BARRIER" else 0.0
+        return vanilla(S, spec.strike, r, r - rb, sigma, T, spec.option_type == "CALL") * df_settle_extra
+    if spec.style == "TOUCH":
+        if spec.touch_type in ("NO_TOUCH", "DOUBLE_NO_TOUCH"):
+            return 0.0
+        if spec.touch_type == "ONE_TOUCH" and spec.pay_at_hit:
+            return float(spec.payout)
+        return float(spec.payout) * math.exp(-r * T) * df_settle_extra
+    raise ValueError(f"{spec.style} has no barrier")
+
+
+def scenario_npv(spec: ExoticSpec, *, base_notional: float, spot: float, forward: float, df_quote: float, t_expiry: float, vol: float,
+                 direction: str = "BUY", spot_ref: Optional[float] = None) -> tuple[float, bool]:
+    """One state of a scenario: the option's value from our side at a spot, a forward and a discount factor to
+    settlement, and a vol; and whether that spot stands at or beyond a barrier. The same value() and the same
+    reading of the inputs as price_exotic, so the state the ticket was priced at gives the ticket's own NPV; one
+    valuation, where price_exotic makes eleven for its risk figures. The terms are checked against `spot_ref`, the
+    spot the ticket was priced at: a shocked spot may stand beyond a barrier, and is then valued as touched
+    (value_touched)."""
+    ref = spot if spot_ref is None else spot_ref
+    spec.validate(ref)
+    if t_expiry <= 0:
+        raise ValueError("expiry must be after the valuation date")
+    if vol <= 0 or spot <= 0 or forward <= 0 or df_quote <= 0:
+        raise ValueError("spot, forward, discount factor and vol must be positive")
+    sign = 1.0 if str(direction).upper() == "BUY" else -1.0
+    r = -math.log(df_quote) / t_expiry
+    rb = r - math.log(forward / spot) / t_expiry
+    scale = base_notional if spec.style in ("EUROPEAN", "AMERICAN", "BARRIER", "DOUBLE_BARRIER") else 1.0
+    hit = beyond_barrier(spec, spot, ref)
+    v = value_touched(spec, spot, r, rb, vol, t_expiry) if hit else value(spec, spot, r, rb, vol, t_expiry)
+    return sign * scale * v, hit
+
+
 # ── on simulated paths (counterparty exposure) ───────────────────────────────
 PATH_POINTS = 401
 

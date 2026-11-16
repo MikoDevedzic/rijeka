@@ -148,7 +148,7 @@ for (const [name, chip, route, npvKey, vegaKey, ir01Key] of [
   expectClean(problems)
 })
 
-test('a Bermudan swaption has no vol to shock, and says why; its curve is shocked and the tree answers', async ({ app, problems }) => {
+test('a Bermudan swaption: its vol is the tree\'s own σ, shocked flat; its curve is shocked and the tree answers', async ({ app, problems }) => {
   await app.goto('/blotter')
   await app.getByText('+ NEW TRADE').first().click()
   const win = app.locator('.tbw-window')
@@ -165,12 +165,25 @@ test('a Bermudan swaption has no vol to shock, and says why; its curve is shocke
   await win.getByRole('button', { name: 'CURVE SCENARIO', exact: true }).click()
   await expect(win.getByTestId('scn-chart')).toBeVisible({ timeout: 30_000 })
   await settled(win)
-  await expect(win.getByTestId('scn-curve-vol'), 'the tree is priced at the model\'s own vol: no surface to shock').toHaveCount(0)
   await expect(win.getByTestId('scn-bermudan')).toContainText('Hull-White tree')
   expect(await value(win.getByTestId('scn-npv'))).toBeCloseTo(quote.npv, 2)
   await flat(win, 10)
   expect(await value(win.getByTestId('scn-change-total')), 'the curve moves the tree').not.toBe(0)
   await expect(win.getByTestId('scn-error')).toHaveCount(0)
+  await win.getByTestId('scn-reset').click(); await settled(win)
+  // the vol in the list is the model's σ: one number, no points to drag, shocked flat; a basis point of it is the ticket's vega
+  await win.getByTestId('scn-curve-vol').click()
+  await expect(win.getByTestId('scn-curve-vol')).toContainText('HULL-WHITE σ')
+  await expect(win.getByTestId('scn-points')).toHaveCount(0)
+  await expect(win.getByTestId('scn-chart-second')).toHaveCount(0)
+  await expect(win.getByTestId('scn-no-points')).toContainText('one number')
+  await flat(win, 1)
+  const dVol = await value(win.getByTestId('scn-change-total'))
+  expect(dVol, 'a higher σ is worth more to the holder of the option').not.toBe(0)
+  if (quote.vega) expect(dVol / quote.vega, 'one basis point of σ is the ticket\'s vega').toBeCloseTo(1, 1)
+  expect(await value(win.getByTestId('scn-vol'))).toBeCloseTo(quote.vol_bp + 1, 6)
+  await expect(win.getByTestId('scn-error')).toHaveCount(0)
+  await win.screenshot({ path: 'e2e/.out/shots/scn-bermudan-sigma.png' })
   expectClean(problems)
 })
 

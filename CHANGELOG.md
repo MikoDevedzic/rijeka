@@ -1,7 +1,54 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.25). Commits on `main` are the detail.
+methodology document carries its own version (v1.26). Commits on `main` are the detail.
+
+## 0.44.0 · 16 November 2026
+
+**An option of any style has the scenario tab every other trade has.** What 0.43.0 left outside the one shape:
+an American, digital, barrier, double-barrier or touch option on a currency pair or a digital asset showed its
+curves but could move none of them, and had a spot-by-vol grid of its own in place of the result table and the
+ladder; a package's vol was shocked flat only; a Bermudan swaption had no vol to shock. No price of a ticket
+changes. Methodology v1.26.
+
+- **Styled options: the same curves, the same shocks, priced by the engine.** Spot, the forward points or basis,
+  each rate curve and the vol (flat, tenor by tenor, or dragged on its term structure) are shocked exactly as on a
+  European option, and the result table, the tiles and the one ladder are filled by the pricing engine: the tab
+  works out what the scenario does to the four inputs the pricer takes (spot, the forward to settlement, the
+  discount factor, the vol), as it does for a European, and a new route values the style there with the function
+  the ticket was priced with (`POST /api/currency/option/scenario`, signed-in, at most 40 markets a request,
+  nothing read from the database or saved). With nothing shocked the figure is the ticket's own, to the last digit;
+  a 1 % spot shock is the ticket's own spot delta and a vol point its own vega. The chip says ENGINE PRICED, and
+  REPRICING… for the quarter of a second after a change. The old grid is gone from the tab; its route
+  (`/api/currency/option/ladder`) stays and is no longer called by the app.
+- **A spot shocked through a barrier is valued as touched, and the tab says so.** The pricer takes a spot inside the
+  barriers. A scenario that carries spot to a level or beyond it is valued at what the option is worth at that
+  moment, which is the limit of the pricer's value there, so the figure does not jump as a shock crosses: a
+  knock-out its rebate, a knock-in the plain option, a one-touch its payout (in full when paid at the hit,
+  discounted when paid at expiry), a no-touch nothing. A line in amber names which it is for this option, and the
+  ladder marks the columns it holds in. Before, those cells of the grid were dashes.
+- **What a styled option settles.** The cell beside the scenario's fixing worked out a plain option's payoff
+  whatever the style: a barrier option was shown the payoff of the option without its barrier, a digital the
+  payoff of a call or put, and a touch nothing. It now follows the settlement rule: a digital pays its payout on
+  the right side of the strike; a barrier or a touch shows the amount if its level never trades and the amount if
+  it does, and one amount when the fixing itself stands at or beyond the level.
+- **A package's vol, tenor by tenor.** A package with an option leg takes a shock on a tenor of the surface as a
+  single option does: each option leg reads it at its own expiry.
+- **A Bermudan swaption's vol.** Its tree is priced at the Hull-White model's own σ, one number. The tab now lists
+  that σ as the trade's vol, by name, shocked flat in basis points; the engine builds the tree again at the moved
+  σ, and a basis point of it is the vega the ticket reports. It is not a shift of the swaption surface (the model
+  is not calibrated again), and the tab says so; the surface is not drawn beside it.
+- Not in this: a package that holds a styled option is still not repriced whole (the tab shows its first leg and
+  says so); the scenario's forward and discount factor are the tab's own arithmetic on every currency ticket, as
+  before, so on quoted forward points a rate shock moves the forward where the engine would hold it; a currency
+  forward's and a European option's figures are still the browser's closed form (APPROXIMATION); a booked
+  currency barrier option's settlement does not yet apply the rule the cell shows.
+- Tests: 28 for the engine's scenario value (each of fourteen options at its own market is the ticket's price
+  exactly; the value just inside each barrier meets the touched value), the Bermudan's σ on the stack, unit tests
+  for the scenario's market, the request and each style's settlement, and a journey that takes every style of a
+  crypto and an FX option through each shock. The lessons are in the builder's list.
+
+---
 
 ## 0.43.1 · 15 November 2026
 

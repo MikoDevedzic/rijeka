@@ -297,15 +297,17 @@ export function gk(F, K, T, sigma, call, df) {
 // spot; here the points scale with spot and the sliders show the carry effect (the panel says so).
 // Null when the quote does not carry what the form needs (a settled trade's body has no discount factor and no
 // time to settlement): there is then no forward to show, and none is made up.
-export function reprice(q, { spotPct = 0, quoteBp = 0, baseBp = 0, volPts = 0, dPoints = 0, pip = 1 } = {}) {
-  if (!q || (q.direction !== 'BUY' && q.direction !== 'SELL')) return null
+// The market a scenario leaves a trade on: its spot, its forward to settlement, the quote currency's discount factor
+// to the payment date and, for an option, its vol in points. The shocks' arithmetic in one place: the closed form
+// below prices a forward and a European option on it, and the engine prices every other style of option at the same
+// four inputs (POST /api/currency/option/scenario), so one scenario means one market whatever is priced on it.
+// Null when the quote does not carry what a scenario needs.
+export function shockedState(q, { spotPct = 0, quoteBp = 0, baseBp = 0, volPts = 0, dPoints = 0, pip = 1 } = {}) {
+  if (!q) return null
   if (![spotPct, quoteBp, baseBp, volPts, dPoints].every(finite) || !positive(pip)) return null
   const option = q.shape === 'OPTION'
   const T = option ? q.t_settle : q.t
-  if (!positive(q.spot) || !positive(q.forward) || !finite(q.base_notional) || !positive(q.df_quote) || !finite(T)) return null
-  if (option ? !(positive(q.strike) && finite(q.t_expiry) && finite(q.vol_pct) && (q.option_type === 'CALL' || q.option_type === 'PUT'))
-             : !(finite(q.forward_rate) && positive(q.df_base))) return null
-  const sign = q.direction === 'BUY' ? 1 : -1
+  if (!positive(q.spot) || !positive(q.forward) || !positive(q.df_quote) || !finite(T)) return null
   const k = 1 + spotPct / 100
   const S = q.spot * k
   const tSpot = finite(q.t_spot) && q.t_spot > 0 ? q.t_spot : 0
@@ -320,11 +322,27 @@ export function reprice(q, { spotPct = 0, quoteBp = 0, baseBp = 0, volPts = 0, d
   // ticket's NPV.
   let F = q.forward * k * carry
   if (dPoints) F += dPoints * pip * k * carry
-  if (!finite(F)) return null
+  if (!finite(F) || !positive(S) || !positive(dfq)) return null
   F = Math.max(F, FORWARD_FLOOR * S)                               // a shocked forward is never zero or negative
-  const unit = option ? gk(F, q.strike, q.t_expiry, Math.max(q.vol_pct / 100 + volPts / 100, 0.0001), q.option_type === 'CALL', dfq)
-                      : (F - q.forward_rate) * dfq
-  return finite(unit) ? { forward: F, npv: sign * q.base_notional * unit } : null      // a null unit value is not a zero
+  // the vol the pricer itself took (`vol`, a fraction, unrounded) where the quote carries it; else the points it reports
+  const vol0 = option ? (positive(q.vol) ? q.vol * 100 : finite(q.vol_pct) ? q.vol_pct : null) : null
+  return { spot: S, forward: F, df_quote: dfq, vol_pct: vol0 == null ? null : Math.max(vol0 + volPts, 0.01) }
+}
+
+export function reprice(q, shocks = {}) {
+  if (!q || (q.direction !== 'BUY' && q.direction !== 'SELL')) return null
+  const option = q.shape === 'OPTION'
+  const T = option ? q.t_settle : q.t
+  if (!positive(q.spot) || !positive(q.forward) || !finite(q.base_notional) || !positive(q.df_quote) || !finite(T)) return null
+  if (option ? !(positive(q.strike) && finite(q.t_expiry) && finite(q.vol_pct) && (q.option_type === 'CALL' || q.option_type === 'PUT'))
+             : !(finite(q.forward_rate) && positive(q.df_base))) return null
+  const st = shockedState(q, shocks)
+  if (!st) return null
+  const sign = q.direction === 'BUY' ? 1 : -1
+  const volPts = finite(shocks.volPts) ? shocks.volPts : 0
+  const unit = option ? gk(st.forward, q.strike, q.t_expiry, Math.max(q.vol_pct / 100 + volPts / 100, 0.0001), q.option_type === 'CALL', st.df_quote)
+                      : (st.forward - q.forward_rate) * st.df_quote
+  return finite(unit) ? { forward: st.forward, npv: sign * q.base_notional * unit } : null      // a null unit value is not a zero
 }
 
 // ── the fixing ───────────────────────────────────────────────────────────────────────
@@ -339,6 +357,73 @@ export function settlementAmount({ shape, optionType, direction, notional, strik
   const amount = shape === 'OPTION' ? sign * notional * Math.max(optionType === 'CALL' ? fixing - strike : strike - fixing, 0)
                                     : sign * notional * (fixing - strike)
   return amount === 0 ? 0 : amount                                 // never "-0"
+}
+
+// What an option of any style pays on a fixing, in the quote currency, from the booker's side: the settlement
+// rule's own reading (backend/settlement/rule.py option_amount and knock_state).
+//   { kind: 'plain', amount }                         a European or American option, a digital: the fixing decides it
+//   { kind: 'path', never, touched, certain, atTouch } a barrier or a touch: what it pays if its level never traded and
+//                                                     what it pays if it did. `certain`: the fixing itself stands at or
+//                                                     beyond the level, so it traded. `atTouch`: the touched amount was
+//                                                     paid when the level traded (a knock-out's rebate, if it has
+//                                                     one, a one-touch paid at the hit), not at settlement.
+// A single touch level has no side of its own: `refSpot`, the spot the option was priced at, says which side it is on.
+// Null when the terms or the fixing are not there to read.
+export function styleSettlement(q, { strike, fixing, refSpot } = {}) {
+  if (!q || q.shape !== 'OPTION' || !positive(fixing) || (q.direction !== 'BUY' && q.direction !== 'SELL')) return null
+  const sign = q.direction === 'BUY' ? 1 : -1
+  const z = (x) => (x === 0 ? 0 : x)                                // never "-0"
+  const style = q.style || 'EUROPEAN'
+  const N = q.base_notional
+  const plain = () => (finite(N) && positive(strike) && (q.option_type === 'CALL' || q.option_type === 'PUT')
+    ? z(sign * N * Math.max(q.option_type === 'CALL' ? fixing - strike : strike - fixing, 0)) : null)
+  if (style === 'EUROPEAN' || style === 'AMERICAN') { const amount = plain(); return amount == null ? null : { kind: 'plain', amount } }
+  const payout = asNumber(q.payout)
+  if (style === 'DIGITAL') {
+    if (!positive(payout) || !positive(strike) || (q.option_type !== 'CALL' && q.option_type !== 'PUT')) return null
+    const itm = q.option_type === 'CALL' ? fixing > strike : fixing < strike
+    return { kind: 'plain', amount: z(itm ? sign * payout * (q.payout_currency === 'BASE' ? fixing : 1) : 0) }
+  }
+  const lower = asNumber(q.lower), upper = asNumber(q.upper), H = asNumber(q.barrier)
+  const double = style === 'DOUBLE_BARRIER' || (style === 'TOUCH' && String(q.touch_type || '').startsWith('DOUBLE'))
+  let certain
+  if (double) { if (!positive(lower) || !positive(upper)) return null; certain = fixing >= upper || fixing <= lower }
+  else {
+    if (!positive(H)) return null
+    const up = style === 'BARRIER' ? String(q.barrier_type || '').startsWith('UP') : positive(refSpot) ? H > refSpot : null
+    if (up == null) return null
+    certain = up ? fixing >= H : fixing <= H
+  }
+  if (style === 'TOUCH') {
+    if (!positive(payout)) return null
+    const hitPays = q.touch_type === 'ONE_TOUCH' || q.touch_type === 'DOUBLE_ONE_TOUCH'
+    return { kind: 'path', never: z(hitPays ? 0 : sign * payout), touched: z(hitPays ? sign * payout : 0), certain, atTouch: hitPays && q.pay_at_hit === true }
+  }
+  if (style === 'BARRIER' || style === 'DOUBLE_BARRIER') {
+    const van = plain()
+    if (van == null) return null
+    const rebate = z(sign * N * (asNumber(q.rebate) || 0))
+    const out = String(q.barrier_type || '').endsWith('OUT')
+    return out ? { kind: 'path', never: van, touched: rebate, certain, atTouch: rebate !== 0 } : { kind: 'path', never: rebate, touched: van, certain, atTouch: false }
+  }
+  return null
+}
+
+// What an option is worth once a scenario's spot stands at or beyond its level, in words: the engine's own rule
+// (backend/pricing/fx_exotic.py value_touched). A double one-touch is valued paid at settlement, as the pricer does.
+export function touchedWords(q) {
+  if (!q || q.shape !== 'OPTION') return null
+  if (q.style === 'TOUCH') {
+    const one = q.touch_type === 'ONE_TOUCH' || q.touch_type === 'DOUBLE_ONE_TOUCH'
+    if (!one) return 'At this spot the level is touched: a no-touch is worth nothing from then on.'
+    return `At this spot the level is touched: the option is worth its payout, ${q.touch_type === 'ONE_TOUCH' && q.pay_at_hit === true ? 'paid at the touch' : 'discounted from settlement'}.`
+  }
+  if (q.style === 'BARRIER' || q.style === 'DOUBLE_BARRIER') {
+    if (!String(q.barrier_type || '').endsWith('OUT')) return 'At this spot the barrier is touched: the option is knocked in, and is valued as the plain option.'
+    const rebate = q.style === 'BARRIER' ? asNumber(q.rebate) : null
+    return `At this spot the barrier is touched: the option is knocked out, and is worth ${positive(rebate) ? 'its rebate, paid at the touch' : 'nothing (it has no rebate)'}.`
+  }
+  return null
 }
 
 const usable = (r) => r && typeof r.date === 'string' && positive(asNumber(r.value))

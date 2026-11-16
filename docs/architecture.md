@@ -263,7 +263,17 @@ curve of `/price/preview`; `curve_flat_bp`, `curve_shift_bp` and `vol_shift_bp` 
 `/floor` and `/collar`). The server moves the quotes it builds the curve from and the vol it prices at
 (`pricer.py` `_curve_shift`), within bounds, and with none set answers as it always has; a dozen such requests
 follow a shock (the market, each shocked curve alone, all together, a ladder), a quarter of a second after the
-last change. No new route, table or setting.
+last change. No new route, table or setting. A Bermudan swaption's `vol_shift_bp` moves the Hull-White σ its tree
+is built on.
+
+An option of a style the browser has no closed form for (American, digital, barrier, double barrier, touch) is
+priced under a scenario by `POST /api/currency/option/scenario` (0.44.0): the option's terms and a list of at most
+40 markets (a spot, a forward, a discount factor, a vol), each valued by the pricer the ticket was priced with
+(`pricing/fx_exotic.py` `scenario_npv`). The route is signed-in, reads nothing from the database and saves
+nothing: the tab works out the markets (`fx-scenario.js` `shockedState`, the same arithmetic its closed form uses
+for a European option) and sends every figure it shows in one request (`fx-requests.js` `scenarioRequest`), a
+quarter of a second after the last change. `POST /api/currency/option/ladder`, which the tab used before for a
+spot-by-vol grid, is no longer called by the app and stays as a route.
 
 The CURVE SCENARIO tab of a currency or digital-asset ticket (`trade-window/FxScenarioChart.jsx`,
 `fx-scenario.js`) draws the pair's recent fixings and its forward curve, lets the curve be dragged by tenor or as a

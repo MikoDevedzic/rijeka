@@ -222,7 +222,7 @@ const PLACES = [
   ['Key-rate ladder', 's14'], ['SA-CCR by asset class', 's16'], ['European swaption', 's5'], ['β=0 SABR surface', 's5'], ['Caps, floors, collars', 's6'], ['Scenario shifts of a rates ticket', 's6'],
   ['Bermudan swaption', 's7'], ['HW1F calibration', 's8'], ['Exposure, CSA, margin period of risk', 's9'], ['XVA waterfall', 's10'], ['P&L attribution', 's11'],
   ['FX spot, forwards, NDFs', 's12'], ['Forward beyond the last quoted tenor', 's12'], ['Crypto NDF', 's12'], ["A currency NDF's fixing", 's12'], ['Digital-asset vol surface and forward points', 's13'], ['Settlement of digital-asset forwards', 's13'], ['Barriers watched between', 's13'],
-  ['Scenario tab in the browser', 's13'], ['FX option, European', 's13'], ['FX option styles', 's13'], ['Crypto options', 's13'],
+  ['Scenario tab in the browser', 's13'], ['Scenario of a currency or digital-asset option of any style', 's13'], ['FX option, European', 's13'], ['FX option styles', 's13'], ['Crypto options', 's13'],
   ['Market risk: full-revaluation VaR', 's14'], ["A factor's usual daily move", 's14'], ['Fixing ladder', 's14'], ['Counterparty credit: real-world paths', 's15'], ['Initial margin:', 's9'], ['Capital add-on of a currency', 's9'],
   ['XVA of a package', 's10'], ['Wrong-way risk', 's10'], ['Vol regimes of a digital asset', 's9'], ['Fees on a trade', 's9'], ['Canonical record, EIP-712, registry', 's17'], ['Package record', 's17'],
 ]

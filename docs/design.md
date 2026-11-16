@@ -307,8 +307,23 @@ vol, a currency option's in vol points ("+1 pt"), because that is how each is qu
 shock as "+10 bp · 2 points".
 
 A rates ticket's figures are the pricing engine's on the moved market, and its chip says FULL REVALUATION; a
-currency ticket's are the tab's own closed form, and its chip says APPROXIMATION. A rates ticket whose terms were
-changed after its price says so in amber and keeps the scenario of the terms as priced.
+currency forward's and a European option's are the tab's own closed form, and the chip says APPROXIMATION; an
+option of any other style (American, digital, barrier, double barrier, touch) is priced by the engine at the
+market the tab works out, and the chip says ENGINE PRICED. A chip of the engine's says REPRICING… while an answer
+is awaited, and the figures of the last answer stay until it is back; a figure with no answer is a dash, never a
+figure from somewhere else. A rates ticket whose terms were changed after its price says so in amber and keeps the
+scenario of the terms as priced.
+
+A style is not a reason for another tab: a barrier or a touch option has the same curves, the same shocks, the
+same table and the same one ladder as a European. What is its own is said in words, in amber, where it applies: a
+scenario whose spot stands at or beyond the level says the option is valued as touched and what that is for this
+option, and the ladder then carries a BARRIER row marking the columns it is true of. The settlement cell gives an
+amount for the fixing typed; where the fixing alone cannot say (a barrier, a touch), the amount if the level never
+trades and, beside it, the amount if it does.
+
+A vol that is one number is shown as one number: a Bermudan swaption's is the Hull-White σ its tree is built on,
+named so in the list, shocked flat, with a sentence where its chart would be. It is not drawn as a curve of one
+point, and the swaption surface is not shown beside it as if it were being moved.
 
 Where the two tabs still differ, and why: the currency tab has a forward and a fixing to show, so its tiles are
 FORWARD, NPV, CHANGE and the fixing where the rates tab's are NPV, CHANGE, IR01 and the vol; its shock row is

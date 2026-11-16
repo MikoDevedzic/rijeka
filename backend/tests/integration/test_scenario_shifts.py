@@ -122,14 +122,24 @@ def test_a_receiver_and_a_swaption_away_from_the_money_move_with_the_curve_at_th
     assert low["vol_bp"] == pytest.approx(0.01) and low["npv"] >= 0
 
 
-def test_a_bermudan_refuses_a_vol_shift_and_takes_a_curve_shift(client, auth_a):
+def test_a_bermudans_vol_shift_moves_the_models_own_sigma_and_its_curve_shift_the_tree(client, auth_a):
+    """A Bermudan is priced on the Hull-White tree at the model's σ, one number. A vol shift moves that σ (not the
+    swaption surface), the answer names the σ it priced at, and a basis point of it is the vega the ticket reports."""
     berm = {**SWAPTION, "expiry_y": 5.0, "structure": "BERMUDAN", "exercise_schedule_y": [1, 2, 3, 4, 5], "effective_date": "2031-11-04", "maturity_date": "2036-11-04"}
-    r = client.post("/api/price/swaption", json={**berm, "vol_shift_bp": 5}, headers=auth_a)
-    assert r.status_code == 422 and "Bermudan" in r.text
     base = client.post("/api/price/swaption", json=berm, headers=auth_a)
-    if base.status_code == 200:          # the stack has a Hull-White calibration: the tree prices, and the curve moves it
-        moved = _post(client, auth_a, "/api/price/swaption", {**berm, "curve_flat_bp": 10})
-        assert moved["npv"] != base.json()["npv"]
+    if base.status_code != 200:          # the stack has no Hull-White calibration: the tree cannot price, with or without a shift
+        assert base.status_code == 422 and client.post("/api/price/swaption", json={**berm, "vol_shift_bp": 5}, headers=auth_a).status_code == 422
+        return
+    b = base.json()
+    up = _post(client, auth_a, "/api/price/swaption", {**berm, "vol_shift_bp": 1})
+    dn = _post(client, auth_a, "/api/price/swaption", {**berm, "vol_shift_bp": -1})
+    assert up["vol_bp"] == pytest.approx(b["vol_bp"] + 1) and up["hw1f_params"]["sigma_bp"] == up["vol_bp"]
+    assert up["npv"] > b["npv"] > dn["npv"]                                          # an option is worth more at a higher vol
+    assert (up["npv"] - dn["npv"]) / 2 == pytest.approx(b["vega"], abs=0.02)         # the route's own vega is this bump (figures rounded to cents)
+    low = _post(client, auth_a, "/api/price/swaption", {**berm, "vol_shift_bp": -1000})
+    assert low["vol_bp"] == pytest.approx(0.01)                                      # floored, and still priced
+    moved = _post(client, auth_a, "/api/price/swaption", {**berm, "curve_flat_bp": 10})
+    assert moved["npv"] != b["npv"] and moved["vol_bp"] == b["vol_bp"]               # the curve moves the tree, not the σ
 
 
 @pytest.mark.parametrize("url,body", [("/api/price/swaption", SWAPTION), ("/api/price/floor", FLOOR), ("/api/price/collar", COLLAR)])

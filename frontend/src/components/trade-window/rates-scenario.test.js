@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { CURVE_BOUND_BP, LADDER, NO_SHOCK, capSmile, capTerm, curveIds, curvePoints, curveQuotes, figures, hasVol, horizon, isShocked, scenarioPayload, shockAtPoint, shockAtTime,
+import { CURVE_BOUND_BP, LADDER, NO_SHOCK, capSmile, capTerm, curveIds, curvePoints, curveQuotes, figures, hasVol, isBermudan, horizon, isShocked, scenarioPayload, shockAtPoint, shockAtTime,
   shockSaid, spread, swaptionAcross, swaptionTerm, tenorYears, wanted, withFlat, withOwn } from './rates-scenario'
 
 const QUOTES = [{ tenor: 'ON', quote_type: 'OISDeposit', rate: 3.88, enabled: true }, { tenor: '1Y', quote_type: 'OIS', rate: 3.7 }, { tenor: '3M', quote_type: 'OIS', rate: 3.85 },
@@ -108,9 +108,8 @@ describe('the request of a scenario', () => {
     const bare = { expiry_y: 1, tenor_y: 5, vol_bp: 86.5, curves: [{ curve_id: 'USD_SOFR', quotes: [] }] }
     expect(scenarioPayload('IR_SWAPTION', bare, { USD_SOFR: { flat: 10, own: {} } })).toMatchObject({ curve_flat_bp: 10, curve_shift_bp: {} })
     expect(hasVol('IR_SWAP')).toBe(false); expect(hasVol('RATES_FLOOR')).toBe(true); expect(hasVol('IR_SWAPTION')).toBe(true); expect(hasVol('FX_FORWARD')).toBe(false)
-    expect(hasVol('IR_SWAPTION', { structure: 'EUROPEAN' })).toBe(true)
-    expect(hasVol('IR_SWAPTION', { structure: 'bermudan' })).toBe(false)          // priced on the tree at the model's own vol
-    expect(hasVol('RATES_CAP', { structure: 'BERMUDAN' })).toBe(true)
+    // a Bermudan is an option too: its vol is the tree's own σ, shocked flat (isBermudan tells the tab which vol it is)
+    expect(isBermudan('IR_SWAPTION', { structure: 'bermudan' })).toBe(true); expect(isBermudan('IR_SWAPTION', { structure: 'EUROPEAN' })).toBe(false); expect(isBermudan('RATES_CAP', { structure: 'BERMUDAN' })).toBe(false)
     expect(horizon('IR_SWAP', SWAP).through).toBeCloseTo(5.0, 1)
     expect(horizon('RATES_CAP', CAP)).toEqual({ through: 5, expiry: 5 })
     expect(horizon('IR_SWAPTION', SWPN)).toEqual({ through: 6, expiry: 1, tenor: 5 })

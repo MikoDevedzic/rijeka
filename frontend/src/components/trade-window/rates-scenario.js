@@ -140,10 +140,10 @@ export function withFlat(shock, value, bound) {
 
 // ── the trade ────────────────────────────────────────────────────────────────────────────────
 export const KIND = { IR_SWAP: 'swap', IR_SWAPTION: 'swaption', RATES_CAP: 'cap', RATES_FLOOR: 'floor', RATES_COLLAR: 'collar' }
-// Whether the trade is priced at a vol a scenario can move: an option, but not a Bermudan swaption, which is priced on
-// the Hull-White tree at the model's own volatility (the engine refuses a vol shift on it).
+// Whether the trade is priced at a vol a scenario can move: an option. A Bermudan swaption is priced on the Hull-White
+// tree at the model's own volatility, one number with no surface behind it: that σ is what its vol shock moves, flat.
 export const isBermudan = (productKey, payload) => KIND[productKey] === 'swaption' && String(payload?.structure || '').toUpperCase() === 'BERMUDAN'
-export const hasVol = (productKey, payload) => KIND[productKey] != null && KIND[productKey] !== 'swap' && !isBermudan(productKey, payload)
+export const hasVol = (productKey) => KIND[productKey] != null && KIND[productKey] !== 'swap'
 // The curves a request prices on, in the order the ticket names them: the one a cap, a floor, a collar or a swaption
 // names for itself, else those of the request's own list (a swap's).
 export function curveIds(payload) {

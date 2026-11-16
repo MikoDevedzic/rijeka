@@ -53,13 +53,13 @@ const snapshot = (id) => apiFetch(`/api/market-data/snapshots/${id}/latest`).the
 // whether the form has been changed since (`stale`). `booked`: the ticket is a stored trade, whose own value is its
 // revaluation as booked; the scenario is of its terms as the ticket shows them.
 export default function RatesScenario({ product, productKey, state, result, payload = null, active, curves, booked = false }) {
-  const kind = KIND[productKey], option = hasVol(productKey, payload), bermudan = isBermudan(productKey, payload)
+  const kind = KIND[productKey], option = hasVol(productKey), bermudan = isBermudan(productKey, payload)
   const ccy = state?.ccy || 'USD'
   const form = useMemo(() => { try { const p = product?.pricing?.buildPayload?.(state); return p ? JSON.stringify({ ...p, curves }) : null } catch { return null } }, [product, state, curves])
   const stale = !!(payload && form && form !== JSON.stringify(payload))
   const endpoint = typeof product?.pricing?.endpoint === 'function' ? product.pricing.endpoint(state) : product?.pricing?.endpoint
   const ids = useMemo(() => curveIds(payload), [payload])
-  const idKey = ids.join(','), swvolId = kind === 'swaption' ? `${ccy}_SWVOL_ATM` : null
+  const idKey = ids.join(','), swvolId = kind === 'swaption' && !bermudan ? `${ccy}_SWVOL_ATM` : null          // a Bermudan's vol is the tree's σ: no surface is read for it
   const hz = useMemo(() => horizon(productKey, payload), [productKey, payload])
 
   // the saved quotes of each curve the trade is priced on, and of the swaption surface
@@ -77,15 +77,15 @@ export default function RatesScenario({ product, productKey, state, result, payl
   const shocks = held.scope === scope ? held.shocks : {}
   const setShock = (key, next) => setHeld(h => ({ scope, sel: h.scope === scope ? h.sel : null, shocks: { ...(h.scope === scope ? h.shocks : {}), [key]: next } }))
 
-  const volPts = useMemo(() => (kind === 'swaption' ? swaptionTerm(snaps[swvolId]?.quotes, hz.tenor).points : option ? capTerm(result?.surface_rows) : []), [kind, option, snaps, swvolId, hz.tenor, result])
+  const volPts = useMemo(() => (bermudan ? [] : kind === 'swaption' ? swaptionTerm(snaps[swvolId]?.quotes, hz.tenor).points : option ? capTerm(result?.surface_rows) : []), [bermudan, kind, option, snaps, swvolId, hz.tenor, result])
   const factors = useMemo(() => [
     ...ids.map(id => ({ key: id, kind: 'curve', name: id.replace(/_/g, ' '), color: 'var(--rf-ir)', unit: 'bp', bound: CURVE_BOUND_BP, slide: 200, step: 5, d: 0,
       sub: snaps[id] ? `saved ${snaps[id].valuation_date}` : snaps[id] === undefined ? 'reading the saved quotes…' : 'no quotes read: flat only',
       points: curvePoints(snaps[id]?.quotes, hz.through), quotes: curveQuotes(snaps[id]?.quotes) })),
-    ...(option ? [{ key: 'vol', kind: 'vol', name: `${ccy} ${kind === 'swaption' ? 'SWAPTION' : 'CAP'} VOL`, color: 'var(--rf-vol)', unit: 'bp', bound: VOL_BOUND_BP, slide: 30, step: 0.5, d: 1,
-      sub: volPts.length ? 'normal vol · at the money' : 'no surface read: flat only',
+    ...(option ? [{ key: 'vol', kind: 'vol', name: bermudan ? `${ccy} HULL-WHITE σ` : `${ccy} ${kind === 'swaption' ? 'SWAPTION' : 'CAP'} VOL`, color: 'var(--rf-vol)', unit: 'bp', bound: VOL_BOUND_BP, slide: 30, step: 0.5, d: 1,
+      sub: bermudan ? 'the tree\'s own vol · one number' : volPts.length ? 'normal vol · at the money' : 'no surface read: flat only',
       points: volPts }] : []),
-  ], [ids, snaps, hz.through, hz.tenor, option, kind, ccy, volPts, swvolId])
+  ], [ids, snaps, hz.through, hz.tenor, option, bermudan, kind, ccy, volPts, swvolId])
   const cur = factors.find(f => f.key === held.sel && held.scope === scope) || factors[0]
   const volF = factors.find(f => f.kind === 'vol')
   const volAt = (shock) => (volF ? shockAtTime(shock, volF.points, hz.expiry) : 0)
@@ -165,8 +165,8 @@ export default function RatesScenario({ product, productKey, state, result, payl
     <div style={XVA_LEFT} data-testid="scn-left">
       <div style={{ ...secHdr, marginTop: 4 }}>CURVES THAT PRICE THIS TRADE<Note inline>Every market input the price was built from, each in the colour of its risk factor. Select one to shock it flat, point by point, or by dragging on the chart.</Note></div>
       {factors.map(curveBtn)}
-      {bermudan && <div data-testid="scn-bermudan" style={{ fontSize: 11.5, color: 'var(--text-mute)', lineHeight: 1.45, margin: '2px 2px 0' }}>A Bermudan is priced on the Hull-White tree at the model's own volatility, so it has no vol surface to shock here: a scenario moves its curve.</div>}
-      <div style={secHdr}>FLAT SHOCK · {cur.kind === 'vol' ? 'BP OF NORMAL VOL' : 'BASIS POINTS'}</div>
+      {bermudan && <div data-testid="scn-bermudan" style={{ fontSize: 11.5, color: 'var(--text-mute)', lineHeight: 1.45, margin: '2px 2px 0' }}>A Bermudan is priced on the Hull-White tree. Its vol is the model's σ, one number: it is shocked flat, and is not the swaption surface.</div>}
+      <div style={secHdr}>FLAT SHOCK · {cur.kind === 'vol' ? (bermudan ? 'BP OF THE MODEL\'S σ' : 'BP OF NORMAL VOL') : 'BASIS POINTS'}</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 84px', gap: 10, alignItems: 'center' }}>
         <input type="range" data-testid="scn-flat" aria-label={`Flat shock, ${cur.name}`} min={-cur.slide} max={cur.slide} step={cur.step} value={Math.max(-cur.slide, Math.min(cur.slide, shock.flat))}
           onChange={e => setFlat(Number(e.target.value))} style={{ width: '100%', accentColor: 'var(--text)' }} />
@@ -198,19 +198,21 @@ export default function RatesScenario({ product, productKey, state, result, payl
 
   // ── the right column: the selected curve, the result, the scenario's value, the ladder ──
   const isVol = cur.kind === 'vol'
-  const chartTitle = isVol ? `VOL SURFACE · ${ccy} ${kind === 'swaption' ? 'SWAPTIONS' : 'CAPS AND FLOORS'}` : `${cur.name} · QUOTED RATE % A YEAR`
-  const chartSays = isVol
+  const chartTitle = isVol ? (bermudan ? `HULL-WHITE σ · ${ccy}` : `VOL SURFACE · ${ccy} ${kind === 'swaption' ? 'SWAPTIONS' : 'CAPS AND FLOORS'}`) : `${cur.name} · QUOTED RATE % A YEAR`
+  const chartSays = isVol && bermudan
+    ? 'The volatility of the short rate in the Hull-White model the tree is built on, from the stored calibration: one number, in basis points. A shock moves it flat and the tree is built again; the vega beside it is the value of one basis point of it. The swaption surface is not moved: that would mean calibrating the model again.'
+    : isVol
     ? `The surface as it is saved: normal vol in basis points, at the money, by ${kind === 'swaption' ? 'expiry' : 'maturity'}. Drag a point up or down to shock it; the trade is repriced at the vol it priced at, moved by the shock at its own ${kind === 'swaption' ? 'expiry' : 'maturity'}.`
     : `The curve's quotes at its main tenors, up to the trade's last date and the two after it; those beyond cannot reach this trade. Drag one up or down to shock it: the quotes around it follow on the line to the next tenor, the curve is built again and the trade repriced on it.`
   const volNow = tradeVol == null ? null : tradeVol + volShift
   const dotOf = (t, label = true) => (volNow == null || !Number.isFinite(t) ? null : { t, v: volNow, label: label ? `${volNow.toFixed(1)} bp` : '' })
-  const second = !isVol ? null : kind === 'swaption' ? swaptionAcross(snaps[swvolId]?.quotes, hz.expiry) : { points: capSmile(result?.surface_rows, hz.expiry), expiry: null }
+  const second = !isVol || bermudan ? null : kind === 'swaption' ? swaptionAcross(snaps[swvolId]?.quotes, hz.expiry) : { points: capSmile(result?.surface_rows, hz.expiry), expiry: null }
   // where the trade itself stands on the second chart: a cap's or a floor's strike less the at-the-money rate, a
   // swaption's own swap tenor (a collar has two strikes, and is not marked)
   const strikeOf = kind === 'cap' ? payload.cap_rate : kind === 'floor' ? payload.floor_rate : null
   const own2 = kind === 'swaption' ? { t: hz.tenor, label: 'THE SWAP' }
     : strikeOf != null && Number.isFinite(Number(result?.atm_forward)) ? { t: (Number(strikeOf) - Number(result.atm_forward)) * 1e4, label: 'THE STRIKE' } : null
-  const noPoints = <div data-testid="scn-no-points" style={{ padding: '36px 0', color: 'var(--text-dim)', fontSize: 12.5 }}>{isVol ? `No vol surface could be read for ${ccy}: the vol the trade priced at is shocked flat.` : `No saved quotes could be read for ${cur.name}: the curve is shocked flat.`}</div>
+  const noPoints = <div data-testid="scn-no-points" style={{ padding: '36px 0', color: 'var(--text-dim)', fontSize: 12.5 }}>{isVol && bermudan ? `The tree's σ is one number${tradeVol == null ? '' : ` (${tradeVol.toFixed(1)} bp at the market${volShift ? `, ${(tradeVol + volShift).toFixed(1)} bp under this scenario` : ''})`}: there is no curve of it to draw. It is shocked flat, on the left.` : isVol ? `No vol surface could be read for ${ccy}: the vol the trade priced at is shocked flat.` : `No saved quotes could be read for ${cur.name}: the curve is shocked flat.`}</div>
   const legend = (
     <CurveLegend testId="scn-legend" items={[
       { mark: 'dash', color: 'var(--text-dim)', text: isShocked(shock) ? (isVol ? 'ATM AT THE MARKET' : 'AT THE MARKET') : (isVol ? 'ATM' : 'THE QUOTES') },
@@ -254,7 +256,7 @@ export default function RatesScenario({ product, productKey, state, result, payl
       </div>
       <div style={{ ...rRow, paddingTop: 7 }} data-testid="scn-shock">
         <div style={{ ...rName, padding: '0 8px 7px 0' }}>SHOCK</div>
-        {factors.map(c => <div key={c.key} style={rSmall}>{c.kind === 'vol' && isShocked(shocks.vol) ? `${plus(volShift, 2)} bp at the trade` : shockSaid(shocks[c.key], ` ${c.unit}`)}</div>)}
+        {factors.map(c => <div key={c.key} style={rSmall}>{c.kind === 'vol' && isShocked(shocks.vol) ? `${plus(volShift, 2)} bp ${bermudan ? 'of σ' : 'at the trade'}` : shockSaid(shocks[c.key], ` ${c.unit}`)}</div>)}
         {factors.length > 1 && <div style={rSmall}>—</div>}<div style={{ ...rSmall, ...rTot }}>—</div>
       </div>
       <div style={rRow} data-testid="scn-change">
@@ -263,7 +265,7 @@ export default function RatesScenario({ product, productKey, state, result, payl
         {factors.length > 1 && money(cross, 'cross')}{money(total, 'total')}
       </div>
       <div style={rRow} data-testid="scn-first">
-        <div style={{ ...rName, padding: '0 8px 7px 0' }}>SENSITIVITY × SHOCK<Note inline>IR01 × the curve's flat shock{option ? ', VEGA × the vol shock at the trade' : ''}: the ticket's own risk figures, to first order. The line above is the engine's price on the curve built again from the moved quotes. The two differ by the trade's curvature, by the discounting, which the ticket's IR01 holds still, and because a quote moved a basis point is not a zero rate moved a basis point. A curve shocked point by point has no single figure to multiply, and shows a dash.</Note></div>
+        <div style={{ ...rName, padding: '0 8px 7px 0' }}>SENSITIVITY × SHOCK<Note inline>IR01 × the curve's flat shock{option ? (bermudan ? ', VEGA × the shock of the model\'s σ' : ', VEGA × the vol shock at the trade') : ''}: the ticket's own risk figures, to first order. The line above is the engine's price on the curve built again from the moved quotes. The two differ by the trade's curvature, by the discounting, which the ticket's IR01 holds still, and because a quote moved a basis point is not a zero rate moved a basis point. A curve shocked point by point has no single figure to multiply, and shows a dash.</Note></div>
         {factors.map((c, i) => money(firsts[i], c.kind === 'vol' ? 'vol' : c.key, rSmall))}
         {factors.length > 1 && <div style={rSmall}>—</div>}{money(firstTotal, 'total', rSmall)}
       </div>
@@ -311,7 +313,7 @@ export default function RatesScenario({ product, productKey, state, result, payl
             <Tile label={`NPV · ${ccy}`} value={fmt(all?.npv)} color={tone(all?.npv)} sub={`at the market ${fmt(market?.npv)}`} testId="scn-npv" raw={all?.npv} />
             <Tile label={`CHANGE · ${ccy}`} value={signedChange(total)} color={tone(total)} testId="scn-change-total" raw={total} />
             <Tile label="IR01 · A BP" value={signedChange(all?.ir01)} sub={`at the market ${signedChange(market?.ir01)}`} testId="scn-ir01" raw={all?.ir01} />
-            {option && <Tile label="VOL · BP" value={tradeVol == null ? '—' : (tradeVol + volShift).toFixed(1)} sub={tradeVol == null ? 'each leg at its own strike' : `at the market ${tradeVol.toFixed(1)}`} testId="scn-vol" raw={tradeVol == null ? '' : tradeVol + volShift} />}
+            {option && <Tile label={bermudan ? 'σ · BP' : 'VOL · BP'} value={tradeVol == null ? '—' : (tradeVol + volShift).toFixed(1)} sub={tradeVol == null ? 'each leg at its own strike' : `at the market ${tradeVol.toFixed(1)}`} testId="scn-vol" raw={tradeVol == null ? '' : tradeVol + volShift} />}
           </div>
           {ladderBlock}
         </div>

@@ -153,3 +153,10 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   claims no more than the page can know.
 - A screen changed by a change is pictured, every one: the home's diagram was edited unseen, and the picture, when
   taken, showed a label that had been cut off since before the change.
+- A block moved inside a long component is followed by a check for names read above the line that defines them
+  (`npx eslint --rule '{"no-use-before-define": ["error", {"functions": false}]}' <file>`): the usual lint and the
+  unit tests passed, and the ticket crashed on its first run on the stack with "cannot access before
+  initialization".
+- A cell that computes one product's formula is read for every style the screen can show it for: the scenario's
+  settlement cell gave a barrier option the payoff of the option without its barrier, and had since the styles
+  were added.
