@@ -179,3 +179,8 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   set of journeys is run on the tree that is pushed, not on the tree of an hour before: a new inventory row is a
   new card on a section's page, a journey counts those cards, and the full run that passed had been built before
   the row was added.
+- A dated note in a document that lives on (the model inventory, a page of the methodology) names the role, not the
+  person who held it that day: a rename then rewrites no record, and the independent reviewer did not have to find
+  thirty credits moved to a name that did not exist on their date.
+- A field a ticket sends is traced to the function that prices it: the collar ticket sent its frequency for as long
+  as the route ignored it, and the two neighbouring routes that read the same field hid that for weeks.

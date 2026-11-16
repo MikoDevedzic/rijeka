@@ -1,7 +1,23 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.26). Commits on `main` are the detail.
+methodology document carries its own version (v1.27). Commits on `main` are the detail.
+
+## 0.44.2 · 16 November 2026
+
+**A collar is priced on the ticket's own periods.** The collar ticket sends its payment frequency; the pricing
+route did not read it, and priced both legs quarterly whatever the ticket said. A cap and a floor have always been
+priced at the ticket's frequency, so a semi-annual, annual or monthly collar was not the cap less the floor that
+those two tickets price. It now is, with a scenario's shifts as without.
+
+- **What moves.** A quarterly collar is unchanged, to the cent. A collar at another frequency changes: on a flat
+  3.5 % curve at 85 bp, a five-year 4.5 % / 2.5 % collar on ten million was shown as -5,943 at every frequency and
+  is now -3,161 semi-annual, +2,365 annual and -7,799 monthly. A booked collar's valuation, P&L and risk already
+  ran on the trade's own periods and do not move; the pinned sample book is unchanged.
+- A test on the stack holds a collar to its cap less its floor, leg by leg, at annual, semi-annual, quarterly and
+  monthly periods, with and without a shifted curve and vol. Methodology v1.27.
+
+---
 
 ## 0.44.1 · 16 November 2026
 

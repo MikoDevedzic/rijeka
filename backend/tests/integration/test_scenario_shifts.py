@@ -146,6 +146,26 @@ def test_a_bermudans_vol_shift_moves_the_models_own_sigma_and_its_curve_shift_th
     assert moved["npv"] != b["npv"] and moved["vol_bp"] == b["vol_bp"]               # the curve moves the tree, not the σ
 
 
+@pytest.mark.parametrize("freq", [1, 2, 4, 12])
+def test_a_collar_is_its_cap_less_its_floor_at_the_tickets_own_frequency(client, auth_a, freq):
+    """A collar is a cap bought and a floor sold on the same periods: the ticket's. Until 0.44.2 the route priced both
+    legs quarterly whatever frequency the ticket sent, so a semi-annual, annual or monthly collar was not the cap
+    less the floor that the cap and floor tickets price at that frequency. With a scenario's shifts as without."""
+    for shift in ({}, {"curve_flat_bp": 10, "vol_shift_bp": 5}):
+        collar = _post(client, auth_a, "/api/price/collar", {**COLLAR, "freq_per_year": freq, **shift})
+        cap = _post(client, auth_a, "/api/price/cap", {**CAP, "cap_rate": COLLAR["cap_rate"], "freq_per_year": freq, **shift})
+        floor = _post(client, auth_a, "/api/price/floor", {**FLOOR, "floor_rate": COLLAR["floor_rate"], "freq_per_year": freq, **shift})
+        assert collar["n_caplets"] == cap["n_caplets"]                                   # the same periods
+        assert collar["cap_npv"] == cap["npv"] and collar["floor_npv"] == floor["npv"]    # each leg is that ticket's own price
+        assert collar["net_npv"] == pytest.approx(cap["npv"] - floor["npv"], abs=0.011)   # each figure is rounded to cents
+        assert collar["net_ir01"] == pytest.approx(cap["ir01"] - floor["ir01"], abs=0.011)
+        assert collar["net_vega"] == pytest.approx(cap["vega"] - floor["vega"], abs=0.011)
+    quarterly = _post(client, auth_a, "/api/price/collar", {**COLLAR, "freq_per_year": 4})
+    here = _post(client, auth_a, "/api/price/collar", {**COLLAR, "freq_per_year": freq})
+    assert (here["n_caplets"] == quarterly["n_caplets"]) == (freq == 4)                  # another frequency is other periods
+    assert _post(client, auth_a, "/api/price/collar", {k: v for k, v in COLLAR.items() if k != "freq_per_year"})["net_npv"] == quarterly["net_npv"]   # none sent: quarterly, as before
+
+
 @pytest.mark.parametrize("url,body", [("/api/price/swaption", SWAPTION), ("/api/price/floor", FLOOR), ("/api/price/collar", COLLAR)])
 @pytest.mark.parametrize("extra", [{"curve_flat_bp": 1001}, {"curve_shift_bp": {"5Y": -2000}}, {"vol_shift_bp": 5000}])
 def test_every_route_refuses_a_shift_out_of_bounds(client, auth_a, url, body, extra):

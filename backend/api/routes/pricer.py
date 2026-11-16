@@ -1712,8 +1712,11 @@ def price_collar_route(
             valuation_date  = val_date,
             surface_rows    = surface_rows,
             fallback_vol_bp = req.fallback_vol_bp,
+            # the legs' periods are the ticket's own, as a cap's and a floor's are (until 0.44.2 this route priced
+            # both legs quarterly whatever the ticket said, so a semi-annual collar was not its cap less its floor)
+            freq_per_year   = req.freq_per_year,
             vol_shift_bp    = req.vol_shift_bp or 0.0,
-            vol_atm_forward = _held_atm_forward(req, val_date, db, user["sub"], 4),      # the collar's legs are quarterly here, as price_collar has them
+            vol_atm_forward = _held_atm_forward(req, val_date, db, user["sub"], req.freq_per_year),
         )
     except Exception as exc:
         raise internal(500, "Pricing error", exc)
