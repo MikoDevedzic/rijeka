@@ -27,6 +27,11 @@ async function api(path, opts = {}) {
   return j
 }
 
+// The inputs table's columns. INPUT is wide enough for the longest name and its kind in words, whole ("USD_SWVOL_ATM
+// swaption vol surface"): at 14rem every row's kind was cut ("funding lev…", "rate curve · 3…"), and what follows
+// it (the pillar count, what is beyond tolerance) is what gives way.
+const INPUT_COLS = '300px 5rem 12rem 11rem 13rem minmax(8rem, 1fr) 8rem'
+
 export default function IpvPage() {
   const navigate = useNavigate()
   const [run, setRun] = useState(null)
@@ -112,11 +117,11 @@ export default function IpvPage() {
         <section className="pnl-panel">
           <header><span>MARKET DATA INPUTS THE BOOK DEPENDS ON</span><span className="pnl-sub">one row per curve, surface, spot, funding level or implied rate the trades in scope read · click a row to verify its pillars</span></header>
           <div className="pnl-tree">
-            <div className="pnl-tr head" style={{ gridTemplateColumns: '14rem 5rem 12rem 11rem 13rem minmax(8rem, 1fr) 8rem' }}>
+            <div className="pnl-tr head" style={{ gridTemplateColumns: INPUT_COLS }}>
               <span className="pnl-tn">INPUT</span><span className="pnl-tv">TRADES</span><span className="pnl-tv">SENSITIVITY</span><span className="pnl-tv dim" style={{ textAlign: 'left' }}>DESK MARK</span><span className="pnl-tv dim" style={{ textAlign: 'left' }}>INDEPENDENT</span><span className="pnl-tv" style={{ textAlign: 'left' }}>STATE</span><span className="pnl-tv">IPV IMPACT</span>
             </div>
             {rows.map(r => (
-              <div key={r.curve_id} className={`pnl-tr d1 trade${input && input.curve_id === r.curve_id ? ' on' : ''}`} style={{ gridTemplateColumns: '14rem 5rem 12rem 11rem 13rem minmax(8rem, 1fr) 8rem' }} onClick={() => setSel(r.curve_id)}>
+              <div key={r.curve_id} className={`pnl-tr d1 trade${input && input.curve_id === r.curve_id ? ' on' : ''}`} style={{ gridTemplateColumns: INPUT_COLS }} onClick={() => setSel(r.curve_id)}>
                 <span className="pnl-tn" style={{ paddingLeft: 8 }} title={`${r.curve_id} · ${r.kindLabel} · ${r.pillars} pillar${r.pillars === 1 ? '' : 's'}`}>{r.curve_id}<small>{r.kindLabel} · {r.pillars} pillar{r.pillars === 1 ? '' : 's'}{r.review ? ` · ${r.review} beyond tolerance` : ''}{r.overridden ? ` · ${r.overridden} overridden` : ''}</small></span>
                 <span className="pnl-tv">{r.trades}</span>
                 <span className="pnl-tv">{r.sens}</span>

@@ -67,7 +67,7 @@ describe('a digital asset\'s funding level: one name and one sign with the rest 
     expect(kindLabel('FUNDING', 'sol_funding')).toBe('implied SOL rate')
     expect(kindLabel('FUNDING', 'EUR_FLAT')).toBe('funding level')
     expect(kindLabel('RATES', 'USD_SOFR')).toBe('rate curve')
-    expect(inputRows({ inputs: [{ curve_id: 'BTC_FUNDING', kind: 'FUNDING', pillars: [] }] })[0].kindLabel).toBe('implied rate')                  // the row: its name carries the asset
+    expect(inputRows({ inputs: [{ curve_id: 'BTC_FUNDING', kind: 'FUNDING', pillars: [] }] })[0].kindLabel).toBe('implied BTC rate')
     expect(sensLabel('FUNDING', 'eth_funding')).toBe('CRYBASIS01')
     expect(sensLabel('FUNDING', 'SOL_FUNDING')).toBe('CRYBASIS01')
     expect(sensLabel('FUNDING', 'EUR_FLAT')).toBe('IR01')                    // a currency's flat rate is a rate

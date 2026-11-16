@@ -144,8 +144,13 @@ test('the cards of the XVA reserves and IPV pages are set as cards, hold a far l
     await expect(funding.first()).toContainText('CRYBASIS01')
     await expect(funding.first()).not.toContainText('IR01')
     // the input itself is named as the ticket names it (IMPLIED BTC RATE), not "funding level", a third name
-    await expect(funding.first()).toContainText('implied rate')
+    await expect(funding.first()).toContainText(/implied (BTC|ETH|SOL) rate/)
     await expect(funding.first()).not.toContainText('funding level')
+    // every row's kind is whole in its column: what gives way is what follows it (the pillar count), never the word
+    for (const small of await app.locator('.pnl-tr.trade .pnl-tn small').all()) {
+      const cut = await small.evaluate(el => { const r = document.createRange(); r.selectNodeContents(el.firstChild); return Math.round(r.getBoundingClientRect().right - el.getBoundingClientRect().right) })
+      expect(cut, `"${(await small.textContent()).slice(0, 40)}" is cut inside its kind`).toBeLessThanOrEqual(1)
+    }
     await funding.first().click()
     const pillars = app.locator('.pnl-panel', { hasText: /VERIFY\s+BY PILLAR/ }).first()
     await expect(pillars).toContainText('CRYBASIS01 per pillar')
