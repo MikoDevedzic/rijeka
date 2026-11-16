@@ -33,7 +33,8 @@ const useMarketDataStore = create((set, get) => ({
   // ── Snapshot state per curveId ────────────────────────────────────────────
   snapshotSaving: {},   // { [curveId]: bool }
   snapshotSaved:  {},   // { [curveId]: { date, source } }
-  snapshotTried:  {},   // { [curveId]: true } once the stored quotes have been asked for, whatever the answer
+  snapshotTried:  {},   // { [curveId]: true } once the stored quotes have been asked for and the API has answered or failed
+  edited:         {},   // { [curveId]: true } once a quote or a switch of the curve has been changed by hand since it was loaded
   snapshotError:  {},   // { [curveId]: string }
 
   // ── Actions ───────────────────────────────────────────────────────────────
@@ -49,6 +50,7 @@ const useMarketDataStore = create((set, get) => ({
 
   toggleInstrument: (curveId, idx, enabled) =>
     set((s) => ({
+      edited: s.edited[curveId] ? s.edited : { ...s.edited, [curveId]: true },
       curves: s.curves.map((c) =>
         c.id !== curveId ? c : {
           ...c,
@@ -63,6 +65,7 @@ const useMarketDataStore = create((set, get) => ({
     const v = parseFloat(value);
     if (isNaN(v)) return;
     set((s) => ({
+      edited: s.edited[curveId] ? s.edited : { ...s.edited, [curveId]: true },
       curves: s.curves.map((c) =>
         c.id !== curveId ? c : {
           ...c,
@@ -174,10 +177,15 @@ const useMarketDataStore = create((set, get) => ({
    * Load the latest snapshot for a curve from DB and update store quotes.
    * Non-fatal if no snapshot exists — workspace still usable with defaults.
    */
-  loadLatestSnapshot: async (curveId) => {
+  // `keepEdits`: the list's own read ahead (CurvesSidebar) passes it, so an answer that arrives after the user has
+  // begun to type in that curve does not replace what was typed. A curve's own page reads without it, as it always
+  // has: opening a curve shows what is stored.
+  loadLatestSnapshot: async (curveId, { keepEdits = false } = {}) => {
+    let asked = false;                 // no session yet is not an answer: the list asks again
     try {
       const session = await getSessionMaybe();
       if (!session) return;
+      asked = true;
 
       const res = await fetch(API + '/api/market-data/snapshots/' + curveId + '/latest', {
         headers: { 'Authorization': 'Bearer ' + session.access_token },
@@ -186,8 +194,10 @@ const useMarketDataStore = create((set, get) => ({
 
       const data = await res.json();
       if (!data.exists || !data.quotes?.length) return;
+      if (keepEdits && get().edited[curveId]) return;
 
       set((s) => ({
+        edited: s.edited[curveId] ? Object.fromEntries(Object.entries(s.edited).filter(([k]) => k !== curveId)) : s.edited,   // what is shown is what is stored again
         curves: s.curves.map((c) => {
           if (c.id !== curveId) return c;
           const updated = c.instruments.map((inst) => {
@@ -205,7 +215,7 @@ const useMarketDataStore = create((set, get) => ({
     } catch {
       // Non-fatal
     } finally {
-      set((s) => (s.snapshotTried[curveId] ? s : { snapshotTried: { ...s.snapshotTried, [curveId]: true } }));
+      if (asked) set((s) => (s.snapshotTried[curveId] ? s : { snapshotTried: { ...s.snapshotTried, [curveId]: true } }));
     }
   },
 

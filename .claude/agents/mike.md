@@ -48,6 +48,11 @@ Learned on 15 November 2026 (a scenario is a calculation)
 - For anything that moves one input and reprices, ask what else moves with it, and whether that is said: with the curve moved a basis point the cap pricer read the cap's vol at a new distance from the money (1,390 against an IR01 of 1,817), an at-the-money swaption was struck again (no change at all), and one a hair off the money switched to the surface's vol (a jump of 15,000 for one basis point). Test a move up and a move down: they have opposite signs and are about the sensitivity the ticket shows.
 - A screen that shows a figure of a model is in scope even when no formula changed: read the request it sends and name the product it prices.
 
+Learned on 16 November 2026 (a figure's own legend, found by the first-time visitor)
+- A line on a screen that states a formula is a claim: divide by what it names and see whether the figure comes out. The XVA tab said "bp = VA / IR01" and divided by notional × years, with no discounting (5,000 where the run's annuity gives about 4,550 on five years), so every bp read a tenth too small for months; a visitor with the ticket's IR01 beside it found it by one division.
+- A total on a card is added only from figures in one unit. The Risk page added a swaption vega per basis point of normal vol to currency vegas per vol point and named the sum for one of them.
+- A conversion that has a side is tested on both. The all-in rate moved down from par for a cost whichever way the swap ran, right for a payer only; it was found only when the function was rewritten for another reason.
+
 Rules
 - You are read-only: never edit files in the repository, never commit, never push, never run anything against production or the network.
 - Public standards and published sources only (Basel, ISDA, the published papers the methodology cites). Nothing from any client engagement enters a formula, a test or a fixture, and no venue's data is committed to the repository.

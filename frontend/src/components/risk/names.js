@@ -20,11 +20,14 @@ export const limitName = (metric, scenarios = []) => limitLabel({ metric: String
 // The book's vega, by how its vol is quoted. A currency or digital-asset surface ({PAIR}_VOL) is bumped by one vol
 // point and a swaption surface ({CCY}_SWVOL_…) by one basis point of normal vol, so the two are not one number:
 // each family is summed on its own (the rows are already in the reporting currency), and a family the book does
-// not hold is null. `curves` is the surfaces' names, shortened, in the rows' order.
+// not hold is null. `curves` is the surfaces' names, shortened, in the rows' order: a pair by itself (BTCUSD), a
+// swaption surface with what it is (USD swaptions), since "USD" beside two pairs would say nothing. These two
+// names are all the engine ladders (pnl/market.py is_vol_surface); caps and floors are not laddered.
 export function vegaByQuote(rows) {
   const list = rows || []
-  const isRates = (r) => /SWVOL|CAPVOL|CAP_VOL/i.test(String(r.curve))
+  const isRates = (r) => /_SWVOL_ATM$/.test(String(r.curve))
   const sum = (xs) => xs.length ? xs.reduce((a, r) => a + (Number(r.total) || 0), 0) : null
-  return { point: sum(list.filter(r => !isRates(r))), normalBp: sum(list.filter(isRates)), curves: list.map(r => String(r.curve).replace(/_VOL$|_SWVOL_ATM$/, '')) }
+  const short = (r) => isRates(r) ? `${String(r.curve).replace(/_SWVOL_ATM$/, '')} swaptions` : String(r.curve).replace(/_VOL$/, '')
+  return { point: sum(list.filter(r => !isRates(r))), normalBp: sum(list.filter(isRates)), curves: list.map(short) }
 }
 

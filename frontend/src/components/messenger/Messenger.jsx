@@ -127,6 +127,10 @@ export default function Messenger() {
   const [greeting, setGreeting] = useState(false)
   const hiddenHere = HIDDEN_ON.includes(location.pathname)
   const signIn = greetKey(session)
+  // The card has done its work once the messenger has been open or stood in a window of its own, however that came
+  // about (the button, a row of the card, an alert pressed, a shortcut, "put back"): it does not return when the
+  // messenger is closed.
+  if (greeting && (open || poppedOut)) setGreeting(false)          // settled while rendering, as React asks of state that follows other state
   useEffect(() => {
     const t = setTimeout(() => {
       let seen = null

@@ -414,7 +414,7 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
     if (isFinite(p) && p > 0) return p
     try { const r = parseFloat(rateRef?.current?.value); return isFinite(r) && r > 0 ? r : NaN } catch { return NaN }
   })()
-  const vaRows = buildVaRows(xva, { kind: 'rate', dv01, parRate, allInRate: allInRate(parRate, xva, dv01) })
+  const vaRows = buildVaRows(xva, { kind: 'rate', dv01, parRate, allInRate: allInRate(parRate, xva, dv01, direction || trade?.direction || 'PAY') })
   const cmpRows = onChainCompareRows(xva, compareResult?.xva)
   const saving = onChainSaving(xva, compareResult?.xva, simResult?.xva?.notional)
 

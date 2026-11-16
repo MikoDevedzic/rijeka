@@ -30,6 +30,7 @@ const TYPE_LABEL = {
 // the built-in starting quote, which is not the desk's rate (the list said 3.65% for a curve stored at 3.88%).
 const STORED = new Set(['OIS', 'BASIS']);
 const AT_ONCE = 4;                     // requests in flight while the list fills
+const AGAIN_MS = 1500, ROUNDS = 4;     // a session not ready when the page opened: the list asks again, a few times
 
 function curveDisplayVal(c) {
   if (c.curve_class === 'FUNDING') {
@@ -58,19 +59,25 @@ export default function CurvesSidebar() {
   const tried = useMarketDataStore((s) => s.snapshotTried);
   const flt = search.toUpperCase();
 
-  // the stored quotes of every curve in an open group, a few at a time, each asked for once
+  // the stored quotes of every curve in an open group, a few at a time, each asked for until the API has answered
+  // for it (a session that was not ready is not an answer); never over what the user has begun to type
+  const [round, setRound] = useState(0);
   useEffect(() => {
-    let stop = false;
-    const st = useMarketDataStore.getState();
-    const ids = CCY_GROUPS.filter((g) => openGroups[g.ccy]).flatMap((g) => g.ids).filter((id) => {
-      const c = st.curves.find((x) => x.id === id);
-      return c && STORED.has(c.curve_class) && !st.snapshotTried[id];
-    });
+    let stop = false, again = null;
+    const waiting = () => {
+      const st = useMarketDataStore.getState();
+      return CCY_GROUPS.filter((g) => openGroups[g.ccy]).flatMap((g) => g.ids).filter((id) => {
+        const c = st.curves.find((x) => x.id === id);
+        return c && STORED.has(c.curve_class) && !st.snapshotTried[id];
+      });
+    };
     (async () => {
-      for (let i = 0; i < ids.length && !stop; i += AT_ONCE) await Promise.all(ids.slice(i, i + AT_ONCE).map((id) => st.loadLatestSnapshot(id)));
+      const ids = waiting(), load = useMarketDataStore.getState().loadLatestSnapshot;
+      for (let i = 0; i < ids.length && !stop; i += AT_ONCE) await Promise.all(ids.slice(i, i + AT_ONCE).map((id) => load(id, { keepEdits: true })));
+      if (!stop && round < ROUNDS && waiting().length) again = setTimeout(() => setRound((r) => r + 1), AGAIN_MS);
     })();
-    return () => { stop = true; };
-  }, [openGroups]);
+    return () => { stop = true; clearTimeout(again); };
+  }, [openGroups, round]);
 
   return (
     <div className="crv-sidebar">

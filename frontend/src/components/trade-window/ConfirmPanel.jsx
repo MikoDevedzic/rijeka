@@ -33,6 +33,10 @@ import PartialTermination from './PartialTermination'
 import KnockRecord from './KnockRecord'
 import ConfirmMark from '../brand/ConfirmMark'
 import { seedOf } from '../brand/mark'
+
+// A record written before 0.46.4 carries a note that names the setting which was not set ("(RIJEKA_CHAIN_RPC unset)"):
+// the certificate prints the note without it. The stored record is not changed.
+const plainNote = (note) => note ? String(note).replace(/\s*\(RIJEKA_[A-Z_]+ unset\)/, '') : note
 import { confirmCaption, confirmPhase } from '../brand/confirm-phase'
 
 const STATUS_COLORS = {
@@ -133,7 +137,7 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
           : tAnchor.tx_hash)}
         {terminated && tAnchor.block_number && row('TERMINATED AT', `block ${tAnchor.block_number}` + (att.termination?.reason ? ` · ${att.termination.reason}` : ''))}
       </>) : (
-        row('ANCHOR', att.anchor?.note || 'No chain configured', 'var(--text-dim)')
+        row('ANCHOR', plainNote(att.anchor?.note) || 'No chain configured', 'var(--text-dim)')
       )}
 
       <div className="cert-actions" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginTop: 12 }}>
@@ -462,7 +466,7 @@ function ConfirmBody({
               Both signatures are made and the transaction is sent; the block has not taken it yet. This tab asks the
               server every 10 seconds and shows the attestation when it is mined. You can leave the tab or come back
               later: the server keeps following the transaction either way.
-              {anchor.note ? ` ${anchor.note}.` : ''}
+              {anchor.note ? ` ${plainNote(anchor.note)}.` : ''}
             </div>
             {anchor.tx_hash && (
               <div style={{ marginTop: 8, fontFamily: MONO, fontSize: 12, wordBreak: 'break-all' }}>

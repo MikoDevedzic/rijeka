@@ -221,4 +221,10 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - Text a stranger can post is never a label the system acts on. A report's own "source" decided whether its fault
   rang, and the first report of a fault lent its label to all the others: what decides is what a verified account
   said, or what the API saw for itself.
+- A function moved or rewritten is read for what it assumed before the move. The all-in rate assumed the desk pays
+  fixed; rewriting it carried the assumption into new, tested code until a validator asked about the other side.
+- A count is made the way the list beside it is made, duplicates and all, and its test carries the awkward case
+  (a package of legs), not only the plain one.
+- An effect that acts on a value from the address or the store acts once: the address changes a render later than
+  the store does, and the same name opened two tickets.
 

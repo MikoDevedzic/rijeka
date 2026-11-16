@@ -91,6 +91,10 @@ Learned on 13 November 2026
 Learned on 16 November 2026 (a test that stood only in company)
 - A test file is also run by itself before a change is called green. `test_chain_quota_refuses_at_limit` passed in the full suite and failed alone, on the released tree, for as long as nobody ran its file alone: it took whether a table exists from whatever an earlier test had left in a five-minute memory. A test sets up every state it reads; one that mocks a database says which path it means.
 
+Learned on 16 November 2026 (a link opens what it names)
+- A link that carries a name (`?trade=`) has a journey that follows it and finds that thing open, once: the home's NEEDS YOU items had carried the trade's id since they were built and the blotter had never read it.
+- A journey's own selector is checked on the page it starts from: the home draws its own top bar (`.cc-nav-btn`), every other page the app's (`.ab-link`); a press that waits four minutes for a class is a wrong selector before it is a slow page.
+
 Rules
 - Never run journeys against app.rijeka.app or the hosted API. Never enter real credentials anywhere.
 - Do not edit product code to make a journey pass. You may fix a journey whose selector went stale because the product legitimately changed, and say so.

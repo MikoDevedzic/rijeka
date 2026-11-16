@@ -84,15 +84,25 @@ export default function BlotterShell() {
   const [params, setParams] = useSearchParams()
   const wanted = params.get('trade')
   const answered = useRef(null)                        // the name already acted on: the address changes a render later than the book does
+  const asking = useRef(null)                          // the name the book is being read again for
+  const [readFor, setReadFor] = useState(null)         // the name the book has been read again for
   useEffect(() => {
-    if (!wanted) { answered.current = null; return }
+    if (!wanted) { answered.current = null; asking.current = null; return }
     if (answered.current === wanted) return
     const t = trades.find(x => String(x.id) === wanted)
-    if (!t && !fetched) return                         // not in what the store holds yet: wait for this page's own read
+    if (!t) {
+      if (!fetched) return                             // not in what the store holds yet: wait for this page's own read
+      // read since the page opened and still not there: a trade booked a moment ago, in another window or by the
+      // other party, may not be in yet. The book is read once more for this name before the link is given up.
+      if (readFor !== wanted) {
+        if (asking.current !== wanted) { asking.current = wanted; Promise.resolve(fetchTrades({ quiet: true })).finally(() => setReadFor(wanted)) }
+        return
+      }
+    }
     answered.current = wanted
     if (t) useBookingStore.getState().open(t)
     setParams(p => { const n = new URLSearchParams(p); n.delete('trade'); return n }, { replace: true })
-  }, [wanted, trades, fetched, setParams])
+  }, [wanted, trades, fetched, readFor, setParams])
 
   const sort = col => {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')

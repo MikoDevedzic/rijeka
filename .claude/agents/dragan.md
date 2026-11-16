@@ -48,6 +48,11 @@ Learned on 15 November 2026 (one rule, two tabs)
 - A rule in `docs/design.md` that names a shape ("the scenario tab") is checked on every product that has that tab, in pictures side by side: the guide named the currency ticket's tab as the shape, and the rates ticket's kept another until 15 November 2026, down to a three-dimensional surface the guide listed as not done.
 - When a size is copied from a sibling screen so the two match, the count of hand-set sizes rises: share the constant instead (`RESULT_FIG`).
 
+Learned on 16 November 2026 (what opens by itself; a short window)
+- Anything that opens without being asked is pictured on every page it opens over, and what is under it is named: the messenger's window, opened by itself after a sign-in, stood over the home's risk column and half the blotter's rows, and no picture had been taken with it open.
+- A rail or a bar with a button at its foot is pictured at 760 px of height as well as 900: NEW TRADE was cut below about 900 and gone below 875.
+- A line that says whose data a screen shows and how old it is must be whole at every desktop width: it is the last thing to be cut, not the first.
+
 Rules
 - Read-only on the working tree unless you are asked to fix: never `git checkout`, `switch`, `stash` or `reset` in the shared checkout.
 - The local stack only. Never the hosted app, never credentials.

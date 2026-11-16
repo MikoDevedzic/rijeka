@@ -25,29 +25,36 @@ other than what it does.
   NEEDS YOU. The strip's snapshot line (whose data, how old) is no longer cut on a narrower window: the 30Y point
   and the last vol give way to it.
 - **The door's CONFIRMATIONS ANCHORED counts anchored confirmations.** It counted every confirmation with a hash,
-  including those signed by both parties and kept off the chain. It now counts what the public register lists.
+  including those signed by both parties and kept off the chain. It now counts the records the registry holds, as
+  the public register lists them: a package of legs confirmed as one is counted once.
 - **XVA in basis points on a rates ticket.** The row under the strip said "bp = VA / IR01" and divided by notional
   × years, with no discounting: about a tenth too large a divisor on a five-year swap, so every bp, and the all-in
   rate's distance from par, read about a tenth too small. It is now each adjustment over notional × the run's own
   annuity (Σ DF·Δt) × 1 bp, which the saving on chain's running figure already used, and the line says so. The
   adjustments in money are unchanged.
+- **The all-in rate knows which side the desk is on.** It moved the rate down from par for a cost whichever way the
+  swap ran, which is right when the desk pays fixed. A desk that receives fixed is paid for a cost by receiving
+  more: its all-in rate is now above par. ColVA is in the rate, as it was already in the all-in in money beside
+  it. The model inventory has a row for this conversion and says what it is not (a swap struck again at that rate).
 - **The Risk page's vega card** added a swaption vega per basis point of normal vol to currency vegas per vol
-  point and called the sum "FX VOL". It shows the two apart, each with its unit. With too few days of history the
+  point and called the sum "FX VOL". It shows the two apart, each with its unit. (The API's `vega_usd` is still
+  that sum; no screen reads it.) With too few days of history the
   VaR card and the VaR panel print a dash, as the home does, not zero.
 - **Rate curves list.** Each stored curve's rate is read before it is printed; the list showed the built-in
   starting quote until a curve was pressed (3.65 % for a curve stored at 3.88 %).
 - **Smaller things.** The System page shows a trader no usage block (it stood there saying "not available"); a
   ticket's unit reads "USD per EUR", not "USD/EUR"; the footer's button on a booked trade says CLOSE, CANCEL TRADE
   being another thing; a solved coupon prints 3.480009, not 3.48000900; a certificate with no chain behind it no
-  longer prints a setting's name; the scenario tab says what its approximation is.
+  longer prints a setting's name (a record already stored keeps its note; the certificate leaves the name out);
+  the scenario tab says what its approximation is.
 
 Not changed, and why: the three chips of the scenario tab (they say three true things; a currency forward and a
 European option priced by the engine there is the mend, and is not in this release); the names of a digital
 asset's implied rate across the ticket, the IPV page and the scenario tab; the blotter's STORE column.
 
 Tests: 6 new browser journeys (`second-look.spec.js`), the greeting's journeys rewritten (6), the launch journey
-holds the XVA row to the run's annuity; unit tests for the home's words, the vega split and the rate's basis point;
-one integration test of the door's count against PostgreSQL.
+holds the XVA row to the run's annuity; unit tests for the home's words, the vega split, the rate's basis point
+and the all-in rate on both sides; one integration test of the door's count against PostgreSQL, a package in it.
 
 ## 0.46.3 · 16 November 2026
 

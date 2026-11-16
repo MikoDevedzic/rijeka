@@ -1,5 +1,6 @@
 """The door's count of anchored confirmations (GET /api/public/pulse, `confirmations`) against PostgreSQL: a
-confirmation the registry holds is counted, one signed and kept off the chain is not, though both carry a hash."""
+confirmation the registry holds is counted, one signed and kept off the chain is not, though both carry a hash;
+a package of legs confirmed as one is one record on the registry and is counted once, as the register lists it."""
 from __future__ import annotations
 
 import json
@@ -30,7 +31,16 @@ def test_only_a_confirmation_the_registry_holds_is_counted(booked, ids, stack):
             att = {"trade_hash": h, "bilateral": True, **({"anchor": anchor} if anchor else {})}
             conn.execute(text(EVENT), {**who, "p": json.dumps({"attestation": att}), "h": h})
         assert public._scalar(db, public.ANCHORED_SQL) == before + 1
-        assert public.build(db)["confirmations"] == before + 1
+        # a package of three legs: each leg's event has its own hash and carries the package's record and anchor
+        pkg = {"hash": "0x" + "e5" * 32, "trade_id": "PKG-IT-1", "of": 3}
+        for i, product in enumerate(("IR_SWAP", "IR_CAP", "IR_FLOOR"), start=1):
+            h = "0x" + f"f{i}" * 32
+            att = {"trade_hash": h, "package": {**pkg, "leg": i}, "anchor": {"anchored": True, "block_number": 9, "tx_hash": "0x" + "a7" * 32}}
+            conn.execute(text(EVENT), {"t": booked[product]["id"], "u": ids["a"]["user_id"], "p": json.dumps({"attestation": att}), "h": h})
+        assert public._scalar(db, public.ANCHORED_SQL) == before + 2
+        assert public.build(db)["confirmations"] == before + 2
+        listed = public._register(db, 200)
+        assert sum(1 for r in listed["confirmations"] if r.get("package_hash") == pkg["hash"] or r.get("trade_hash") == pkg["hash"]) <= 1
     finally:
         tx.rollback()
         conn.close()

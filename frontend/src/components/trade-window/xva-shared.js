@@ -30,7 +30,7 @@ export const VA_DEFS = {
   kva:    { label:'KVA',    color:T.down, desc:'Capital Valuation Adjustment = -(Hurdle/100) x Sum[ Capital(t) x dt x DF(t) ]. Capital(t) = SA-CCR EAD x 8% RWA. Often the largest VA for vanilla IRS.', curve:'EE' },
   mva:    { label:'MVA',    color:T.amber, desc:'Margin Valuation Adjustment = -Sum[ IM(t) x max(FTP(t) - pickup, 0) x dt x DF(t) ]. Cost of funding initial margin, less what the asset it is posted in earns over OIS. IM is derived from the ISDA SIMM IR delta risk weight applied to the trade IR01, and amortises with residual maturity.', curve:'none' },
   colva:  { label:'ColVA',  color:T.amber, desc:'Collateral Valuation Adjustment = Sum[ (VM posted(t) x s_post + VM held(t) x s_recv) x dt x DF(t) ]: the carry of the variation margin against cash at OIS. s = what the asset the margin is held in earns over OIS (a Treasury bill at OIS: 0; a stablecoin earning nothing: minus OIS). Cash on both sides: zero. Positive = benefit.', curve:'none' },
-  all_in: { label:'ALL-IN', color:T.textHi, desc:'NPV + CVA + DVA + FVA + KVA + MVA + ColVA, where FVA = FCA + FBA. Full economic cost of the trade. Client pays ALL-IN rate; desk runs NPV.', curve:'none' },
+  all_in: { label:'ALL-IN', color:T.textHi, desc:'NPV + CVA + DVA + FVA + KVA + MVA + ColVA, where FVA = FCA + FBA. Full economic cost of the trade. On a rates ticket the all-in rate is the fixed rate that pays the desk for the adjustments: below par when the desk pays fixed, above it when the desk receives.', curve:'none' },
 }
 export const VA_INFO = VA_DEFS
 export const VA_KEYS = Object.keys(VA_DEFS)
@@ -254,19 +254,27 @@ const signed = (bp) => { const n = parseFloat(bp); return (n > 0 ? '+' : '') + (
 // run's own Σ DF·Δt on its grid (the XVA block's `annuity`, which the saving on chain's running figure divides by
 // too). An adjustment over it is that adjustment as a running rate. null when the run carries no annuity: the cells
 // then print no bp and the all-in rate a dash, never a figure worked from an undiscounted life (notional × years,
-// which the tab used until 0.46.4 and which overstated the divisor by the discounting: 5,000 where this gives
-// about 4,530 on a five-year swap, so every bp read about a tenth too small).
+// which the tab used until 0.46.4 and which overstated the divisor by the discounting: 5,000 where the grid gives
+// about 4,547 on a five-year swap at 3.8 %, so every bp read about a tenth too small). The grid's annuity is a
+// monthly sum; the swap's own, on its payment dates and day count, is within half a percent of it (4,530 there).
+// It is an upfront amount spread over the trade's life, not a swap struck again at another rate.
 export function rateBp01(notional, annuity) {
   const n = Number(notional), a = Number(annuity)
   return Number.isFinite(n) && n > 0 && Number.isFinite(a) && a > 0 ? n * a * 1e-4 : null
 }
 
-// The all-in rate of a rates ticket, in percent: the par rate plus the adjustments as a running rate (their sum
-// over rateBp01, in bp). NaN when either is not known, which the strip prints as a dash.
-export function allInRate(parRate, xva, bp01) {
+// The all-in rate of a rates ticket, in percent: the fixed rate at which the desk is paid for the adjustments, the
+// par rate moved by their sum as a running rate (the sum over rateBp01, in bp). Every adjustment is signed from the
+// desk's side, a cost negative, whichever way the swap runs, so the move depends on the side: a desk that pays
+// fixed is made whole by paying less (par + sum, the sum being negative for a cost), one that receives fixed by
+// receiving more (par − sum). It moved the rate down on both sides until 0.46.4, which was right for a payer only.
+// ColVA is in the sum, as it is in the ALL-IN in money beside it. NaN when the par rate or the annuity is not
+// known, which the strip prints as a dash.
+export const RATE_ADJUSTMENTS = ['cva', 'dva', 'fca', 'fba', 'kva', 'mva', 'colva']
+export function allInRate(parRate, xva, bp01, direction = 'PAY') {
   if (!xva || !(bp01 > 0) || !Number.isFinite(parRate)) return NaN
-  const total = ['cva', 'dva', 'fca', 'fba', 'kva', 'mva'].reduce((s, k) => s + (Number(xva[k]) || 0), 0)
-  return parRate + total / bp01 / 100
+  const total = RATE_ADJUSTMENTS.reduce((s, k) => s + (Number(xva[k]) || 0), 0)
+  return parRate + (String(direction).toUpperCase() === 'RECEIVE' ? -1 : 1) * total / bp01 / 100
 }
 
 // The eight VA cells. basis.kind:

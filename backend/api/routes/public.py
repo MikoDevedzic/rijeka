@@ -99,10 +99,13 @@ def _chain() -> dict:
     return out
 
 
-# The door's "CONFIRMATIONS ANCHORED": confirmations whose record says the registry holds them, which is what the
-# public register lists (`_register` reads the same flag). A confirmation signed by both parties and kept off the
-# chain (no node, the relayer's budget spent, a self-host with no registry) has its hash and is not counted here.
-ANCHORED_SQL = ("SELECT count(*) FROM trade_events WHERE event_type = 'CONFIRMED' AND confirmation_hash IS NOT NULL "
+# The door's "CONFIRMATIONS ANCHORED": the records the registry holds, counted as the public register lists them
+# (`_register` reads the same flag and lists a package once). A confirmation signed by both parties and kept off
+# the chain (no node, the relayer's budget spent, a self-host with no registry) has its hash and is not counted. A
+# package of legs confirmed as one is one record on the registry, though each leg's event carries it: counted once,
+# by the package's hash.
+ANCHORED_SQL = ("SELECT count(DISTINCT coalesce(payload->'attestation'->'package'->>'hash', confirmation_hash)) FROM trade_events "
+                "WHERE event_type = 'CONFIRMED' AND confirmation_hash IS NOT NULL "
                 "AND payload->'attestation'->'anchor'->>'anchored' = 'true'")
 
 

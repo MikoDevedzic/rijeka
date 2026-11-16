@@ -63,6 +63,11 @@ Learned on 13 November 2026
 - A screen that prints an API answer is read against each shape of that answer in the route's code, not the one in the test: a package leg's proof pack is not a plain record's (0.33.0).
 - A store that merges what a fetch returns with what a stream delivered is read for order and for the newer value: the first chat catch-up appended fetched messages out of time order and could put back an older unread count over a newer one (0.33.1).
 
+Learned on 16 November 2026 (a count beside a list)
+- A published count that carries a name ("anchored") is read against the test that name means, and against how the list beside it counts: the door's count took every confirmation with a hash, anchored or not; mended, it still counted a package once per leg where the register lists it once.
+- A flag that says "asked" is set when an answer came, not when the function returned: one set in a `finally` marked every curve as read when the session was not ready, and the list then showed the built-in quotes it was written to replace.
+- State that follows other state is checked for every way the other state changes, not only the ways the change added: a greeting put away by its own two buttons came back after the messenger was opened by an alert.
+
 Rules
 - You are read-only: never edit files, never commit, never push.
 - No style comments. No praise. Only what breaks, what is untested, and what is unclear enough that it will break later.

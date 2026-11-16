@@ -99,8 +99,16 @@ describe('buildVaRows', () => {
   it('the all-in rate is par plus the adjustments as a running rate; a dash when either is unknown', () => {
     const run = { cva: -8357, dva: 1200, fca: -900, fba: 300, kva: -373, mva: -1630, colva: 55 }
     const bp01 = rateBp01(10_000_000, 4.53)
-    // (−8357 + 1200 − 900 + 300 − 373 − 1630) / 4530 = −2.1545 bp; ColVA is not in the rate
-    expect(allInRate(3.48, run, bp01)).toBeCloseTo(3.48 - 0.021545, 6)
+    // (−8357 + 1200 − 900 + 300 − 373 − 1630 + 55) / 4530 = −2.14238 bp, ColVA in it as in the ALL-IN in money
+    const bp = (-8357 + 1200 - 900 + 300 - 373 - 1630 + 55) / 4530
+    // a desk that pays fixed is paid for a cost by paying less; one that receives fixed, by receiving more
+    expect(allInRate(3.48, run, bp01)).toBeCloseTo(3.48 + bp / 100, 9)
+    expect(allInRate(3.48, run, bp01, 'PAY')).toBeLessThan(3.48)
+    expect(allInRate(3.48, run, bp01, 'RECEIVE')).toBeCloseTo(3.48 - bp / 100, 9)
+    expect(allInRate(3.48, run, bp01, 'receive')).toBeGreaterThan(3.48)
+    // a net benefit moves each the other way
+    expect(allInRate(3.48, { dva: 4530 }, bp01, 'PAY')).toBeCloseTo(3.49, 9)
+    expect(allInRate(3.48, { dva: 4530 }, bp01, 'RECEIVE')).toBeCloseTo(3.47, 9)
     expect(allInRate(3.48, run, null)).toBeNaN()
     expect(allInRate(NaN, run, bp01)).toBeNaN()
     expect(allInRate(3.48, null, bp01)).toBeNaN()

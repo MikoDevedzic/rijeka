@@ -42,7 +42,7 @@ describe('one sensitivity, one name and one sign', () => {
 describe('vega is summed only with vega quoted the same way', () => {
   it('keeps a vol point and a basis point of normal vol apart', () => {
     const rows = [{ curve: 'BTCUSD_VOL', total: 15000 }, { curve: 'EURUSD_VOL', total: -3000.5 }, { curve: 'USD_SWVOL_ATM', total: 15024.5 }]
-    expect(vegaByQuote(rows)).toEqual({ point: 11999.5, normalBp: 15024.5, curves: ['BTCUSD', 'EURUSD', 'USD'] })
+    expect(vegaByQuote(rows)).toEqual({ point: 11999.5, normalBp: 15024.5, curves: ['BTCUSD', 'EURUSD', 'USD swaptions'] })
   })
   it('says a family the book does not hold is not there, not zero', () => {
     expect(vegaByQuote([{ curve: 'EURUSD_VOL', total: 10 }])).toMatchObject({ point: 10, normalBp: null })
