@@ -122,6 +122,19 @@ brass rule. In a rail of filters (the blotter's left pane) a section's heading i
 reads as their heading by weight, the bright text colour and a rule above it; the choices sit a step in, in the
 quieter colour, and the selected one is the lighter panel with the brass rule at its edge.
 
+**A filter offers the words its rows show.** A rail that filters a table by a word (a status, an asset class) lists
+the words the table's cells can carry, in an order that means something (a trade's life), and gains a button for a
+word it did not list while a row carries it. The blotter's status filter once offered PENDING, LIVE, MATURED and
+CANCELLED beside rows that said CONFIRMED.
+
+**A table keeps inside its panel.** Columns share the panel's width, each no narrower than its longest figure, and
+the rows keep that least width so the table scrolls inside the panel, never past it. A cell whose words are longer
+than its column cuts them with an ellipsis and keeps them whole in its title; it never prints over its neighbour.
+
+**The product is "open", its engine is open source.** Copy calls Rijeka an open derivatives desk; "open source" is
+said only of the engine and the standard, which are under Apache-2.0. A sentence that lists asset classes says
+which are live and which are next.
+
 ## Buttons, fields, rows
 
 Three things a user does to the screen, each with one look everywhere (`index.css`, the block "What can be

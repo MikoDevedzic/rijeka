@@ -34,6 +34,7 @@ const ST = {
   MATURED:    { c: 'var(--text-faint)', l: 'MATURED'    },
   CANCELLED:  { c: 'var(--text-faint)', l: 'CANCELLED'  },
   TERMINATED: { c: 'var(--text-faint)', l: 'TERMINATED' },
+  DEFAULTED:  { c: 'var(--text-faint)', l: 'DEFAULTED'  },
 }
 const SR = {
   WORKING:    { l: 'WORKING'    },
@@ -53,7 +54,10 @@ function tenor(t) {
 }
 
 const ASSET_CLASSES = ['CRYPTO', 'FX', 'RATES', 'CREDIT', 'EQUITY', 'COMMODITY']
-const STATUSES      = ['PENDING', 'LIVE', 'MATURED', 'CANCELLED']
+// The filter offers the words the rows show: every status a trade's record can carry (backend/projections/
+// trade_projection.py), in the order of a trade's life. Until 0.44.6 it offered PENDING, LIVE, MATURED and CANCELLED,
+// while most rows said CONFIRMED: a visitor could not filter for what the blotter showed.
+const STATUSES      = ['PENDING', 'CONFIRMED', 'LIVE', 'MATURED', 'TERMINATED', 'CANCELLED']
 const STORES        = ['WORKING', 'PRODUCTION', 'HISTORY']
 
 export default function BlotterShell() {
@@ -86,8 +90,10 @@ export default function BlotterShell() {
     { open: (ts) => { ts.forEach(x => useBookingStore.getState().open(x)); if (ts.length > 1) setSelectedIds(new Set()) }, copy: (text) => { navigator.clipboard?.writeText(String(text)).catch(() => {}) },
       filter: setFilter, clear: resetFilters, toggle }) : []
 
-  const live    = trades.filter(t => t.status === 'LIVE').length
-  const pending = trades.filter(t => t.status === 'PENDING').length
+  const count = (s) => trades.filter(t => t.status === s).length
+  const live = count('LIVE'), pending = count('PENDING'), confirmed = count('CONFIRMED')
+  // a status no button names (DEFAULTED, or one a later release adds) gets a button while a trade carries it
+  const statuses = [...STATUSES, ...[...new Set(trades.map(t => t.status).filter(Boolean))].filter(s => !STATUSES.includes(s)).sort()]
 
   return (
     <div className="bl-root">
@@ -100,7 +106,7 @@ export default function BlotterShell() {
         </div>
 
         <div className="bl-section-lbl">STATUS</div>
-        {['ALL', ...STATUSES].map(s => (
+        {['ALL', ...statuses].map(s => (
           <button
             key={s}
             className={`bl-filter-btn ${filters.status === s || (!filters.status && s === 'ALL') ? 'active' : ''}`}
@@ -144,13 +150,19 @@ export default function BlotterShell() {
             <span className="bl-sum-val">{trades.length}</span>
           </div>
           <div className="bl-sum-row">
-            <span className="bl-sum-lbl">LIVE</span>
-            <span className="bl-sum-val" style={{ color: live ? 'var(--up)' : undefined }}>{live}</span>
+            <span className="bl-sum-lbl">PENDING</span>
+            <span className="bl-sum-val" data-testid="bl-sum-pending">{pending}</span>
           </div>
           <div className="bl-sum-row">
-            <span className="bl-sum-lbl">PENDING</span>
-            <span className="bl-sum-val">{pending}</span>
+            <span className="bl-sum-lbl">CONFIRMED</span>
+            <span className="bl-sum-val" data-testid="bl-sum-confirmed">{confirmed}</span>
           </div>
+          {live > 0 && (
+            <div className="bl-sum-row">
+              <span className="bl-sum-lbl">LIVE</span>
+              <span className="bl-sum-val" style={{ color: 'var(--up)' }}>{live}</span>
+            </div>
+          )}
         </div>
 
         <button className="bl-new-trade-btn" aria-keyshortcuts={ariaKey('new-trade')} onClick={() => useBookingStore.getState().open()}>

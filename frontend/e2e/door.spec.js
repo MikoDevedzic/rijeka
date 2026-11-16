@@ -27,6 +27,10 @@ test('a visitor with no session lands on the door: sign in or create a desk, the
   const at = await scrolls(page)
   expect(at.across, 'nothing wider than the window').toBeLessThanOrEqual(0)
   expect(at.down, `on a laptop the door is one screen too (it is ${at.down}px taller)`).toBeLessThanOrEqual(0)
+  // the door says what is live and what is next, and claims no asset class that is not live; "open source" is the engine's licence, not the product's name
+  const lede = page.locator('.au-headline p')
+  await expect(lede).toContainText('Rates, FX and digital assets are live; credit, equities and commodities are next.')
+  await expect(page.locator('.au-shell')).not.toContainText(/open-source|free for everyone/i)
   await page.screenshot({ path: 'e2e/.out/shots/door-desktop.png' })
 
   await seg.getByRole('link', { name: 'CREATE A DESK' }).click()

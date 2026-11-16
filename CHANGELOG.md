@@ -3,6 +3,32 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.27). Commits on `main` are the detail.
 
+## 0.44.6 · 16 November 2026
+
+**What a first-time visitor reads: the door, the blotter's filter, the IPV tables.** More of the first-time
+visitor's list. Words and layout; no figure changes.
+
+- **The door says what is live and what is next.** Its sentence listed six asset classes as though all were
+  there, and called the product "open-source". It now reads: rates, FX and digital assets are live; credit,
+  equities and commodities are next; and "an open derivatives desk". The same sentence is the page's description
+  for search and link previews. The installed app's description and the footers of two Excel exports said
+  "open-source" of the product too, and say "open" now: open source is the engine's licence, not the product's
+  name.
+- **The blotter's filter offers the words its rows show.** Rows said CONFIRMED, and the filter offered PENDING,
+  LIVE, MATURED and CANCELLED: there was no way to filter for most of the blotter. The filter now lists every
+  status a trade's record can carry, in the order of a trade's life (PENDING, CONFIRMED, LIVE, MATURED,
+  TERMINATED, CANCELLED), and a status none of those names gets a button while a trade carries it. The counts
+  under it are TOTAL, PENDING and CONFIRMED; LIVE is counted when a trade is.
+- **The IPV page's tables keep inside their panels.** The pillar table's nine columns were fixed at a width wider
+  than the panel it stands in on a 1440px page, so the tolerance and the status were cut off; the columns now
+  share the panel's width and the table scrolls inside it when the panel is narrower still. In the inputs table
+  the name of who approved an input was printed over the impact beside it; it is cut with an ellipsis and kept
+  whole in the cell's title.
+- Journeys hold each: the door's sentence and its one screen on a laptop, a filter button for every status on a
+  row, the pillar table's last column inside its panel, and no cell printing over its neighbour.
+
+---
+
 ## 0.44.5 · 16 November 2026
 
 **The book brief reads the risk report.** Prometheus's brief of the book priced each trade itself, today, and

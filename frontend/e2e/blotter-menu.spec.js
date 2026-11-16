@@ -51,6 +51,10 @@ test('right-click a trade: open it, copy its reference, show only trades like it
   expect(await app.evaluate(() => window.__copied), 'what the page handed to the clipboard').toBe(ref)
   if (browserName === 'chromium') expect(await app.evaluate(() => navigator.clipboard.readText())).toBe(ref)
 
+  // the rail's filter offers the words the rows show: every status on a row has a button of its own
+  const shown = [...new Set((await app.locator('.bl-row .bl-status-txt').allInnerTexts()).map(s => s.trim()))]
+  for (const s of shown) await expect(app.locator('.bl-left .bl-filter-btn', { hasText: new RegExp(`^${s}$`) }), `a filter for ${s}`).toHaveCount(1)
+  await app.locator('.bl-left').screenshot({ path: 'e2e/.out/shots/blotter-rail.png' })
   // show only this status, then the rail's ALL shows every trade again (it used to hide them all)
   const status = (await row.locator('.bl-status-txt').innerText()).trim()
   await row.click({ button: 'right' })

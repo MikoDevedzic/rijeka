@@ -1,7 +1,7 @@
 {
   "name": "Rijeka",
   "short_name": "Rijeka",
-  "description": "An open-source derivatives desk: price it, see what it costs, confirm it on chain.",
+  "description": "An open derivatives desk: price it, see what it costs, confirm it on chain.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

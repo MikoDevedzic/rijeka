@@ -112,17 +112,17 @@ export default function IpvPage() {
         <section className="pnl-panel">
           <header><span>MARKET DATA INPUTS THE BOOK DEPENDS ON</span><span className="pnl-sub">one row per curve, surface, spot or funding level the trades in scope read · click a row to verify its pillars</span></header>
           <div className="pnl-tree">
-            <div className="pnl-tr head" style={{ gridTemplateColumns: '14rem 5rem 12rem 11rem 13rem 8rem 8rem' }}>
+            <div className="pnl-tr head" style={{ gridTemplateColumns: '14rem 5rem 12rem 11rem 13rem minmax(8rem, 1fr) 8rem' }}>
               <span className="pnl-tn">INPUT</span><span className="pnl-tv">TRADES</span><span className="pnl-tv">SENSITIVITY</span><span className="pnl-tv dim" style={{ textAlign: 'left' }}>DESK MARK</span><span className="pnl-tv dim" style={{ textAlign: 'left' }}>INDEPENDENT</span><span className="pnl-tv" style={{ textAlign: 'left' }}>STATE</span><span className="pnl-tv">IPV IMPACT</span>
             </div>
             {rows.map(r => (
-              <div key={r.curve_id} className={`pnl-tr d1 trade${input && input.curve_id === r.curve_id ? ' on' : ''}`} style={{ gridTemplateColumns: '14rem 5rem 12rem 11rem 13rem 8rem 8rem' }} onClick={() => setSel(r.curve_id)}>
+              <div key={r.curve_id} className={`pnl-tr d1 trade${input && input.curve_id === r.curve_id ? ' on' : ''}`} style={{ gridTemplateColumns: '14rem 5rem 12rem 11rem 13rem minmax(8rem, 1fr) 8rem' }} onClick={() => setSel(r.curve_id)}>
                 <span className="pnl-tn" style={{ paddingLeft: 8 }}>{r.curve_id}<small>{r.kindLabel} · {r.pillars} pillar{r.pillars === 1 ? '' : 's'}{r.review ? ` · ${r.review} beyond tolerance` : ''}{r.overridden ? ` · ${r.overridden} overridden` : ''}</small></span>
                 <span className="pnl-tv">{r.trades}</span>
                 <span className="pnl-tv">{r.sens}</span>
                 <span className="pnl-tv dim" style={{ textAlign: 'left' }}>{r.desk}</span>
                 <span className="pnl-tv dim" style={{ textAlign: 'left' }}>{r.independent}</span>
-                <span className="pnl-tv" style={{ textAlign: 'left', color: STATE_COLOR[r.state] }}>{r.state}{r.decision ? <small className="pnl-note"> · {r.decision.by}</small> : null}</span>
+                <span className="pnl-tv" data-testid="ipv-state" title={r.decision ? `${r.state} · ${r.decision.by}` : undefined} style={{ textAlign: 'left', color: STATE_COLOR[r.state], minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.state}{r.decision ? <small className="pnl-note"> · {r.decision.by}</small> : null}</span>
                 <span className="pnl-tv" style={{ color: r.impact < -0.5 ? 'var(--down)' : r.impact > 0.5 ? 'var(--up)' : 'var(--text-mute)' }}>{r.impact ? fmtSigned(r.impact) : '—'}</span>
               </div>
             ))}
@@ -219,14 +219,18 @@ function OverrideCell({ p, input, drafts, setDrafts, onOverride, signed, small }
 
 function PillarTable({ input, drafts, setDrafts, onOverride, onWithdraw, signed }) {
   const rows = pillarRows(input)
-  const g = '5rem 6rem 6rem 6rem 5rem 8rem 8rem 5rem 7rem'
+  // The columns share the panel's width, each no narrower than its longest figure, and the rows keep that least
+  // width so the table scrolls inside its panel when the panel is narrower still. Until 0.44.6 the nine columns
+  // were fixed at 56rem: in the half-width panel of a 1440px page the tolerance and the status were cut off.
+  const g = 'minmax(48px, 0.7fr) minmax(60px, 1fr) minmax(92px, 1.3fr) minmax(78px, 1fr) minmax(54px, 0.8fr) minmax(84px, 1.1fr) minmax(64px, 1fr) minmax(40px, 0.5fr) minmax(104px, 1.2fr)'
+  const least = { minWidth: 700 }
   return (
     <div className="pnl-tree">
-      <div className="pnl-tr head" style={{ gridTemplateColumns: g }}>
+      <div className="pnl-tr head" style={{ gridTemplateColumns: g, ...least }}>
         <span className="pnl-tn">PILLAR</span><span className="pnl-tv">DESK</span><span className="pnl-tv">INDEP.</span><span className="pnl-tv">OVERRIDE</span><span className="pnl-tv">SHIFT</span><span className="pnl-tv">{sensLabel(input.kind, input.curve_id)}</span><span className="pnl-tv">IMPACT</span><span className="pnl-tv">TOL</span><span className="pnl-tv" style={{ textAlign: 'left' }}>STATUS</span>
       </div>
       {rows.map(p => (
-        <div key={p.key} className="pnl-tr d1" style={{ gridTemplateColumns: g, alignItems: 'center' }}>
+        <div key={p.key} className="pnl-tr d1" data-testid="ipv-pillar" style={{ gridTemplateColumns: g, alignItems: 'center', ...least }}>
           <span className="pnl-tn" style={{ paddingLeft: 8 }}>{p.key}</span>
           <span className="pnl-tv">{fmtQuote(p.desk, input.kind)}</span>
           <span className="pnl-tv dim">{p.independent == null ? '—' : fmtQuote(p.independent, input.kind)}{p.gap != null ? <small> {fmtShift(p.gap, input.unit)}</small> : null}</span>

@@ -112,6 +112,18 @@ test('the cards of the XVA reserves and IPV pages are set as cards, hold a far l
     expect(await inBrass(app, app.locator('.pnl-cards').first()), 'a card\'s name or figure in brass on IPV').toEqual([])
     await expect(app.locator('.pnl')).not.toContainText(/spot ?01/i)
     await app.screenshot({ path: 'e2e/.out/shots/ipv-names.png' })
+    // the pillar table's last column (the status) is inside its panel, or the table scrolls to it: never cut off
+    const panel = app.locator('.pnl-panel', { hasText: /VERIFY\s+BY PILLAR/ }).first()
+    const cut = await panel.locator('[data-testid="ipv-pillar"]').first().evaluate(row => {
+      const last = row.lastElementChild.getBoundingClientRect(), tree = row.parentElement
+      const box = tree.getBoundingClientRect()
+      return { beyond: last.right - box.right, scrolls: tree.scrollWidth - tree.clientWidth > 1 }
+    })
+    expect(cut.beyond <= 1 || cut.scrolls, `the status column ends ${cut.beyond}px beyond its panel and the table does not scroll`).toBe(true)
+    // in the inputs table a state with the name of who decided it ends before the impact beside it begins
+    // (a cell whose words are longer than its column cuts them, with the whole text in its title: it never lets them run on)
+    const over = await app.locator('[data-testid="ipv-state"]').evaluateAll(els => els.filter(el => el.scrollWidth > el.clientWidth + 1 && (getComputedStyle(el).overflowX !== 'hidden' || !el.title)).length)
+    expect(over, 'a state printed over the impact column').toBe(0)
   }
   // a digital asset's funding level is the forward basis's risk, named and signed as on the ticket and the Risk page
   const funding = app.locator('.pnl-tr', { hasText: /(BTC|ETH|SOL)_FUNDING/ })
