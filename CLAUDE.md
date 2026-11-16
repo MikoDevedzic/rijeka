@@ -234,4 +234,8 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   column taken out of the blotter left its width in the table and the head short of the edge, in a picture already
   on disk. And an edit made by a script is read back where it landed: a comment appended to the middle of a long
   line cut the rest of the line off, and only a unit test said so.
+- "To cents" is a measurement, taken at the size a screen shows, before it is written. The scenario tab's closed
+  form had said it of a European option for weeks; on 10m it was up to a whole unit off, which nobody saw until the
+  engine's own figure stood beside it. And a chip that names who priced a figure is checked in the state where
+  that one did not answer.
 
