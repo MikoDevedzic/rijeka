@@ -11,8 +11,9 @@ so no id is kept; and the account the token check verified, when there was one.
 
 `add()` never waits and never raises: a problem goes into a small buffer and `flush()` writes it off the request
 path, at once when the recorder next has a moment, and when the API stops. Without the table nothing is kept here.
-Anyone may post a browser's report, so all browsers together are kept to BROWSER_PER_10_MIN and BROWSER_PER_DAY, and
-a report nobody signed keeps only the start of its stack; beyond the limits a report is counted as dropped. Only the
+Anyone may post a browser's report, so browsers together are kept to so many in ten minutes and in a day, signed-in
+and unsigned each in an allowance of their own (a flood of strangers' reports never leaves a signed-in account's
+without room), and a report nobody signed keeps only the start of its stack; beyond the limits a report is counted as dropped. Only the
 hosted API records (activity/store.py: enabled): a developer's own server reads the same database as production,
 and its errors are not the desk's.
 Rows older than KEEP_DAYS are deleted, once a day, by the alert step.
@@ -41,15 +42,17 @@ SLOW_S = 30.0
 KEEP_DAYS = 30
 BUFFER_MAX = 500
 FLUSH_GAP_S = 5.0
-BROWSER_PER_10_MIN = 120              # reports kept from all browsers together: the route's own limit is per address
+BROWSER_PER_10_MIN = 120              # reports kept from signed-in browsers together: the route's own limit is per address
 BROWSER_PER_DAY = 5000
+UNSIGNED_PER_10_MIN = 60              # and from browsers nobody signed, in an allowance of their own: a flood of
+UNSIGNED_PER_DAY = 2000               # strangers' reports must never leave a signed-in account's report without room
 ANONYMOUS_STACK = 500                 # of a report nobody signed: enough to tell faults apart, not a place to keep text
 READ_MAX = 2000
 FIELD = {"source": 40, "route": 200, "message": 500, "stack": 4000, "release": 60, "user_agent": 200}
 _lock = threading.Lock()
 _buffer: list[dict] = []
 _state: dict[str, Any] = {"flushed_at": 0.0, "present_at": 0.0, "present": False, "dropped": 0}
-_browser: list[float] = []            # when the last reports were taken
+_browser: dict[bool, list[float]] = {True: [], False: []}      # when the last reports were taken: signed, unsigned
 
 INSERT = text("""
     INSERT INTO health_events (at, kind, source, route, status, ms, message, stack, release, user_agent, user_id, fingerprint)
@@ -84,12 +87,13 @@ def add(kind: str, *, source: str = "", route: str = "", status: Optional[int] =
         row["fingerprint"] = fingerprint(kind, row["route"], row["message"], row["status"])
         with _lock:
             if kind == "browser":             # anyone may post a report: together they may fill no table
-                at = time.time()
-                _browser[:] = [t for t in _browser if at - t < 86400]
-                if len(_browser) >= BROWSER_PER_DAY or sum(1 for t in _browser if at - t < 600) >= BROWSER_PER_10_MIN:
+                at, signed = time.time(), bool(user_id)
+                taken = _browser[signed] = [t for t in _browser[signed] if at - t < 86400]
+                per_day, per_10 = (BROWSER_PER_DAY, BROWSER_PER_10_MIN) if signed else (UNSIGNED_PER_DAY, UNSIGNED_PER_10_MIN)
+                if len(taken) >= per_day or sum(1 for t in taken if at - t < 600) >= per_10:
                     _state["dropped"] += 1
                     return False
-                _browser.append(at)
+                taken.append(at)
             if len(_buffer) >= BUFFER_MAX:
                 _state["dropped"] += 1
                 return False
@@ -181,20 +185,27 @@ def count_since(db, hours: float = 24.0) -> Optional[int]:
         return None
 
 
-def rows_since(db, since: datetime) -> Optional[list[dict]]:
-    """The problems since a moment, newest first, with the account's e-mail where there is one. For the admin's page
-    and the day's summary. [] without the table; None when it could not be read."""
+def rows_since(db, since: datetime, strict: bool = False) -> Optional[list[dict]]:
+    """The problems since a moment, with the account's e-mail where there is one. For the admin's page and the day's
+    summary. [] without the table; None when it could not be read, or with `strict` the error itself, the session
+    left as it was (the alert step must not have its transaction rolled back under it, nor take "unread" for "none")."""
     if not table_present(db):
         return []
+    if strict:
+        return _rows(db, since)
     try:
-        got = db.execute(text(
-            "SELECT h.id, h.at, h.kind, h.source, h.route, h.status, h.ms, h.message, h.release, h.user_id, u.email, h.fingerprint, h.alerted_at "
-            "FROM health_events h LEFT JOIN auth.users u ON u.id = h.user_id WHERE h.kind <> 'digest' AND h.at >= :s "
-            "ORDER BY (h.kind = 'browser'), h.at DESC LIMIT :n"),      # what the API saw first: a flood of reports must not push it out
-            {"s": since, "n": READ_MAX}).all()
+        return _rows(db, since)
     except Exception as e:                              # noqa: BLE001
         _quiet(db.rollback); log.warning("problems not read: %s", type(e).__name__)
         return None
+
+
+def _rows(db, since: datetime) -> list[dict]:
+    got = db.execute(text(
+        "SELECT h.id, h.at, h.kind, h.source, h.route, h.status, h.ms, h.message, h.release, h.user_id, u.email, h.fingerprint, h.alerted_at "
+        "FROM health_events h LEFT JOIN auth.users u ON u.id = h.user_id WHERE h.kind <> 'digest' AND h.at >= :s "
+        "ORDER BY (h.kind = 'browser'), h.at DESC LIMIT :n"),          # what the API saw first: a flood of reports must not push it out
+        {"s": since, "n": READ_MAX}).all()
     keys = ("id", "at", "kind", "source", "route", "status", "ms", "message", "release", "user_id", "email", "fingerprint", "alerted_at")
     return [dict(zip(keys, r)) for r in got]
 
@@ -205,10 +216,12 @@ def group(rows: list[dict]) -> list[dict]:
     for r in rows:
         g = out.setdefault(r["fingerprint"], {"fingerprint": r["fingerprint"], "kind": r["kind"], "source": r["source"], "route": r["route"],
                                               "status": r["status"], "message": r["message"], "count": 0, "accounts": set(), "emails": set(),
+                                              "signed_sources": set(),
                                               "anonymous": 0, "first": r["at"], "last": r["at"], "slowest_ms": None, "release": r.get("release")})
         g["count"] += 1
         if r.get("user_id"):
             g["accounts"].add(str(r["user_id"]))
+            g["signed_sources"].add(r.get("source") or "")      # where the signed-in reports say they came from: a stranger's label is not asked
             if r.get("email"):
                 g["emails"].add(r["email"])
         else:
@@ -218,7 +231,7 @@ def group(rows: list[dict]) -> list[dict]:
             g["slowest_ms"] = max(g["slowest_ms"] or 0, int(r["ms"]))
     done = []
     for g in out.values():
-        done.append({**g, "accounts": len(g["accounts"]), "emails": sorted(g["emails"]),
+        done.append({**g, "accounts": len(g["accounts"]), "emails": sorted(g["emails"]), "signed_sources": sorted(g["signed_sources"]),
                      "first": g["first"].isoformat() if hasattr(g["first"], "isoformat") else g["first"],
                      "last": g["last"].isoformat() if hasattr(g["last"], "isoformat") else g["last"]})
     # what the API saw for itself first (nobody can forge it), then by how many accounts, then by how often
@@ -232,5 +245,5 @@ def status(db) -> dict:
 
 def _reset_for_tests() -> None:
     with _lock:
-        _buffer.clear(); _browser.clear()
+        _buffer.clear(); _browser[True] = []; _browser[False] = []
     _state.update(flushed_at=0.0, present_at=0.0, present=False, dropped=0)

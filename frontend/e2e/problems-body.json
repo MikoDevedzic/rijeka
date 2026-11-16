@@ -27,7 +27,10 @@
    "slowest_ms": 812,
    "release": null,
    "line": "POST /api/xva/simulate answered 500 \u00b7 1 account, once",
-   "rings": true
+   "rings": true,
+   "signed_sources": [
+    "POST"
+   ]
   },
   {
    "fingerprint": "c3",
@@ -45,7 +48,8 @@
    "slowest_ms": 41400,
    "release": null,
    "line": "POST /api/ccr/run took 41 s \u00b7 a visitor not signed in, once",
-   "rings": true
+   "rings": true,
+   "signed_sources": []
   },
   {
    "fingerprint": "a1",
@@ -66,7 +70,10 @@
    "slowest_ms": null,
    "release": "063bb5f4b8bf",
    "line": "On /risk: Failed to fetch dynamically imported module \u00b7 2 accounts and visitors not signed in, 4 times",
-   "rings": true
+   "rings": true,
+   "signed_sources": [
+    "boundary-load"
+   ]
   }
  ],
  "truncated": false,

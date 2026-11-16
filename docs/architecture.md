@@ -486,22 +486,26 @@ tells the operator.
 - **Where it is kept.** `health_events` (`docs/migrations/2026-11-16_health.sql`), written by `health/store.py` off
   the request path, 30 days, row-level security on with no policy. The account is a reference that is set to null
   when the account is deleted. A browser's report is text from outside: cut to a length, scrubbed of anything
-  shaped like a token; all browsers together are kept to 120 reports in ten minutes and 5,000 a day, and a report
-  nobody signed keeps only the start of its stack. Only the hosted API keeps problems (`RIJEKA_RECORD`). Without
+  shaped like a token; signed-in browsers together are kept to 120 reports in ten minutes and 5,000 a day, unsigned
+  ones to 60 and 2,000 in an allowance of their own, and a report nobody signed keeps only the start of its stack. Only the hosted API keeps problems (`RIJEKA_RECORD`). Without
   the table the older memory log is all there is, and nobody is alerted.
 - **Who is told, and when** (`health/alerts.py`, the scheduler's `health_alerts` step, every pass, under an
-  advisory lock so that two instances never both run it). What rings: a request failed with 500, 502 or 504, a slow
-  answer, a signed-in account's browser report. What is kept and shown and does not ring: a 501 or a 503, a report
-  whose source begins `net-` (the browser could not reach the API), and any report nobody signed (anyone can post
-  one: it can neither ring nor silence a real fault, since only a fault that rang counts as told). A new fault is
-  told once: one SYSTEM message from "Rijeka health" in the support room of every admin account (the messenger's
-  badge, chime and desktop notification do the rest), and a mail through Resend when `RESEND_API_KEY` and
-  `RIJEKA_ALERT_EMAIL_TO` are set. Not again for six hours; at most six messages an hour (the rest wait, untold,
-  for room); once a day after 13:00 UTC a summary of the last 24 hours, also when there was nothing. A fault is
-  marked told in the same transaction that posts the message, and only when a room or a mailbox was reached;
-  otherwise it stays untold and the step raises `Undelivered`, which the scheduler records as a failed step on
-  `GET /api/ops/health`. No message names an account, and a browser's words are reduced to plain text with every
-  address replaced before they are repeated.
+  advisory lock so that two instances never both run it, in one transaction). What rings: a request failed with a
+  5xx other than 501, a slow answer, a signed-in account's browser report. What is kept and shown and does not
+  ring: a 501; a report whose signed-in senders all give a source beginning `net-` (the browser could not reach
+  the API), until three accounts say so at once; and any report nobody signed. An unsigned report can be posted by
+  anyone under any label, so it never rings, never counts as the operator having been told (only a fault that
+  rang does), and a fault is judged by its signed-in reports alone. A new fault is told once: one SYSTEM message
+  from "Rijeka health" in the support room of every admin account (the messenger's badge, chime and desktop
+  notification do the rest), and a mail through Resend when `RESEND_API_KEY` and `RIJEKA_ALERT_EMAIL_TO` are set.
+  Not again for six hours. The API's own faults and browsers' reports have separate hourly budgets (six messages
+  and two) and the API's are read and listed first, so no account's reports can hold back a fault of the API's;
+  what is over a budget waits, untold, for room. Once a day after 13:00 UTC a summary of the last 24 hours, also
+  when there was nothing. A fault is marked told in the transaction that posts the message, and only when a room
+  or a mailbox was reached; otherwise it stays untold and the step raises `NobodyToTell`. Any pass that fails
+  raises, so the scheduler records a failed step on `GET /api/ops/health` and the watch fails on it. No message
+  names an account, and a browser's words are reduced to plain text with every address replaced before they are
+  repeated.
 - **Who reads it.** `GET /api/ops/problems` (admin): the same problem as one line, how often, how many accounts and
   who; shown on Configurations → SYSTEM (`ProblemsPanel.jsx`). `GET /api/ops/health` carries a count
   (`problems.last_24h`, asked of the database once a minute) and nothing else. The public route that takes a

@@ -97,6 +97,11 @@ means a file is missing from the build: after the read-back look at the count of
 `GET /api/ops/health` (`client_errors`) and, signed in, at the entries themselves. Say so when
 reporting a release to someone who had the app open, and release changes that are ready together as one.
 
+**A red watch for `health_alerts`.** The step that tells the operator of users' problems fails on purpose when
+there is something to tell and nobody to tell it to (`NobodyToTell`): no account with the admin role has a support
+room (it has one once it has opened the messenger) and the two mail settings are unset. It is mended by opening the
+messenger as an admin, or by setting the mail; it is not a fault of the release. Any other failure of that step is.
+
 ## 6. Rollback
 
 - **App:** `release` is a pointer. Moving it back to the previous commit restores the previous build

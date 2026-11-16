@@ -25,8 +25,10 @@ def _sql(statement: str, **params):
 
 
 def _fresh():
+    from api.routes import ops
     from health import store
     store.flush(); store._reset_for_tests()
+    ops._problems_cache.update(at=0.0, body=None)                              # the public count is kept a minute: an earlier test's is not this one's
     _sql("DELETE FROM health_events")
     _sql("DELETE FROM chat_messages WHERE sender_name = 'Rijeka health'")
 
@@ -100,7 +102,7 @@ def test_the_operator_is_told_once_only_when_it_reaches_somebody_and_never_silen
     try:
         # nobody holds the admin role: there is something to tell and nobody to tell it to. Said, not swallowed,
         # and nothing is marked told, so the next pass tries again.
-        with pytest.raises(alerts.Undelivered):
+        with pytest.raises(alerts.NobodyToTell):
             _step(now)
         assert _sql("SELECT count(*) FROM health_events WHERE rang")[0][0] == 0
         assert _sql("SELECT count(*) FROM health_events WHERE alerted_at IS NULL")[0][0] == 3     # the two faults that ring, still waiting
@@ -121,7 +123,8 @@ def test_the_operator_is_told_once_only_when_it_reaches_somebody_and_never_silen
         report = {"message": "Cannot read properties of undefined (reading 'npv')", "route": "/risk", "source": "boundary"}
         client.post("/api/ops/client-error", json=report, headers=auth_a); store.flush()
         again = _step(now + timedelta(minutes=2))
-        assert again["new"] == 1 and again["told"] == 0 and len(_health_messages(USER_A)) == 1
+        assert again == {"new": 0, "told": 0} and len(_health_messages(USER_A)) == 1             # looked at with the rest of its kind, and not rung
+        assert _sql("SELECT count(*) FROM health_events WHERE alerted_at IS NULL")[0][0] == 0
         assert _step(now + timedelta(minutes=3)) == {"new": 0, "told": 0}
 
         # a stranger sends a report first, in the very words of a fault the app can report; then a signed-in account
@@ -133,26 +136,43 @@ def test_the_operator_is_told_once_only_when_it_reaches_somebody_and_never_silen
         rang = _step(now + timedelta(minutes=5))
         assert rang["told"] == 1 and "On /blotter: The blotter could not be drawn" in _health_messages(USER_A)[-1]
 
-        # what is not a fault of the desk's does not ring: an answer that says "not supported" or "not configured",
-        # and a browser that could not reach the API (one person's connection)
+        # what is not a fault of the desk's does not ring: an answer that says "not supported", and one browser that
+        # could not reach the API (one person's connection)
         store.add("api", source="POST", route="/api/price/swaption", status=501, message="POST /api/price/swaption answered 501", user_id=USER_B)
-        store.add("api", source="POST", route="/api/analyse", status=503, message="POST /api/analyse answered 503", user_id=USER_B)
         store.add("browser", source="net-chat-send", route="/blotter", message="chat: a message was not sent (not reached)", user_id=USER_B)
         store.flush()
-        assert _step(now + timedelta(minutes=6)) == {"new": 3, "told": 0}
+        assert _step(now + timedelta(minutes=6)) == {"new": 2, "told": 0}
 
-        # at most so many messages an hour: one over waits, unmarked, and rings when the hour has room
-        monkeypatch.setattr(alerts, "PER_HOUR", 2)
-        store.add("api", source="POST", route="/api/book/trade", status=500, message="POST /api/book/trade answered 500", user_id=USER_B); store.flush()
+        # a 503 is a refusal of service and rings; a 501 ("not supported") is an answer and does not
+        assert _sql("SELECT rang FROM health_events WHERE status = 501")[0][0] is False
+
+        # browsers' reports have an hourly budget of their own: an account that keeps reporting cannot use up the
+        # room a fault of the API's needs. Two messages told of browser faults this hour: a third waits, unmarked.
+        client.post("/api/ops/client-error", json={"message": "Yet another page fell over", "route": "/pnl", "source": "boundary"}, headers=auth_b); store.flush()
         held = _step(now + timedelta(minutes=7))
-        assert held["told"] == 0 and held["held"] == 1 and len(_health_messages(USER_A)) == 2
-        later = _step(now + timedelta(minutes=70))                                               # the two messages are more than an hour old
-        assert later["told"] == 1 and "POST /api/book/trade answered 500" in _health_messages(USER_A)[-1]
+        assert held["told"] == 0 and held["held"] == 1
+        n = len(_health_messages(USER_A))
+        # ... while a fault the API saw for itself is told at once, in the same hour
+        store.add("api", source="POST", route="/api/book/trade", status=500, message="POST /api/book/trade answered 500", user_id=USER_B); store.flush()
+        api = _step(now + timedelta(minutes=8))
+        assert api["told"] == 1 and api["held"] == 1 and len(_health_messages(USER_A)) == n + 1
+        assert "POST /api/book/trade answered 500" in _health_messages(USER_A)[-1] and "Yet another page" not in _health_messages(USER_A)[-1]
+        later = _step(now + timedelta(minutes=70))                                               # the browser messages are more than an hour old
+        assert later["told"] == 1 and "On /pnl: Yet another page fell over" in _health_messages(USER_A)[-1]
+
+        # a stranger's label is not asked: an unsigned report that calls itself a connection fault, sent first in a
+        # real fault's own words, does not make the signed-in report that follows a connection fault
+        words = {"message": "The risk report could not be drawn", "route": "/risk"}
+        client.post("/api/ops/client-error", json={**words, "source": "net-x"}); store.flush()
+        _step(now + timedelta(minutes=71))
+        client.post("/api/ops/client-error", json={**words, "source": "boundary"}, headers=auth_b); store.flush()
+        _step(now + timedelta(minutes=72))                                                       # held or told: either way it is a fault that rings
+        assert _sql("SELECT count(*) FROM health_events WHERE message = 'The risk report could not be drawn' AND user_id IS NOT NULL AND (rang OR alerted_at IS NULL)")[0][0] == 1
 
         # once a day, after the hour, the summary: once, and only when it reached somebody
         day = now.replace(hour=alerts.DIGEST_HOUR_UTC, minute=5)
         set_role(USER_A, "trader")
-        with pytest.raises(alerts.Undelivered):
+        with pytest.raises(alerts.NobodyToTell):
             _step(day)
         assert _sql("SELECT count(*) FROM health_events WHERE kind = 'digest'")[0][0] == 0        # the day is not marked done
         set_role(USER_A, "admin")
@@ -160,7 +180,6 @@ def test_the_operator_is_told_once_only_when_it_reaches_somebody_and_never_silen
         assert "digest" not in _step(day + timedelta(minutes=2))
         last = _health_messages(USER_A)[-1]
         assert last.startswith("**The last 24 hours, to ") and "problems, " in last and last.endswith(alerts.WHERE)
-        assert len(_health_messages(USER_A)) == 4
     finally:
         set_role(USER_A, "trader")
         _sql("DELETE FROM chat_messages WHERE sender_name = 'Rijeka health'")

@@ -170,6 +170,7 @@ def test_a_strangers_words_cannot_become_a_link_or_formatting_in_the_operators_m
     assert line == "URGENT verify your account an address img src=x onerror=1 rm mail an address next line an address an address"
     # a mail reader makes a link of a bare name with a dot in it: none is left between two words
     assert alerts.said("sign in again at evil.example/login or rijeka.app.evil.example") == "sign in again at evil example/login or rijeka app evil example"
+    assert alerts.said("go to evil .com or evil .co .uk now") == "go to evil com or evil co uk now"                # nor put back together by a space
     assert alerts.said("Cannot read properties of undefined (reading 'npv'). Value 1.25 kept.") == "Cannot read properties of undefined reading 'npv'. Value 1.25 kept."
     for mark in ("*", "[", "]", "<", ">", "`", "http", "evil", "\n"):
         assert mark not in line
@@ -184,19 +185,40 @@ def test_what_rings_a_fault_of_the_apis_a_slow_answer_a_signed_in_accounts_repor
     one = lambda **k: store.group([_row(**k)])[0]                                                 # noqa: E731
     assert alerts.rings(store.group([_row(), _row()])[0]) is False                                # not signed in: anyone can post one, saying anything
     assert alerts.rings(one(user=U1)) is True
-    assert alerts.rings(one(user=U1, source="net-chat-send", message="chat: a message was not sent (not reached)")) is False    # one person's connection
-    for status, want in ((500, True), (502, True), (504, True), (501, False), (503, False)):      # "not supported" and "not configured" are answers
+    for status, want in ((500, True), (502, True), (503, True), (504, True), (501, False)):       # "not supported" is an answer, not a fault
         assert alerts.rings(one(kind="api", route="/api/x", message=f"POST /api/x answered {status}", status=status, source="POST")) is want, status
     assert alerts.rings(one(kind="slow", route="/api/x", message="x", status=200, ms=40_000, source="POST")) is True
 
 
+def test_one_persons_connection_does_not_ring_and_everybodys_does():
+    lost = dict(source="net-chat-send", route="/blotter", message="chat: a message was not sent (not reached)")
+    assert alerts.rings(store.group([_row(user=U1, **lost)])[0]) is False
+    assert alerts.rings(store.group([_row(user=U1, **lost), _row(user=U2, **lost)])[0]) is False
+    three = store.group([_row(user=u, **lost) for u in (U1, U2, "00000000-0000-0000-0000-0000000000a3")])[0]
+    assert three["accounts"] == alerts.NET_ACCOUNTS and alerts.rings(three) is True               # nobody reaches the API: that is not their connections
+
+
+def test_a_strangers_label_is_not_asked_a_fault_is_judged_by_its_signed_in_reports():
+    """The fingerprint is the place and the words, not the label: a stranger who sends a real fault's words first,
+    labelled as a connection fault, must not make the signed-in report that follows one; nor the other way about."""
+    words = dict(route="/risk", message="The risk report could not be drawn")
+    first_a_stranger = store.group([_row(source="net-x", **words), _row(user=U1, source="boundary", **words)])[0]
+    assert first_a_stranger["source"] == "net-x" and first_a_stranger["signed_sources"] == ["boundary"] and alerts.rings(first_a_stranger) is True
+    lost = dict(route="/blotter", message="chat: a message was not sent (not reached)")
+    first_a_stranger = store.group([_row(source="boundary", **lost), _row(user=U1, source="net-chat-send", **lost)])[0]
+    assert first_a_stranger["signed_sources"] == ["net-chat-send"] and alerts.rings(first_a_stranger) is False
+
+
 def test_all_browsers_together_can_make_the_api_keep_only_so_much(monkeypatch):
-    monkeypatch.setattr(store, "BROWSER_PER_10_MIN", 3)
+    monkeypatch.setattr(store, "UNSIGNED_PER_10_MIN", 3)
     assert [store.add("browser", message=f"m{i}") for i in range(5)] == [True, True, True, False, False]
     assert store.add("api", source="GET", route="/api/x", status=500) is True                    # what the API saw is not theirs to crowd out
+    assert store.add("browser", message="a signed-in account's", user_id=U1) is True             # nor a signed-in account's report: its own allowance
     assert store.status(_Db())["dropped"] == 2
-    store._reset_for_tests(); monkeypatch.setattr(store, "BROWSER_PER_10_MIN", 100); monkeypatch.setattr(store, "BROWSER_PER_DAY", 2)
+    store._reset_for_tests(); monkeypatch.setattr(store, "UNSIGNED_PER_10_MIN", 100); monkeypatch.setattr(store, "UNSIGNED_PER_DAY", 2)
     assert [store.add("browser", message=f"m{i}") for i in range(3)] == [True, True, False]       # and in a day
+    monkeypatch.setattr(store, "BROWSER_PER_10_MIN", 1)
+    assert [store.add("browser", message=f"s{i}", user_id=U1) for i in range(2)] == [True, False]   # signed-in reports have a ceiling too
 
 
 def test_a_report_nobody_signed_keeps_only_the_start_of_its_stack():
@@ -240,14 +262,15 @@ def test_no_mail_without_both_settings_and_never_an_error(monkeypatch):
 
 
 # ── the step ─────────────────────────────────────────────────────────────────
-def test_without_the_table_the_step_does_nothing_and_never_raises():
+def test_without_the_table_the_step_does_nothing_and_a_failed_pass_raises():
     assert alerts.step(_Db(present=False), now=NOW) == {"skipped": "the health table is not applied"}
     class Broken(_Db):
         def execute(self, stmt, params=None):
             if "to_regclass" in str(stmt):
                 return super().execute(stmt, params)
             raise RuntimeError("away")
-    assert alerts.step(Broken(), now=NOW) == {"failed": "RuntimeError"}
+    with pytest.raises(RuntimeError):                                                             # a pass that failed is never recorded as one that worked
+        alerts.step(Broken(), now=NOW)
 
 
 def test_the_token_check_for_a_public_route_reads_no_database_and_asks_for_no_keys(monkeypatch):

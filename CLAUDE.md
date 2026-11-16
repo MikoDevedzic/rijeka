@@ -214,3 +214,11 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - A figure that will be shown as evidence has each of its words defined beside the code that computes it ("active",
   "came back", "ever"), with the case that would flatter it tested: a visit that crosses midnight, a window of days
   cutting what says "ever", a read that fails and shows none.
+- An alarm is judged by how it fails. The first health alerts marked a fault as told whether or not the message
+  reached anyone, recorded a failed pass as a good one, could be silenced by anyone able to post a report, and rang
+  for what is no fault. Before an alarm ships, walk: who can make it ring, who can make it stay quiet, what it does
+  when it reaches nobody, and what it says of itself when it cannot do its work. Each has a test.
+- Text a stranger can post is never a label the system acts on. A report's own "source" decided whether its fault
+  rang, and the first report of a fault lent its label to all the others: what decides is what a verified account
+  said, or what the API saw for itself.
+

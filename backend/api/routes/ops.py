@@ -240,7 +240,8 @@ def _problems_count(db: Session) -> dict:
         body = {"last_24h": H.count_since(db), "recording": H.enabled() and H.table_present(db)}
     except Exception:                     # noqa: BLE001
         body = {"last_24h": None, "recording": False}
-    _problems_cache.update(at=now, body=body)          # as the rest of the public body: asked of the database once a minute
+    if body["recording"]:                               # a no is asked again: the table may be applied the next minute
+        _problems_cache.update(at=now, body=body)       # as the rest of the public body: asked of the database once a minute
     return body
 
 
@@ -304,7 +305,7 @@ def record_client_error(body: dict, ip: str, now: Optional[float] = None) -> boo
     if not _allow(ip, now):
         return False
     _errors.append({"at": now, "message": scrub(body.get("message")), "stack": scrub(body.get("stack"), ERR_FIELD * 4),
-                    "url": scrub(body.get("url"), 300), "route": scrub(body.get("route"), 200) or "/",
+                    "route": scrub(body.get("route"), 200) or "/",
                     "user_agent": scrub(body.get("user_agent"), 200), "release": scrub(body.get("release"), 60),
                     "source": scrub(body.get("source"), 20) or "window", "client_at": scrub(body.get("at"), 40)})
     return True

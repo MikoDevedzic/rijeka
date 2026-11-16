@@ -16,18 +16,21 @@ the host's log; a chat message that never left was nowhere.
   the route as declared is kept, never the address, so no identifier is.
 - **Who is told.** A new fault is told once: a message from "Rijeka health" in the support room of every admin
   account, where the messenger's badge and chime announce it, and a mail when the two mail settings are set
-  (`docs/ops/environment.md`). What rings: a request the API fails with 500, 502 or 504, a slow answer, and what a
-  signed-in account's browser reports. What is kept and shown but does not ring: a 501 or a 503 (an answer, not a
-  fault), a browser that could not reach the API (one person's connection), and any report from a browser that
-  is not signed in, which anyone can send and which therefore can neither ring nor silence a real fault. A fault
-  the operator was told of is not told again for six hours; at most six messages an hour, and what is over waits
-  and rings when the hour has room. Once a day there is a summary of the last 24 hours, also when nothing went
-  wrong, so that silence means nothing went wrong. No message names an account; a browser's own words are
-  reduced to plain text, with no address and nothing a mail reader would turn into a link.
-- **An alarm that reaches nobody says so.** A fault is marked told only when the message reached a support room
-  or a mailbox. When it reached nobody (no admin has opened the messenger and no mail is set) the fault stays
-  untold, the scheduler's step is reported as failed on `GET /api/ops/health`, the watch fails on it, and the
-  SYSTEM page says NOBODY IS TOLD.
+  (`docs/ops/environment.md`). What rings: a request the API fails with a 5xx other than 501, a slow answer, and
+  what a signed-in account's browser reports. What is kept and shown but does not ring: a 501 ("not supported" is
+  an answer, not a fault); a browser that could not reach the API, which is one person's connection until three
+  accounts say it at once, which is the API being away; and any report from a browser that is not signed in,
+  which anyone can send under any label, and which therefore can neither ring, nor silence a real fault, nor
+  change how one is judged. A fault the operator was told of is not told again for six hours. The API's own
+  faults and browsers' reports each have an hourly budget of messages (six and two), so that no account, by
+  reporting, can use up the room a fault of the API's needs; what is over a budget waits and rings when its hour
+  has room. Once a day there is a summary of the last 24 hours, also when nothing went wrong, so that silence
+  means nothing went wrong. No message names an account; a browser's own words are reduced to plain text, with
+  no address and nothing a mail reader would turn into a link.
+- **An alarm that cannot do its work says so.** A fault is marked told only when the message reached a support
+  room or a mailbox, in the transaction that posts it. When it reached nobody (no admin has opened the messenger
+  and no mail is set), or when the pass failed for any other reason, the fault stays untold, the scheduler's step
+  is a failed step on `GET /api/ops/health`, the watch fails on it, and the SYSTEM page says NOBODY IS TOLD.
 - **Who it hit.** Configurations → SYSTEM has a panel for the admin role: each problem as one line, how often, how
   many accounts, and who they are.
 - **Nothing is kept or told until its table is applied** (`docs/migrations/2026-11-16_health.sql`). Until then the
