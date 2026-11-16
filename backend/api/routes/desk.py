@@ -206,10 +206,11 @@ def lifecycle(db: Session, user: dict) -> dict:
         except Exception as e:
             log.debug("desk: countersign inbox failed: %s", e)
             db.rollback()
-    # 2. My bookings that still wait for the other side.
+    # 2. My bookings that are not confirmed yet. The next step is the booker's own (the CONFIRM tab: it signs, and
+    # sends to the other side or, on the demo, is countersigned at once), so the words say what to do, not "wait".
     for t in sorted((t for t in trades if t.status == "PENDING"), key=lambda t: t.created_at or datetime.min.replace(tzinfo=timezone.utc), reverse=True)[:10]:
-        actions.append({"kind": "AWAITING", "title": f"{t.trade_ref} awaits confirmation",
-                        "detail": f"with {cp_name(t) or 'counterparty'} · {_product(t.instrument_type, t.asset_class)}",
+        actions.append({"kind": "AWAITING", "title": f"{t.trade_ref} is not confirmed yet",
+                        "detail": f"confirm it from its CONFIRM tab · {cp_name(t) or 'counterparty'} · {_product(t.instrument_type, t.asset_class)}",
                         "trade_ref": t.trade_ref, "trade_id": str(t.id), "since": _iso(t.created_at), "href": f"/blotter?trade={t.id}"})
     # 3. Maturities and settlements inside the window.
     for t in sorted((t for t in trades if t.status in ("CONFIRMED", "LIVE") and t.maturity_date), key=lambda t: t.maturity_date):

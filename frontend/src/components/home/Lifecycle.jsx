@@ -14,7 +14,7 @@ import DeskGlobe from './DeskGlobe'
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 const REFRESH_MS = 60_000
 const KIND = {
-  COUNTERSIGN: ['SIGN', 'amber'], AWAITING: ['WAIT', ''], MATURITY: ['DUE', 'blue'],
+  COUNTERSIGN: ['SIGN', 'amber'], AWAITING: ['CONFIRM', ''], MATURITY: ['DUE', 'blue'],
   OFF_CHAIN: ['OFF-CHAIN', 'red'], WALLET: ['WALLET', 'amber'], NODE: ['NODE', 'red'], LIMIT: ['LIMIT', 'red'], LIMIT_WARN: ['LIMIT', 'amber'],
   BATCH: ['BATCH', 'amber'],
 }

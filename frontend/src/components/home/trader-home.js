@@ -421,7 +421,7 @@ export function standing(marks, pending = 0) {
   else words.push(['ok', 'Inside every limit'])
   if (near) words.push(['near', `${near} close`])
   if (marks.length && clear) words.push(['dim', `${clear} clear`])
-  if (pending) words.push(['hollow', `${pending} pending`])        // trades awaiting a signature, the blotter's word; whose turn it is, NEEDS YOU says
+  if (pending) words.push(['hollow', `${pending} trade${pending > 1 ? 's' : ''} pending`])        // trades awaiting a signature, the blotter's word; whose turn it is, NEEDS YOU says
   const t = marks[0]                                               // the marks come most used first: past its limit it is not "closest" to it
   const lead = t && t.status === 'BREACH' ? 'Furthest past' : 'Closest'
   return { words, standardOnly: marks.length > 0 && marks.every(m => m.standard), tight: t ? `${lead}: ${t.name}${t.side ? (t.side > 0 ? ', long' : ', short') : ''}, at ${t.pct}% of its limit.` : '' }

@@ -290,8 +290,8 @@ export default function BlotterShell() {
               </thead>
               <tbody>
                 {rows.length === 0 ? (
-                  <tr><td colSpan={stores ? 13 : 12} className="bl-empty">
-                    {trades.length === 0 ? 'NO TRADES — CLICK + NEW TRADE TO BEGIN' : 'NO TRADES MATCH FILTERS'}
+                  <tr><td colSpan={stores ? 13 : 12} className={`bl-empty${trades.length ? ' none-match' : ''}`} data-testid="bl-empty">
+                    {trades.length === 0 ? 'NO TRADES — CLICK + NEW TRADE TO BEGIN' : `NONE OF YOUR ${trades.length} TRADES MATCH THE SEARCH OR THE FILTERS`}
                   </td></tr>
                 ) : rows.map(t => {
                   const ac = AC[t.asset_class] || { a: t.asset_class }

@@ -31,7 +31,7 @@ const fmtM = (n) => n == null ? '—' : Math.abs(n) >= 1e9 ? `${(n / 1e9).toFixe
 const ago = (iso) => { if (!iso) return ''; const h = (Date.now() - new Date(iso)) / 36e5; return h < 1 ? `${Math.max(1, Math.round(h * 60))}m` : h < 24 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d` }
 const eth = (v) => v == null ? '—' : `${Number(v).toFixed(v < 0.1 ? 4 : 3)} ETH`
 const short = (h) => h ? `${h.slice(0, 8)}…${h.slice(-4)}` : '—'
-const KIND = { COUNTERSIGN: ['SIGN', 'amber'], AWAITING: ['WAIT', ''], MATURITY: ['DUE', 'blue'], OFF_CHAIN: ['OFF-CHAIN', 'red'], WALLET: ['WALLET', 'amber'], NODE: ['NODE', 'red'], LIMIT: ['LIMIT', 'red'], LIMIT_WARN: ['LIMIT', 'amber'], BATCH: ['BATCH', 'amber'], CHAT: ['CHAT', ''] }
+const KIND = { COUNTERSIGN: ['SIGN', 'amber'], AWAITING: ['CONFIRM', ''], MATURITY: ['DUE', 'blue'], OFF_CHAIN: ['OFF-CHAIN', 'red'], WALLET: ['WALLET', 'amber'], NODE: ['NODE', 'red'], LIMIT: ['LIMIT', 'red'], LIMIT_WARN: ['LIMIT', 'amber'], BATCH: ['BATCH', 'amber'], CHAT: ['CHAT', ''] }
 // a refusal for running too often is said in words (the risk report is four runs a minute an account)
 const why429 = (e) => String(e) === '429' ? 'it has been run too often this minute' : e
 const PNL_STATUS = { OPEN: ['OPEN', ''], TRADER_SIGNED: ['TRADER SIGNED', 'amber'], CONTROLLER_SIGNED: ['CONTROLLER SIGNED', 'amber'], FINAL: ['FINAL', 'ok'] }
@@ -110,7 +110,7 @@ export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], 
                     {...(a.href || a.chat ? { tabIndex: 0, role: 'button', onKeyDown: pressKey(() => go(a)) } : {})}>
                   <span className={`lf-chip ${tn}`}>{chip}</span>
                   <span className="lf-t"><b>{a.title}</b><small>{a.detail}</small></span>
-                  <span className="lf-when">{a.since ? ago(a.since) : ''}</span>
+                  <span className="lf-when" title={a.since ? `since ${new Date(a.since).toLocaleString()}` : undefined}>{a.since ? `${ago(a.since)} ago` : ''}</span>
                 </li>
               )
             })}

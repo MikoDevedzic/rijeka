@@ -70,7 +70,8 @@ function OISInstruments({ curve }) {
 
   useEffect(() => { loadLatestSnapshot(curve.id).finally(() => setSnapshotReady(true)); }, [curve.id]);
 
-  // Derived zeros/DFs/fwds from quotes (simplified flat-forward approximation for display)
+  // An indication of zero, DF and forward from each quote alone, as if the quote were a continuously compounded zero
+  // rate. NOT the engine's bootstrap: the table's note and its column heads say so.
   const computeBootstrap = (instruments) => {
     const result = {};
     const active = instruments.filter(i => i.en && i.quote > 0);
@@ -233,17 +234,23 @@ function OISInstruments({ curve }) {
 
       {/* ── Unified table ─────────────────────────────────────────────────── */}
       <div style={{overflowX:'auto'}}>
+        {/* The last three columns are an indication read off each quote alone, not the engine's curve: the page
+            printed them under plain ZERO % and DF, and a reader comparing them with a ticket's CASHFLOWS found the
+            5Y zero a basis point off (a first-time visitor, 16 November 2026). */}
+        <div data-testid="curve-indicative-note" style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5, padding: '0 0 8px', maxWidth: 760 }}>
+          MID is the quote as stored. The three columns after it are an indication from that quote alone, as if it were a continuously compounded zero rate: they are not the curve the engine prices on. The engine bootstraps discount factors from all the quotes together; a trade's CASHFLOWS tab shows its zero rate and discount factor at each date.
+        </div>
         <div style={{display:'grid',gridTemplateColumns:gridTemplate,minWidth:'560px'}}>
 
           {/* Header */}
           <div style={thStyle}></div>
           <div style={thStyle}>TENOR</div>
-          <div style={thStyle}>TICKER / SOURCE</div>
+          <div style={thStyle} title="The identifier a market-data terminal would quote this instrument under. The demo's quotes come from public sources, named in SRC.">IDENTIFIER</div>
           <div style={thStyle}>SRC</div>
           <div style={thR}>MID %</div>
-          <div style={thR}>ZERO %</div>
-          <div style={thR}>DF</div>
-          <div style={thR}>FWD %</div>
+          <div style={thR} title="An indication from this quote alone, not the engine's bootstrapped zero">ZERO % ≈</div>
+          <div style={thR} title="An indication from this quote alone, not the engine's bootstrapped discount factor">DF ≈</div>
+          <div style={thR} title="An indication between this quote and the one before it">FWD % ≈</div>
 
           {/* Rows */}
           {curve.instruments.map((inst, i) => {

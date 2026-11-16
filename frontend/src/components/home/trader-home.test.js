@@ -339,7 +339,7 @@ describe("the trader's home: limits", () => {
   })
   it('says where you stand from the statuses the API gave', () => {
     const s = standing(limitMarks(LIMS), 2)
-    expect(s.words).toEqual([['over', '1 limit breached'], ['near', '1 close'], ['dim', '2 clear'], ['hollow', '2 pending']])
+    expect(s.words).toEqual([['over', '1 limit breached'], ['near', '1 close'], ['dim', '2 clear'], ['hollow', '2 trades pending']])
     expect(s.tight).toBe('Furthest past: USD SOFR 1-5Y · SWAPS, at 133% of its limit.')
     expect(standing(limitMarks(LIMS.slice(0, 1)), 0).words).toEqual([['ok', 'Inside every limit'], ['dim', '1 clear']])
     expect(standing([], 0)).toEqual({ words: [['mute', 'No limits set']], standardOnly: false, tight: '' })
