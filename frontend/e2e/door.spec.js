@@ -28,9 +28,14 @@ test('a visitor with no session lands on the door: sign in or create a desk, the
   expect(at.across, 'nothing wider than the window').toBeLessThanOrEqual(0)
   expect(at.down, `on a laptop the door is one screen too (it is ${at.down}px taller)`).toBeLessThanOrEqual(0)
   // the door says what is live and what is next, and claims no asset class that is not live; "open source" is the engine's licence, not the product's name
-  const lede = page.locator('.au-headline p')
-  await expect(lede).toContainText('Rates, FX and digital assets are live; credit, equities and commodities are next.')
+  // (the pill over the headline is where that is said, once; the sentence under it lists no asset class)
+  await expect(page.locator('.au-phase')).toContainText(/RATES, FX & CRYPTO .* LIVE · CREDIT, EQUITY, COMMODITY NEXT/)
+  await expect(page.locator('.au-headline p')).not.toContainText(/credit|equit|commodit/i)
   await expect(page.locator('.au-shell')).not.toContainText(/open-source|free for everyone/i)
+  const meta = await page.locator('meta[name="description"]').getAttribute('content')
+  expect(meta, 'the description a search or a link preview shows').toContain('Rates, FX and digital assets are live; credit, equities and commodities are next.')
+  const ld = await page.locator('script[type="application/ld+json"]').first().textContent()
+  expect(ld, 'no licensed methodology is named in what a search engine reads').not.toMatch(/SIMM/i)
   await page.screenshot({ path: 'e2e/.out/shots/door-desktop.png' })
 
   await seg.getByRole('link', { name: 'CREATE A DESK' }).click()

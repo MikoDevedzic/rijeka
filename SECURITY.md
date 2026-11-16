@@ -1,6 +1,7 @@
 # Security
 
-Rijeka is an open-source OTC derivatives desk. The hosted demo at app.rijeka.app runs
+Rijeka is an open OTC derivatives desk (the engine and the standard are open source under Apache-2.0; the
+platform's source is open under the Business Source License 1.1). The hosted demo at app.rijeka.app runs
 on the Sepolia testnet with public market data; it holds no customer money and no
 production trades. Self-hosted installs hold whatever their operators put in them, so
 the code is treated as production code.

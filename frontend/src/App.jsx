@@ -66,7 +66,7 @@ function BlotterLayout() {
   return (
     <div className="app-frame" style={{display:'flex',height:'100vh',flexDirection:'column'}}>
       <AppBar />
-      <div style={{flex:1,overflow:'hidden'}}><Suspense fallback={<Loading />}><AuthGuard /></Suspense></div>
+      <div style={{flex:1,overflow:'hidden'}}><InLayout><Suspense fallback={<Loading />}><AuthGuard /></Suspense></InLayout></div>
     </div>
   )
 }
@@ -75,7 +75,7 @@ function DocLayout() {
   return (
     <div className="app-frame" style={{display:'flex',height:'100vh',flexDirection:'column'}}>
       <AppBar />
-      <main style={{flex:1,overflow:'auto',background:'var(--bg)'}}><Suspense fallback={<Loading />}><AuthGuard /></Suspense></main>
+      <main style={{flex:1,overflow:'auto',background:'var(--bg)'}}><InLayout><Suspense fallback={<Loading />}><AuthGuard /></Suspense></InLayout></main>
     </div>
   )
 }
@@ -86,7 +86,7 @@ function ConfigLayout() {
       <AppBar />
       <div style={{display:'flex',flex:1,overflow:'hidden'}}>
         <CfgNav />
-        <main style={{flex:1,overflow:'auto',background:'var(--bg)'}}><Suspense fallback={<Loading />}><AuthGuard /></Suspense></main>
+        <main style={{flex:1,overflow:'auto',background:'var(--bg)'}}><InLayout><Suspense fallback={<Loading />}><AuthGuard /></Suspense></InLayout></main>
       </div>
     </div>
   )
@@ -156,6 +156,14 @@ function ModuleEditors({ children }) {
 
 // A routed page that throws shows the error card; navigating elsewhere heals it.
 // It also counts the view: one beacon per route change (lib/usage.js).
+// A page that fails is caught inside its layout, under the top bar: the bar stays, and going to another page heals
+// it. (Until 0.44.6 the one boundary stood over the layouts, so a failed page took the top bar with it.) The outer
+// one below still catches a failure of a layout itself, and is the one that counts the view.
+function InLayout({ children }) {
+  const { pathname } = useLocation()
+  return <ErrorBoundary scope="page" resetKey={pathname}>{children}</ErrorBoundary>
+}
+
 function PageBoundary({ children }) {
   const { pathname } = useLocation()
   useEffect(() => { hit('view', pathname) }, [pathname])

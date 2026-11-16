@@ -35,6 +35,10 @@ Learned on 15 November 2026
 - After the push, list whether the commit changes anything under `frontend/`: when it does not, Netlify builds nothing, and the watch is given the app's present commit, not the new one.
 - Before blaming a release for load, measure it: count the statements and the CPU seconds of the action on the local stack. The suspicion that 0.40.0 overloaded the database did not survive the count.
 
+Learned on 16 November 2026 (a release under an open app)
+- A release replaces the files each page is loaded from. Anyone with the app open, the owner first, meets the new build on the next page they open: since 0.44.6 the app reloads itself there when no trade window is open and asks when one is (`frontend/src/lib/stale-build.js`, journey `stale-build.spec.js`). The read-back loads the app afresh and cannot see this, so say it in the release report: "an app that was open reloads on its next page, or asks if a ticket is open". If the journey for it is red, the release waits.
+- Several releases in one day are several such moments for everyone signed in. Changes that are ready together go out as one release, read back once.
+
 Rules
 - A change to confirmation, the chain code, the CONFIRM tab or the public register has `npm run e2e:chain` green as well as `npm run e2e` (`docs/ops/release.md`): the plain journeys have no chain and end at a record that is signed, not anchored.
 - A change that touches only tests or stack scripts under `backend/` still restarts the API and the worker (any file under `backend/` that is not Markdown does): wait for health to report the commit.

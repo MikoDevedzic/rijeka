@@ -157,12 +157,10 @@ export default function BlotterShell() {
             <span className="bl-sum-lbl">CONFIRMED</span>
             <span className="bl-sum-val" data-testid="bl-sum-confirmed">{confirmed}</span>
           </div>
-          {live > 0 && (
-            <div className="bl-sum-row">
-              <span className="bl-sum-lbl">LIVE</span>
-              <span className="bl-sum-val" style={{ color: 'var(--up)' }}>{live}</span>
-            </div>
-          )}
+          <div className="bl-sum-row">
+            <span className="bl-sum-lbl">LIVE</span>
+            <span className="bl-sum-val" style={{ color: live ? 'var(--up)' : undefined }}>{live}</span>
+          </div>
         </div>
 
         <button className="bl-new-trade-btn" aria-keyshortcuts={ariaKey('new-trade')} onClick={() => useBookingStore.getState().open()}>

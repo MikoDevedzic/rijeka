@@ -117,7 +117,7 @@ export default function IpvPage() {
             </div>
             {rows.map(r => (
               <div key={r.curve_id} className={`pnl-tr d1 trade${input && input.curve_id === r.curve_id ? ' on' : ''}`} style={{ gridTemplateColumns: '14rem 5rem 12rem 11rem 13rem minmax(8rem, 1fr) 8rem' }} onClick={() => setSel(r.curve_id)}>
-                <span className="pnl-tn" style={{ paddingLeft: 8 }}>{r.curve_id}<small>{r.kindLabel} · {r.pillars} pillar{r.pillars === 1 ? '' : 's'}{r.review ? ` · ${r.review} beyond tolerance` : ''}{r.overridden ? ` · ${r.overridden} overridden` : ''}</small></span>
+                <span className="pnl-tn" style={{ paddingLeft: 8 }} title={`${r.curve_id} · ${r.kindLabel} · ${r.pillars} pillar${r.pillars === 1 ? '' : 's'}`}>{r.curve_id}<small>{r.kindLabel} · {r.pillars} pillar{r.pillars === 1 ? '' : 's'}{r.review ? ` · ${r.review} beyond tolerance` : ''}{r.overridden ? ` · ${r.overridden} overridden` : ''}</small></span>
                 <span className="pnl-tv">{r.trades}</span>
                 <span className="pnl-tv">{r.sens}</span>
                 <span className="pnl-tv dim" style={{ textAlign: 'left' }}>{r.desk}</span>
@@ -217,6 +217,10 @@ function OverrideCell({ p, input, drafts, setDrafts, onOverride, signed, small }
   )
 }
 
+// a quiet cell of the pillar table (the stylesheet's `.pnl-tv.dim` is hidden on a narrow page, which is right for a
+// table that drops columns and wrong for this one, which scrolls)
+const QUIET = { color: 'var(--text-mute)' }
+
 function PillarTable({ input, drafts, setDrafts, onOverride, onWithdraw, signed }) {
   const rows = pillarRows(input)
   // The columns share the panel's width, each no narrower than its longest figure, and the rows keep that least
@@ -227,22 +231,22 @@ function PillarTable({ input, drafts, setDrafts, onOverride, onWithdraw, signed 
   return (
     <div className="pnl-tree">
       <div className="pnl-tr head" style={{ gridTemplateColumns: g, ...least }}>
-        <span className="pnl-tn">PILLAR</span><span className="pnl-tv">DESK</span><span className="pnl-tv">INDEP.</span><span className="pnl-tv">OVERRIDE</span><span className="pnl-tv">SHIFT</span><span className="pnl-tv">{sensLabel(input.kind, input.curve_id)}</span><span className="pnl-tv">IMPACT</span><span className="pnl-tv">TOL</span><span className="pnl-tv" style={{ textAlign: 'left' }}>STATUS</span>
+        <span className="pnl-tn">PILLAR</span><span className="pnl-tv">DESK</span><span className="pnl-tv">INDEP.</span><span className="pnl-tv">OVERRIDE</span><span className="pnl-tv">SHIFT</span><span className="pnl-tv">{sensLabel(input.kind, input.curve_id)}</span><span className="pnl-tv">IMPACT</span><span className="pnl-tv">TOL</span><span className="pnl-tv" style={{ textAlign: 'left', paddingLeft: 8 }}>STATUS</span>
       </div>
       {rows.map(p => (
         <div key={p.key} className="pnl-tr d1" data-testid="ipv-pillar" style={{ gridTemplateColumns: g, alignItems: 'center', ...least }}>
           <span className="pnl-tn" style={{ paddingLeft: 8 }}>{p.key}</span>
           <span className="pnl-tv">{fmtQuote(p.desk, input.kind)}</span>
-          <span className="pnl-tv dim">{p.independent == null ? '—' : fmtQuote(p.independent, input.kind)}{p.gap != null ? <small> {fmtShift(p.gap, input.unit)}</small> : null}</span>
+          <span className="pnl-tv" style={QUIET}>{p.independent == null ? '—' : fmtQuote(p.independent, input.kind)}{p.gap != null ? <small> {fmtShift(p.gap, input.unit)}</small> : null}</span>
           <span className="pnl-tv" style={{ display: 'flex', justifyContent: 'flex-end', gap: 4, alignItems: 'center' }}>
             <OverrideCell p={p} input={input} drafts={drafts} setDrafts={setDrafts} onOverride={onOverride} signed={signed} />
             {p.overrideId && !signed && <button className="pnl-btn ghost" style={{ padding: '1px 5px', fontSize: 10 }} title="withdraw the override" onClick={() => onWithdraw(p.overrideId)}>✕</button>}
           </span>
           <span className="pnl-tv" style={{ color: p.shift == null ? 'var(--text-mute)' : 'var(--amber)' }}>{p.shift == null ? '—' : fmtShift(p.shift, input.unit)}</span>
-          <span className="pnl-tv dim">{fmtSigned(p.sensitivity)}</span>
+          <span className="pnl-tv" style={QUIET}>{fmtSigned(p.sensitivity)}</span>
           <span className="pnl-tv" style={{ color: p.impact < -0.5 ? 'var(--red)' : p.impact > 0.5 ? 'var(--up)' : 'var(--text-mute)' }}>{p.impact ? fmtSigned(p.impact) : '—'}</span>
-          <span className="pnl-tv dim" title={p.tolSource}>{p.tol}{p.material ? '' : ' ·'}</span>
-          <span className="pnl-tv" style={{ textAlign: 'left', color: PILLAR_COLOR[p.status], fontSize: 10 }}>{p.status}{p.material ? '' : <small className="pnl-note"> immaterial</small>}</span>
+          <span className="pnl-tv" style={QUIET} title={p.tolSource}>{p.tol}{p.material ? '' : ' ·'}</span>
+          <span className="pnl-tv" style={{ textAlign: 'left', paddingLeft: 8, color: PILLAR_COLOR[p.status], fontSize: 10 }}>{p.status}{p.material ? '' : <small className="pnl-note"> immaterial</small>}</span>
         </div>
       ))}
     </div>

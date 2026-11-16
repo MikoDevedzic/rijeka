@@ -124,7 +124,20 @@ test('the cards of the XVA reserves and IPV pages are set as cards, hold a far l
     // (a cell whose words are longer than its column cuts them, with the whole text in its title: it never lets them run on)
     const over = await app.locator('[data-testid="ipv-state"]').evaluateAll(els => els.filter(el => el.scrollWidth > el.clientWidth + 1 && (getComputedStyle(el).overflowX !== 'hidden' || !el.title)).length)
     expect(over, 'a state printed over the impact column').toBe(0)
-  }
+    expect(await app.locator('[data-testid="ipv-state"]').count(), 'the inputs table has rows to measure').toBeGreaterThan(0)
+    // on a narrow page the pillar table scrolls inside its panel with every column still under its own head: the
+    // stylesheet hides quiet cells at 1100px and below, which once left a row three cells short of its head
+    await app.setViewportSize({ width: 1000, height: 900 })
+    const narrow = await panel.locator('[data-testid="ipv-pillar"]').first().evaluate(row => {
+      const seen = (el) => [...el.children].filter(c => getComputedStyle(c).display !== 'none').length
+      const head = row.parentElement.querySelector('.pnl-tr.head'), tree = row.parentElement, box = tree.getBoundingClientRect()
+      return { head: seen(head), row: seen(row), past: Math.max(0, tree.scrollWidth - tree.clientWidth), wider: box.right - document.documentElement.clientWidth }
+    })
+    expect(narrow.row, `a pillar row shows ${narrow.row} cells under a head of ${narrow.head}`).toBe(narrow.head)
+    expect(narrow.wider, 'the pillar table runs past the page instead of scrolling inside its panel').toBeLessThanOrEqual(1)
+    await panel.screenshot({ path: 'e2e/.out/shots/ipv-pillars-narrow.png' })
+    await app.setViewportSize({ width: 1440, height: 900 })
+  } else test.info().annotations.push({ type: 'not shown', description: 'the stack\'s IPV run has no spot input: the IPV tables were not measured' })
   // a digital asset's funding level is the forward basis's risk, named and signed as on the ticket and the Risk page
   const funding = app.locator('.pnl-tr', { hasText: /(BTC|ETH|SOL)_FUNDING/ })
   if (await shown(funding.first())) {

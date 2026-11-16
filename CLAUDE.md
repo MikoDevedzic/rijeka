@@ -1,6 +1,6 @@
 # Working on Rijeka
 
-Rijeka is an open-source OTC derivatives desk: a FastAPI backend (`backend/`, Render), a React/Vite frontend
+Rijeka is an open OTC derivatives desk (its engine is open source): a FastAPI backend (`backend/`, Render), a React/Vite frontend
 (`frontend/`, Netlify from the `release` branch), one hosted Supabase database (the owner's
 own environment points at it; contributors, tests and journeys use the local stack), and an on-chain
 confirmation registry. `docs/architecture.md` is the map.
@@ -192,3 +192,11 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - A figure shown on two screens is read from one place by both, and a new reader is listed beside the others on
   the map: the brief summed the pricers' own figures for weeks after the home had been moved to the risk report,
   because the home's fix had not asked who else showed the book's value.
+- A word that must go from public copy is searched for over the whole repository, the page's head and what a
+  search engine reads included, not over the screens alone: "ISDA SIMM" stood in the app page's structured data
+  for a week after it had been taken off every screen, and "open-source" in the assistant's own description.
+- A class that hides a cell on a narrow page is not used for a cell's colour in a table that keeps all its
+  columns: the head stayed, three cells went, and every figure after them stood under the wrong heading.
+- A release is read from the seat of someone with the app already open, not only from a fresh load: each deploy of
+  a day replaced the pages' files under the owner's open window, and the first page pressed after one showed the
+  browser's raw error. The release checklist's read-back loads the app afresh and could not see it.

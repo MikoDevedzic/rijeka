@@ -21,7 +21,7 @@ export function fmtSigned(v) {
 export function fmtQuote(v, kind) {
   if (v == null || isNaN(v)) return '—'
   const d = kind === 'SPOT' ? 4 : kind === 'SWAPTION_VOL' ? 2 : 3
-  return Number(v).toFixed(d)
+  return Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d })      // thousands separated: a spot is 108,250.0000
 }
 export function fmtShift(v, unit) {
   if (v == null || isNaN(v)) return '—'

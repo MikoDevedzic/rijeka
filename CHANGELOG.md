@@ -5,27 +5,48 @@ methodology document carries its own version (v1.27). Commits on `main` are the 
 
 ## 0.44.6 · 16 November 2026
 
-**What a first-time visitor reads: the door, the blotter's filter, the IPV tables.** More of the first-time
-visitor's list. Words and layout; no figure changes.
+**What a first-time visitor reads: the door, the blotter's filter, the IPV tables; and a release under an open
+app.** More of the first-time visitor's list, and a fault every release caused. Words and layout; no figure
+changes.
 
-- **The door says what is live and what is next.** Its sentence listed six asset classes as though all were
-  there, and called the product "open-source". It now reads: rates, FX and digital assets are live; credit,
-  equities and commodities are next; and "an open derivatives desk". The same sentence is the page's description
-  for search and link previews. The installed app's description and the footers of two Excel exports said
-  "open-source" of the product too, and say "open" now: open source is the engine's licence, not the product's
-  name.
+- **A release no longer breaks the next page of an app that was open.** Each page is a file named by its build,
+  fetched when the page is first opened; a release replaces them. A tab opened before a release then failed on
+  the first page it had not yet opened, with the browser's raw words ("Failed to fetch dynamically imported
+  module") in place of the whole screen, top bar included, until it was reloaded by hand. The app now knows the
+  case. With no trade window open it reloads by itself, once, and the page opens on the new build. With a trade
+  window open it does not reload, because that would close the window: it says the desk was updated while the
+  window was open and offers the reload. A page that fails for any reason is now caught under the top bar, which
+  stays, so another page is one press away.
+
+- **The door says what is live and what is next, once.** Its sentence listed six asset classes as though all
+  were there, and called the product "open-source". The sentence now ends before the list ("an open derivatives
+  desk for both worlds ..."), and the line over the headline is where the door says which classes are live and
+  which are next. The page's description for search and link previews says it in a sentence: rates, FX and
+  digital assets are live; credit, equities and commodities are next.
+- **What a search engine reads about the app.** The structured data in the page's head described the product
+  with a licensed margin methodology it does not compute (ISDA SIMM), with caps and floors and nothing of FX,
+  digital assets or confirmation, and under an older company name. It now describes the product as the README
+  does and names no licensed methodology; a journey reads it.
+- **"Open", not "open-source", of the product.** The installed app's description, the footers of two Excel
+  exports, the assistant's own description of the product and the security policy said "open-source" of the
+  whole product. Open source is the licence of the engine and the standard; the platform's source is open under
+  the Business Source License. The assistant's description also no longer says who uses the product.
 - **The blotter's filter offers the words its rows show.** Rows said CONFIRMED, and the filter offered PENDING,
   LIVE, MATURED and CANCELLED: there was no way to filter for most of the blotter. The filter now lists every
   status a trade's record can carry, in the order of a trade's life (PENDING, CONFIRMED, LIVE, MATURED,
   TERMINATED, CANCELLED), and a status none of those names gets a button while a trade carries it. The counts
-  under it are TOTAL, PENDING and CONFIRMED; LIVE is counted when a trade is.
+  under it are TOTAL, PENDING, CONFIRMED and LIVE.
 - **The IPV page's tables keep inside their panels.** The pillar table's nine columns were fixed at a width wider
   than the panel it stands in on a 1440px page, so the tolerance and the status were cut off; the columns now
-  share the panel's width and the table scrolls inside it when the panel is narrower still. In the inputs table
-  the name of who approved an input was printed over the impact beside it; it is cut with an ellipsis and kept
-  whole in the cell's title.
-- Journeys hold each: the door's sentence and its one screen on a laptop, a filter button for every status on a
-  row, the pillar table's last column inside its panel, and no cell printing over its neighbour.
+  share the panel's width and the table scrolls inside it when the panel is narrower still. On a page of 1100px
+  or less three of its cells were hidden while their headings stayed, so each figure after them stood under the
+  wrong heading; every cell now stays in its column. In the inputs table the name of who approved an input was
+  printed over the impact beside it; it is cut with an ellipsis and kept whole in the cell's title, as an
+  input's own name now is. A quote is printed with its thousands separated (a spot of 108,250.0000).
+- Journeys hold each: a release under an open app with and without a trade window, the door's line and its one
+  screen on a laptop, the description and the structured data, a
+  filter button for every status on a row, the pillar table's last column inside its panel at 1440px and every
+  cell under its own heading at 1000px, and no cell printing over its neighbour.
 
 ---
 

@@ -48,6 +48,17 @@ describe('the name of an input\'s sensitivity', () => {
   })
 })
 
+describe('a quote as the page prints it', () => {
+  it('thousands separated, at the kind\'s own decimals', async () => {
+    const { fmtQuote } = await import('./ipv-page')
+    expect(fmtQuote(108250, 'SPOT')).toBe('108,250.0000')
+    expect(fmtQuote(1.0825, 'SPOT')).toBe('1.0825')
+    expect(fmtQuote(86.5, 'SWAPTION_VOL')).toBe('86.50')
+    expect(fmtQuote(3.94, 'RATES')).toBe('3.940')
+    expect(fmtQuote(null, 'SPOT')).toBe('—')
+  })
+})
+
 describe('a digital asset\'s funding level: one name and one sign with the rest of the app', () => {
   it('is CRYBASIS01, never IR01; a currency\'s flat rate and a rate curve stay IR01', () => {
     expect(sensLabel('FUNDING', 'BTC_FUNDING')).toBe('CRYBASIS01')

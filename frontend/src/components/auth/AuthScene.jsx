@@ -51,7 +51,7 @@ export default function AuthScene({ children, eyebrow, mode }) {
 
         <div className="au-headline">
           <h1>Price it.{' '}<br />See what it costs.{' '}<br /><span>Confirm it on chain.</span></h1>
-          <p>An open derivatives desk for both worlds: the models and bilateral confirmations trading desks run on, the open code and on-chain record crypto expects. Rates, FX and digital assets are live; credit, equities and commodities are next.</p>
+          <p>An open derivatives desk for both worlds: the models and bilateral confirmations trading desks run on, the open code and on-chain record crypto expects.</p>
         </div>
 
         <div className="au-explore">
