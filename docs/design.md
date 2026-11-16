@@ -189,7 +189,7 @@ pressed, typed into or pointed at"; tokens `--btn-*`, `--fld-*`, `--row-*`).
 - **Focus is always shown.** A row that is pressed takes the band the pointer gives it and the app's ring inside
   the row's own edge (a ring outside it would be cut by the table): the blotter's rows, the home's trade rows, a
   NEEDS YOU item. A field takes the two-pixel ring of its well. Everything else takes the app's ring
-  (`:focus-visible` in `index.css`, one pixel in the accent).
+  (`:focus-visible` in `index.css`, two pixels in the accent; it was one, which was easy to lose on a dark panel).
 - **A button is raised.** A lighter face than the panel it stands on, a bright edge, bright text, a darker foot
   under it; it lifts under the pointer and goes down onto the foot when pressed. Brass is still the one action of
   a view and stands on the same foot. A button whose colour says something (BUY or SELL, a selected mode, a

@@ -20,14 +20,13 @@ and a dozen of its fields had no name, and that no page said in a heading which 
 - **A page says which page it is, once, and marks its main content, once**: a first heading, read and not drawn
   where the top bar already shows the page. Held on each of the thirty-odd pages the suite opens. The messenger's
   pane and the methodology's column were second main regions inside a page that had one.
-- **Focus is shown one way on a row**: the band the pointer gives it and the app's ring inside the row's edge, on
-  the blotter and on the home.
+- **Focus is shown one way on a row**: the band the pointer gives it and a ring inside the row's edge, on the
+  blotter and on the home. Everywhere else the app's ring is two pixels; it was one, easy to lose on a dark panel.
 
 Not changed: Escape does not close a ticket (an unbooked ticket lost to a stray key is the worse fault; CANCEL
 and CLOSE are reached by Tab). A blotter of many trades is as many stops; moving between rows by the arrow keys is
 not built, and closing a ticket does not put the focus back on its row. Two new tickets open at once have the same
-name. Contrast was measured roughly and nothing fell below 4.5 to 1; that wants a second measure. The app's ring
-is one pixel.
+name. Contrast was measured roughly and nothing fell below 4.5 to 1; that wants a second measure.
 
 Tests: a keyboard journey (`keyboard.spec.js`): the blotter, ten products' tickets and their tabs with no unnamed
 field, the home's items; the pages journey holds each page it opens to one first heading and one main; unit tests

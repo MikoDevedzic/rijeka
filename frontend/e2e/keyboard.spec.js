@@ -24,6 +24,12 @@ test('the blotter by keyboard: a row opens its trade, a column sorts, every box 
   await expect(app.getByRole('checkbox', { name: `Select ${ref}` })).toHaveCount(1)
   expect(await unnamed(app.locator('.bl-root')), 'fields with no name on the blotter').toEqual([])
 
+  // the app's ring on a button is two pixels
+  const nav = app.locator('.ab-link', { hasText: /^P&L/ }).first()
+  await nav.focus(); await app.keyboard.press('Shift+Tab'); await app.keyboard.press('Tab')          // by the keyboard, so the ring shows
+  expect(await nav.evaluate(el => getComputedStyle(el).outlineWidth), 'the ring on a focused button').toBe('2px')
+  await app.screenshot({ path: 'e2e/.out/shots/keyboard-button-ring.png', clip: { x: 0, y: 0, width: 760, height: 60 } })
+
   // a column sorts by Enter and says which way
   const date = app.locator('.bl-root thead th', { hasText: /^DATE/ })
   await expect(date).toHaveAttribute('aria-sort', 'descending')
