@@ -166,6 +166,18 @@ def test_a_collar_is_its_cap_less_its_floor_at_the_tickets_own_frequency(client,
     assert _post(client, auth_a, "/api/price/collar", {k: v for k, v in COLLAR.items() if k != "freq_per_year"})["net_npv"] == quarterly["net_npv"]   # none sent: quarterly, as before
 
 
+@pytest.mark.parametrize("url,body", [("/api/price/cap", CAP), ("/api/price/floor", FLOOR), ("/api/price/collar", COLLAR)])
+def test_a_frequency_that_is_not_a_schedule_is_refused(client, auth_a, url, body):
+    """The periods step a whole number of months. Nought was a 500, five priced fifty months as five years, and
+    thirteen or a negative number priced the trade at nothing with a 200; the collar ignored the field until it
+    read it. Each is now refused as terms, on all three routes."""
+    for bad in (0, -1, 5, 7, 13, 365, 1000):
+        r = client.post(url, json={**body, "freq_per_year": bad}, headers=auth_a)
+        assert r.status_code == 422 and "freq_per_year" in r.text, (url, bad, r.status_code, r.text[:160])
+    for good in (1, 2, 3, 4, 6, 12):
+        assert client.post(url, json={**body, "freq_per_year": good}, headers=auth_a).status_code == 200, (url, good)
+
+
 @pytest.mark.parametrize("url,body", [("/api/price/swaption", SWAPTION), ("/api/price/floor", FLOOR), ("/api/price/collar", COLLAR)])
 @pytest.mark.parametrize("extra", [{"curve_flat_bp": 1001}, {"curve_shift_bp": {"5Y": -2000}}, {"vol_shift_bp": 5000}])
 def test_every_route_refuses_a_shift_out_of_bounds(client, auth_a, url, body, extra):

@@ -1488,7 +1488,7 @@ class CapFloorRequest(BaseModel):
     fallback_vol_bp: float          = 85.0
     valuation_date: Optional[date]  = None
     curve_id:       str             = "USD_SOFR"
-    freq_per_year:  int             = 4
+    freq_per_year:  int             = 4          # the legs' periods a year: a whole number of months each (PERIODS_A_YEAR)
     vol_override_bp: Optional[float] = None
     # A scenario: the curve as it is saved with every quote moved by `curve_flat_bp` and a tenor's by its own on
     # top, and the vol each leg is priced at moved by `vol_shift_bp`. The vol is read from the surface where the
@@ -1497,6 +1497,19 @@ class CapFloorRequest(BaseModel):
     curve_flat_bp:  Optional[float] = None
     curve_shift_bp: Optional[Dict[str, float]] = None
     vol_shift_bp:   Optional[float] = Field(default=None, ge=-1000.0, le=1000.0)
+
+
+PERIODS_A_YEAR = (1, 2, 3, 4, 6, 12)      # the schedule steps a whole number of months: any other count is not a schedule
+
+
+def _periods_a_year(req) -> int:
+    """The request's payment frequency, or 422. The schedule is built in steps of 12 // n months, so nought divided
+    by nothing, five made periods of two months over fifty, and thirteen or more put every period on one day and
+    priced the trade at nothing: each answered 200 or 500 where the terms were simply not a schedule."""
+    n = req.freq_per_year
+    if n not in PERIODS_A_YEAR:
+        raise HTTPException(status_code=422, detail=f"freq_per_year must be one of {', '.join(str(x) for x in PERIODS_A_YEAR)} (periods a year)")
+    return n
 
 
 def _held_atm_forward(req, val_date, db: Session, user_id: str, freq_per_year: int) -> Optional[float]:
@@ -1563,6 +1576,7 @@ def price_cap_route(
 
     if req.cap_rate is None:
         raise HTTPException(status_code=422, detail="cap_rate required")
+    _periods_a_year(req)
 
     val_date = req.valuation_date or date.today()
     ci       = CurveInput(curve_id=req.curve_id, quotes=[], shift_flat_bp=req.curve_flat_bp, shift_bp=req.curve_shift_bp)
@@ -1624,6 +1638,7 @@ def price_floor_route(
 
     if req.floor_rate is None:
         raise HTTPException(status_code=422, detail="floor_rate required")
+    _periods_a_year(req)
 
     val_date = req.valuation_date or date.today()
     ci       = CurveInput(curve_id=req.curve_id, quotes=[], shift_flat_bp=req.curve_flat_bp, shift_bp=req.curve_shift_bp)
@@ -1691,6 +1706,7 @@ def price_collar_route(
         raise HTTPException(status_code=422, detail="Both cap_rate and floor_rate required for collar")
     if req.cap_rate <= req.floor_rate:
         raise HTTPException(status_code=422, detail="cap_rate must be above floor_rate")
+    _periods_a_year(req)
 
     val_date = req.valuation_date or date.today()
     ci       = CurveInput(curve_id=req.curve_id, quotes=[], shift_flat_bp=req.curve_flat_bp, shift_bp=req.curve_shift_bp)

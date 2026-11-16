@@ -10,12 +10,24 @@ route did not read it, and priced both legs quarterly whatever the ticket said. 
 priced at the ticket's frequency, so a semi-annual, annual or monthly collar was not the cap less the floor that
 those two tickets price. It now is, with a scenario's shifts as without.
 
-- **What moves.** A quarterly collar is unchanged, to the cent. A collar at another frequency changes: on a flat
-  3.5 % curve at 85 bp, a five-year 4.5 % / 2.5 % collar on ten million was shown as -5,943 at every frequency and
-  is now -3,161 semi-annual, +2,365 annual and -7,799 monthly. A booked collar's valuation, P&L and risk already
-  ran on the trade's own periods and do not move; the pinned sample book is unchanged.
+- **What moves.** A quarterly collar is unchanged, to the cent. A collar at another frequency changes: valued 2
+  November 2026 on a flat curve (a continuously compounded zero rate of 3.5 %) at a normal vol of 85 bp, a
+  five-year 4.5 % / 2.5 % collar on ten million was shown as -5,943 at every frequency and is now -3,161
+  semi-annual, +2,365 annual and -7,799 monthly. The figure on a ticket moves, a new one and a booked collar's
+  when it is opened again from the blotter.
+- **What does not.** A booked collar's valuation, P&L and risk are priced by another function, on the booked leg's
+  own schedule at its own frequency; this change does not touch it, and the pinned sample book is unchanged. (That
+  schedule is the leg's, the ticket's is spot plus whole months: the two are not held equal to the cent by any
+  test.) A booked term is not rewritten: a collar booked at another frequency with no premium typed took the
+  ticket's figure of the day as its premium, the quarterly one, and keeps it.
+- **A frequency that is not a schedule is refused.** The cap, floor and collar routes took any whole number of
+  periods a year. Nought was a server error, five priced fifty months as five years, and thirteen or more priced
+  the trade at nothing. They now take 1, 2, 3, 4, 6 or 12 and answer anything else as terms that cannot be
+  priced. The tickets send 1, 2, 4 or 12.
 - A test on the stack holds a collar to its cap less its floor, leg by leg, at annual, semi-annual, quarterly and
-  monthly periods, with and without a shifted curve and vol. Methodology v1.27.
+  monthly periods, with and without a shifted curve and vol; the model validator's own caplet sum gives the four
+  figures above to the cent. It is a test of consistency with the cap and the floor, whose prices are the ones
+  compared outside; a collar has no comparison or workbook of its own. Methodology v1.27.
 
 ---
 
