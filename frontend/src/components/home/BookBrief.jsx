@@ -54,7 +54,7 @@ export default function BookBrief({ onSheet }) {
         <div className="bb-foot">
           AI narration over computed facts · every number checked against the sheet
           {b.dropped?.length ? ` · ${b.dropped.length} sentence${b.dropped.length > 1 ? 's' : ''} removed by the audit` : ''}
-          {b.source === 'risk_report' ? <span data-testid="bb-source" data-source="risk_report"> · valuation from the risk report of {b.report_date}</span>
+          {b.source === 'risk_report' ? <span data-testid="bb-source" data-source="risk_report" data-differs={Object.keys(b.report_differs || {}).length ? 'yes' : 'no'}> · valuation from the risk report of {b.report_date}{Object.keys(b.report_differs || {}).length ? ', and the book has changed since (see the facts)' : ''}</span>
             : b.source === 'none' ? <span data-testid="bb-source" data-source="none"> · no risk report is stored yet, so no valuation is shown: the Risk page makes one</span> : null}
           {b.source === 'none' ? '' : b.priced < b.trades ? ` · ${b.trades - b.priced} trade${b.trades - b.priced > 1 ? 's' : ''} ${b.source === 'risk_report' ? 'not in that report' : 'not priced'}` : ''}
           {' · '}changes nothing

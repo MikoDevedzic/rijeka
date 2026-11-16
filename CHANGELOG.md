@@ -18,9 +18,16 @@ the prose.
   figure and says why.
 - **Market risk switched off.** A firm without the market-risk module has no report to disagree with: its brief
   prices the trades with the pricers the blotter uses, as before.
-- **A newer report is a newer brief.** A brief is kept for an hour; one kept from before a newer risk report is
-  not served after it.
-- The audit is unchanged: every number in the prose is still checked against the facts it cites.
+- **The book since the report.** The report is of the book as it stood when it was made. Where the book has
+  changed since (a trade booked, a trade amended, a trade the report valued that is no longer live), the facts
+  say so once, with the references, and that the totals are of the book as it stood then; a trade amended since
+  keeps the report's figure and says it is as it stood. The foot of the brief says the book has changed.
+- **A newer report, or a changed book, is a newer brief.** A brief is kept for an hour; one kept from before a
+  newer risk report, or from before a trade was booked, cancelled or amended, is not served after it.
+- **The audit and dates.** Every number in the prose is still checked against the facts it cites. A date in a
+  fact is no longer read as figures: its year let a number near it pass, and a date said in words was dropped for
+  its day. The day and the year of a cited date are now accepted exactly, and nothing is rounded to them. A
+  stored report from before reports carried their by-trade rows is not read.
 - The journeys' stand-in for the database's REST address no longer fails the next journey when a request was still
   in flight as a page closed (about one run in thirty of the ticket's journeys had failed that way).
 

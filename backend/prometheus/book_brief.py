@@ -30,7 +30,7 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 from sqlalchemy import text
@@ -49,6 +49,9 @@ FORBIDDEN = re.compile(
     r"likely|unlikely|going to|outlook|bullish|bearish|buy|sell|hedge now|opportunit(?:y|ies))\b", re.I)
 # A figure in prose. Not the digits of an identifier such as TRD-93205226 or a date's month and day.
 NUMBER = re.compile(r"(?<![\w.-])-?\d+(?:,\d{3})*(?:\.\d+)?(?!\d)")
+# A date or a time as a fact writes it (2026-11-02, 2026-11-16 08:30). It is not a figure: read as numbers its year
+# would let "2,030" pass beside 2026, and a date said in words ("2 November") would be dropped for its day.
+ISO_DATE = re.compile(r"(?<!\d)(\d{4})-(\d{2})-(\d{2})(?:[ T]\d{2}:\d{2}(?::\d{2})?)?(?!\d)")
 
 SYSTEM = (
     "You are Prometheus, the read-only analyst on an OTC derivatives desk. You are given a fact sheet: "
@@ -171,19 +174,44 @@ def _risk_report(db: Session, uid: str) -> tuple[Optional[dict], str]:
     except Exception as e:           # noqa: BLE001 — no report is an answer the sheet can state
         db.rollback(); log.info("brief: the risk report could not be read: %s", str(e)[:120])
         return None, NONE
-    if not rep or not rep.get("date") or not isinstance(rep.get("ladder"), dict):
+    # a report stored before it carried its by-trade rows cannot say which trade a figure is of: not read
+    if not rep or not rep.get("date") or not isinstance(rep.get("ladder"), dict) or not isinstance(rep.get("ladder_rows"), list):
         return None, NONE
     return rep, REPORT
 
 
 def _report_stamp(db: Session, uid: str) -> Optional[str]:
-    """Which stored report the account's latest is (its date and when it was made), without reading it: a brief
-    kept from before a newer report is not served after it."""
+    """Which stored report the account's latest is (its date and when it was made) and how the book stands (how many
+    trades, and when one was last booked or changed), without reading either: a brief kept from before a newer
+    report, or from before a trade was booked, cancelled or amended, is not served after it."""
+    out = []
+    for sql in ("SELECT risk_date AS a, created_at AS b FROM risk_daily WHERE user_id = :u ORDER BY risk_date DESC LIMIT 1",
+                "SELECT count(*) AS a, max(coalesce(last_modified_at, created_at)) AS b FROM trades WHERE user_id = :u"):
+        try:
+            r = db.execute(text(sql), {"u": uid}).first()
+            out.append(f"{r.a}|{r.b}" if r else "")
+        except Exception:            # noqa: BLE001 — no table, nothing to stamp
+            db.rollback(); out.append("")
+    return "#".join(out) if any(out) else None
+
+
+def _when(v) -> Optional[datetime]:
+    """A timestamp as the report or a trade carries it, or None."""
+    if isinstance(v, datetime):
+        return v
     try:
-        r = db.execute(text("SELECT risk_date, created_at FROM risk_daily WHERE user_id = :u ORDER BY risk_date DESC LIMIT 1"), {"u": uid}).first()
-    except Exception:                # noqa: BLE001 — no table, no report
-        db.rollback(); return None
-    return f"{r.risk_date}|{r.created_at}" if r else None
+        return datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _after(a, b) -> bool:
+    """Whether a is later than b; False where either is missing or the two cannot be compared (one with a zone, one without)."""
+    a, b = _when(a), _when(b)
+    try:
+        return a is not None and b is not None and a > b
+    except TypeError:
+        return False
 
 
 def _num(v) -> Optional[float]:
@@ -204,6 +232,8 @@ def fact_sheet(db: Session, user: dict, today: Optional[date] = None) -> dict:
     rdate = str(report["date"])[:10] if report else None
     rows = {str(r.get("trade_id")): r for r in (report or {}).get("ladder_rows") or [] if isinstance(r, dict)}
     unvalued = {str(x.get("trade_ref")): str(x.get("reason") or "")[:120] for x in ((report or {}).get("ladder") or {}).get("problems") or [] if isinstance(x, dict)}
+    made_at = (report or {}).get("generated_at") or (report or {}).get("stored_at")
+    since = {"booked": [], "changed": [], "gone": []}          # how the book as it stands differs from the report's
     trades = db.query(Trade).filter(Trade.user_id == uid, Trade.status.in_(("LIVE", "PENDING", "CONFIRMED"))) \
         .order_by(Trade.trade_date.desc().nullslast()).all()
     facts: list[Fact] = []
@@ -236,13 +266,20 @@ def fact_sheet(db: Session, user: dict, today: Optional[date] = None) -> dict:
                 npv, npv_ccy = round(_num(row["npv"]), 0), str(row.get("ccy") or ccy).upper()
                 if _num(row.get("ir01")):
                     extra["ir01"] = round(_num(row["ir01"]), 0)
-                s01 = sum(v for v in (_num(x) for x in (row.get("spot01") or {}).values()) if v is not None)
-                if s01:
-                    extra["spot01"] = round(s01, 0)
+                s01 = [v for v in (_num(x) for x in (row.get("spot01") or {}).values()) if v is not None and abs(v) >= 0.5]
+                if len(s01) == 1:                                   # one asset: one figure (two unlike assets are not added up)
+                    extra["spot01"] = round(s01[0], 0)
                 priced += 1
+                if _after(getattr(t, "last_modified_at", None), made_at):
+                    why = f"changed since the risk report of {rdate}: the figure is as it stood then"
+                    extra["pricing"] = why
+                    since["changed"].append(t.trade_ref)
             else:
-                why = (f"not valued in the risk report of {rdate}: {unvalued[t.trade_ref]}" if unvalued.get(t.trade_ref)
-                       else f"not in the risk report of {rdate}: booked or changed since")
+                if unvalued.get(t.trade_ref):
+                    why = f"not valued in the risk report of {rdate}: {unvalued[t.trade_ref]}"
+                else:
+                    why = f"not in the risk report of {rdate}: booked since"
+                    since["booked"].append(t.trade_ref)
                 extra["pricing"] = why
         elif source == PRICERS and priced < MAX_PRICED:
             try:
@@ -270,7 +307,7 @@ def fact_sheet(db: Session, user: dict, today: Optional[date] = None) -> dict:
         txt = (f"{t.trade_ref}: {t.instrument_type} {ccy} {float(t.notional or 0):,.0f} vs {extra['counterparty'] or 'n/a'}, "
                f"{(t.status or '').lower()}, matures {extra['maturity'] or 'n/a'}"
                + (f", NPV {npv:,.0f} {npv_ccy}" if npv is not None else "")
-               + (f", IR01 {extra['ir01']:,.0f}" if "ir01" in extra else "")
+               + (f", IR01 {extra['ir01']:,.0f}" + (f" {npv_ccy}" if source == REPORT else "") if "ir01" in extra else "")
                + (f" ({why})" if why else ""))
         extra["npv_ccy"] = npv_ccy if npv is not None else None
         facts.append(Fact(f"T{i}", "trade", label, npv, npv_ccy if npv is not None else "", txt, extra))
@@ -281,9 +318,17 @@ def fact_sheet(db: Session, user: dict, today: Optional[date] = None) -> dict:
         rccy = str(report.get("reporting_ccy") or "USD").upper()
         made = str(report.get("stored_at") or report.get("generated_at") or "")[:16].replace("T", " ")
         facts[0].text += f"; {priced} of {len(trades)} valued in the risk report of {rdate}" if trades else ""
+        # a trade the report valued that is not in the book as it stands (cancelled, terminated or matured since):
+        # the report's totals still carry it
+        mine = {str(t.id) for t in trades}
+        since["gone"] = sorted(str(r.get("trade_ref") or i) for i, r in rows.items() if i not in mine)
+        differs = [f"{len(v)} {words} ({', '.join(v[:6])}{', …' if len(v) > 6 else ''})" for v, words in
+                   ((since["booked"], "booked since"), (since["changed"], "changed since"), (since["gone"], "valued in it and no longer live")) if v]
         facts.append(Fact("R1", "book", "Where the valuation figures come from", None, "",
                           f"Valuation figures are the stored risk report of {rdate}" + (f" (made {made} UTC)" if made else "")
-                          + ": the figures the Risk page and the home show, not a pricing of today", {"report_date": rdate}))
+                          + ": the figures the Risk page and the home show, not a pricing of today"
+                          + (". The book has changed since that report: " + "; ".join(differs) + ". The totals are of the book as it stood then" if differs else ""),
+                          {"report_date": rdate}))
         npv_r, ir01_r = _num(lad.get("npv_usd")), _num(lad.get("ir01_usd"))
         if npv_r is not None and rows:
             totals[rccy] = npv_r
@@ -359,6 +404,7 @@ def fact_sheet(db: Session, user: dict, today: Optional[date] = None) -> dict:
             "priced": priced, "facts": [f.as_dict() for f in facts],
             # where the valuation figures came from, and which report: the page says it under the prose
             "source": source, "report_date": rdate, "report_stored_at": (report or {}).get("stored_at"),
+            "report_differs": {k: len(v) for k, v in since.items() if v} if source == REPORT else {},
             # the desk's numbers as the sheet has them: what the home shows above the trade list where market risk is off
             "totals": {"npv": {k: _r0(v) for k, v in sorted(totals.items())}, "ir01": _r0(ir01_total) if ir01_total else None,
                        "spot01": {k: _r0(v) for k, v in sorted(spot01.items())}, "theta": {k: _r0(v) for k, v in sorted(theta.items())}}}
@@ -412,15 +458,21 @@ def audit(paragraphs: list[dict], sheet: dict) -> tuple[list[dict], list[dict]]:
         if m:
             dropped.append({"text": txt, "reason": f"forecasting or advisory language: '{m.group(0)}'"}); continue
         pool: list[float] = []
+        dates: set[float] = set()           # the year and the day of each date the cited facts name: exact, never rounded
         for i in ids:
             f = by_id[i]
             if f.get("value") is not None:
                 pool.append(float(f["value"]))
             pool += [float(v) for v in (f.get("extra") or {}).values() if isinstance(v, (int, float)) and not isinstance(v, bool)]
-            pool += [float(x.replace(",", "")) for x in NUMBER.findall(f.get("text") or "")]
+            ftxt = f.get("text") or ""
+            for y, _m, d in ISO_DATE.findall(ftxt):
+                dates.update((float(y), float(d)))
+            pool += [float(x.replace(",", "")) for x in NUMBER.findall(ISO_DATE.sub(" ", ftxt))]
         bad = None
-        for raw in NUMBER.findall(txt):
+        for raw in NUMBER.findall(ISO_DATE.sub(" ", txt)):          # a date in the prose is not a figure either
             n = float(raw.replace(",", ""))
+            if "," not in raw and "." not in raw and n in dates:      # "2 November 2026": the day and the year of a cited date
+                continue
             if not _num_ok(n, pool):
                 bad = raw; break
         if bad is not None:

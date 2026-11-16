@@ -102,6 +102,9 @@ def test_where_the_valuation_comes_from(monkeypatch):
     assert bb._risk_report(db, "u") == (None, bb.NONE)
     monkeypatch.setattr(R, "stored_report", lambda db, uid, d=None: {"date": None, "note": "No market dates"})
     assert bb._risk_report(db, "u") == (None, bb.NONE)
+    # a report stored before it carried its by-trade rows cannot say which trade a figure is of: not read
+    monkeypatch.setattr(R, "stored_report", lambda db, uid, d=None: {"date": "2026-10-01", "ladder": {"npv_usd": 1.0}})
+    assert bb._risk_report(db, "u") == (None, bb.NONE)
     monkeypatch.setattr(R, "stored_report", lambda db, uid, d=None: (_ for _ in ()).throw(RuntimeError("down")))
     assert bb._risk_report(db, "u") == (None, bb.NONE) and db.rollback.called
     monkeypatch.setitem(sys.modules, "modules", _Mods(False))
@@ -118,6 +121,105 @@ def test_a_brief_kept_from_before_a_newer_risk_report_is_not_served_after_it(mon
         b = bb.brief(MagicMock(), {"sub": "u3"})            # the same report: the kept brief
         c = bb.brief(MagicMock(), {"sub": "u3"})            # a newer report: made again
     assert b is a and c is not a and fs.call_count == 2 and c["report_stamp"] == "2026-11-03|08:00"
+
+
+class _Q:
+    def __init__(self, rows): self.rows = rows
+    def filter(self, *a, **k): return self
+    def order_by(self, *a): return self
+    def all(self): return self.rows
+
+
+class _DB:
+    """The book as fact_sheet reads it: the trades, no counterparties, no news."""
+    def __init__(self, trades): self.trades = trades
+    def query(self, model): return _Q(self.trades if model.__name__ == "Trade" else [])
+    def execute(self, *a, **k): return SimpleNamespace(all=lambda: [], first=lambda: None)
+    def rollback(self): pass
+
+
+def _trade(n, **kw):
+    from datetime import date, datetime, timezone
+    base = dict(id=f"id-{n}", trade_ref=f"TRD-{n}", status="CONFIRMED", trade_date=date(2026, 10, 1), notional_ccy="USD", counterparty_id=None,
+                instrument_type="IR_SWAP", notional=10_000_000, maturity_date=date(2031, 11, 2), asset_class="RATES",
+                last_modified_at=datetime(2026, 10, 1, tzinfo=timezone.utc))
+    return SimpleNamespace(**{**base, **kw})
+
+
+REPORT = {"date": "2026-11-02", "reporting_ccy": "USD", "generated_at": "2026-11-02T22:00:00+00:00", "stored_at": "2026-11-02T22:00:05+00:00",
+          "ladder": {"npv_usd": -1_500_000.4, "ir01_usd": 4613.2, "spot01": {"EUR": 1200.0, "JPY": 0.2}, "crybasis01_usd": 38.0,
+                     "problems": [{"trade_ref": "TRD-4", "reason": "no curve"}]},
+          "ladder_rows": [{"trade_id": "id-1", "trade_ref": "TRD-1", "ccy": "USD", "npv": -1_848_668.2, "ir01": 4613.2, "spot01": {}, "theta": 120.0, "usd_rate": 1.0},
+                          {"trade_id": "id-3", "trade_ref": "TRD-3", "ccy": "EUR", "npv": 348_000.0, "ir01": 0.0, "spot01": {"EUR": 1200.0}, "theta": -20.0, "usd_rate": 1.1},
+                          {"trade_id": "id-9", "trade_ref": "TRD-9", "ccy": "USD", "npv": 0.6, "ir01": 0.0, "spot01": {}, "theta": None, "usd_rate": 1.0}]}
+
+
+def _sheet(monkeypatch, source, trades, report=None, price=None):
+    monkeypatch.setattr(bb, "_risk_report", lambda db, uid: (report, source))
+    monkeypatch.setattr(bb, "_curve_moves", lambda db, ccys: [])
+    monkeypatch.setattr(bb, "_price_one", price or (lambda *a, **k: (_ for _ in ()).throw(AssertionError("this brief must not price a trade"))))
+    return bb.fact_sheet(_DB(trades), {"sub": "u"})
+
+
+def test_the_sheet_is_the_stored_report_and_says_how_the_book_has_changed_since(monkeypatch):
+    from datetime import datetime, timezone
+    trades = [_trade(1), _trade(2),                                                        # in the report; booked since it was made
+              _trade(3, notional_ccy="EUR", last_modified_at=datetime(2026, 11, 3, tzinfo=timezone.utc)),      # amended after it was made
+              _trade(4)]                                                                    # in it, and not valued by it
+    s = _sheet(monkeypatch, bb.REPORT, trades, REPORT)                                      # (TRD-9 is in the report and no longer in the book)
+    f = {x["id"]: x for x in s["facts"]}
+    assert s["source"] == "risk_report" and s["report_date"] == "2026-11-02" and s["valuation_date"] == "2026-11-02" and s["priced"] == 2
+    # the book's figures are the report's own totals, rounded to the unit
+    assert f["N_USD"]["value"] == -1_500_000 and f["IR01"]["value"] == 4613 and f["S_EUR"]["value"] == 1200 and "S_JPY" not in f
+    assert f["CRYBASIS01"]["value"] == 38 and f["THETA"]["value"] == 98            # 120 x 1.0 - 20 x 1.1
+    assert s["totals"] == {"npv": {"USD": -1_500_000}, "ir01": 4613, "spot01": {"EUR": 1200}, "theta": {"USD": 98}}
+    # each trade is its row; one the report does not carry has no figure and says which case it is
+    assert f["T1"]["value"] == -1_848_668 and "IR01 4,613 USD" in f["T1"]["text"] and "(" not in f["T1"]["text"].split("IR01")[1]
+    assert f["T2"]["value"] is None and "not in the risk report of 2026-11-02: booked since" in f["T2"]["text"]
+    assert f["T3"]["value"] == 348_000 and f["T3"]["unit"] == "EUR" and "changed since the risk report of 2026-11-02: the figure is as it stood then" in f["T3"]["text"]
+    assert f["T4"]["value"] is None and "not valued in the risk report of 2026-11-02: no curve" in f["T4"]["text"]
+    # and the sheet says, once, that the totals are of the book as it stood: a trade booked, one changed, one gone
+    assert s["report_differs"] == {"booked": 1, "changed": 1, "gone": 1}
+    r1 = f["R1"]["text"]
+    assert "stored risk report of 2026-11-02 (made 2026-11-02 22:00 UTC)" in r1 and "not a pricing of today" in r1
+    assert "1 booked since (TRD-2)" in r1 and "1 changed since (TRD-3)" in r1 and "1 valued in it and no longer live (TRD-9)" in r1
+    assert "The totals are of the book as it stood then" in r1
+    # a book that has not changed says nothing of the kind
+    same = _sheet(monkeypatch, bb.REPORT, [_trade(1), _trade(3, notional_ccy="EUR"), _trade(9)], REPORT)
+    assert same["report_differs"] == {} and "changed since" not in next(x for x in same["facts"] if x["id"] == "R1")["text"]
+
+
+def test_with_no_report_stored_the_sheet_carries_no_valuation_and_prices_nothing(monkeypatch):
+    s = _sheet(monkeypatch, bb.NONE, [_trade(1), _trade(2)])
+    f = {x["id"]: x for x in s["facts"]}
+    assert s["source"] == "none" and s["priced"] == 0 and s["report_date"] is None and s["report_differs"] == {}
+    assert all(x["value"] is None for x in s["facts"] if x["kind"] == "trade") and not [x for x in s["facts"] if x["kind"] == "total"]
+    assert "No risk report is stored for this book yet" in f["R1"]["text"] and "none valued: no risk report is stored yet" in f["B1"]["text"]
+    assert s["totals"] == {"npv": {}, "ir01": None, "spot01": {}, "theta": {}}
+
+
+def test_with_market_risk_off_the_trades_are_priced_as_before(monkeypatch):
+    s = _sheet(monkeypatch, bb.PRICERS, [_trade(1)], price=lambda db, user, t, today: {"npv": -100.4, "npv_ccy": "USD", "ir01": 5.2, "theta": 1.0})
+    f = {x["id"]: x for x in s["facts"]}
+    assert s["source"] == "pricers" and s["priced"] == 1 and "R1" not in f
+    assert f["T1"]["value"] == -100 and f["N_USD"]["value"] == -100 and f["IR01"]["value"] == 5 and "on today's curve" in f["N_USD"]["text"]
+    assert s["totals"]["npv"] == {"USD": -100} and s["totals"]["ir01"] == 5
+
+
+def test_a_date_in_a_fact_is_not_a_figure_the_prose_may_round_to(monkeypatch):
+    sheet = {"facts": [{"id": "R1", "kind": "book", "label": "", "value": None, "unit": "",
+                        "text": "Valuation figures are the stored risk report of 2026-11-02 (made 2026-11-16 08:30 UTC)"},
+                       {"id": "N_USD", "kind": "total", "label": "", "value": -1500000.0, "unit": "USD", "text": "Book NPV -1,500,000 USD in the risk report of 2026-11-02"}]}
+    kept, dropped = bb.audit([
+        {"text": "The figures are those of the risk report of 2026-11-02.", "facts": ["R1"]},                 # a date as the fact writes it
+        {"text": "The figures are those of the risk report of 2 November 2026.", "facts": ["R1"]},             # the same date in words
+        {"text": "Book NPV is -1,500,000 USD in that report.", "facts": ["N_USD"]},
+        {"text": "Book NPV is 2,030 USD.", "facts": ["R1", "N_USD"]},                                          # near a year: not a figure of the sheet
+        {"text": "The book holds 30 trades.", "facts": ["R1"]},                                                # the minutes of a time
+        {"text": "The report of 3 November 2026 says so.", "facts": ["R1"]},                                   # another day
+    ], sheet)
+    assert [k["text"][:28] for k in kept] == ["The figures are those of the", "The figures are those of the", "Book NPV is -1,500,000 USD i"]
+    assert [d["reason"] for d in dropped] == ["number not in the cited facts: 2,030", "number not in the cited facts: 30", "number not in the cited facts: 3"]
 
 
 def test_route_needs_auth():
