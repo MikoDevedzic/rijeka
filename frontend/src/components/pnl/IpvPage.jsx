@@ -112,11 +112,11 @@ export default function IpvPage() {
         <section className="pnl-panel">
           <header><span>MARKET DATA INPUTS THE BOOK DEPENDS ON</span><span className="pnl-sub">one row per curve, surface, spot or funding level the trades in scope read · click a row to verify its pillars</span></header>
           <div className="pnl-tree">
-            <div className="pnl-tr head" style={{ gridTemplateColumns: '14rem 5rem 11rem 11rem 13rem 8rem 8rem' }}>
+            <div className="pnl-tr head" style={{ gridTemplateColumns: '14rem 5rem 12rem 11rem 13rem 8rem 8rem' }}>
               <span className="pnl-tn">INPUT</span><span className="pnl-tv">TRADES</span><span className="pnl-tv">SENSITIVITY</span><span className="pnl-tv dim" style={{ textAlign: 'left' }}>DESK MARK</span><span className="pnl-tv dim" style={{ textAlign: 'left' }}>INDEPENDENT</span><span className="pnl-tv" style={{ textAlign: 'left' }}>STATE</span><span className="pnl-tv">IPV IMPACT</span>
             </div>
             {rows.map(r => (
-              <div key={r.curve_id} className={`pnl-tr d1 trade${input && input.curve_id === r.curve_id ? ' on' : ''}`} style={{ gridTemplateColumns: '14rem 5rem 11rem 11rem 13rem 8rem 8rem' }} onClick={() => setSel(r.curve_id)}>
+              <div key={r.curve_id} className={`pnl-tr d1 trade${input && input.curve_id === r.curve_id ? ' on' : ''}`} style={{ gridTemplateColumns: '14rem 5rem 12rem 11rem 13rem 8rem 8rem' }} onClick={() => setSel(r.curve_id)}>
                 <span className="pnl-tn" style={{ paddingLeft: 8 }}>{r.curve_id}<small>{r.kindLabel} · {r.pillars} pillar{r.pillars === 1 ? '' : 's'}{r.review ? ` · ${r.review} beyond tolerance` : ''}{r.overridden ? ` · ${r.overridden} overridden` : ''}</small></span>
                 <span className="pnl-tv">{r.trades}</span>
                 <span className="pnl-tv">{r.sens}</span>
@@ -135,7 +135,7 @@ export default function IpvPage() {
             <section className="pnl-panel">
               <header><span>{input.curve_id} · VERIFY {input.kind === 'SWAPTION_VOL' || input.kind === 'FX_VOL' ? 'BY SURFACE POINT' : 'BY PILLAR'}</span>
                 <span className="pnl-sub">{KIND_LABEL[input.kind]} · {sensLabel(input.kind, input.curve_id)} per pillar at this scope · type an override and give a reason · tolerance per pillar</span></header>
-              {isBasis(input.kind, input.curve_id) && <div className="pnl-note" data-testid="ipv-basis-note" style={{ padding: '8px 14px' }}>CRYBASIS01 is the value of +1 bp a year on the forward basis, as on the ticket and the Risk page. That is −1 bp on the funding level quoted here, so on these rows IMPACT = −CRYBASIS01 × SHIFT.</div>}
+              {isBasis(input.kind, input.curve_id) && <div className="pnl-note" data-testid="ipv-basis-note" style={{ padding: '8px 14px', lineHeight: 1.6 }}>CRYBASIS01 is the value of +1 bp a year on the forward basis, as on the ticket and the Risk page. That is −1 bp on the funding level quoted here, so on these rows IMPACT = −CRYBASIS01 × SHIFT.</div>}
               {input.unladdered && <div className="pnl-note" style={{ padding: '8px 14px' }}>{input.note || 'nothing to ladder for this input'}</div>}
               {input.kind === 'SWAPTION_VOL' ? <SurfaceGrid input={input} drafts={drafts} setDrafts={setDrafts} onOverride={override} signed={signed} />
                 : input.kind === 'FX_VOL' ? <FxGrid input={input} drafts={drafts} setDrafts={setDrafts} onOverride={override} signed={signed} />
@@ -148,7 +148,7 @@ export default function IpvPage() {
               </div>
               <div className="pnl-note" style={{ padding: '0 14px 10px', lineHeight: 1.6 }}>
                 · the independent column is a controller's upload or a self-host's second feed; without one the input needs APPROVE AS MARKED or a WAIVER<br />
-                · impact is first order (the pillar's sensitivity × the shift); APPLY reprices the book on the overrides and shows the residual as second order<br />
+                · impact is first order (the pillar's sensitivity × the shift{isBasis(input.kind, input.curve_id) ? ', with the sign turned on these rows: see the line over the table' : ''}); APPLY reprices the book on the overrides and shows the residual as second order<br />
                 · an input whose pillars are all immaterial at their tolerance passes as WAIVED on its own
               </div>
             </section>

@@ -123,6 +123,7 @@ test('the cards of the XVA reserves and IPV pages are set as cards, hold a far l
     await expect(pillars).toContainText('CRYBASIS01 per pillar')
     await expect(app.getByTestId('ipv-basis-note')).toContainText('IMPACT = −CRYBASIS01 × SHIFT')
     await expect(pillars.locator('.pnl-tr.head')).toContainText('CRYBASIS01')
+    await expect(pillars, 'no sentence on the panel says the impact is the figure times the shift without the turn').toContainText('with the sign turned on these rows')
     await pillars.screenshot({ path: 'e2e/.out/shots/ipv-basis.png' })
   } else test.info().annotations.push({ type: 'not shown', description: 'the stack\'s IPV run has no digital-asset funding input: the name is held by ipv-page.test.js alone' })
   expectClean(problems)
