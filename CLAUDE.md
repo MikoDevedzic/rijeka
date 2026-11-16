@@ -116,3 +116,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   measure a suspected load before naming it the cause (15 November 2026: neither suspicion survived).
 - What is offered to the owner as next is checked against what he has already decided and when: a piece he
   scheduled for after the launch was offered for the same evening.
+- When a screen is made to read what another screen reads, it reads it the same way: the same hook, with its
+  refresh, not a second fetch of the same address (the phone's strip read the stored report where the trader's
+  home asks for the live one after a booking). And a changelog names the screens a change changes after reading
+  where the component is rendered, not from memory.
