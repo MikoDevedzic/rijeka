@@ -58,6 +58,7 @@ def _stack_env() -> dict:
         "SUPABASE_URL": os.environ.get("SUPABASE_URL") or "http://stack.local",
         "RIJEKA_DEMO_PROVISION": "0",
         "RIJEKA_SCHEDULER": "0",
+        "RIJEKA_RECORD": "1",                 # the activity and health records are written here as on the host
         "RIJEKA_DEMO_MARKET_DATA": "0",
         "RIJEKA_CHAIN_DEV_SEED": os.environ.get("RIJEKA_CHAIN_DEV_SEED") or "stack-local",
         "RIJEKA_DEMO_TEMPLATE_EMAIL": EMAIL_A,

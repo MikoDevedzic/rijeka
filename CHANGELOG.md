@@ -20,6 +20,8 @@ and Configurations → SYSTEM shows it to the admin role.
   (counters in memory, written at most every 30 seconds).
 - **What is kept**: for each account and day (UTC), the kind, one word of detail from a fixed list, how many
   times, and the first and last time. The row belongs to its account and is deleted with it.
+- **Only the hosted API records** (`RIJEKA_RECORD`, on by default on the host and off elsewhere): a developer's
+  own server reads the same database, and its requests are not use of the desk.
 - **Nothing is recorded until its table is applied** (`docs/migrations/2026-11-16_activity.sql`, one new table,
   row-level security on, read and written by the API alone). Until then the view shows what the trading tables
   already hold: bookings and confirmations.

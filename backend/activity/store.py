@@ -8,6 +8,9 @@ Nothing is kept without the table (docs/migrations/2026-11-16_activity.sql): `fl
 table is not there, and the buffer never grows past BUFFER_MAX keys. The presence check remembers a yes for five
 minutes and never a no, so a table applied while the API runs is used at the next flush.
 
+Only the hosted API records (`enabled()`): on Render, or where RIJEKA_RECORD=1 says so (the local stack's tests). A
+developer's own server reads the same database as production, and its requests are nobody's use of the desk.
+
 Two API processes may flush the same keys at once. Rows are written in key order, so both take their locks in the
 same order and neither is chosen as a deadlock's victim. A batch that fails as one statement (an account deleted
 while its token still lived is refused by the table's foreign key) is written again row by row, each on its own,
@@ -17,6 +20,7 @@ counted (`dropped`) and shown to the operator.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from datetime import date, datetime, timezone
@@ -43,9 +47,19 @@ UPSERT = text("""
         last_at = GREATEST(activity_daily.last_at, EXCLUDED.last_at)""")
 
 
+def enabled() -> bool:
+    """Whether this process records at all: RIJEKA_RECORD when it is set, else only on the host (as the scheduler is)."""
+    v = (os.getenv("RIJEKA_RECORD") or "").strip().lower()
+    if v in ("1", "true", "yes", "on"):
+        return True
+    if v in ("0", "false", "no", "off"):
+        return False
+    return bool(os.getenv("RENDER"))
+
+
 def add(user_id: str, event: str, detail: str = "", now: Optional[datetime] = None) -> bool:
     """One more of a kind of activity for an account today. False when it was not counted."""
-    if not user_id or not event:
+    if not user_id or not event or not enabled():
         return False
     now = now or datetime.now(timezone.utc)
     key = (str(user_id), now.date(), event, detail or "")
@@ -150,7 +164,7 @@ def flush(session_factory: Optional[Callable[[], Any]] = None) -> dict:
 
 
 def status(db) -> dict:
-    return {"recording": table_present(db), "buffered": len(_buffer), "dropped": _state["dropped"], "flush_seconds": FLUSH_S}
+    return {"recording": enabled() and table_present(db), "buffered": len(_buffer), "dropped": _state["dropped"], "flush_seconds": FLUSH_S}
 
 
 def rows_since(db, since: date) -> Optional[list[dict]]:

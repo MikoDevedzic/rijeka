@@ -459,7 +459,8 @@ chat's, the home page reading the risk report), and none of that is activity.
   API processes never lock crosswise); a batch refused as one statement is written again row by row, so one row that
   cannot be written costs that row; what is lost is counted and shown. **Without the table nothing is recorded**:
   the flush drops what it holds. The presence check never remembers a no. Row-level security is on with no policy;
-  only the API reads and writes it.
+  only the API reads and writes it. Only the hosted API records (`RIJEKA_RECORD`, on where `RENDER` is set): a
+  developer's own server reads the same database as production, and its requests are nobody's use of the desk.
 - **Who reads it.** `GET /api/ops/adoption`, admin role, shown on Configurations → SYSTEM (`AdoptionPanel.jsx`).
   `activity/adoption.py` is the pure function that makes the figures and says what each word means: an account is
   active on a day it did something deliberate; it came back when it was active 24 hours or more after it was first

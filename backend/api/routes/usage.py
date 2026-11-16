@@ -239,7 +239,7 @@ def adoption(db: Session, today: Optional[date] = None) -> dict[str, Any]:
     per_day = lambda rows: [{"user_id": r[0], "day": r[1], "n": int(r[2]), "first_at": r[3], "last_at": r[4]} for r in rows or [] if r[0] is not None]   # noqa: E731
     body = summarise([{"id": r[0], "email": r[1], "created_at": r[2], "firm": r[3]} for r in read["accounts"] or []],
                      read["activity"] or [], read["the whole record"] or [], per_day(read["trades"]), per_day(read["confirmations"]),
-                     today, tracking_since=store.first_day(db), recording=store.table_present(db))
+                     today, tracking_since=store.first_day(db), recording=store.enabled() and store.table_present(db))
     body["unread"] = unread                # what could not be read just now: the figures are short by it, not zero
     body["dropped"] = store.status(db)["dropped"]
     body["note"] = ("Accounts are sign-ups, without test accounts and the platform's admins. An account is active on a day it did something "

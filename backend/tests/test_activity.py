@@ -18,7 +18,8 @@ ID = "8f0c1d3e-0000-4000-8000-000000000001"
 
 
 @pytest.fixture(autouse=True)
-def _clean():
+def _clean(monkeypatch):
+    monkeypatch.setenv("RIJEKA_RECORD", "1")
     store._reset_for_tests()
     yield
     store._reset_for_tests()
@@ -175,6 +176,19 @@ def test_a_flush_never_raises_whatever_the_database_does():
     store.add(U1, "view", "blotter")
     assert store.flush(lambda: (_ for _ in ()).throw(RuntimeError("no session"))) == {"written": 0, "kept": False}
     assert store.status(_Db())["dropped"] == 2
+
+
+def test_only_the_hosted_api_records_a_developers_own_server_does_not(monkeypatch):
+    """A developer's server reads the same database as production: its requests are nobody's use of the desk."""
+    monkeypatch.delenv("RIJEKA_RECORD", raising=False); monkeypatch.delenv("RENDER", raising=False)
+    assert store.enabled() is False and store.add(U1, "view", "blotter") is False and store.note(U1, "POST", "/api/xva/simulate") is False
+    assert store.status(_Db())["buffered"] == 0 and store.status(_Db())["recording"] is False
+    monkeypatch.setenv("RENDER", "true")
+    assert store.enabled() is True and store.add(U1, "view", "blotter") is True
+    monkeypatch.setenv("RIJEKA_RECORD", "0")
+    assert store.enabled() is False and store.add(U1, "view", "blotter") is False               # switched off on the host too
+    monkeypatch.setenv("RIJEKA_RECORD", "1"); monkeypatch.delenv("RENDER")
+    assert store.enabled() is True                                                              # the local stack's tests
 
 
 def test_the_buffer_has_a_ceiling(monkeypatch):
