@@ -217,7 +217,8 @@ test('crypto forward: the scenario tab has a curve to drag, and a fixing at expi
   await expect(chart).toBeVisible()
   await expect(chart, 'the chart has drawn the fixings and the curve').toHaveAttribute('data-ready', 'true')
   // a single forward is priced by the engine at the scenario's market (0.47.0); it said APPROXIMATION before
-  await expect(win.getByTestId('fx-scn-engine')).toHaveText(/ENGINE PRICED|REPRICING…/)
+  await expect(win.getByTestId('fx-scn-tab')).toHaveAttribute('data-busy', 'false')
+  await expect(win.getByTestId('fx-scn-engine'), 'answered, not only asked').toHaveText('ENGINE PRICED')
   await expect(win.getByTestId('fx-scenario-banner')).toContainText('the engine prices the trade there')
   const value = async (id) => Number(await win.getByTestId(id).getAttribute('data-value'))
   await expect.poll(() => value('fx-scenario-forward')).toBeCloseTo(quote.forward, 0)

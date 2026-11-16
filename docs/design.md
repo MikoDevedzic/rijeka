@@ -358,10 +358,12 @@ shock as "+10 bp · 2 points".
 A rates ticket's figures are the pricing engine's on the moved market, and its chip says FULL REVALUATION; a
 single currency or digital-asset trade (a spot, a forward, an NDF, an option of any style) is priced by the engine
 at the market the tab works out, and the chip says ENGINE PRICED; a package of legs is the tab's own closed form
-over its legs, and the chip says APPROXIMATION, in amber, on that alone. A chip of the engine's says REPRICING…
-while an answer is awaited, and the figures of the last answer stay until it is back. A figure with no answer yet
-is the closed form's own where the trade has one (a forward, a European option: the same formula, so the figure
-follows a drag) and a dash where it has none (every other style), never a figure from somewhere else. A rates ticket whose terms were changed after its price says so in amber and keeps the
+over its legs, and the chip says APPROXIMATION, in amber. A chip of the engine's says REPRICING… while an answer
+is awaited. On a rates ticket the figures of the last answer stay until the next is back. On a currency ticket a
+figure whose market has no answer yet is the closed form's own at that market where the trade has one (a forward,
+a European option: the same formula, so the figure follows a drag) and a dash where it has none (every other
+style); it is never the last answer's figure for another market. When the engine does not answer, or cannot be
+asked, the chip does not say it priced: APPROXIMATION over the closed form's figures, NOT PRICED over dashes. A rates ticket whose terms were changed after its price says so in amber and keeps the
 scenario of the terms as priced.
 
 A style is not a reason for another tab: a barrier or a touch option has the same curves, the same shocks, the

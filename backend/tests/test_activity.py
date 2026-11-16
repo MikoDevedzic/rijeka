@@ -52,7 +52,7 @@ def test_a_deliberate_act_is_plain_from_its_route(method, path, want):
     ("POST", "/price"), ("POST", "/price/preview"), ("POST", "/api/price/fees"), ("POST", "/api/price/par-rate"),
     ("POST", "/api/currency/forward/price"), ("POST", "/api/currency/option/price"),
     # the scenario tab asks the engine by itself when it is opened: opening a tab is not running a scenario
-    ("POST", "/api/currency/option/scenario"), ("POST", "/api/currency/option/ladder"),
+    ("POST", "/api/currency/option/scenario"), ("POST", "/api/currency/option/ladder"), ("POST", "/api/currency/forward/scenario"),
     # a scheduler's own call, the operator's and the public routes
     ("POST", "/api/pnl/eod/tick"), ("POST", "/api/market-data/demo/tick"), ("POST", "/api/news/tick"),
     ("GET", "/api/ops/health"), ("POST", "/api/public/hit"), ("POST", "/api/me/activity"),

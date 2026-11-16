@@ -36,9 +36,12 @@ the new route; the browser's Φ and option formula against the engine's own valu
 markets for a forward; journeys for the chip, the unshocked figure, a figure shown while the answer is awaited,
 and an engine that does not answer.
 
-Known, and said in the model inventory: the market a scenario leaves a trade on is still worked out in the
-browser. For an NDF paid in the base currency after its fixing the tab shocks the whole discount factor by the
-quote curve, where the two days to payment are carried by the base curve (about 30 on 600,000 at 100 bp).
+- **A forward paid in the base currency after its fixing** is discounted under a shock as the pricer discounts
+  it: the quote curve to the fixing date, the base curve over the days from there to the payment. The tab had
+  shocked the whole discount factor by the quote curve (about 30 on 600,000 at 100 bp over two days).
+
+Known, and said in the model inventory and beside the chip: the market a scenario leaves a trade on is still
+worked out in the browser.
 
 ## 0.46.5 · 16 November 2026
 

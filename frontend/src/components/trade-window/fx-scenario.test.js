@@ -3,7 +3,7 @@
 import { describe, it, expect } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { TENOR_DAYS, SPOT_BOUND_PCT, FORWARD_FLOOR, interpPoints, daysBetween, spotLagDays, carryPoints, curveNodes, rippleWeights, tenorBounds, applyTenorDrag, clampSpotPct, spotPctFromDrag, carryFactor, shockedCurve, reprice, gk, settlementAmount, latestFixing, fixingSeries, fixingTime, settledState, settledFacts, styleTerms, provisionalReasons, chartLevels, chartStrike, tenorMap, niceStep, valueRange, horizonDays, chartGeometry, isoDate, addDays, axisDates, roundTo, signedChange, strikeAsBooked, modelWords, Phi } from './fx-scenario'
+import { shockedState, TENOR_DAYS, SPOT_BOUND_PCT, FORWARD_FLOOR, interpPoints, daysBetween, spotLagDays, carryPoints, curveNodes, rippleWeights, tenorBounds, applyTenorDrag, clampSpotPct, spotPctFromDrag, carryFactor, shockedCurve, reprice, gk, settlementAmount, latestFixing, fixingSeries, fixingTime, settledState, settledFacts, styleTerms, provisionalReasons, chartLevels, chartStrike, tenorMap, niceStep, valueRange, horizonDays, chartGeometry, isoDate, addDays, axisDates, roundTo, signedChange, strikeAsBooked, modelWords, Phi } from './fx-scenario'
 
 describe('interpPoints: the backend rule (currencies.py interp_points)', () => {
   it('uses the backend tenor days', () => {
@@ -937,6 +937,29 @@ describe('the closed form is the engine\'s own to the last digits, not to cents'
       expect(Math.abs(got - want) / Math.max(1, Math.abs(want)), `${call ? 'call' : 'put'} ${K}`).toBeLessThan(1e-11)
       if (Math.abs(want) < 1e9) expect(Math.abs(got - want)).toBeLessThan(1e-5)
     }
+  })
+})
+
+describe('a forward paid after its fixing is discounted by the curve of the currency it is paid in', () => {
+  // the pricer on flat curves, 10m USDJPY read on 16 Feb 2027 and paid on the 18th, valued 16 Nov 2026
+  // (pricing/currency_forward.py): df_pay with the quote curve +100 bp and with the base curve +100 bp, over df_pay
+  const T = 0.25205479452054796, tPay = 0.25753424657534246
+  const q = (o) => ({ shape: 'NDF', pair: 'USDJPY', base_currency: 'USD', quote_currency: 'JPY', spot: 152, forward: 150.66496593193872, t: T, t_pay: tPay, t_spot: 0, ...o })
+  it('paid in the quote currency: the quote curve over the whole time to payment, the base curve not at all', () => {
+    const quote = q({ settlement_currency: 'JPY', df_quote: 0.9987131574599925 })
+    expect(shockedState(quote, { quoteBp: 100 }).df_quote / quote.df_quote).toBeCloseTo(0.9974279708837077, 14)
+    expect(shockedState(quote, { baseBp: 100 }).df_quote / quote.df_quote).toBeCloseTo(1, 14)
+  })
+  it('paid in the base currency: the quote curve to the fixing date, the base curve over the days to payment', () => {
+    const quote = q({ settlement_currency: 'USD', df_quote: 0.9985216417948976 })
+    expect(shockedState(quote, { quoteBp: 100 }).df_quote / quote.df_quote).toBeCloseTo(0.9974826259685392, 14)
+    expect(shockedState(quote, { baseBp: 100 }).df_quote / quote.df_quote).toBeCloseTo(0.9999452069806443, 14)
+  })
+  it('a forward paid on the date it is read at, and a quote that does not say what it is paid in, are as before', () => {
+    const same = q({ t_pay: T, settlement_currency: 'USD', df_quote: 0.99 })
+    expect(shockedState(same, { quoteBp: 100, baseBp: 100 }).df_quote).toBeCloseTo(0.99 * Math.exp(-0.01 * T), 15)
+    const silent = q({ df_quote: 0.99 })
+    expect(shockedState(silent, { quoteBp: 100, baseBp: 100 }).df_quote).toBeCloseTo(0.99 * Math.exp(-0.01 * tPay), 15)
   })
 })
 

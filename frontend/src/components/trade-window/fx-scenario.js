@@ -318,7 +318,13 @@ export function shockedState(q, { spotPct = 0, quoteBp = 0, baseBp = 0, volPts =
   const carry = Math.exp((quoteBp - baseBp) / 10000 * Math.max(T - tSpot, 0))
   // a forward that fixes before it is paid carries to its fixing date (T) and is discounted from its payment date (t_pay)
   const tPay = !option && finite(q.t_pay) && q.t_pay > T ? q.t_pay : T
-  const dfq = q.df_quote * Math.exp(-quoteBp / 10000 * tPay)
+  // ... by the curve of the currency it is paid in. Paid in the quote currency, the quote curve discounts it all the
+  // way from the payment date. Paid in the base currency (a currency NDF: `settlement_currency`), the quote curve
+  // discounts to the fixing date and the base curve carries the amount over the days from there to the payment, as
+  // pricing/currency_forward.py does: a quote-curve shock then acts over T and a base-curve shock over the gap.
+  // (Until 0.47.0 the quote curve's shock acted over all of it in both cases: about 30 on 600,000 at 100 bp.)
+  const inBase = tPay > T && typeof q.settlement_currency === 'string' && q.settlement_currency === q.base_currency
+  const dfq = q.df_quote * Math.exp(-(inBase ? quoteBp * T + baseBp * (tPay - T) : quoteBp * tPay) / 10000)
   // The engine's own forward, moved by the shocks, in both forward modes and for an option as for a forward. It is
   // never rebuilt here as S·DF_base/DF_quote: the two discount factors the quote names run from today, so on a
   // pair whose spot settles later that product is off by the carry over the spot lag (1.6 pips of forward on a
