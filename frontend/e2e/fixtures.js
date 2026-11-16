@@ -96,7 +96,13 @@ export const test = base.extend({
       try {
         const resp = await route.fetch({ url })
         await route.fulfill({ response: resp, headers: { ...resp.headers(), 'access-control-allow-origin': '*', 'access-control-expose-headers': '*' } })
-      } catch (e) { await route.abort() ; problems.push(`REST ${req.method()} ${url}: ${e.message}`) }
+      } catch (e) {
+        // A request still in flight when its page closes can be neither answered nor aborted, and is not the app's
+        // fault: until 0.44.5 the abort then threw "Route is already handled!" after the journey had ended, and the
+        // NEXT journey was failed for it (about one run in thirty of the ticket's journeys).
+        try { await route.abort() } catch { return }
+        problems.push(`REST ${req.method()} ${url}: ${e.message}`)
+      }
     })
     // the auth host: the user this session belongs to, and a refresh that returns the same session
     await ctx.route(`${STACK}/auth/v1/**`, async route => {

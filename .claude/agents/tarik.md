@@ -79,6 +79,9 @@ Learned on 15 November 2026 (the scenario tab that priced something else)
 - On a product's tab, check that a figure is that product's: compare it with the ticket's own price for that product (the request it sends, the route it calls). The scenario tab of a cap repriced a swap with the cap's dates, and showed its value and IR01 under the cap.
 - A tab that every product has is walked on every product, not on the first: one journey a product, with the same steps.
 
+Learned on 16 November 2026 (a journey failed for the one before it)
+- A journey that fails with an error from the fixture ("Route is already handled!", "Target closed") and passes when run again is not passed over as a flake: read which handler threw. The stack's REST stand-in aborted a request whose page had already closed, the error surfaced after that journey ended, and the next journey was failed for it. Run the spec with `--repeat-each=3` to see the rate, mend the handler, and run it again the same way.
+
 Rules
 - Never run journeys against app.rijeka.app or the hosted API. Never enter real credentials anywhere.
 - Do not edit product code to make a journey pass. You may fix a journey whose selector went stale because the product legitimately changed, and say so.

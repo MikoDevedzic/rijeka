@@ -21,6 +21,8 @@ the prose.
 - **A newer report is a newer brief.** A brief is kept for an hour; one kept from before a newer risk report is
   not served after it.
 - The audit is unchanged: every number in the prose is still checked against the facts it cites.
+- The journeys' stand-in for the database's REST address no longer fails the next journey when a request was still
+  in flight as a page closed (about one run in thirty of the ticket's journeys had failed that way).
 
 ---
 
