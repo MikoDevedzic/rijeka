@@ -115,6 +115,63 @@ for (const [name, asset, product] of [['a crypto option', 'CRYPTO', /^CRYPTO OPT
   })
 }
 
+// A forward and a European option had the browser's closed form alone and an amber APPROXIMATION; they are asked of
+// the engine like every other style, and the closed form stands in for a figure only while the answer is on its way.
+for (const [name, product, route, priceRoute] of [
+  ['an FX forward', /^FX FORWARD$/i, 'forward/scenario', 'forward/price'],
+  ['a European FX option', /^FX OPTION$/i, 'option/scenario', 'option/price'],
+]) {
+  test(`${name} under a scenario: priced by the engine, the unshocked figure the ticket's own, and a figure there while the answer is awaited`, async ({ app, problems }) => {
+    await app.goto('/blotter')
+    await app.getByText('+ NEW TRADE').first().click()
+    const win = app.locator('.tbw-window')
+    await win.waitFor()
+    await win.getByRole('button', { name: 'FX', exact: true }).click()
+    const priced = app.waitForResponse(r => new RegExp(`/api/currency/${priceRoute}$`).test(r.url()) && r.request().method() === 'POST' && r.ok(), { timeout: 60_000 })
+    await win.getByRole('button', { name: product }).click()
+    const quote = await (await priced).json()
+    const first = app.waitForResponse(r => r.url().endsWith(`/api/currency/${route}`) && r.ok(), { timeout: 60_000 })
+    await win.getByRole('button', { name: 'CURVE SCENARIO', exact: true }).click()
+    const tab = win.getByTestId('fx-scn-tab'), npv = win.getByTestId('fx-scenario-npv'), change = win.getByTestId('fx-scenario-change')
+    const asked = await first
+    await expect(tab).toHaveAttribute('data-busy', 'false')
+    await expect(win.getByTestId('fx-scn-engine')).toHaveText('ENGINE PRICED')
+    await expect(win.getByTestId('fx-scenario-banner')).toContainText(/the engine prices the (trade|option) there/)
+    await expect(win).not.toContainText('APPROXIMATION')
+    // with no shock the engine's figure is the ticket's own: the same number, not one near it
+    const body = asked.request().postDataJSON(), values = (await asked.json()).values
+    expect(body.states.length).toBeGreaterThan(0)
+    expect(values.some(v => v.npv === quote.npv), 'the engine\'s value at the ticket\'s own market is the ticket\'s NPV to the last digit').toBe(true)
+    expect(await num(npv)).toBeCloseTo(quote.npv, 2)
+
+    // a shock while the engine is held back: the figure moves at once (the closed form), the chip says the engine is asked
+    let release
+    const gate = new Promise(r => { release = r })
+    // (choosing the curve asks for its ladder, and the shock then asks again: every answer on the route is kept, the
+    // one a request was dropped for among them)
+    const engine = []
+    const keep = async (r) => { if (r.url().endsWith(`/api/currency/${route}`) && r.ok()) { try { engine.push(...(await r.json()).values.map(v => v.npv)) } catch { /* a request the tab dropped */ } } }
+    app.on('response', keep)
+    await app.route(`**/api/currency/${route}`, async r => { await gate; await r.continue().catch(() => {}) })
+    await win.getByTestId('fx-scn-curve-spot').click()
+    const flat = win.getByTestId('fx-scn-flat-value'); await flat.fill('2'); await flat.blur()
+    await expect(win.getByTestId('fx-scn-engine')).toHaveText('REPRICING…')
+    await expect(npv, 'a figure is on screen before the answer').not.toHaveText('—')
+    const soon = { npv: await num(npv), change: await num(change) }
+    expect(soon.change).not.toBe(0)
+    expect(engine.length, 'nothing has been answered yet').toBe(0)
+    release()
+    await expect(tab).toHaveAttribute('data-busy', 'false')
+    await expect(win.getByTestId('fx-scn-engine')).toHaveText('ENGINE PRICED')
+    const after = await num(npv)
+    await expect.poll(() => engine.some(v => Math.abs(v - after) < 0.005), { message: 'the figure on screen is one the engine answered' }).toBe(true)
+    expect(Math.abs(after - soon.npv), 'and the closed form had it to cents').toBeLessThan(0.05)
+    app.off('response', keep)
+    await app.unroute(`**/api/currency/${route}`)
+    expectClean(problems)
+  })
+}
+
 test('terms changed under a scenario: no figure of the earlier trade stands beside the new one', async ({ app, problems }) => {
   await app.goto('/blotter')
   await app.getByText('+ NEW TRADE').first().click()
