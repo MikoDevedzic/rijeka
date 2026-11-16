@@ -166,3 +166,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - A picture given to the design keeper shows the thing the change adds: the ladder's new row was below the fold in
   every picture sent. And a test that cannot run on a stack is skipped by name, not returned from: it otherwise
   reads as passed.
+- After the methodology or the model inventory is rebuilt, the methodology journey is run again, and the whole
+  set of journeys is run on the tree that is pushed, not on the tree of an hour before: a new inventory row is a
+  new card on a section's page, a journey counts those cards, and the full run that passed had been built before
+  the row was added.
