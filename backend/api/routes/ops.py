@@ -135,7 +135,7 @@ def ops_health(db: Session = Depends(get_db)):
     import scheduler
     from db import migrate
     from version import VERSION
-    return {**health(db), "client_errors": {"last_24h": client_error_summary()["last_24h"]},
+    return {**health(db), "client_errors": {"last_24h": client_error_summary()["last_24h"]}, "problems": _problems_count(db),
             "scheduler": scheduler.status(), "worker": worker_status(db), "schema": schema_status(db),
             "migrations": migrate.public_summary(),  # counts only on this public body; names and reasons are GET /api/ops/migrations (admin)
             "version": VERSION,
@@ -156,6 +156,8 @@ OPTIONAL_MIGRATIONS = (
      "a confirm that hands a slow block to ANCHORING instead of waiting in the request", "chain.pending", "tables_present"),
     ("activity", "2026-11-16_activity.sql", "what each account does, by day, for the operator's Adoption view (nothing is recorded without it)",
      "activity.store", "table_present"),
+    ("health", "2026-11-16_health.sql", "problems people hit (browser errors, 5xx and slow answers) kept with the account, and the operator told (without it: the memory log only, and no alert)",
+     "health.store", "table_present"),
     ("jobs", "2026-11-03_jobs.sql (jobs and worker_heartbeat)",
      "heavy runs on the worker; apply only when the worker is alive, or runs queue for nobody", "jobs.queue", "tables_present"),
     ("fixings", "2026-11-10_fixings.sql", "stored fixings for digital assets; without it an expired trade is valued on the stored spot, flagged provisional",
@@ -222,6 +224,16 @@ def worker_status(db: Optional[Session]) -> dict:
     except Exception as e:                # noqa: BLE001
         log.debug("ops: worker status failed: %s", e)
         return {"present": False, "reason": type(e).__name__}
+
+
+def _problems_count(db: Session) -> dict:
+    """A count only, for the public body: how many problems were kept in the last 24 hours (health/store.py). None
+    when the table is not applied; never raises."""
+    try:
+        from health import store as H
+        return {"last_24h": H.count_since(db), "recording": H.table_present(db)}
+    except Exception:                     # noqa: BLE001
+        return {"last_24h": None, "recording": False}
 
 
 @router.get("/migrations")
@@ -318,4 +330,41 @@ async def ops_client_error(request: Request):
     except Exception:                 # noqa: BLE001 — a malformed report is dropped, never an error back to a failing page
         return {"accepted": False, "reason": "malformed"}
     ok = record_client_error(body, _client_ip(request))
+    if ok:
+        # kept beyond this process, with the account when the report came from a signed-in page (health/store.py)
+        from health import store as H
+        H.add("browser", source=scrub(body.get("source"), 20) or "window", route=scrub(body.get("route"), 200) or "/",
+              message=scrub(body.get("message")), stack=scrub(body.get("stack"), ERR_FIELD * 4), release=scrub(body.get("release"), 60),
+              user_agent=scrub(body.get("user_agent"), 200), user_id=await _account_of(request))
+        if H.due():
+            import asyncio
+            asyncio.get_running_loop().run_in_executor(None, H.flush)
     return {"accepted": ok}
+
+
+async def _account_of(request: Request) -> Optional[str]:
+    """The account a report came from, when it carries a sign-in that verifies. A report is never refused for its
+    token: a page fails most often just as a session ends, and the report matters more than who sent it."""
+    auth = request.headers.get("authorization")
+    if not auth:
+        return None
+    try:
+        from middleware.auth import verify_token
+        return str((await verify_token(auth))["sub"])
+    except Exception:                 # noqa: BLE001 — expired, malformed, or the key set is away: an anonymous report
+        return None
+
+
+@router.get("/problems")
+def ops_problems(hours: int = 24, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """What went wrong for the people using the desk, the same problem as one line, with who was affected. The admin
+    role only: it names accounts. `recording` false means the table is not applied and only the memory log exists."""
+    from api.routes._roles import require_admin
+    from health import store as H
+    require_admin(db, user)
+    hours = max(1, min(int(hours), 24 * H.KEEP_DAYS))
+    rows = H.rows_since(db, datetime.now(timezone.utc) - timedelta(hours=hours))
+    from health import alerts
+    problems = [{**g, "line": alerts.describe(g)} for g in H.group(rows or [])[:100]]
+    return {"hours": hours, **H.status(db), "unread": rows is None, "occurrences": len(rows or []), "problems": problems,
+            "mail": alerts.mail_settings() is not None}

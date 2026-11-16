@@ -82,6 +82,18 @@ the repository.
 | `RIJEKA_NEWS_MODEL` | `news/summarize.py` | `claude-haiku-5-5` | Model for the summaries. |
 | `RIJEKA_SOURCE_URL` | `prometheus/agent.py` | the public repository | Base URL for the source links Prometheus cites. |
 
+### Health alerts by mail (optional)
+
+The operator is always told of a problem in the support room of each admin account (`health/alerts.py`). Mail is a
+second way, off until both of the first two are set. The key is a secret: it is set in the host's dashboard by the
+owner, never in a file.
+
+| Variable | Read in | Default | Purpose |
+|---|---|---|---|
+| `RESEND_API_KEY` | `health/alerts.py` | empty (no mail) | A sending key for Resend's HTTP API. |
+| `RIJEKA_ALERT_EMAIL_TO` | `health/alerts.py` | empty (no mail) | Who is mailed: one address, or several separated by commas. |
+| `RIJEKA_ALERT_EMAIL_FROM` | `health/alerts.py` | `Rijeka health <miko@rijeka.app>` | The sender; its domain must be verified with Resend. |
+
 ### Telegram mirror (optional)
 
 | Variable | Read in | Default | Purpose |

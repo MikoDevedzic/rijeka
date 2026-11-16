@@ -171,6 +171,11 @@ def _flush_activity():
         store.flush()
     except Exception:                # noqa: BLE001
         pass
+    try:
+        from health import store as problems
+        problems.flush()
+    except Exception:                # noqa: BLE001
+        pass
 
 
 @app.on_event("startup")

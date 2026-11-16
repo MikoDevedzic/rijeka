@@ -96,7 +96,7 @@ options on the paths), `pnl/` (marks, attribution, XVA P&L), `collateral/` (the 
 yields derived from them, the ticket's collateral onto a CSA, the book's collateral page; `docs/collateral.md`), `chain/` (canonical record, EIP-712
 signing, attestation, keys, lifecycle guard, Telegram), `settlement/` (the fixings store and the one settlement rule), `market_data/` (public-source demo feed, the venue adapter
 `deribit.py` for digital-asset vols and forwards, policy path, calendar), `news/`, `prometheus/` (read-only assistant and book brief), `methodology/` (Excel
-replications), `activity/` (what each account does, by day; below). `scheduler.py` runs the batches in-process (digital-asset marks every 10 minutes; digital-asset fixings, news,
+replications), `activity/` (what each account does, by day; below), `health/` (the problems people hit, kept and told to the operator; below). `scheduler.py` runs the batches in-process (digital-asset marks every 10 minutes; digital-asset fixings, news,
 summaries and spots every 30 minutes; demo market data, end-of-day P&L, market risk and counterparty
 credit every 2 hours) and moves the `release` branch after a deploy.
 The vol regimes' parameters (six per asset) are dated constants in `pricing/vol_regimes.py`, fitted by
@@ -469,6 +469,39 @@ chat's, the home page reading the risk report), and none of that is activity.
   `trades` and `trade_events` themselves, never from the counters, so they go back to the first trade. Test accounts
   and the platform's admins are not accounts. A read that fails is named in the body (`unread`) and on the panel,
   so a short figure is not taken for none.
+
+## What goes wrong for a user: problems and alerts
+
+Until 0.46.0 an error in someone's browser was a line in the API's memory, with no account, gone at the next deploy,
+on a page the operator had to open; a request the API failed was a line in the host's log. `health/` keeps both and
+tells the operator.
+
+- **Three kinds, each from the one place that sees it.** `browser`: the app's own report (`lib/errors.js` →
+  `POST /api/ops/client-error`: an uncaught error, a page whose file did not arrive, a chat message or a question to
+  the assistant that got no answer); from a signed-in page it is sent with the session, and the API keeps the
+  account's id (a sign-in that does not verify never costs the report: it is kept without an account). `api`: a
+  request answered with a 5xx. `slow`: one answered after `health.SLOW_S` (30) seconds or more. The last two are
+  noted by `activity/recorder.py`, the layer that already wraps every route, with the route as declared
+  (`/api/chain/confirm/{trade_id}`), never the address, so no id is kept.
+- **Where it is kept.** `health_events` (`docs/migrations/2026-11-16_health.sql`), written by `health/store.py` off
+  the request path, 30 days, row-level security on with no policy. The account is a reference that is set to null
+  when the account is deleted. A browser's report is text from outside: cut to a length, scrubbed of anything
+  shaped like a token, and all browsers together are kept to 300 reports in ten minutes. Without the table the
+  older memory log is all there is, and nobody is alerted.
+- **Who is told, and when** (`health/alerts.py`, the scheduler's `health_alerts` step, every pass). A new problem
+  that the API saw for itself, or that a signed-in account's browser reported, is told once: one SYSTEM message
+  from "Rijeka health" in the support room of every admin account (the messenger's badge, chime and desktop
+  notification do the rest), and a mail through Resend when `RESEND_API_KEY` and `RIJEKA_ALERT_EMAIL_TO` are set.
+  The same fault is not told again for six hours; at most six messages an hour; a report from a browser that is
+  not signed in never rings by itself (anyone can post one). Once a day after 13:00 UTC a summary of the last 24
+  hours is sent, also when there was nothing. No message names an account, and a browser's words are reduced to
+  plain text with every address replaced before they are repeated.
+- **Who reads it.** `GET /api/ops/problems` (admin): the same problem as one line, how often, how many accounts and
+  who; shown on Configurations → SYSTEM (`ProblemsPanel.jsx`). `GET /api/ops/health` carries a count
+  (`problems.last_24h`) and nothing else. The older `GET /api/ops/client-errors` (signed-in, the memory log, no
+  account) is unchanged.
+- **What this is not.** It hears of a problem only while the API is up to hear it. An API that is down, or a
+  browser that cannot reach it, is the outside check's to see (`docs/ops/monitoring.md`).
 
 ## Data flow of a trade
 

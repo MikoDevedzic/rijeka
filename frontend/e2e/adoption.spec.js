@@ -2,24 +2,10 @@
 //
 // What the app says a person did: a page opened, PRICE pressed, and nothing for what the app reads by itself. The
 // panel is the admin's alone. The stack's users are traders, so the profile is answered as an admin's here and the
-// two admin reads are answered with a body in the API's shape: e2e/adoption-body.json, whose keys
+// admin reads are answered with bodies in the API's shape (e2e/admin.js): e2e/adoption-body.json, whose keys
 // backend/tests/test_activity.py holds to what the API returns, so a renamed field fails there.
-import { readFileSync } from 'node:fs'
-import { test, expect, expectClean, expectNoHorizontalOverflow, API, REST } from './fixtures.js'
-
-const ADOPTION = JSON.parse(readFileSync(new URL('./adoption-body.json', import.meta.url), 'utf8'))
-const USAGE = { days: 14, from: '2026-11-05', to: '2026-11-18', series: [], totals: { visitors: 0, views: 0, signup_started: 0, signups: 0, trades: 0, confirms: 0, anchors: 0 }, hits_stored_in: 'usage_hits', note: '' }
-
-async function asAdmin(app, body = ADOPTION) {
-  await app.route(/\/rest\/v1\/profiles/, async route => {
-    const res = await route.fetch({ url: route.request().url().replace(/^https?:\/\/[^/]+\/rest\/v1/, REST) })
-    const j = await res.json()
-    const admin = (p) => ({ ...p, role: 'admin' })
-    await route.fulfill({ response: res, json: Array.isArray(j) ? j.map(admin) : admin(j) })
-  })
-  await app.route(`${API}/api/ops/adoption`, route => route.fulfill({ json: body }))
-  await app.route(`${API}/api/ops/usage`, route => route.fulfill({ json: USAGE }))
-}
+import { test, expect, expectClean, expectNoHorizontalOverflow, API } from './fixtures.js'
+import { ADOPTION, asAdmin } from './admin.js'
 
 test('the app says a page was opened and PRICE was pressed, and nothing for what it reads by itself', async ({ app, problems }) => {
   const said = []
@@ -105,7 +91,7 @@ test('the admin reads who came, who used it, who came back and what they used', 
 
 test('what could not be read is said, and a phone is not pushed sideways', async ({ app, problems }) => {
   await app.setViewportSize({ width: 390, height: 844 })
-  await asAdmin(app, { ...ADOPTION, unread: ['activity'], tracking_since: null, dropped: 2 })
+  await asAdmin(app, { adoption: { ...ADOPTION, unread: ['activity'], tracking_since: null, dropped: 2 } })
   await app.goto('/configurations/system')
   const panel = app.getByTestId('adoption')
   await expect(app.getByTestId('adoption-head')).toHaveText('3 accounts · activity is recorded from now: nothing yet')

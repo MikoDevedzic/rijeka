@@ -3,6 +3,35 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.27). Commits on `main` are the detail.
 
+## 0.46.0 · 16 November 2026
+
+**The operator is told when a user hits a problem.** An error in someone's browser was a line in the API's memory,
+with no account, gone at the next deploy, on a page that had to be opened; a request the API failed was a line in
+the host's log; a chat message that never left was nowhere.
+
+- **What is a problem.** An error the app reports from a browser (a page that fails, a page whose file does not
+  arrive, a chat message or a question to the assistant that gets no answer); a request the API answers with a
+  server error; a request it takes 30 seconds or more to answer. Each is kept for 30 days with the account that
+  met it, when there was one: a signed-in page now sends its report with the session. Of a failed request only
+  the route as declared is kept, never the address, so no identifier is.
+- **Who is told.** A new problem that the API saw for itself, or that a signed-in account reported, is told once:
+  a message from "Rijeka health" in the support room of every admin account, where the messenger's badge and
+  chime announce it, and a mail when the two mail settings are set (`docs/ops/environment.md`). The same fault is
+  not told again for six hours, and never more than six messages an hour. Once a day there is a summary of the
+  last 24 hours, also when nothing went wrong, so that silence means nothing went wrong. No message names an
+  account; a browser's own words are reduced to plain text before they are repeated.
+- **Who it hit.** Configurations → SYSTEM has a panel for the admin role: each problem as one line, how often, how
+  many accounts, and who they are.
+- **Nothing is kept or told until its table is applied** (`docs/migrations/2026-11-16_health.sql`). Until then the
+  older log in the API's memory is all there is.
+- **What it cannot see.** A problem reaches the API only while the API is up. An outage is the outside check's to
+  see (`docs/ops/monitoring.md`), which is the owner's to set up.
+- The Privacy Notice (version 1.2) says what an error report carries, that it is kept with the account for 30
+  days, and that the alert names nobody. `GET /api/ops/health` lists the table under `schema` as `health` and
+  carries a count under `problems`.
+
+---
+
 ## 0.45.0 · 16 November 2026
 
 **What each account does, by day: the operator's Adoption view.** The usage counts say how many visitors came,

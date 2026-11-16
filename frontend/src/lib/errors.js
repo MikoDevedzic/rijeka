@@ -3,9 +3,14 @@
 // Uncaught browser errors reach the operator. window errors, unhandled promise
 // rejections and React boundary catches are posted to the API's in-memory log
 // (POST /api/ops/client-error), which the health page summarises. Duplicates
-// within ten seconds are sent once; nothing here can throw into the app; no
-// token or storage is read, so a report can never carry a session.
+// within ten seconds are sent once; nothing here can throw into the app.
+// A report from a signed-in page is sent with the session's token in its header
+// (never in its body), so the operator can tell who hit the problem and write to
+// them; the API keeps the account's id, not the token. Signed out, it is sent as
+// before, with nothing that says who.
 // ────────────────────────────────────────────────────────────────────────────────────
+import { sessionToken } from './activity'
+
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 const RELEASE = import.meta.env?.VITE_COMMIT || 'dev'
 const DEDUPE_MS = 10_000
@@ -36,6 +41,11 @@ function send(body) {
     if (recent.size > 50) for (const k of [...recent.keys()].slice(0, 25)) recent.delete(k)
     const json = JSON.stringify(body)
     const url = `${API}/api/ops/client-error`
+    const token = sessionToken()
+    if (token) {              // a beacon cannot carry a header: a signed-in report goes as a request that outlives the page
+      fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: json, keepalive: true }).catch(() => {})
+      return
+    }
     if (navigator.sendBeacon && navigator.sendBeacon(url, new Blob([json], { type: 'application/json' }))) return
     fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: json, keepalive: true }).catch(() => {})
   } catch { /* reporting must never add an error of its own */ }

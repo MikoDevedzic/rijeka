@@ -69,7 +69,14 @@ def _define_steps() -> list[tuple[str, str, Callable[..., Any]]]:
         ("risk", "daily", lambda db, s: risk.daily_tick(db=db, x_rijeka_cron=s)),
         ("ccr", "daily", lambda db, s: ccr.daily_tick(db=db, x_rijeka_cron=s)),
         ("chain_reconcile", "every_cycle", lambda db, s: _reconcile(db)),
+        ("health_alerts", "every_cycle", lambda db, s: _health(db)),
     ]
+
+
+def _health(db) -> dict:
+    """The operator is told of problems people hit, and once a day of the day (health/alerts.py)."""
+    from health import alerts
+    return alerts.step(db)
 
 
 def _reconcile(db) -> dict:

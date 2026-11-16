@@ -18,6 +18,8 @@ let last = ''
 let bearer = ''
 
 export function signedIn(token) { bearer = token || '' }
+/** The session's token, for the one other thing that says whose it is: an error report (lib/errors.js). */
+export const sessionToken = () => bearer
 
 export function say(event, fields = {}, { token, send = globalThis.fetch } = {}) {
   try {

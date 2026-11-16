@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '../../store/useAuthStore'
 import AdoptionPanel from './AdoptionPanel'
+import ProblemsPanel from './ProblemsPanel'
 import '../pnl/PnlPage.css'
 import '../risk/RiskPage.css'
 
@@ -107,6 +108,7 @@ export default function SystemPage() {
           <div className="pnl-foot">Reported by the app itself (window errors, unhandled promises, React boundaries), with tokens stripped before they are kept. The log is in the API's memory: the last 200 reports, at most 60 a minute per address, and it empties on a restart. Enough to know a page is breaking for someone before they write in.</div>
         </section>
       </>)}
+      <ProblemsPanel role={role} />
       <AdoptionPanel role={role} />
     </div>
   )
