@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { addMonths, newLeg, nextLeg, stripLegs, pairedLeg, seedStyle, styleOf, structureOf, legProblem, legPayoff, packageTotals, packageRef, packageTag, readPackageTag, packageOf } from './fx-legs'
+import { addMonths, newLeg, nextLeg, stripLegs, pairedLeg, seedStyle, styleOf, structureOf, legProblem, legPayoff, packageTotals, packageRef, packageTag, readPackageTag, packageOf, monthsOn } from './fx-legs'
 
 const first = { kind: 'FWD', direction: 'SELL', notional: 5, date: '2026-12-10', strike: 73550 }
 
@@ -182,3 +182,32 @@ describe('a package as the server names it: one trade ID, a leg ID for each leg'
     expect(packageOf(a, [a, b, leg('z', 3, 3, 'PENDING', 'TRD-22222222')])).toBe(null)
   })
 })
+
+describe('a leg made a month on keeps a date the ticket itself would keep', () => {
+  // the ticket's rule, as FxLegs is given it: a Saturday or a Sunday goes to the Monday after
+  const roll = (d) => { const day = new Date(d + 'T00:00:00Z').getUTCDay(); const add = day === 6 ? 2 : day === 0 ? 1 : 0; return new Date(Date.parse(d + 'T00:00:00Z') + add * 86_400_000).toISOString().slice(0, 10) }
+  const first = { kind: 'FWD', direction: 'BUY', notional: 10, date: '2026-12-16', strike: null }
+  it('a strip with no rule steps the calendar: 16 January 2027 is a Saturday', () => {
+    expect(stripLegs(first, 3).map(l => l.date)).toEqual(['2027-01-16', '2027-02-16'])
+  })
+  it('with the ticket\'s rule no leg settles on a weekend, and the strip is still a strip', () => {
+    const legs = stripLegs(first, 3, roll)
+    expect(legs.map(l => l.date)).toEqual(['2027-01-18', '2027-02-16'])
+    for (const l of legs) expect([0, 6]).not.toContain(new Date(l.date + 'T00:00:00Z').getUTCDay())
+    expect(structureOf(first, legs)).toBe('STRIP')
+    expect(structureOf(first, stripLegs(first, 3))).toBe('STRIP')                     // and one booked before the rule, as stepped
+  })
+  it('the next leg and a calendar\'s second leg are rolled the same way', () => {
+    expect(nextLeg(first, [], roll).date).toBe('2027-01-18')
+    const call = { kind: 'CALL', direction: 'BUY', notional: 10, date: '2026-12-16', strike: 100 }
+    expect(pairedLeg(call, 'CALENDAR', { roll }).date).toBe('2027-01-18')
+  })
+  it('a date is "months on" as stepped or within a roll of it, and not otherwise', () => {
+    expect(monthsOn('2027-01-16', '2026-12-16', 1)).toBe(true)
+    expect(monthsOn('2027-01-18', '2026-12-16', 1)).toBe(true)
+    expect(monthsOn('2027-01-25', '2026-12-16', 1)).toBe(false)
+    expect(monthsOn('2027-02-16', '2026-12-16', 1)).toBe(false)
+    expect(monthsOn('', '2026-12-16', 1)).toBe(false)
+  })
+})
+

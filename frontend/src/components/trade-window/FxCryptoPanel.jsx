@@ -429,7 +429,9 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
     },
     legRequest: (leg) => (!cur || shape === 'SPOT' ? null : priceRequest(legTicket(leg))),
     legBody: (q, leg) => { if (!cur || !q) return null; const today = iso(new Date()); return { ...build(q, legTicket(leg)), trade_date: today, effective_date: today } },
-    legDefaults: () => ({ dp, payout: crypto ? 100000 : 1000000 }),
+    // `rollLeg`: a leg's date held to the ticket's own rule (the API's calendar; an option's date is its expiry)
+    legDefaults: () => ({ dp, payout: crypto ? 100000 : 1000000,
+      rollLeg: (date, kind) => (calendar ? rollDate(date, rollRule({ crypto, which: kind === 'CALL' || kind === 'PUT' ? 'expiry' : 'settlement' }), calendar).date : date) }),
     // what a leg takes from the ticket beyond its own terms (its price and its record change when one of these does)
     legContext: () => JSON.stringify([pair, shape, crypto || shape === 'NDF' ? true : !!cashSettled, spotOv, crypto ? fundOv : '', crypto ? settleSrc : '']),
   }))

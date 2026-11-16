@@ -157,7 +157,8 @@ export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypt
   })())
 
   const vanilla = (first.kind === 'CALL' || first.kind === 'PUT') && (styleOf(first) === 'EUROPEAN' || styleOf(first) === 'AMERICAN')
-  const pair = (what) => { const l = pairedLeg(first, what, { f: Number(quote.forward), k: Number(quote.strike), dp }); if (l) setLegs([l]) }
+  const roll = typeof defaults.rollLeg === 'function' ? defaults.rollLeg : undefined          // the ticket's own rule for a date on no business day
+  const pair = (what) => { const l = pairedLeg(first, what, { f: Number(quote.forward), k: Number(quote.strike), dp, roll }); if (l) setLegs([l]) }
   const otherName = (first.kind === 'PUT') === (first.direction === 'BUY') ? 'COLLAR' : 'RISK REVERSAL'
   const cols = 13
 
@@ -173,11 +174,11 @@ export default function FxLegs({ first, quote, legs, setLegs, quotes = {}, crypt
         </span>}
         {!locked && (
           <span style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="rj-btn" type="button" style={{ ...tool, color: 'var(--text-hi)', borderColor: 'var(--border-glow)' }} data-testid="fx-legs-add" onClick={() => setLegs([...legs, nextLeg(first, legs)])}>+ ADD LEG</button>
+            <button className="rj-btn" type="button" style={{ ...tool, color: 'var(--text-hi)', borderColor: 'var(--border-glow)' }} data-testid="fx-legs-add" onClick={() => setLegs([...legs, nextLeg(first, legs, roll)])}>+ ADD LEG</button>
             {vanilla && <button className="rj-btn" type="button" style={tool} data-testid="fx-legs-other" title={`The other of call and put on the other side, the same date and size, its strike as far from the forward: a ${otherName.toLowerCase()}`} onClick={() => pair('OTHER')}>{otherName}</button>}
             {vanilla && <button className="rj-btn" type="button" style={tool} data-testid="fx-legs-straddle" title="The other of call and put on the same side, at the same strike and date" onClick={() => pair('STRADDLE')}>STRADDLE</button>}
             {vanilla && <button className="rj-btn" type="button" style={tool} data-testid="fx-legs-calendar" title="The same option a month later, on the other side" onClick={() => pair('CALENDAR')}>CALENDAR</button>}
-            {[3, 6, 12].map(n => <button className="rj-btn" key={n} type="button" style={tool} data-testid={`fx-legs-strip-${n}`} title={`One leg each month for ${n} months, starting with the ticket's own, each at its fair forward`} onClick={() => setLegs(stripLegs(first, n))}>STRIP × {n}</button>)}
+            {[3, 6, 12].map(n => <button className="rj-btn" key={n} type="button" style={tool} data-testid={`fx-legs-strip-${n}`} title={`One leg each month for ${n} months, starting with the ticket's own, each at its fair forward`} onClick={() => setLegs(stripLegs(first, n, roll))}>STRIP × {n}</button>)}
             {several && <button className="rj-btn" type="button" style={tool} data-testid="fx-legs-clear" onClick={() => setLegs([])}>ONE LEG</button>}
           </span>
         )}

@@ -57,16 +57,28 @@ export function seedStyle(l, f, { dp = 2, payout = 100000 } = {}) {
   return out
 }
 
+// A leg made a month on lands on whatever day of the week that is. `roll` is the ticket's own rule for a date that
+// is no business day (FxLegs passes it: the API's calendar and the rule the ticket rolls its own date by), so a
+// leg's date is one the ticket itself would keep. Without it a strip's legs settled on Saturdays and Sundays where
+// the same tenor on a single ticket rolled (a first-time visitor, 16 November 2026). No rule: the date as stepped.
+const asIs = (d) => d
+// whether a date is the one `months` on from `from`, as stepped or as rolled (a roll moves it a few days at most)
+const DAY = 86_400_000
+export const monthsOn = (date, from, months) => {
+  const want = addMonths(from, months)
+  return !!want && ISO.test(String(date)) && Math.abs(Date.parse(date) - Date.parse(want)) <= 4 * DAY
+}
+
 // The leg after the last one: the same kind, style, side and size, a month later, at the fair forward.
-export function nextLeg(first, legs) {
+export function nextLeg(first, legs, roll = asIs) {
   const last = legs.length ? legs[legs.length - 1] : first
-  return newLeg(last, { date: addMonths(last.date, 1), strike: null })
+  return newLeg(last, { date: roll(addMonths(last.date, 1), last.kind), strike: null })
 }
 
 // A strip of `n` legs in all from the ticket's own: the further n − 1, a month apart, each at its own fair forward.
-export function stripLegs(first, n) {
+export function stripLegs(first, n, roll = asIs) {
   const out = []
-  for (let i = 1; i < n; i++) out.push(newLeg(first, { date: addMonths(first.date, i), strike: null }))
+  for (let i = 1; i < n; i++) out.push(newLeg(first, { date: roll(addMonths(first.date, i), first.kind), strike: null }))
   return out
 }
 
@@ -76,12 +88,12 @@ export function stripLegs(first, n) {
 //   STRADDLE   the other of call and put, the same side, strike, date and size
 //   CALENDAR   the same option a month later, the other side
 // null when the ticket's leg is not a call or a put.
-export function pairedLeg(first, what, { f = null, k = null, dp = 2 } = {}) {
+export function pairedLeg(first, what, { f = null, k = null, dp = 2, roll = asIs } = {}) {
   if (first.kind !== 'CALL' && first.kind !== 'PUT') return null
   const other = first.kind === 'CALL' ? 'PUT' : 'CALL', flip = first.direction === 'BUY' ? 'SELL' : 'BUY'
   const strike = first.strike ?? (finite(k) ? k : null)
   if (what === 'STRADDLE') return newLeg(first, { kind: other, strike })
-  if (what === 'CALENDAR') return newLeg(first, { direction: flip, date: addMonths(first.date, 1), strike })
+  if (what === 'CALENDAR') return newLeg(first, { direction: flip, date: roll(addMonths(first.date, 1), first.kind), strike })
   // as far from the forward on the other side; struck at the forward (or so far that the mirror is not a price), 10 % away
   const mirror = finite(f) && finite(strike) && Math.abs(strike / f - 1) > 0.005 ? 2 * f - strike : null
   const mirrored = mirror != null && mirror > 0 ? mirror : finite(f) ? f * (other === 'CALL' ? 1.1 : 0.9) : null
@@ -100,7 +112,7 @@ export function structureOf(first, legs) {
   // a strip repeats the ticket's own leg, an option's style terms and all; only the date and the strike are each leg's own
   const SHAPE = ['kind', 'direction', 'notional']
   const STYLE_TERMS = ['barrierType', 'barrier', 'lowerB', 'upperB', 'rebate', 'payout', 'payoutCcy', 'touchType', 'payAtHit']
-  if (legs.every((l, i) => same(l, first, SHAPE) && styleOf(l) === styleOf(first) && (!isOption(first) || same(l, first, STYLE_TERMS)) && l.date === addMonths(first.date, i + 1))) return 'STRIP'
+  if (legs.every((l, i) => same(l, first, SHAPE) && styleOf(l) === styleOf(first) && (!isOption(first) || same(l, first, STYLE_TERMS)) && monthsOn(l.date, first.date, i + 1))) return 'STRIP'
   if (legs.length === 1) {
     const [a, b] = [first, legs[0]]
     const vanilla = (l) => (l.kind === 'CALL' || l.kind === 'PUT') && (styleOf(l) === 'EUROPEAN' || styleOf(l) === 'AMERICAN')
