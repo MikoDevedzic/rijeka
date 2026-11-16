@@ -353,7 +353,10 @@ from the home's, and a limit is named by `limitName`. Where a row carries more t
 line of its own with its name after it, in the colour of its sign. A table of such rows is one grid whose rows
 take their columns from it (`subgrid`), so a column is as wide as its widest figure and none is printed over
 the next; a least width is given in px (the root is fixed at 14px; the px scale is for type, not for widths).
-On a phone such a row is one stack: the name and the value on a line, each figure under them.
+On a phone such a row is one stack: the name and the value on a line, each figure under them. The IPV page takes the same names and signs where it draws them (`ipv-page.js` `sensLabel`, `sensValue`): a
+digital asset's funding level is CRYBASIS01 in the desk's sign, never IR01, and since the page's shift is the
+funding level's own move, a line over its pillars says that the impact is that shift times it with the sign
+turned.
 
 ## Figures that move
 

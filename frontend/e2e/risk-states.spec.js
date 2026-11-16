@@ -113,6 +113,18 @@ test('the cards of the XVA reserves and IPV pages are set as cards, hold a far l
     await expect(app.locator('.pnl')).not.toContainText(/spot ?01/i)
     await app.screenshot({ path: 'e2e/.out/shots/ipv-names.png' })
   }
+  // a digital asset's funding level is the forward basis's risk, named and signed as on the ticket and the Risk page
+  const funding = app.locator('.pnl-tr', { hasText: /(BTC|ETH|SOL)_FUNDING/ })
+  if (await shown(funding.first())) {
+    await expect(funding.first()).toContainText('CRYBASIS01')
+    await expect(funding.first()).not.toContainText('IR01')
+    await funding.first().click()
+    const pillars = app.locator('.pnl-panel', { hasText: /VERIFY\s+BY PILLAR/ }).first()
+    await expect(pillars).toContainText('CRYBASIS01 per pillar')
+    await expect(app.getByTestId('ipv-basis-note')).toContainText('IMPACT = −CRYBASIS01 × SHIFT')
+    await expect(pillars.locator('.pnl-tr.head')).toContainText('CRYBASIS01')
+    await pillars.screenshot({ path: 'e2e/.out/shots/ipv-basis.png' })
+  } else test.info().annotations.push({ type: 'not shown', description: 'the stack\'s IPV run has no digital-asset funding input: the name is held by ipv-page.test.js alone' })
   expectClean(problems)
 })
 

@@ -29,20 +29,37 @@ export function fmtShift(v, unit) {
   const d = unit === 'pct' ? 2 : 1
   return (n > 0 ? '+' : '') + n.toFixed(d) + ' ' + (unit === 'bp' ? 'bp' : unit === 'vol_bp' ? 'bp' : unit === 'vol_pt' ? 'pt' : '%')
 }
+// A digital asset's funding level (BTC_FUNDING). Every other screen names its sensitivity CRYBASIS01: the value of
+// +1 bp a year on the asset's forward basis, which is -1 bp on the funding level this input quotes. A currency's
+// flat rate (EUR_FLAT) is of the same kind in the engine and is a rate: IR01.
+export const isBasis = (kind, curveId = '') => {
+  if (kind !== 'FUNDING') return false
+  const m = /^([A-Z0-9]+)_FUNDING$/.exec(String(curveId).toUpperCase())
+  return !!m && spotMeasure(m[1])[1] === 'CRY01'
+}
 // The name of an input's sensitivity, as every other screen has it (risk/names.js): a spot's is FX01 on a currency
-// pair and CRY01 where either side is a digital asset (BTCUSD_SPOT), never "spot01".
+// pair and CRY01 where either side is a digital asset (BTCUSD_SPOT), never "spot01"; a digital asset's funding
+// level's is CRYBASIS01, never IR01.
 export function sensLabel(kind, curveId = '') {
+  if (isBasis(kind, curveId)) return 'CRYBASIS01'
   if (kind === 'RATES' || kind === 'FUNDING') return 'IR01'
   if (kind !== 'SPOT') return 'vega'
   const pair = String(curveId).toUpperCase().replace(/_SPOT$/, '')
   return [pair.slice(0, 3), pair.slice(3, 6)].some(a => a.length === 3 && spotMeasure(a)[1] === 'CRY01') ? 'CRY01' : 'FX01'
 }
 
+// ... and its sign, as every other screen has it. The engine ladders a funding level by +1 bp of the level; the
+// desk's figure is for +1 bp of basis, the opposite move, so the figure is turned (a nought stays a nought). The
+// input's shift and impact are not turned: they are the level's own move and what it is worth, so on such a row
+// IMPACT = -CRYBASIS01 x SHIFT, and the page says so.
+export const sensValue = (kind, curveId, v) => (v == null || !isBasis(kind, curveId) ? v : v === 0 ? 0 : -v)
+
 // The inputs table: one row per input, with the counts the controller reads first.
 export function inputRows(run) {
   return (run?.inputs || []).map(i => ({
     curve_id: i.curve_id, kind: i.kind, kindLabel: KIND_LABEL[i.kind] || i.kind, unit: i.unit, trades: i.trades, state: i.state,
-    sensitivity: i.sensitivity_total, sens: `${sensLabel(i.kind, i.curve_id)} ${fmtSigned(i.sensitivity_total)}/${i.unit === 'pct' ? '%' : i.unit === 'vol_pt' ? 'pt' : 'bp'}`,
+    sensitivity: sensValue(i.kind, i.curve_id, i.sensitivity_total),
+    sens: `${sensLabel(i.kind, i.curve_id)} ${fmtSigned(sensValue(i.kind, i.curve_id, i.sensitivity_total))}/${i.unit === 'pct' ? '%' : i.unit === 'vol_pt' ? 'pt' : 'bp'}`,
     desk: i.desk_snapshot_date ? `snapshot ${i.desk_snapshot_date}` : 'no snapshot',
     independent: i.has_independent ? i.independent_source : (i.unladdered ? 'nothing to verify' : 'none · model IPV only'),
     review: i.review || 0, overridden: i.overridden || 0, impact: i.first_order || 0, pillars: i.pillars?.length || 0, decision: i.decision || null,
@@ -53,7 +70,7 @@ export function inputRows(run) {
 // The pillar rows of one input (a curve, a spot, a funding level): one line per quote.
 export function pillarRows(input) {
   return (input?.pillars || []).map(p => ({
-    key: p.key, tenor: p.tenor, quote_type: p.quote_type, desk: p.desk, independent: p.independent, gap: p.gap, sensitivity: p.sensitivity,
+    key: p.key, tenor: p.tenor, quote_type: p.quote_type, desk: p.desk, independent: p.independent, gap: p.gap, sensitivity: sensValue(input?.kind, input?.curve_id, p.sensitivity),
     tol: p.tol, tolSource: p.tol_source, material: p.material, override: p.override, overrideId: p.override_id, reason: p.override_reason, by: p.override_by,
     shift: p.shift, impact: p.impact, status: p.status,
   }))

@@ -3,6 +3,18 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.27). Commits on `main` are the detail.
 
+## 0.44.4 · 16 November 2026
+
+**The IPV page names a digital asset's funding sensitivity as the rest of the app does.** The page called it IR01
+and showed the engine's sign (the value of +1 bp on the funding level). The ticket, the Risk page, the limits and
+P&L call the same risk CRYBASIS01, the value of +1 bp a year on the forward basis, which is the opposite move. The
+IPV page now says CRYBASIS01 and shows that sign, in the inputs table and on each pillar. The shift and the impact
+on a row are the funding level's own move and what it is worth, and are not turned; a line over the pillars says
+that on these rows IMPACT = −CRYBASIS01 × SHIFT. A currency's flat rate stays IR01. No stored run changes: the
+name and the sign are set where the page draws them.
+
+---
+
 ## 0.44.3 · 16 November 2026
 
 **What a firm types into its collateral is checked before the tables that keep it exist.** Two migrations are

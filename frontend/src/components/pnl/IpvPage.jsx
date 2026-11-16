@@ -10,7 +10,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSessionMaybe } from '../../lib/session'
 import PnlNav from './PnlNav'
-import { KIND_LABEL, PILLAR_COLOR, STATE_COLOR, counts, errorMessage, fmtQuote, fmtShift, fmtSigned, fxGrid, inputRows, pillarRows, sensLabel, surfaceGrid, waterfall } from './ipv-page'
+import { KIND_LABEL, PILLAR_COLOR, STATE_COLOR, counts, errorMessage, fmtQuote, fmtShift, fmtSigned, fxGrid, inputRows, isBasis, pillarRows, sensLabel, surfaceGrid, waterfall } from './ipv-page'
 import './PnlPage.css'
 import '../risk/RiskPage.css'
 
@@ -135,6 +135,7 @@ export default function IpvPage() {
             <section className="pnl-panel">
               <header><span>{input.curve_id} · VERIFY {input.kind === 'SWAPTION_VOL' || input.kind === 'FX_VOL' ? 'BY SURFACE POINT' : 'BY PILLAR'}</span>
                 <span className="pnl-sub">{KIND_LABEL[input.kind]} · {sensLabel(input.kind, input.curve_id)} per pillar at this scope · type an override and give a reason · tolerance per pillar</span></header>
+              {isBasis(input.kind, input.curve_id) && <div className="pnl-note" data-testid="ipv-basis-note" style={{ padding: '8px 14px' }}>CRYBASIS01 is the value of +1 bp a year on the forward basis, as on the ticket and the Risk page. That is −1 bp on the funding level quoted here, so on these rows IMPACT = −CRYBASIS01 × SHIFT.</div>}
               {input.unladdered && <div className="pnl-note" style={{ padding: '8px 14px' }}>{input.note || 'nothing to ladder for this input'}</div>}
               {input.kind === 'SWAPTION_VOL' ? <SurfaceGrid input={input} drafts={drafts} setDrafts={setDrafts} onOverride={override} signed={signed} />
                 : input.kind === 'FX_VOL' ? <FxGrid input={input} drafts={drafts} setDrafts={setDrafts} onOverride={override} signed={signed} />

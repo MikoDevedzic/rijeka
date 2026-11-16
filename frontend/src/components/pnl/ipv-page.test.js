@@ -1,6 +1,6 @@
 // pnl/ipv-page.test.js — the pure helpers behind P&L → IPV (ipv-page.js). Run: npm test.
 import { describe, it, expect } from 'vitest'
-import { counts, fmt, fmtShift, fmtSigned, fxGrid, inputRows, pillarRows, sensLabel, surfaceGrid, waterfall } from './ipv-page'
+import { counts, fmt, fmtShift, fmtSigned, fxGrid, inputRows, isBasis, pillarRows, sensLabel, sensValue, surfaceGrid, waterfall } from './ipv-page'
 
 const run = {
   date: '2026-11-03', scope_key: 'GLOBAL', status: 'OPEN', flash_usd: 184320, first_order_usd: -21450, second_order_usd: null, xva_usd: -6180, official_usd: 156690, applied_at: null,
@@ -45,6 +45,34 @@ describe('the name of an input\'s sensitivity', () => {
     expect(sensLabel('RATES', 'USD_SOFR')).toBe('IR01')
     expect(sensLabel('FX_VOL', 'EURUSD_VOL')).toBe('vega')
     expect(inputRows({ inputs: [{ curve_id: 'BTCUSD_SPOT', kind: 'SPOT', unit: 'pct', sensitivity_total: 124564 }] })[0].sens).toBe('CRY01 +$124,564/%')
+  })
+})
+
+describe('a digital asset\'s funding level: one name and one sign with the rest of the app', () => {
+  it('is CRYBASIS01, never IR01; a currency\'s flat rate and a rate curve stay IR01', () => {
+    expect(sensLabel('FUNDING', 'BTC_FUNDING')).toBe('CRYBASIS01')
+    expect(sensLabel('FUNDING', 'eth_funding')).toBe('CRYBASIS01')
+    expect(sensLabel('FUNDING', 'SOL_FUNDING')).toBe('CRYBASIS01')
+    expect(sensLabel('FUNDING', 'EUR_FLAT')).toBe('IR01')                    // a currency's flat rate is a rate
+    expect(sensLabel('FUNDING', 'EUR_FUNDING')).toBe('IR01')                 // and so is a currency's funding level
+    expect(sensLabel('RATES', 'BTC_FUNDING')).toBe('IR01')                   // the kind decides, not the name alone
+    expect(isBasis('FUNDING', 'BTC_FUNDING')).toBe(true); expect(isBasis('FUNDING')).toBe(false); expect(isBasis('SPOT', 'BTCUSD_SPOT')).toBe(false)
+  })
+  it('carries the desk\'s sign: the engine\'s figure for +1 bp of the level, turned', () => {
+    expect(sensValue('FUNDING', 'BTC_FUNDING', -38.25)).toBe(38.25)
+    expect(sensValue('FUNDING', 'BTC_FUNDING', 0)).toBe(0); expect(Object.is(sensValue('FUNDING', 'BTC_FUNDING', 0), -0)).toBe(false)
+    expect(sensValue('FUNDING', 'BTC_FUNDING', null)).toBe(null)
+    expect(sensValue('FUNDING', 'EUR_FLAT', -38.25)).toBe(-38.25)
+    expect(sensValue('RATES', 'USD_SOFR', 12)).toBe(12)
+  })
+  it('on the inputs table and on each pillar, with the shift and the impact left as the level\'s own', () => {
+    const run = { inputs: [{ curve_id: 'BTC_FUNDING', kind: 'FUNDING', unit: 'bp', trades: 2, state: 'REVIEW', sensitivity_total: -38.25, first_order: -382.5,
+      pillars: [{ key: '1M', desk: 5.2, independent: 5.3, gap: 10, sensitivity: -38.25, shift: 10, impact: -382.5, status: 'REVIEW' }] }] }
+    const row = inputRows(run)[0]
+    expect(row.sens).toBe('CRYBASIS01 +$38/bp'); expect(row.sensitivity).toBe(38.25); expect(row.impact).toBe(-382.5)
+    const p = pillarRows(run.inputs[0])[0]
+    expect(p.sensitivity).toBe(38.25); expect(p.shift).toBe(10); expect(p.impact).toBe(-382.5)
+    expect(p.impact).toBeCloseTo(-p.sensitivity * p.shift, 9)                // IMPACT = -CRYBASIS01 x SHIFT, as the page says
   })
 })
 
