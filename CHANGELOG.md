@@ -3,6 +3,25 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.27). Commits on `main` are the detail.
 
+## 0.44.8 · 16 November 2026
+
+**Two migrations approved for production: a firm's collateral, and anchors in flight.** No code changes; the
+deployed API applies each when it starts (`backend/db/migrate.py`) and `GET /api/ops/health` reports the outcome
+under `migrations` and `schema`. Both create new, empty tables with row-level security on and no policy, written
+only by the API.
+
+- **`2026-11-05_collateral.sql`**: `collateral_instruments` and `collateral_schedules`. Until it is applied the
+  collateral page serves the seed and a firm cannot keep an instrument or a schedule of its own; with it a firm's
+  instruments and the schedule per counterparty are kept (the input checks of 0.44.3 are what guard them).
+- **`2026-11-11_pending_anchors.sql`**: `pending_anchors`. Until it is applied a single-trade on-chain confirm
+  waits in the request for the block, up to the backend's three minutes. With it the request waits 25 seconds;
+  past that the signed record and the transaction hash are kept, the route answers 202 with the trade still
+  PENDING, and the scheduler's reconcile step and the trade window's own polling apply the one CONFIRMED event
+  when the registry holds the record. A package confirm, a countersign, an amend and a terminate stay as they
+  were. The jobs migration is not part of this: it waits for a worker.
+
+---
+
 ## 0.44.7 · 16 November 2026
 
 **The messenger opens by itself after a sign-in.** Prometheus, the support room and the rooms with other desks
