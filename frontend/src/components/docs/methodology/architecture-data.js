@@ -30,15 +30,15 @@ export const HOSTS = [
 // its area. Each has a colour of its own, from the tokens, so that the figures in one row can be told apart; none is
 // brass, which is what is on chain.
 export const GATES = [
-  { id: 'quinn', name: 'QUINN', role: 'Browser tester', css: 'var(--cyan)', line: 0x7fd3cc, note: 'Clicks through the real app on a local copy of the whole system before a change ships.' },
-  { id: 'ada', name: 'ADA', role: 'Numbers guardian', css: 'var(--rf-vol)', line: 0xcfe08a, note: 'Runs the QuantLib reference suite, the Excel replications and the pinned sample book. Every number that moved is explained.' },
-  { id: 'emmy', name: 'EMMY', role: 'Model validator', css: 'var(--purple)', line: 0xc1a6ee, note: 'Each calculation has a reference comparison, an Excel replication and a methodology section, or the model inventory says which is missing.' },
-  { id: 'iris', name: 'IRIS', role: 'Design keeper', css: 'var(--rf-basis)', line: 0xe8a6d0, note: 'One way of setting type, figures and colour on every screen.' },
-  { id: 'vera', name: 'VERA', role: 'Independent reviewer', css: 'var(--text-hi)', line: 0xf6f1e4, note: 'Reads the change cold, without the author\'s reasoning, and looks for what it breaks in code that already works.' },
-  { id: 'magnus', name: 'MAGNUS', role: 'Security reviewer', css: 'var(--red)', line: 0xf0828c, note: 'Sign-in, roles, tenancy, keys, public endpoints and anything that shows user-supplied text.' },
-  { id: 'nikola', name: 'NIKOLA', role: 'Architect', css: 'var(--blue)', line: 0x8fc1e6, note: 'Keeps this map true to the code, and each new piece in the pattern the system already has for its kind.' },
-  { id: 'edgar', name: 'EDGAR', role: 'Database keeper', css: 'var(--amber)', line: 0xe9975a, note: 'Migrations are one feature each, safe to run again and locked down; the schema file agrees with them.' },
-  { id: 'marco', name: 'MARCO', role: 'First-time visitor', css: 'var(--rf-fx)', line: 0x6fd0c0, note: 'Walks the app cold, as someone who has never seen it, before a release a newcomer will meet: a picture at every stop, read with ten minutes and no knowledge of the code. He reports what could not be worked out, and fixes nothing.' },
+  { id: 'tarik', name: 'TARIK', role: 'Browser tester', css: 'var(--cyan)', line: 0x7fd3cc, note: 'Clicks through the real app on a local copy of the whole system before a change ships.' },
+  { id: 'lauren', name: 'LAUREN', role: 'Numbers guardian', css: 'var(--rf-vol)', line: 0xcfe08a, note: 'Runs the QuantLib reference suite, the Excel replications and the pinned sample book. Every number that moved is explained.' },
+  { id: 'mike', name: 'MIKE', role: 'Model validator', css: 'var(--purple)', line: 0xc1a6ee, note: 'Each calculation has a reference comparison, an Excel replication and a methodology section, or the model inventory says which is missing.' },
+  { id: 'dragan', name: 'DRAGAN', role: 'Design keeper', css: 'var(--rf-basis)', line: 0xe8a6d0, note: 'One way of setting type, figures and colour on every screen.' },
+  { id: 'christine', name: 'CHRISTINE', role: 'Independent reviewer', css: 'var(--text-hi)', line: 0xf6f1e4, note: 'Reads the change cold, without the author\'s reasoning, and looks for what it breaks in code that already works.' },
+  { id: 'machado', name: 'MACHADO', role: 'Security reviewer', css: 'var(--red)', line: 0xf0828c, note: 'Sign-in, roles, tenancy, keys, public endpoints and anything that shows user-supplied text.' },
+  { id: 'archie', name: 'ARCHIE', role: 'Architect', css: 'var(--blue)', line: 0x8fc1e6, note: 'Keeps this map true to the code, and each new piece in the pattern the system already has for its kind.' },
+  { id: 'raja', name: 'RAJA DB', role: 'Database keeper', css: 'var(--amber)', line: 0xe9975a, note: 'Migrations are one feature each, safe to run again and locked down; the schema file agrees with them.' },
+  { id: 'eric', name: 'ERIC', role: 'First-time visitor', css: 'var(--rf-fx)', line: 0x6fd0c0, note: 'Walks the app cold, as someone who has never seen it, before a release a newcomer will meet: a picture at every stop, read with ten minutes and no knowledge of the code. Eric reports what could not be worked out, and fixes nothing.' },
 ]
 // The six checks GitHub runs on the commit that ships (.github/workflows/ci.yml: each is a job's name). They are
 // the green of how a change ships, each lamp a step lighter than the one before: a colour a reviewer has would
@@ -75,20 +75,20 @@ export const PIECES = [
   { id: 'branch', kind: 'ship', name: 'A BRANCH', sub: 'one change', p: [-14.3, -9.4], shape: 'node', h: 1.15, cy: 0.5, plain: true,
     note: 'Every change is made on a branch. Nothing on a branch touches production.' },
   { id: 'patrick', kind: 'ship', name: 'PATRICK', sub: 'Product lead', p: [-15.7, -10.2], shape: 'agent', h: 1.6, cy: 0.9, agent: true, css: 'var(--text-mute)', line: 0x8a9f94,
-    note: 'Holds the mission and ranks what would most strengthen it: what to do next, for whom, and what to stop. He proposes; the owner decides. He builds and ships nothing.' },
-  { id: 'petra', kind: 'ship', name: 'PETRA', sub: 'Project manager', p: [-12.9, -10.2], shape: 'agent', h: 2.15, cy: 0.9, agent: true, css: 'var(--text-dim)', line: 0xa9b9ae,
+    note: 'Holds the mission and ranks what would most strengthen it: what to do next, for whom, and what to stop. Patrick proposes; the owner decides. Patrick builds and ships nothing.' },
+  { id: 'hermie', kind: 'ship', name: 'HERMIE', sub: 'Project manager', p: [-12.9, -10.2], shape: 'agent', h: 2.15, cy: 0.9, agent: true, css: 'var(--text-dim)', line: 0xa9b9ae,
     note: 'Records every proposal and decision, with its status, before work starts.' },
   ...GATES.map((g, i) => ({ id: g.id, kind: 'ship', name: g.name, sub: g.role, p: [-10.7 + 1.2 * i, -10.2], shape: 'agent', h: i % 2 ? 2.15 : 1.6, cy: 0.9, agent: true, gate: i, css: g.css, line: g.line, note: g.note })),
   { id: 'ci', kind: 'ship', name: 'SIX CHECKS', sub: 'on the commit that ships', p: [0.7, -9.4], shape: 'checks', h: 1.25, cy: 0.5, plain: true,
     note: 'Backend tests, frontend build, registry contract tests, integration tests, browser journeys and a self-host smoke test, run by GitHub on the commit that ships. All six must pass.' },
   { id: 'main', kind: 'ship', name: 'MAIN', sub: 'protected, forward only', p: [3.1, -9.4], shape: 'node', h: 1.15, cy: 0.5, plain: true,
     note: 'The branch production is built from. It is protected: it moves only forward, and only to a commit whose six checks passed.' },
-  { id: 'jarvis', kind: 'ship', name: 'JARVIS', sub: 'Release manager', p: [4.8, -10.2], shape: 'agent', h: 2.15, cy: 0.9, agent: true, css: 'var(--up)', line: 0x8fe0ae,
+  { id: 'jenn', kind: 'ship', name: 'JENN', sub: 'Release manager', p: [4.8, -10.2], shape: 'agent', h: 2.15, cy: 0.9, agent: true, css: 'var(--up)', line: 0x8fe0ae,
     note: 'Follows the release checklist and reads the commit back from production before anything is called live.' },
   { id: 'release', kind: 'ship', name: 'RELEASE', sub: 'what the app is built from', p: [6.9, -9.4], shape: 'node', h: 1.15, cy: 0.5, plain: true,
     note: 'The branch the app is built from. When a change touches the API, it moves to the new commit only after the live API reports that commit; a change that leaves the API as it is, it follows at once. Either way the app never runs ahead of its API.' },
-  { id: 'grace', kind: 'ship', name: 'GRACE', sub: 'Operations keeper', p: [8.5, -10.2], shape: 'agent', h: 2.15, cy: 0.9, agent: true, css: 'var(--text)', line: 0xe9e3d3,
-    note: 'Holds what the hosted system runs on against what is asked of it: machine sizes, the database\'s memory and connections, the cost of each action, what the scheduler recorded. Read-only: a change of size is the owner\'s. She writes the account of an outage.' },
+  { id: 'greg', kind: 'ship', name: 'GREG', sub: 'Operations keeper', p: [8.5, -10.2], shape: 'agent', h: 2.15, cy: 0.9, agent: true, css: 'var(--text)', line: 0xe9e3d3,
+    note: 'Holds what the hosted system runs on against what is asked of it: machine sizes, the database\'s memory and connections, the cost of each action, what the scheduler recorded. Read-only: a change of size is the owner\'s. Greg writes the account of an outage.' },
 ]
 
 // each join, from the piece that asks to the piece that answers; lift: where the arc must clear what stands between;
@@ -140,7 +140,7 @@ export const STORIES = [
         say: 'Every two hours the scheduler rebuilds market data from public sources and stores, one row a day, a mark for each trade, the attributed P&L, the risk report and the counterparty-credit run. The venue\'s marks are read every ten minutes; spots, news and digital-asset fixings every thirty. Prometheus reads the same tables through read-only tools.' },
   ] },
   { id: 'change', name: 'A CHANGE', follow: 'FOLLOW A CHANGE', lede: 'A change to the code on its way to production, and who looks at it on the way.', steps: [
-    { k: 'c1', name: 'PROPOSE', pieces: ['patrick', 'petra', 'branch'], joins: [],
+    { k: 'c1', name: 'PROPOSE', pieces: ['patrick', 'hermie', 'branch'], joins: [],
       say: 'The product lead ranks what would most strengthen the mission, and the owner decides. A change then starts as a recorded decision and a branch. Nothing on a branch touches production.' },
     { k: 'c2', name: 'THE GATES', pieces: ['branch', ...GATES.map(g => g.id)], joins: ['gate'], gates: true,
       say: 'Each gate is a reviewer with one job, called when a change touches its area: the app in a real browser, the numbers, the models, the design, a cold read of the change, security, the architecture, the database, and a first look by someone who has never seen the app. What a gate finds is fixed or answered before the change goes on, and what it missed is written into its own instructions, so the next change is read by a reviewer that knows.' },
@@ -150,10 +150,10 @@ export const STORIES = [
       say: 'Render rebuilds the API from main when a change touches it. As it starts, the API applies the database changes on an approved list and nothing else.' },
     { k: 'c5', name: 'THE APP FOLLOWS', pieces: ['api', 'release', 'files'], joins: ['api_rel', 'rel_files'], passed: true, checked: true,
       say: 'When the change touched the API, the release branch moves to the new commit once the live API reports it; when it did not, the branch follows at once. Netlify rebuilds the app from that branch, so the app never runs ahead of its API.' },
-    { k: 'c6', name: 'READ BACK', pieces: ['jarvis', 'api', 'files', 'app'], joins: ['files_app', 'app_api'], passed: true, checked: true,
+    { k: 'c6', name: 'READ BACK', pieces: ['jenn', 'api', 'files', 'app'], joins: ['files_app', 'app_api'], passed: true, checked: true,
       say: 'The release manager reads the commit back from the live API and the live app. Only then is the change called live.' },
-    { k: 'c7', name: 'KEPT RUNNING', pieces: ['grace', 'api', 'pg'], joins: ['api_pg'], passed: true, checked: true,
-      say: 'The operations keeper holds what the system runs on against what is asked of it: the machine sizes, the database\'s memory and connections, what each action costs the API\'s one CPU, what the scheduler recorded. She looks before a launch, after a change of host or size and when a release adds work, and writes the account of an outage the day it happens.' },
+    { k: 'c7', name: 'KEPT RUNNING', pieces: ['greg', 'api', 'pg'], joins: ['api_pg'], passed: true, checked: true,
+      say: 'The operations keeper holds what the system runs on against what is asked of it: the machine sizes, the database\'s memory and connections, what each action costs the API\'s one CPU, what the scheduler recorded. Greg looks before a launch, after a change of host or size and when a release adds work, and writes the account of an outage the day it happens.' },
   ] },
   { id: 'clock', name: 'THE CLOCK', follow: 'FOLLOW THE CLOCK', lede: 'What the system does by itself, with nobody signed in. The scheduler runs inside the API.', steps: [
     { k: 't0', name: 'EVERY MINUTE', pieces: ['api', 'chain', 'pg'], joins: ['api_chain', 'api_pg'],

@@ -119,7 +119,7 @@ def test_what_render_does_not_deploy_is_not_waited_for():
     own, main = "a" * 40, "m" * 40
     # render.yaml is here on purpose: an edit to it may restart the host, with the same API code, and the rule
     # asks whether API code changed
-    outside = ["chain/verify/index.html", "chain/README.md", "CHANGELOG.md", ".claude/agents/jarvis.md", "render.yaml",
+    outside = ["chain/verify/index.html", "chain/README.md", "CHANGELOG.md", ".claude/agents/jenn.md", "render.yaml",
                "tests/reference/test_x.py", "frontend/src/components/docs/methodology/methodology.json", "backend/README.md"]
     assert S.frontend_only(outside) is True
     log = []

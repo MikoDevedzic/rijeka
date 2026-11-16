@@ -1,6 +1,6 @@
 # Browser journeys
 
-Quinn's tests (`.claude/agents/quinn.md`): the built app, in a real browser, on the local stack. They exist because
+Tarik's tests (`.claude/agents/tarik.md`): the built app, in a real browser, on the local stack. They exist because
 unit tests and the build did not catch what users saw: a page that crashed on an undefined variable, a tab that
 crashed on a stored record's shape, results that fell below the fold, a PRICE that ran before the par rate had solved.
 

@@ -228,7 +228,7 @@ is no price. Not yet behind marks: the lines on the TRADE tab, the swap's tabs a
 
 ## Figures
 
-One rule for the whole app, held by Iris (`.claude/agents/iris.md`) and by a check (`cd frontend && npm run design`,
+One rule for the whole app, held by Dragan (`.claude/agents/dragan.md`) and by a check (`cd frontend && npm run design`,
 `src/design.test.js` in the unit run):
 
 - A number, a date, a rate, a tenor or a code is mono with tabular digits; 12.5px where it is a value in a table or

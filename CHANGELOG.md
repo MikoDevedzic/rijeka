@@ -5,13 +5,24 @@ methodology document carries its own version (v1.26). Commits on `main` are the 
 
 ## 0.44.1 · 16 November 2026
 
-**A product lead among the roles.** Every role so far guards something that exists: the numbers, the look, the
-database, the release. None asked what the platform should do next to serve its mission. Patrick does: he holds
-the mission as the README states it, ranks what would most strengthen it (for whom, at what cost, on what
-evidence), says what to stop, and looks at a large piece of work before it starts. He proposes and the owner
-decides; he builds nothing, ships nothing and writes nothing public. The role is in `.claude/agents/patrick.md`
-and the gates table; the system page draws him at the first step of a change, before the project manager's
-record, on a GitHub slab made a little wider to hold him. No figure and no screen of the desk changes.
+**A product lead among the roles, and the roles under new names.** No figure and no screen of the desk changes.
+
+- **Patrick, the product lead.** Every role so far guards something that exists: the numbers, the look, the
+  database, the release. None asked what the platform should do next to serve its mission. Patrick does: holds the
+  mission as the README states it, ranks what would most strengthen it (for whom, at what cost, on what evidence),
+  says what to stop, and looks at a large piece of work before it starts. Patrick proposes and the owner decides;
+  the role builds nothing, ships nothing and writes nothing public. It is in `.claude/agents/patrick.md` and the
+  gates table, and the system page draws it at the first step of a change, before the project manager's record,
+  on a GitHub slab made a little wider.
+- **The roles renamed.** The browser tester is Tarik (was Quinn), the numbers guardian Lauren (Ada), the model
+  validator Mike (Emmy), the design keeper Dragan (Iris), the independent reviewer Christine (Vera), the security
+  reviewer Machado (Magnus), the architect Archie (Nikola), the database keeper Raja DB (Edgar), the release
+  manager Jenn (Jarvis), the project manager Hermie (Petra), the first-time visitor Eric (Marco) and the
+  operations keeper Greg (Grace). Renamed: the role definitions and their files, the gates table and the lessons
+  in `CLAUDE.md`, the system page, the documents that describe how a change ships, and the journeys that name a
+  reviewer. Not renamed, because they are records of their day: this changelog's earlier entries, `docs/archive`,
+  review notes in code comments and tests, and the approved migration files. `CLAUDE.md` carries the list of old
+  and new names. A role is now referred to by its name, not by he or she.
 
 ---
 

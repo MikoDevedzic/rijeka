@@ -2,7 +2,7 @@
 
 The account of each outage of the hosted demo: when it began, what a visitor saw, what was and was not the cause
 and how that was established, what was changed, and what is still open. Kept by the operations keeper
-(`.claude/agents/grace.md`), written the same day.
+(`.claude/agents/greg.md`), written the same day.
 
 ## 15 November 2026: the database stopped answering (19:32 to 21:50 UTC)
 

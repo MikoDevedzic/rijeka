@@ -1,6 +1,6 @@
 # Release checklist
 
-Jarvis's checklist (`.claude/agents/jarvis.md`). `docs/ops/deploy.md` explains why the chain is shaped this way;
+Jenn's checklist (`.claude/agents/jenn.md`). `docs/ops/deploy.md` explains why the chain is shaped this way;
 this page is what to do, in order.
 
 ## 1. Before the pull request
@@ -11,13 +11,13 @@ this page is what to do, in order.
 - [ ] Backend: `cd backend && python -m pytest -q --ignore=tests/integration --ignore=tests/reference`.
       A change to `.github/scripts/` (the production watch): `ruff check --config ruff.toml ../.github/scripts &&
       python -m pytest -q ../.github/scripts`, as CI's `backend tests` job runs them.
-- [ ] **Quinn**: `cd frontend && npm run e2e` on the local stack. A new screen, tab or button has a journey.
+- [ ] **Tarik**: `cd frontend && npm run e2e` on the local stack. A new screen, tab or button has a journey.
       A change to confirmation, the chain code, the CONFIRM tab or the public register also runs `npm run e2e:chain`
       (a confirmation anchored on a local test chain; CI runs it on every pull request).
-- [ ] **Ada**, for a numbers change: `tests/reference`, the engine and replication tests, the pinned sample
+- [ ] **Lauren**, for a numbers change: `tests/reference`, the engine and replication tests, the pinned sample
       book; any movement has a line in `backend/tests/integration/GOLDEN_CHANGES.md`.
-- [ ] **Vera**, for anything larger than a hotfix: a fresh review of `git diff main...HEAD`.
-- [ ] **Magnus**, when the change touches sign-in, roles, tenancy, keys, payments or a public endpoint.
+- [ ] **Christine**, for anything larger than a hotfix: a fresh review of `git diff main...HEAD`.
+- [ ] **Machado**, when the change touches sign-in, roles, tenancy, keys, payments or a public endpoint.
 - [ ] A change to `docs/methodology/rijeka_methodology.tex` or `docs/model_inventory.md`: rebuild the three prints and
       commit them with it: `cd docs/methodology && tectonic rijeka_methodology.tex`, copy the PDF to
       `frontend/public/methodology/`, and `cd frontend && npm run methodology` (the unit run fails when the pages are
@@ -48,7 +48,7 @@ the file and what it gates.
 - **The runner applies it** (`backend/db/migrate.py`, `docs/architecture.md` → Migrations in production). To
   approve a migration: quote the owner's words; `cd backend && python -m db.migrate --stage <file>` copies the file
   into `backend/db/approved/` and prints its line; add the line to `backend/db/migrations_approved.txt` with who
-  approved it, the date and the words; `python -m db.migrate --check`; Edgar reviews the entry. It is applied when
+  approved it, the date and the words; `python -m db.migrate --check`; Raja DB reviews the entry. It is applied when
   that commit's API starts. Never from a shell: the runner is off outside the deployed API.
 - After the deploy, read `migrations` on the health endpoint: counts only, and `applied` must equal `approved`
   with `problems` 0. Anything else: the names and the reason (`missing`, `mismatch`, `changed`, `refused: <rule>`,

@@ -11,21 +11,26 @@ Every change goes through the same gates. Each gate has a name and an agent defi
 
 | Who | Role | When | What "passed" means |
 |---|---|---|---|
-| **Quinn** | Browser tester | every frontend or API change | `cd frontend && npm run e2e` green on the local stack; a new screen or button has a journey in the same change |
-| **Ada** | Numbers guardian | any change to pricing, XVA, exposure, capital, collateral, P&L or risk | `tests/reference` green, the engine and replication tests green, the pinned sample book unchanged or its movement explained in `GOLDEN_CHANGES.md` |
-| **Emmy** | Model validator | any change that adds or changes a formula, a product, a risk measure or the construction of a market input | each calculation has a reference comparison, an Excel replication and a methodology section, or `docs/model_inventory.md` says which is missing; one figure re-derived independently by a fresh agent |
-| **Iris** | Design keeper | any change that adds or alters a screen, a table, a field, a button, a colour or a size | `cd frontend && npm run design` shows no count risen; the changed screen compared in pictures with a screen that shows the same kind of thing; a field and the figure beside it measured alike; `docs/design.md` followed or amended |
-| **Vera** | Independent reviewer | anything larger than a one-line hotfix | a fresh agent has read `git diff main...HEAD` cold and its findings are fixed or answered |
-| **Magnus** | Security reviewer | sign-in, roles, tenancy, keys, payments, public endpoints, user-supplied text | no finding left open |
-| **Nikola** | Architect | any change that adds or removes a service, an outside dependency or data source, a table, a scheduled job, a setting or a public endpoint | `docs/architecture.md` and `docs/ops/environment.md` match the code, checked by a fresh agent against the diff; the new piece follows the pattern the system already has for its kind |
-| **Edgar** | Database keeper | any change that adds or alters a table, column, function, trigger, policy or grant, writes to the database in a new way, or touches the migration runner or its approved list | migrations are one feature each, safe to re-run, locked down and tolerated when absent; `docs/schema.sql` agrees with them; nothing is on the approved list that the owner did not approve in his own words |
-| **Marco** | First-time visitor | a release that changes what someone new meets first (the door, sign-up, the home, a ticket's first screen, a new page); before a launch or a public post | he has walked the app cold on the local stack and read a picture of every stop; what would confuse a newcomer is fixed or answered |
-| **Grace** | Operations keeper | before a launch or a public post; after a change of hosting plan, host or machine size; after an outage; when a release adds work to a request or a batch | the sizes in `docs/ops/environment.md` are true; the dearest action is measured and the headroom said; the watch says nothing wrong; an outage has its account in `docs/ops/incidents.md` |
-| **Jarvis** | Release manager | every deploy | `docs/ops/release.md` followed; the commit read back from production |
-| **Petra** | Project manager | every proposal and decision | recorded in `_docs/BACKLOG.md` (local only) with its status |
-| **Patrick** | Product lead | the start of a working session, after a release, a weekly walk, before a large piece of work | he has said, ranked and argued, what would most strengthen the mission and what to stop; the owner has decided; nothing is approved because he ranked it first |
+| **Tarik** | Browser tester | every frontend or API change | `cd frontend && npm run e2e` green on the local stack; a new screen or button has a journey in the same change |
+| **Lauren** | Numbers guardian | any change to pricing, XVA, exposure, capital, collateral, P&L or risk | `tests/reference` green, the engine and replication tests green, the pinned sample book unchanged or its movement explained in `GOLDEN_CHANGES.md` |
+| **Mike** | Model validator | any change that adds or changes a formula, a product, a risk measure or the construction of a market input | each calculation has a reference comparison, an Excel replication and a methodology section, or `docs/model_inventory.md` says which is missing; one figure re-derived independently by a fresh agent |
+| **Dragan** | Design keeper | any change that adds or alters a screen, a table, a field, a button, a colour or a size | `cd frontend && npm run design` shows no count risen; the changed screen compared in pictures with a screen that shows the same kind of thing; a field and the figure beside it measured alike; `docs/design.md` followed or amended |
+| **Christine** | Independent reviewer | anything larger than a one-line hotfix | a fresh agent has read `git diff main...HEAD` cold and its findings are fixed or answered |
+| **Machado** | Security reviewer | sign-in, roles, tenancy, keys, payments, public endpoints, user-supplied text | no finding left open |
+| **Archie** | Architect | any change that adds or removes a service, an outside dependency or data source, a table, a scheduled job, a setting or a public endpoint | `docs/architecture.md` and `docs/ops/environment.md` match the code, checked by a fresh agent against the diff; the new piece follows the pattern the system already has for its kind |
+| **Raja DB** | Database keeper | any change that adds or alters a table, column, function, trigger, policy or grant, writes to the database in a new way, or touches the migration runner or its approved list | migrations are one feature each, safe to re-run, locked down and tolerated when absent; `docs/schema.sql` agrees with them; nothing is on the approved list that the owner did not approve in his own words |
+| **Eric** | First-time visitor | a release that changes what someone new meets first (the door, sign-up, the home, a ticket's first screen, a new page); before a launch or a public post | Eric has walked the app cold on the local stack and read a picture of every stop; what would confuse a newcomer is fixed or answered |
+| **Greg** | Operations keeper | before a launch or a public post; after a change of hosting plan, host or machine size; after an outage; when a release adds work to a request or a batch | the sizes in `docs/ops/environment.md` are true; the dearest action is measured and the headroom said; the watch says nothing wrong; an outage has its account in `docs/ops/incidents.md` |
+| **Jenn** | Release manager | every deploy | `docs/ops/release.md` followed; the commit read back from production |
+| **Hermie** | Project manager | every proposal and decision | recorded in `_docs/BACKLOG.md` (local only) with its status |
+| **Patrick** | Product lead | the start of a working session, after a release, a weekly walk, before a large piece of work | Patrick has said, ranked and argued, what would most strengthen the mission and what to stop; the owner has decided; nothing is approved because Patrick ranked it first |
 
-A one-line hotfix asked for by name may skip Vera; it never skips lint, tests and Jarvis's checklist.
+The roles took these names on 16 November 2026, and a role is called by its name, not by he or she. A record dated
+before then keeps the names of its day (the changelog, `docs/archive`, a review note in a code comment or a test, the
+approved migration files): Quinn is Tarik, Ada is Lauren, Emmy is Mike, Iris is Dragan, Vera is Christine, Magnus is
+Machado, Nikola is Archie, Edgar is Raja DB (`raja`), Jarvis is Jenn, Petra is Hermie, Marco is Eric, Grace is Greg.
+
+A one-line hotfix asked for by name may skip Christine; it never skips lint, tests and Jenn's checklist.
 
 ### Who runs each gate (since 12 November 2026)
 
@@ -34,27 +39,27 @@ reported 53 high findings among 776, two thirds of them low, for about 11.7 mill
 what changes is who runs it.
 
 - **A fresh agent** (sonnet, one round, a narrow brief):
-  - **Vera** on every change larger than a one-line hotfix. Her brief: report only what would break production,
+  - **Christine** on every change larger than a one-line hotfix. The brief: report only what would break production,
     mislead a user, move or misstate money, or open a security hole; and say where a document states something the
-    code does not do. Where no specialist below is run, their questions for that change go into her brief.
-  - **Iris** when a screen changes.
-  - **Emmy** when a formula, a product, a risk measure or the construction of a market input is added or changed.
-  - **Magnus** when sign-in, roles, tenancy, keys, payments or a public endpoint change. Text a user types that does
-    not reach a public page is a question in Vera's brief.
-  - **Edgar** when a migration, the runner or the approved list is in the diff.
-  - **Marco** before a launch or a public post, and when what a newcomer meets first changes. He is the dearest
-    of the agents to run (he takes and reads a picture of every stop), so not on every change.
+    code does not do. Where no specialist below is run, their questions for that change go into that brief.
+  - **Dragan** when a screen changes.
+  - **Mike** when a formula, a product, a risk measure or the construction of a market input is added or changed.
+  - **Machado** when sign-in, roles, tenancy, keys, payments or a public endpoint change. Text a user types that does
+    not reach a public page is a question in Christine's brief.
+  - **Raja DB** when a migration, the runner or the approved list is in the diff.
+  - **Eric** before a launch or a public post, and when what a newcomer meets first changes. Eric is the dearest
+    of the agents to run (a picture of every stop is taken and read), so not on every change.
   - **Patrick** when the owner asks what to do next, once a week for a walk of the product against its mission,
-    and before a piece of work larger than a few days starts. He ranks and argues; he changes nothing, and his
+    and before a piece of work larger than a few days starts. Patrick ranks and argues and changes nothing, and the
     list is a proposal the project manager records.
-  - **Grace** after an outage, before a launch, after a change of plan, host or size, and when a release adds
-    work to a request or a batch: for the account and the measurements. The builder sets her account in
+  - **Greg** after an outage, before a launch, after a change of plan, host or size, and when a release adds
+    work to a request or a batch: for the account and the measurements. The builder sets Greg's account in
     `docs/ops/incidents.md`.
-- **The builder, who says so in the report**: **Ada** (`tests/reference`, the engine and replication tests, the
-  pinned book, and a reason in `GOLDEN_CHANGES.md` for every number that moved), **Nikola** (the map against the
-  diff), **Quinn** (the journeys), **Jarvis** (the release checklist), **Petra** (the backlog), and **Grace**'s reading of the hosts' dashboards,
+- **The builder, who says so in the report**: **Lauren** (`tests/reference`, the engine and replication tests, the
+  pinned book, and a reason in `GOLDEN_CHANGES.md` for every number that moved), **Archie** (the map against the
+  diff), **Tarik** (the journeys), **Jenn** (the release checklist), **Hermie** (the backlog), and **Greg**'s reading of the hosts' dashboards,
   which needs the owner signed in. A moved number the
-  builder cannot explain goes to Ada as an agent.
+  builder cannot explain goes to Lauren as an agent.
 - The owner can ask for any role as an agent on any change.
 
 ## Standing rules

@@ -1,4 +1,4 @@
-// Quinn's browser journeys (e2e/). They run the built app on the local stack: see e2e/README.md.
+// Tarik's browser journeys (e2e/). They run the built app on the local stack: see e2e/README.md.
 import { defineConfig } from '@playwright/test'
 
 export const WEB = 'http://127.0.0.1:4174'

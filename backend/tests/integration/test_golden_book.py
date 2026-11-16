@@ -1,4 +1,4 @@
-"""The pinned sample book (Ada, the numbers guardian). A fixed set of trades on the stack's fixed market of 2 November
+"""The pinned sample book (Lauren, the numbers guardian). A fixed set of trades on the stack's fixed market of 2 November
 2026, valued at that date with fixed seeds: a swap and its par rate, its XVA under each settlement and with the margin
 held in a stablecoin, an FX and a digital-asset forward with their XVA, and the swap's capital stock under three
 collateral regimes. Every figure is compared with golden_book.json.
