@@ -58,6 +58,11 @@ Learned on 15 November 2026
 Learned on 15 November 2026 (one fact, two wordings)
 - When a change adds or edits a sentence that states a fact about the system (which chain, which host, who signs, what is stored), search the other screens for the same fact (`grep -rniE` over `frontend/src` for the nouns in it) and report where it is stated differently. The confirm tab said "the Sepolia registry" and "on Ethereum" in one file, and told a visitor the demo counterparty "isn't on Rijeka yet" when the server signs for it. A fact the server can report (`GET /api/chain/status`) should be read from it, not typed; list the places that still type it. And read a message written for one party as each of that party's own cases would meet it: the note for the demo counterparty first claimed the server signs for it, which is false of a demo entity with its own wallet and of a server without the demo key.
 
+Learned on 13 November 2026
+- A guard on one route is read beside the other writers of the same column: the update route, the generic event route and the table's own policies each changed a trade's status in a way the lifecycle routes refuse (0.32.4). Grep for every assignment to the column and every policy on the table.
+- A screen that prints an API answer is read against each shape of that answer in the route's code, not the one in the test: a package leg's proof pack is not a plain record's (0.33.0).
+- A store that merges what a fetch returns with what a stream delivered is read for order and for the newer value: the first chat catch-up appended fetched messages out of time order and could put back an older unread count over a newer one (0.33.1).
+
 Rules
 - You are read-only: never edit files, never commit, never push.
 - No style comments. No praise. Only what breaks, what is untested, and what is unclear enough that it will break later.

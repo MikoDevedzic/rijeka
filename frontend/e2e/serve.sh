@@ -71,6 +71,15 @@ if [ "$CHAIN" = "1" ]; then
   eval "$CHAIN_ENV"
 fi
 
+# 2b. the assistant, only for a run that names a key for it (the film's Prometheus scene: `RIJEKA_STACK_ASSISTANT_KEY`,
+#     and `RIJEKA_STACK_ASSISTANT_MODEL` when the model is not the default). The stack's own environment leaves the key
+#     empty, so the journeys and CI never call the model; what the assistant is sent then is the stack's sample book
+if [ -n "${RIJEKA_STACK_ASSISTANT_KEY:-}" ]; then
+  export ANTHROPIC_API_KEY="$RIJEKA_STACK_ASSISTANT_KEY"
+  if [ -n "${RIJEKA_STACK_ASSISTANT_MODEL:-}" ]; then export PROMETHEUS_MODEL="$RIJEKA_STACK_ASSISTANT_MODEL"; fi
+fi
+unset RIJEKA_STACK_ASSISTANT_KEY RIJEKA_STACK_ASSISTANT_MODEL
+
 # 3. the API on the stack's environment
 RIJEKA_NO_DOTENV=1 CORS_ORIGINS="http://127.0.0.1:$WEB_PORT,http://localhost:$WEB_PORT" RIJEKA_RATE_LIMITS=0 \
   "$PY" -m uvicorn main:app --host 127.0.0.1 --port $API_PORT --log-level warning > "$OUT/api.log" 2>&1 &

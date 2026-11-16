@@ -3,6 +3,27 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.27). Commits on `main` are the detail.
 
+## 0.46.2 · 16 November 2026
+
+**Housekeeping before launch. Nothing a user of the desk sees changes.**
+
+- **The walkthrough film is a script in the repository** (`frontend/e2e/film/`, `npm run film`): a Playwright
+  recording of the desk on the local stack, with its Prometheus, methodology and Excel scenes. It had sat in an
+  open pull request since 13 November. The journeys ignore it. The stack can be given an assistant key for one run
+  (`RIJEKA_STACK_ASSISTANT_KEY`), which the journeys and CI never set.
+- **The lessons of 13 November are in the roles' definitions**: three health reads before the release move and
+  the release branch checked after it; a red check read before it is re-run; a rule in a comment checked against
+  every writer of the row; a screen tried against every shape of the answer it prints; a store fed by a stream
+  tried with the stream silent; a migration on the approved list runs on every desk that runs this code.
+- **A test that stood only in company stands alone.** The relayer budget's cap test passed in the full suite and
+  failed by itself, since it took whether a table exists from an earlier test; it now says which way of counting
+  it means and covers both.
+- **The legal pages' script writes the site's look.** `frontend/scripts/build_legal.mjs` still wrote the public
+  site's earlier look; its output is now the live terms and privacy pages byte for byte.
+- The README's counts of tests are today's.
+
+---
+
 ## 0.46.1 · 16 November 2026
 
 **Two migrations approved for production: the activity record and the health record.** No code changes; the

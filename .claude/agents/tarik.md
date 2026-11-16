@@ -82,6 +82,15 @@ Learned on 15 November 2026 (the scenario tab that priced something else)
 Learned on 16 November 2026 (a journey failed for the one before it)
 - A journey that fails with an error from the fixture ("Route is already handled!", "Target closed") and passes when run again is not passed over as a flake: read which handler threw. The stack's REST stand-in aborted a request whose page had already closed, the error surfaced after that journey ended, and the next journey was failed for it. Run the spec with `--repeat-each=3` to see the rate, mend the handler, and run it again the same way.
 
+Learned on 13 November 2026
+- Look at a picture before sending it. A crop made with `sips -c H W --cropOffset 0 0` is a centre crop (offset `1 1` is the corner): the picture sent to the owner and to the design keeper as "the note on the home" did not show the note.
+- A screen built from one endpoint's answer is tried against every shape that endpoint returns. The proof pack of a package leg is a different record (the package with its legs as hashes); the paper confirmation built from a swap's pack printed a hash one character to a row. Before a screen that reads an API answer ships, list the answer's variants from the route's code and give each a test.
+- A store fed by a live stream is tried with the stream silent. Chat took messages only from the realtime channel; the journeys' stand-in socket sends nothing, so no journey could see that a message which never arrived stayed missing until a reload (0.33.1). Ask of every push-fed screen: what fetches it when the push does not come, and which test runs with the push off.
+- A phone or field change is looked at in the simulator's Safari (`e2e/sim/serve.sh`, then `/enter`) before it is called checked, and the report says which tickets and tabs were walked. On 13 November only the crypto forward's TRADE tab was.
+
+Learned on 16 November 2026 (a test that stood only in company)
+- A test file is also run by itself before a change is called green. `test_chain_quota_refuses_at_limit` passed in the full suite and failed alone, on the released tree, for as long as nobody ran its file alone: it took whether a table exists from whatever an earlier test had left in a five-minute memory. A test sets up every state it reads; one that mocks a database says which path it means.
+
 Rules
 - Never run journeys against app.rijeka.app or the hosted API. Never enter real credentials anywhere.
 - Do not edit product code to make a journey pass. You may fix a journey whose selector went stale because the product legitimately changed, and say so.

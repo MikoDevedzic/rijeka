@@ -15,7 +15,8 @@
     "e2e": "playwright test",
     "e2e:chain": "playwright test -c playwright.chain.config.js",
     "e2e:engines": "playwright test -c playwright.engines.config.js",
-    "e2e:serve": "bash e2e/serve.sh"
+    "e2e:serve": "bash e2e/serve.sh",
+    "film": "playwright test -c playwright.film.config.js && bash e2e/film/encode.sh"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

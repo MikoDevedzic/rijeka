@@ -132,13 +132,35 @@ def test_chain_quota_unset_is_unlimited(monkeypatch):
 
 
 def test_chain_quota_refuses_at_limit(monkeypatch):
+    """The cap by both ways of counting. Whether the attempts table is there is remembered by the budget for five
+    minutes, so the test says which way it means instead of taking whatever an earlier test left (it passed in the
+    full suite and failed alone until 16 November 2026)."""
+    from types import SimpleNamespace
     from fastapi import HTTPException
     from api.routes.chain import _check_chain_quota
+    from chain import budget
     monkeypatch.setenv("RIJEKA_CHAIN_DAILY_LIMIT", "5")
+    monkeypatch.setenv("RIJEKA_CHAIN_FIRM_DAILY_LIMIT", "0"); monkeypatch.setenv("RIJEKA_CHAIN_GLOBAL_DAILY_LIMIT", "0")
+    monkeypatch.setattr(budget, "firm_of", lambda db, user_id: None)
+    monkeypatch.setattr(budget, "_memory", type(budget._memory)(maxlen=budget._memory.maxlen))
+
+    # without the attempts table: the stored events are the floor of the count
+    monkeypatch.setattr(budget, "table_present", lambda db: False)
     db = MagicMock()
     db.execute.return_value.scalar.return_value = 4
     _check_chain_quota(db, uuid.uuid4())                      # under: fine
     db.execute.return_value.scalar.return_value = 5
+    with pytest.raises(HTTPException) as e:
+        _check_chain_quota(db, uuid.uuid4())
+    assert e.value.status_code == 429 and "limit of 5" in e.value.detail
+
+    # with it: the attempts themselves are counted
+    monkeypatch.setattr(budget, "table_present", lambda db: True)
+    db = MagicMock()
+    db.execute.return_value.first.return_value = SimpleNamespace(u=4, f=0, g=4)
+    _check_chain_quota(db, uuid.uuid4())                      # under: fine, and the attempt is written
+    assert any("INSERT INTO chain_attempts" in str(c.args[0]) for c in db.execute.call_args_list)
+    db.execute.return_value.first.return_value = SimpleNamespace(u=5, f=0, g=5)
     with pytest.raises(HTTPException) as e:
         _check_chain_quota(db, uuid.uuid4())
     assert e.value.status_code == 429 and "limit of 5" in e.value.detail
