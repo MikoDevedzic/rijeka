@@ -146,7 +146,9 @@ for (const [name, product, route, priceRoute] of [
     expect(values.some(v => (route.startsWith('forward') ? v.npv === quote.npv : Math.abs(v.npv - quote.npv) < 1e-6)), 'the engine\'s value at the ticket\'s own market is the ticket\'s NPV').toBe(true)
     expect(await num(npv)).toBeCloseTo(quote.npv, 2)
 
-    // a shock while the engine is held back: the figure moves at once (the closed form), the chip says the engine is asked
+    // a shock while the engine is held back: the figure moves at once (the closed form), the chip says the engine is asked.
+    // The shock is one no rung of the ladder stands on (3.7 %): the tab's first request priced the ladder too, and a
+    // market it already holds is not asked again.
     let release
     const gate = new Promise(r => { release = r })
     // (choosing the curve asks for its ladder, and the shock then asks again: every answer on the route is kept, the
@@ -156,7 +158,7 @@ for (const [name, product, route, priceRoute] of [
     app.on('response', keep)
     await app.route(`**/api/currency/${route}`, async r => { await gate; await r.continue().catch(() => {}) })
     await win.getByTestId('fx-scn-curve-spot').click()
-    const flat = win.getByTestId('fx-scn-flat-value'); await flat.fill('2'); await flat.blur()
+    const flat = win.getByTestId('fx-scn-flat-value'); await flat.fill('3.7'); await flat.blur()
     await expect(win.getByTestId('fx-scn-engine')).toHaveText('REPRICING…')
     await expect(npv, 'a figure is on screen before the answer').not.toHaveText('—')
     const soon = { npv: await num(npv), change: await num(change) }

@@ -349,8 +349,10 @@ export function reprice(q, shocks = {}) {
   const st = shockedState(q, shocks)
   if (!st) return null
   const sign = q.direction === 'BUY' ? 1 : -1
-  const volPts = finite(shocks.volPts) ? shocks.volPts : 0
-  const unit = option ? gk(st.forward, q.strike, q.t_expiry, Math.max(q.vol_pct / 100 + volPts / 100, 0.0001), q.option_type === 'CALL', st.df_quote)
+  // the vol is the market's own (shockedState): the one the pricer took, unrounded, where the quote carries it. The
+  // closed form read the vol as displayed (`vol_pct`, rounded) until 0.47.0, while the engine was sent the unrounded
+  // one: a quarter of a unit apart on a 10m option, seen once the two figures stood side by side.
+  const unit = option ? gk(st.forward, q.strike, q.t_expiry, st.vol_pct / 100, q.option_type === 'CALL', st.df_quote)
                       : (st.forward - q.forward_rate) * st.df_quote
   return finite(unit) ? { forward: st.forward, npv: sign * q.base_notional * unit } : null      // a null unit value is not a zero
 }

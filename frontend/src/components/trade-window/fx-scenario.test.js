@@ -846,8 +846,11 @@ describe('shockedState: the market a scenario leaves a trade on', () => {
     expect(st.spot).toBeCloseTo(1.16 * 1.025, 12)
     expect(st.df_quote).toBeCloseTo(0.98 * Math.exp(-0.004 * 0.5), 12)                               // the quote curve's shock, to the settlement date
     expect(st.vol_pct).toBeCloseTo(8.50004 + 1.25, 10)
-    // and the closed form is that market priced: Garman-Kohlhagen at the state's forward and discount factor
-    expect(reprice(opt, shocks).npv).toBeCloseTo(1e6 * gk(st.forward, 1.17, 0.49, (8.5 + 1.25) / 100, true, st.df_quote), 6)
+    // and the closed form is that market priced: Garman-Kohlhagen at the state's forward, discount factor and vol.
+    // The vol is the state's own (8.50004, as the pricer took it), not the one the quote displays (8.5): the two
+    // gave figures 0.12 apart on this 1m option, the closed form's against the engine's at the same scenario
+    expect(reprice(opt, shocks).npv).toBeCloseTo(1e6 * gk(st.forward, 1.17, 0.49, st.vol_pct / 100, true, st.df_quote), 9)
+    expect(Math.abs(reprice(opt, shocks).npv - 1e6 * gk(st.forward, 1.17, 0.49, (8.5 + 1.25) / 100, true, st.df_quote))).toBeGreaterThan(0.1)
   })
   it('a vol shocked below nothing stops at a hundredth of a point; a forward has no vol', async () => {
     const { shockedState } = await import('./fx-scenario')

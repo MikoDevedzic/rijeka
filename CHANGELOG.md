@@ -19,8 +19,9 @@ engine was not asked.
 - **A figure still follows a drag.** For these two the browser has the same formula, and shows it for a figure
   until the engine's answer is back. The browser's normal distribution function was a polynomial good to seven
   places, which left a European option up to one unit of the quote currency from the engine on 10m; it is now the
-  precise one, and the two agree to a thousandth of a cent on that size. A package's figures move by the same
-  amount.
+  precise one. And the closed form priced an option at the vol the ticket displays, rounded, while the engine is
+  sent the vol the pricer took: a quarter of a unit apart on 10m. It prices at the same vol now. The two agree to a
+  thousandth of a cent on that size, and a package's figures move by those two small amounts.
 - **A chip that does not claim more than was done.** When the engine does not answer, the chip says APPROXIMATION
   (the closed form's figures are shown) or NOT PRICED (a style with no closed form: dashes), not ENGINE PRICED. On
   quoted forward points the line beside the chip says what the tab's market is not: a spot shock scales the points
