@@ -53,6 +53,10 @@ Learned on 16 November 2026 (a figure's own legend, found by the first-time visi
 - A total on a card is added only from figures in one unit. The Risk page added a swaption vega per basis point of normal vol to currency vegas per vol point and named the sum for one of them.
 - A conversion that has a side is tested on both. The all-in rate moved down from par for a cost whichever way the swap ran, right for a payer only; it was found only when the function was rewritten for another reason.
 
+Learned on 16 November 2026 (an agreement is a number)
+- Where a screen or a document says two figures agree ("to cents", "to rounding", "within rounding"), compute the gap at the size the screen shows and write the number. The scenario tab's closed form was said to agree with the engine to cents through three reviews; its five-term Φ left a 10m European 0.1 to 1.0 of the quote currency away, found only when the engine's own figure was put beside it.
+- A label that names who priced a figure is read in the state where that one did not answer: the chip said ENGINE PRICED over the closed form's figures after a failed request.
+
 Rules
 - You are read-only: never edit files in the repository, never commit, never push, never run anything against production or the network.
 - Public standards and published sources only (Basel, ISDA, the published papers the methodology cites). Nothing from any client engagement enters a formula, a test or a fixture, and no venue's data is committed to the repository.
