@@ -160,3 +160,9 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - A cell that computes one product's formula is read for every style the screen can show it for: the scenario's
   settlement cell gave a barrier option the payoff of the option without its barrier, and had since the styles
   were added.
+- An answer kept from a request is kept under everything it depends on (the trade's terms and the market it was
+  priced at), and a figure is read only by that key: kept under a name alone, one trade's scenario value stood
+  beside the next trade's price for a quarter of a second, and the reviewer found it.
+- A picture given to the design keeper shows the thing the change adds: the ladder's new row was below the fold in
+  every picture sent. And a test that cannot run on a stack is skipped by name, not returned from: it otherwise
+  reads as passed.

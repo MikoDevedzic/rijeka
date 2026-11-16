@@ -30,7 +30,7 @@ import { pillars } from './fx-vol'
 import { shockAtTime as shiftAtTime, shockSaid as shockWords } from './rates-scenario'
 import { RISK_FACTORS } from '../../lib/risk-factors'
 import { RESULT_FIG, XVA_ROW, XVA_LEFT, XVA_RIGHT } from './xva-shared'
-import { marketKey, scenarioRead, scenarioRequest } from './fx-requests'
+import { marketKey, scenarioMerge, scenarioRead, scenarioRequest } from './fx-requests'
 import { NOT_A_NUMBER, crybasis01, formatRead, parseNumber } from './fx-ticket'
 import {
   FIXING_DAYS, FX_SPOT_LAG_DAYS, RATE_SHOCK_BOUND, SPOT_BOUND_PCT, applyTenorDrag, carryFactor, carryPoints, chartLevels, curveNodes, daysBetween,
@@ -582,6 +582,8 @@ function LegCashflows({ quote, crypto }) {
 // the ticket's own. In both, a spot shock scales the quoted points with spot, and on quoted points the pricer
 // would not move the forward with the rate sliders. The banner and the caption under the sliders say so.
 const ENGINE_DELAY_MS = 250           // the engine is asked once the scenario has stood still this long
+// an amount the trade would settle: the cell's figure, and the second one beside it where there are two
+const SETTLE_FIG = (v) => ({ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 500, color: tone(v, 2) })
 const TOUCHED_NOTE = 'In these columns spot stands at or beyond the level. The figure is what the option is worth at that moment: a knock-out its rebate, a knock-in the plain option, a one-touch its payout, a no-touch nothing.'
 
 // Which source the trade fixes on, when it fixes and settles (ISO dates; an American option fixes when it is
@@ -604,10 +606,10 @@ function FixingSource({ source, time, date, settles, american, last, cash, dp })
   )
 }
 
-// A styled option's prices: one request for every figure on the tab (fx-requests.js scenarioRequest), sent once the
-// scenario has stood still, only while the tab is showing and the quote is not being repriced, and dropped in flight
-// when the scenario moves on. It draws nothing: the tab holds the last answer until the next is back, and its chip
-// says REPRICING… meanwhile.
+// A styled option's prices: one request for every market the tab needs and does not hold (fx-requests.js
+// scenarioRequest), sent once the scenario has stood still, only while the tab is showing and the quote is not being
+// repriced, and dropped in flight when the scenario moves on. It draws nothing: the tab's chip says REPRICING…
+// meanwhile, and a figure whose market is not answered yet is a dash.
 function EngineAsk({ req, on, onAnswer, onFailure }) {
   const key = req?.key || null
   useEffect(() => {
@@ -618,7 +620,7 @@ function EngineAsk({ req, on, onAnswer, onFailure }) {
         const r = await apiFetch('/api/currency/option/scenario', { method: 'POST', signal: stop.signal, headers: { 'Content-Type': 'application/json' }, body: key })
         const j = await r.json().catch(() => ({}))
         if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : `the engine answered ${r.status}`)
-        if (!stop.signal.aborted) onAnswer({ key, index: req.index, values: Array.isArray(j.values) ? j.values : [] })
+        if (!stop.signal.aborted) onAnswer(req, Array.isArray(j.values) ? j.values : [])
       } catch (e) { if (!stop.signal.aborted) onFailure({ key, message: e.message }) }
     }, ENGINE_DELAY_MS)
     return () => { clearTimeout(timer); stop.abort() }
@@ -645,7 +647,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const [market, setMarket] = useState(null)             // { pair, row, tenorDays }: the pair's spot, points, pip, sources and the API's tenor map
   const [marketFor, setMarketFor] = useState(null)       // the stored market (marketKey) whose pairs request has come back, whatever it answered
   const [stored, setStored] = useState(null)             // { pair, rows }: the pair's recent fixings
-  const [held, setHeld] = useState(null)                 // { key, index, values }: the engine's last answer for a styled option, and the request it answers
+  const [held, setHeld] = useState(null)                 // { terms, by }: what the engine has answered for a styled option, by its terms and by market
   const [failed, setFailed] = useState(null)             // { key, message }: the last request the engine could not answer
   const origin = useRef(null)                            // the shocks as they stood when a drag began
   const pair = quote?.pair
@@ -948,14 +950,15 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const rungs = ladder ? ladder.xs.map(x => ({ x, f: step(`lad:${cur.key}:${x}`, ladder.more(x)) })) : []
 
   // ── a styled option: every figure named above goes to the engine in one request, and is read from its answer ──
-  const req = engine ? scenarioRequest(quote, named) : null
-  const reqKey = req?.key || null
-  const engineError = engine && failed?.key === reqKey ? failed.message : null
-  const busy = engine && !!reqKey && held?.key !== reqKey && !engineError          // the figures shown answer an earlier scenario
-  // a figure as it is read: priced here, or the engine's answer under its name (nothing until one is back)
+  const req = engine ? scenarioRequest(quote, named, held) : null
+  const reqKey = req?.key || null                                             // null when every market wanted is already held
+  const engineError = engine && !!reqKey && failed?.key === reqKey ? failed.message : null
+  const busy = engine && !!reqKey && !engineError                             // a market on screen is still being priced
+  // a figure as it is read: priced here, or the engine's value at that figure's own market for this option's terms
+  // (nothing until it is back; never a value answered for another market or another trade)
   const got = (f) => {
     if (!f || !engine || !f.name) return f
-    const a = engineError ? null : scenarioRead(held, reqKey, f.name)          // a request that failed shows nothing in its place
+    const a = scenarioRead(held, req, f.name)
     return { forward: f.forward, npv: a ? a.npv : null, touched: !!a?.touched, error: a?.error || null }
   }
   const nowR = got(now)
@@ -963,6 +966,8 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const none = { forward: null, npv: null }                                  // a ladder cell that cannot be priced shows a dash
   const lad = rungs.map(({ x, f }) => ({ x, r: got(f) || none }))
   const scenNpv = whole ? pNow.npv : nowR.npv, marketNpv = whole ? pBase.npv : base.npv
+  // a market the pricer could not value is a dash in its cell, and its reason is said once
+  const cellError = engine ? [nowR, ...Object.values(aloneR), ...lad.map(l => l.r)].find(r => r?.error)?.error || null : null
 
   // ── the result, factor by factor: each one's shock alone, what is left over when they act together, and the total ──
   // a package: the same decomposition, each factor's shock alone over every leg
@@ -1164,15 +1169,17 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <input data-testid="fx-scenario-fixing" type="text" inputMode="decimal" aria-label="Scenario fixing" value={fixingShown} data-invalid={fixingBad ? 'true' : undefined}
           onChange={e => setFixingText(e.target.value)} style={{ ...inputBox, width: 112, ...(fixingText != null ? setBox : null), ...(fixingBad ? { color: 'var(--amber)', borderColor: 'var(--amber)', boxShadow: 'none' } : {}) }} />
-        <span data-testid="fx-scenario-settlement" data-value={amount ?? ''} title={settles?.kind === 'path' ? (settles.certain ? 'What the trade settles: the fixing is at or beyond the level, so it traded' : 'What the trade settles if its level never traded') : 'What the trade settles at that fixing'} style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 500, color: tone(amount, 2) }}>
+        <span data-testid="fx-scenario-settlement" data-value={amount ?? ''} title={settles?.kind === 'path' ? (settles.certain ? 'What the trade settles: the fixing is at or beyond the level, so it traded' : 'What the trade settles if its level never trades') : 'What the trade settles at that fixing'} style={SETTLE_FIG(amount)}>
           {amount == null ? '—' : `${signed(amount)} ${qc}`}
         </span>
       </div>
       {settles?.kind === 'path' && (
         <div data-testid="fx-scenario-settlement-path" data-certain={settles.certain ? 'true' : 'false'} style={{ fontSize: 11.5, color: 'var(--text-dim)', marginTop: 4, lineHeight: 1.5 }}>
           {settles.certain
-            ? <>the fixing is at or beyond the {levelWord}, so it traded{settles.atTouch ? ': paid at the touch' : ''}</>
-            : <>if the {levelWord} never trades. If it does: <span data-testid="fx-scenario-settlement-touched" data-value={settles.touched} style={{ fontFamily: 'var(--mono)', fontSize: 12.5, color: tone(settles.touched, 2) }}>{signed(settles.touched)} {qc}</span>{settles.atTouch ? ', paid at the touch' : ''}</>}
+            ? <>the fixing is at or beyond the {levelWord}, so it traded</>
+            : <>if the {levelWord} never trades
+                <div style={{ marginTop: 4 }}><span data-testid="fx-scenario-settlement-touched" data-value={settles.touched} style={SETTLE_FIG(settles.touched)}>{signed(settles.touched)} {qc}</span></div>
+                if it does{settles.atTouch ? ', paid at the touch' : ''}</>}
         </div>
       )}
       {fixingText != null && <button type="button" className="tbw-btn" style={{ marginTop: 6, padding: '3px 8px', fontSize: 11 }} onClick={() => setFixingText(null)} title="Follow the scenario's forward at settlement again">USE THE FORWARD</button>}
@@ -1195,6 +1202,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
                 : 'Scenario: an approximation in the browser, to cents with no shock; nothing is saved.'}</Note>
             </div>
             {engineError && <div data-testid="fx-scn-error" style={{ fontSize: 12, color: 'var(--amber)', padding: '0 0 6px' }}>The engine could not price this scenario: {engineError}</div>}
+            {!engineError && cellError && <div data-testid="fx-scn-cell-error" style={{ fontSize: 12, color: 'var(--amber)', padding: '0 0 6px' }}>The engine could not price every market of this scenario, and those figures are dashes: {cellError}</div>}
             {engine && nowR.touched && <div data-testid="fx-scn-touched" style={{ fontSize: 12, color: 'var(--amber)', padding: '0 0 6px' }}>{touchedWords(quote)}</div>}
             {selected}
           </div>
@@ -1207,7 +1215,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
           </div>
           {packageBlock}
           {ladderBlock}
-          {engine && <EngineAsk req={req} on={active && !stale && !!reqKey && held?.key !== reqKey && failed?.key !== reqKey} onAnswer={setHeld} onFailure={setFailed} />}
+          {engine && <EngineAsk req={req} on={active && !stale && !!reqKey && failed?.key !== reqKey} onAnswer={(asked, values) => { setHeld(h => scenarioMerge(h, asked, values)); setFailed(null) }} onFailure={setFailed} />}
         </div>
       </div>
     </div>

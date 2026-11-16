@@ -1,6 +1,6 @@
 // Which request an answer on a currency ticket's tabs belongs to (fx-requests.js). The quotes are made up.
 import { describe, it, expect } from 'vitest'
-import { marketKey, scenarioTerms, scenarioRequest, scenarioRead, xvaTermsKey, xvaResultMatches } from './fx-requests'
+import { SCENARIO_KEPT, marketKey, scenarioTerms, scenarioRequest, scenarioMerge, scenarioRead, xvaTermsKey, xvaResultMatches } from './fx-requests'
 
 const option = (o = {}) => ({
   pair: 'BTCUSD', shape: 'OPTION', base_currency: 'BTC', quote_currency: 'USD', option_type: 'CALL', direction: 'BUY', base_notional: 10,
@@ -51,12 +51,15 @@ describe('a styled option under a scenario: what the engine is asked, and what a
     expect('pair' in b || 'npv' in b || 'vol_pct' in b).toBe(false)       // nothing of the market: that is in the states
     expect(scenarioTerms(null)).toBe(null)
   })
+  const id = (s) => [s.spot, s.forward, s.df_quote, s.vol_pct].join('|')
   it('scenarioRequest prices a market once however many names read it', () => {
     const r = scenarioRequest(barrier, [['now', market], ['only:spot', up], ['only:vol', market], ['lad:spot:0', market], ['lad:spot:5', up]])
     expect(r.body.states).toEqual([market, up])
-    expect(r.index).toEqual({ now: 0, 'only:spot': 1, 'only:vol': 0, 'lad:spot:0': 0, 'lad:spot:5': 1 })
+    expect(r.ids).toEqual([id(market), id(up)])
+    expect(r.index).toEqual({ now: id(market), 'only:spot': id(up), 'only:vol': id(market), 'lad:spot:0': id(market), 'lad:spot:5': id(up) })
     expect(r.key).toBe(JSON.stringify(r.body))
     expect(r.body.style).toBe('BARRIER')
+    expect(r.terms).toBe(JSON.stringify(scenarioTerms(barrier)))
   })
   it('a name with no usable market is left out; with none left there is nothing to ask', () => {
     const r = scenarioRequest(barrier, [['now', market], ['only:vol', { ...market, vol_pct: null }], ['only:fwd', null], ['lad:spot:-100', { ...market, spot: 0 }]])
@@ -65,25 +68,56 @@ describe('a styled option under a scenario: what the engine is asked, and what a
     expect(scenarioRequest(barrier, [])).toBe(null)
     expect(scenarioRequest(null, [['now', market]])).toBe(null)
   })
-  it('another scenario, or other terms, is another request', () => {
-    const k = scenarioRequest(barrier, [['now', market]]).key
-    expect(scenarioRequest(barrier, [['now', up]]).key).not.toBe(k)
-    expect(scenarioRequest({ ...barrier, barrier: 131000 }, [['now', market]]).key).not.toBe(k)
-    expect(scenarioRequest({ ...barrier, npv: 1, forward: 1 }, [['now', market]]).key).toBe(k)        // the request sends neither
+  it('a market already answered for these terms is not asked again; with all of them held there is no request', () => {
+    const first = scenarioRequest(barrier, [['now', market]])
+    const held = scenarioMerge(null, first, [{ npv: 31250.5, touched: false }])
+    const next = scenarioRequest(barrier, [['now', up], ['only:vol', market]], held)
+    expect(next.body.states).toEqual([up])                                    // the market itself is held
+    expect(next.index['only:vol']).toBe(id(market))
+    const all = scenarioRequest(barrier, [['now', market]], held)
+    expect(all.body).toBe(null); expect(all.key).toBe(null); expect(all.index.now).toBe(id(market))
+    // what was answered for other terms is another trade's: everything is asked
+    expect(scenarioRequest({ ...barrier, strike: 111000 }, [['now', market]], held).body.states).toEqual([market])
   })
-  it('scenarioRead: the answer under a name, and whether it answers the request on screen', () => {
-    const r = scenarioRequest(barrier, [['now', market], ['only:spot', up]])
-    const held = { key: r.key, index: r.index, values: [{ npv: 31250.5, touched: false }, { npv: 20, touched: true }] }
-    expect(scenarioRead(held, r.key, 'now')).toEqual({ npv: 31250.5, touched: false, error: null, current: true })
-    expect(scenarioRead(held, r.key, 'only:spot')).toEqual({ npv: 20, touched: true, error: null, current: true })
-    expect(scenarioRead(held, 'another request', 'now')).toEqual({ npv: 31250.5, touched: false, error: null, current: false })   // the last answer stays while the next is out
-    expect(scenarioRead(held, r.key, 'lad:spot:5')).toBe(null)                                         // a name the last answer did not carry
-    expect(scenarioRead(null, r.key, 'now')).toBe(null)
+  it('scenarioRead: the value at the name\'s own market, for these terms only', () => {
+    const r1 = scenarioRequest(barrier, [['now', market], ['only:spot', up]])
+    const held = scenarioMerge(null, r1, [{ npv: 31250.5, touched: false }, { npv: 20, touched: true }])
+    expect(scenarioRead(held, r1, 'now')).toEqual({ npv: 31250.5, touched: false, error: null })
+    expect(scenarioRead(held, r1, 'only:spot')).toEqual({ npv: 20, touched: true, error: null })
+    // the scenario moves on: `now` is another market, not yet answered, and reads as nothing; it never reads the old one
+    const down = { ...market, spot: 98800, forward: 99037.5 }
+    const r2 = scenarioRequest(barrier, [['now', down], ['only:spot', down], ['only:vol', market]], held)
+    expect(scenarioRead(held, r2, 'now')).toBe(null)
+    expect(scenarioRead(held, r2, 'only:vol')).toEqual({ npv: 31250.5, touched: false, error: null })     // a market still held is read at once
+    // the terms change (another strike): nothing held is read, though the names and the markets are the same
+    const other = scenarioRequest({ ...barrier, strike: 111000 }, [['now', market], ['only:spot', up]], held)
+    expect(scenarioRead(held, other, 'now')).toBe(null)
+    expect(scenarioRead(held, other, 'only:spot')).toBe(null)
+    expect(scenarioRead(null, r1, 'now')).toBe(null); expect(scenarioRead(held, null, 'now')).toBe(null)
+    expect(scenarioRead(held, r1, 'lad:spot:5')).toBe(null)                                                // a name the request does not carry
+  })
+  it('scenarioMerge: answers add up for the same terms, start again for other terms, and stay within a bound', () => {
+    const r1 = scenarioRequest(barrier, [['now', market]])
+    const h1 = scenarioMerge(null, r1, [{ npv: 1, touched: false }])
+    const r2 = scenarioRequest(barrier, [['now', up]], h1)
+    const h2 = scenarioMerge(h1, r2, [{ npv: 2, touched: false }])
+    expect(Object.keys(h2.by)).toEqual([id(market), id(up)])
+    const rOther = scenarioRequest({ ...barrier, strike: 111000 }, [['now', market]], h2)
+    const h3 = scenarioMerge(h2, rOther, [{ npv: 3, touched: false }])
+    expect(h3.terms).toBe(rOther.terms); expect(Object.keys(h3.by)).toEqual([id(market)]); expect(h3.by[id(market)].npv).toBe(3)
+    // an answer shorter than what was asked: the market is recorded as not priced, with a reason, never left to be read as held and empty
+    const short = scenarioMerge(null, scenarioRequest(barrier, [['now', market], ['x', up]]), [{ npv: 1, touched: false }])
+    expect(scenarioRead(short, scenarioRequest(barrier, [['x', up]], short), 'x')).toEqual({ npv: null, touched: false, error: 'the engine gave no answer for this market' })
+    // the oldest markets are let go
+    let h = null
+    for (let k = 0; k < SCENARIO_KEPT + 25; k++) { const s = { ...market, spot: 100000 + k }; h = scenarioMerge(h, scenarioRequest(barrier, [['now', s]], h), [{ npv: k, touched: false }]) }
+    expect(Object.keys(h.by)).toHaveLength(SCENARIO_KEPT)
+    expect(h.by[id({ ...market, spot: 100000 })]).toBeUndefined(); expect(h.by[id({ ...market, spot: 100000 + SCENARIO_KEPT + 24 })].npv).toBe(SCENARIO_KEPT + 24)
   })
   it('scenarioRead: a market the pricer could not value reads as no figure, with its reason', () => {
-    const held = { key: 'k', index: { now: 0, x: 1 }, values: [{ npv: null, touched: false, error: 'outside what the pricer can value' }] }
-    expect(scenarioRead(held, 'k', 'now')).toEqual({ npv: null, touched: false, error: 'outside what the pricer can value', current: true })
-    expect(scenarioRead(held, 'k', 'x')).toBe(null)                                                    // an answer shorter than its index
+    const r = scenarioRequest(barrier, [['now', market]])
+    const held = scenarioMerge(null, r, [{ npv: null, touched: false, error: 'outside what the pricer can value' }])
+    expect(scenarioRead(held, r, 'now')).toEqual({ npv: null, touched: false, error: 'outside what the pricer can value' })
   })
 })
 

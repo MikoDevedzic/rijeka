@@ -319,10 +319,10 @@ same table and the same one ladder as a European. What is its own is said in wor
 scenario whose spot stands at or beyond the level says the option is valued as touched and what that is for this
 option, and the ladder then carries a BARRIER row marking the columns it is true of. The settlement cell gives an
 amount for the fixing typed; where the fixing alone cannot say (a barrier, a touch), the amount if the level never
-trades and, beside it, the amount if it does.
+trades and, under it and set as the first is, the amount if it does.
 
 A vol that is one number is shown as one number: a Bermudan swaption's is the Hull-White σ its tree is built on,
-named so in the list, shocked flat, with a sentence where its chart would be. It is not drawn as a curve of one
+named so in the list, shocked flat, with one sentence under the title where its chart would be (said once, not again in the list). It is not drawn as a curve of one
 point, and the swaption surface is not shown beside it as if it were being moved.
 
 Where the two tabs still differ, and why: the currency tab has a forward and a fixing to show, so its tiles are

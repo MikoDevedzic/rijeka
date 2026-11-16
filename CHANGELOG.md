@@ -46,7 +46,9 @@ changes. Methodology v1.26.
 - Tests: 28 for the engine's scenario value (each of fourteen options at its own market is the ticket's price
   exactly; the value just inside each barrier meets the touched value), the Bermudan's σ on the stack, unit tests
   for the scenario's market, the request and each style's settlement, and a journey that takes every style of a
-  crypto and an FX option through each shock. The lessons are in the builder's list.
+  crypto and an FX option through each shock. The engine's answers are kept by the option's terms and by market,
+  so a figure on the tab is the engine's for exactly that trade and that market, or a dash. The lessons are in
+  the builder's list.
 
 ---
 

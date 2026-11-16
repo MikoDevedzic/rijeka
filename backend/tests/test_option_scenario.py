@@ -53,20 +53,22 @@ def _edges(spec):
 @pytest.mark.parametrize("name", [k for k, s in STYLES.items() if s.style in ("BARRIER", "DOUBLE_BARRIER", "TOUCH")])
 def test_touched_is_the_limit_of_the_pricer_at_the_barrier(name):
     """Inside the barrier the pricer; at it and beyond, the touched value. The two meet, so a scenario's value does
-    not jump as a spot shock crosses: the pricer's value a hundred-thousandth of spot inside the barrier, and a
-    millionth, close on the touched value in proportion to the distance (on 10m of notional or a payout of 250,000,
-    within 15 of the quote currency at a millionth)."""
+    not jump as a spot shock crosses. Close to a barrier the pricer's value is a straight line in the distance, so
+    the line through its values two millionths and one millionth of spot inside, read at the barrier, is its limit:
+    that limit is the touched value to a thousandth of the quote currency, on 10m of notional or a payout of 250,000
+    (measured: within 0.00006 on every barrier of every style here). The gap a millionth inside is itself up to 14,
+    which is why the limit is taken and not the nearest value."""
     spec = STYLES[name]
     scale = N if spec.style in ("BARRIER", "DOUBLE_BARRIER") else 1.0
     f = lambda s: F0 * s / S0                                       # the forward moves with spot, the carry held
     at_spot = lambda s: scenario_npv(spec, **{**MARKET, "spot": s, "forward": f(s)}, spot_ref=S0)
     for H, inward in _edges(spec):
-        (near, hit_near), (nearer, hit_nearer) = at_spot(H * (1 + inward * 1e-5)), at_spot(H * (1 + inward * 1e-6))
+        (two, hit_two), (one, hit_one) = at_spot(H * (1 + inward * 2e-6)), at_spot(H * (1 + inward * 1e-6))
         (v_at, hit_at), (_, hit_past) = at_spot(H), at_spot(H * (1 - inward * 0.02))
-        assert not hit_near and not hit_nearer and hit_at and hit_past
+        assert not hit_two and not hit_one and hit_at and hit_past
         assert v_at == scale * value_touched(spec, H, R, R - math.log(f(H) / H) / T, VOLA, T)          # the function it says it is
-        assert abs(nearer - v_at) <= 15.0, f"{name} at {H}: {nearer} a millionth inside, {v_at} touched"
-        assert abs(nearer - v_at) <= 0.2 * abs(near - v_at) + 1e-6, f"{name} at {H}: the gap does not close with the distance"
+        assert 2 * one - two == pytest.approx(v_at, abs=1e-3), f"{name} at {H}: the pricer's limit is {2 * one - two}, the touched value {v_at}"
+        assert abs(one - v_at) <= 15.0                                                              # and no jump a screen would show
 
 
 def test_what_a_touched_option_is_worth():

@@ -87,8 +87,13 @@ for (const [name, asset, product] of [['a crypto option', 'CRYPTO', /^CRYPTO OPT
         }
         expect(seen, `${style}: a 50 % move of spot, one way or the other, touches its level`).toBe(true)
         expect(Number.isFinite(await num(npv)), `${style}: a touched option still has a value`).toBe(true)
-        await expect(win.getByTestId('fx-scn-ladder-touched').locator('[data-touched="true"]').first()).toBeVisible()
         await win.screenshot({ path: `e2e/.out/shots/style-${asset.toLowerCase()}-${style.toLowerCase().replace(' ', '-')}-touched.png` })
+        // the ladder says which of its columns stand at or beyond the level (pictured with the ladder in view)
+        const mark = win.getByTestId('fx-scn-ladder-touched')
+        await mark.evaluate(el => el.scrollIntoView({ block: 'center' }))          // clear of the ticket's sticky footer
+        await expect(mark.locator('[data-touched="true"]').first()).toBeVisible()
+        await win.screenshot({ path: `e2e/.out/shots/style-${asset.toLowerCase()}-${style.toLowerCase().replace(' ', '-')}-touched-ladder.png` })
+        await win.evaluate(el => { el.scrollTop = 0 })
         await win.getByTestId('fx-scenario-reset').click(); await settled()
         await expect(win.getByTestId('fx-scn-touched')).toHaveCount(0)
       }
@@ -109,6 +114,42 @@ for (const [name, asset, product] of [['a crypto option', 'CRYPTO', /^CRYPTO OPT
     expectClean(problems)
   })
 }
+
+test('terms changed under a scenario: no figure of the earlier trade stands beside the new one', async ({ app, problems }) => {
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  await win.getByRole('button', { name: 'CRYPTO', exact: true }).click()
+  await win.getByRole('button', { name: /^CRYPTO OPTION$/i }).click()
+  await win.locator('.tbw-chip', { hasText: /^AMERICAN$/ }).click()
+  await win.getByRole('button', { name: 'CURVE SCENARIO', exact: true }).click()
+  const tab = win.getByTestId('fx-scn-tab'), npv = win.getByTestId('fx-scenario-npv'), change = win.getByTestId('fx-scenario-change')
+  await expect(win.getByTestId('fx-scn-engine')).toHaveText('ENGINE PRICED')
+  await win.getByTestId('fx-scn-curve-spot').click()
+  const flat = win.getByTestId('fx-scn-flat-value'); await flat.fill('5'); await flat.blur()
+  await expect(tab).toHaveAttribute('data-busy', 'false')
+  const before = { npv: await num(npv), change: await num(change) }
+  expect(before.change).not.toBe(0)
+  // the engine is held back, then the option is turned from a call into a put: another trade under the same scenario
+  let release
+  const gate = new Promise(r => { release = r })
+  await app.route('**/api/currency/option/scenario', async route => { await gate; await route.continue() })
+  await win.getByRole('button', { name: /^TRADE$/ }).click()
+  const repriced = app.waitForResponse(r => /\/api\/currency\/option\/price$/.test(r.url()) && r.request().postDataJSON()?.option_type === 'PUT' && r.ok())
+  await win.getByRole('button', { name: 'PUT', exact: true }).click()
+  await repriced
+  await win.getByRole('button', { name: 'CURVE SCENARIO', exact: true }).click()
+  await expect(win.getByTestId('fx-scn-engine')).toHaveText('REPRICING…')
+  await expect(npv, 'while the put is being priced its scenario value is a dash, not the call\'s').toHaveText('—')
+  await expect(change).toHaveText('—')
+  release()
+  await expect(tab).toHaveAttribute('data-busy', 'false')
+  const after = { npv: await num(npv), change: await num(change) }
+  expect(Number.isFinite(after.npv)).toBe(true)
+  expect(Math.sign(after.change), 'spot up 5 %: a bought call gains and a bought put loses').toBe(-Math.sign(before.change))
+  expectClean(problems)
+})
 
 test('a scenario the engine cannot price says so, and shows no figure in its place', async ({ app, problems }) => {
   await app.goto('/blotter')

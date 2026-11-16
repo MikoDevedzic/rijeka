@@ -129,15 +129,19 @@ def test_a_bermudans_vol_shift_moves_the_models_own_sigma_and_its_curve_shift_th
     base = client.post("/api/price/swaption", json=berm, headers=auth_a)
     if base.status_code != 200:          # the stack has no Hull-White calibration: the tree cannot price, with or without a shift
         assert base.status_code == 422 and client.post("/api/price/swaption", json={**berm, "vol_shift_bp": 5}, headers=auth_a).status_code == 422
-        return
+        pytest.skip("the stack holds no Hull-White calibration: a Bermudan's σ shift is not exercised")
     b = base.json()
     up = _post(client, auth_a, "/api/price/swaption", {**berm, "vol_shift_bp": 1})
     dn = _post(client, auth_a, "/api/price/swaption", {**berm, "vol_shift_bp": -1})
     assert up["vol_bp"] == pytest.approx(b["vol_bp"] + 1) and up["hw1f_params"]["sigma_bp"] == up["vol_bp"]
     assert up["npv"] > b["npv"] > dn["npv"]                                          # an option is worth more at a higher vol
-    assert (up["npv"] - dn["npv"]) / 2 == pytest.approx(b["vega"], abs=0.02)         # the route's own vega is this bump (figures rounded to cents)
+    # the route's own vega is the central bump of one basis point either side: this holds the shift to the same σ the
+    # vega is of (it would fail if the shift went to a surface vol), not the tree's own correctness, which the
+    # Jamshidian comparison holds (figures rounded to cents)
+    assert (up["npv"] - dn["npv"]) / 2 == pytest.approx(b["vega"], abs=0.02)
+    assert up["npv"] - b["npv"] == pytest.approx(b["vega"], rel=0.05)                # one-sided, as a scenario shifts it: the vega to first order
     low = _post(client, auth_a, "/api/price/swaption", {**berm, "vol_shift_bp": -1000})
-    assert low["vol_bp"] == pytest.approx(0.01)                                      # floored, and still priced
+    assert low["vol_bp"] == pytest.approx(0.01) and low["vega"] is None              # floored and still priced; no vega where the bump below would be a negative σ
     moved = _post(client, auth_a, "/api/price/swaption", {**berm, "curve_flat_bp": 10})
     assert moved["npv"] != b["npv"] and moved["vol_bp"] == b["vol_bp"]               # the curve moves the tree, not the σ
 

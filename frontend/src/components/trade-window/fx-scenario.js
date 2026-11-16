@@ -364,9 +364,10 @@ export function settlementAmount({ shape, optionType, direction, notional, strik
 //   { kind: 'plain', amount }                         a European or American option, a digital: the fixing decides it
 //   { kind: 'path', never, touched, certain, atTouch } a barrier or a touch: what it pays if its level never traded and
 //                                                     what it pays if it did. `certain`: the fixing itself stands at or
-//                                                     beyond the level, so it traded. `atTouch`: the touched amount was
-//                                                     paid when the level traded (a knock-out's rebate, if it has
-//                                                     one, a one-touch paid at the hit), not at settlement.
+//                                                     beyond the level, so it traded. `atTouch`: a touch before expiry
+//                                                     pays the touched amount when it happens (a knock-out's rebate, if
+//                                                     it has one, a one-touch paid at the hit); where the fixing itself
+//                                                     decides it (`certain`) the rule pays it at settlement.
 // A single touch level has no side of its own: `refSpot`, the spot the option was priced at, says which side it is on.
 // Null when the terms or the fixing are not there to read.
 export function styleSettlement(q, { strike, fixing, refSpot } = {}) {
