@@ -25,6 +25,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { SendForConfirmation } from './SendForConfirmation'
 import { useSendStatus, useAnchoring } from './useSendStatus'
 import { chainName } from '../../lib/wallet'
+import { useNetwork } from '../../lib/chain-status'
 import CertMark from '../brand/CertMark'
 import PaperConfirmation from './PaperConfirmation'
 import { getProofPack } from './booking'
@@ -62,6 +63,10 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
   }
   const [showTerminate, setShowTerminate] = useState(false)
   const [reason, setReason] = useState('')
+  // VERIFY's answer is drawn under the certificate, which is taller than the tab: it is brought into view when it
+  // arrives, clear of the ticket's footer and its tabs, which stay in place over what scrolls (the scroll margins)
+  const verdict = useRef(null)
+  useEffect(() => { if (verifyResult && !verifyResult.info) verdict.current?.scrollIntoView({ block: 'nearest' }) }, [verifyResult])
   if (!attestation) return null
   const att = attestation.attestation
   const onChain = attestation.on_chain
@@ -177,7 +182,7 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
         </div>
       )}
       {vr && !vr.info && (
-        <div data-testid="confirm-verify-result" style={{ marginTop: 10, padding: '8px 10px', borderRadius: 'var(--r-1)', fontSize: 12, fontFamily: MONO,
+        <div ref={verdict} data-testid="confirm-verify-result" style={{ scrollMarginBottom: 88, scrollMarginTop: 88, marginTop: 10, padding: '8px 10px', borderRadius: 'var(--r-1)', fontSize: 12, fontFamily: MONO,
           background: 'var(--bg)', border: '1px solid ' + (vr.error ? 'var(--red)' : vOk ? 'var(--green)' : 'var(--amber)'),
           color: vr.error ? 'var(--red)' : vOk ? 'var(--green)' : 'var(--amber)', lineHeight: 1.7 }}>
           {vr.error ? ('Verify failed: ' + vr.error) : (<>
@@ -237,6 +242,10 @@ function ConfirmBody({
   const pendingId = bookedTrade?.status === 'PENDING' ? bookedTrade.id : null
   const send = useSendStatus(pendingId, onRemoteConfirmed)
   const cpOnNetwork = !!send.status?.counterparty?.on_network
+  // The chain this server anchors on, named as it is (lib/chain-status.js): Sepolia is Ethereum's test network, and
+  // a server with no chain configured anchors nothing, which the copy says before the certificate has to.
+  const net = useNetwork()
+  const registry = `the TradeConfirmationRegistry ${net.where}`
   // A transaction in flight for this trade (a 202 from CONFIRM ON-CHAIN, or found again after a reload).
   const anchor = useAnchoring(pendingId, confirming, onRemoteConfirmed)
   const anchoring = !!anchor?.pending
@@ -253,7 +262,9 @@ function ConfirmBody({
           <div className="empty-title">Nothing to confirm yet</div>
           <div className="empty-sub">
             Price the ticket and press BOOK TRADE. The booked trade appears here with its canonical
-            record, keccak256 hash and EIP-712 signatures, and this tab walks it to the Sepolia registry.
+            record, keccak256 hash and EIP-712 signatures, and {net.anchored === false
+              ? 'this tab has both sides sign it. This server has no chain configured, so nothing is anchored.'
+              : `this tab walks it to the registry ${net.where}.`}
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'center', marginTop: 10 }}>
             {['BOOK', 'SIGN', 'COUNTERSIGN', 'ANCHOR', 'PROOF LINK'].map((step, i, arr) => (
@@ -377,13 +388,19 @@ function ConfirmBody({
             ? 'Cancelling closes the trade without settlement — terminal and cannot be undone.'
             : pkgPending
               ? `CONFIRM confirms the whole package as one record: each of the ${pkg.n} legs keeps its own canonical record and hash, `
-                + 'both legal entities sign (EIP-712) the package record that lists those hashes, and one transaction anchors it in the '
-                + 'TradeConfirmationRegistry on Ethereum. Every leg is confirmed together, or none. Only the hash goes on-chain. '
+                + (net.anchored === false
+                  ? 'and both legal entities sign (EIP-712) the package record that lists those hashes. This server has no chain '
+                    + 'configured: the signatures are kept and nothing is anchored. Every leg is confirmed together, or none. '
+                  : `both legal entities sign (EIP-712) the package record that lists those hashes, and one transaction anchors it in ${registry}. `
+                    + 'Every leg is confirmed together, or none. Only the hash goes on-chain. ')
                 + 'Cancelling closes this leg without settlement — terminal and cannot be undone.'
-              : 'CONFIRM builds the canonical trade record, has both legal entities sign its keccak256 hash (EIP-712), '
-                + 'and anchors the pair of signatures in the TradeConfirmationRegistry on Ethereum. From that block both '
-                + 'parties hold an identical, immutable record of the terms. Only the hash goes on-chain. Cancelling closes '
-                + 'the trade without settlement — terminal and cannot be undone.'}
+              : (net.anchored === false
+                  ? 'CONFIRM builds the canonical trade record and has both legal entities sign its keccak256 hash (EIP-712). '
+                    + 'This server has no chain configured: the signatures are kept and nothing is anchored, and the certificate says so. '
+                  : 'CONFIRM builds the canonical trade record, has both legal entities sign its keccak256 hash (EIP-712), '
+                    + `and anchors the pair of signatures in ${registry}. From that block both `
+                    + 'parties hold an identical, immutable record of the terms. Only the hash goes on-chain. ')
+                + 'Cancelling closes the trade without settlement — terminal and cannot be undone.'}
         </div>
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>

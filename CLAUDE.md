@@ -133,3 +133,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - Before a screen says "not known", read the code that produces the figure and list every way it comes back
   empty (not asked for, asked and failed, asked and truly nothing): the first rule for the Collateral tab called a
   counterparty with no trades "not yet run", and a limit that could not be valued "within limits".
+- A fact the server reports (the chain it anchors on) is asked of the server wherever a screen states it, through
+  one function that words it; a name typed into copy is wrong on the next host. And a message written for the
+  general case is read once as each special party sees it: the demo counterparty was told to sign with a
+  command-line tool.

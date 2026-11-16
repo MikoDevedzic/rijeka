@@ -10,6 +10,7 @@
 // follows the confirmation live.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { isDemoLei } from '../../lib/network'
 
 const MONO = 'var(--mono)'
 
@@ -21,10 +22,16 @@ export function SendForConfirmation({ s, compact = false }) {
   const sent = status.sent?.length > 0
 
   if (status.status === 'CONFIRMED') return null   // the parent shows the attestation
+  // The demo counterparty (an LEI that begins DEMO) is not a firm that has yet to join: Rijeka holds its key and signs
+  // for it, and the certificate says so. Telling a visitor it "isn't on Rijeka yet" and to send it a request to sign
+  // with a command-line tool was true of a real counterparty and wrong of this one.
   if (!status.counterparty?.on_network) return compact ? null : (
-    <div className="tbw-mut" style={{ fontSize: 12, lineHeight: 1.5, maxWidth: 520 }}>
-      {status.reason} Their countersignature has to come from their own system: confirm below, or send them the
-      confirmation request to sign with the command-line tool.
+    <div className="tbw-mut" data-testid="send-why-not" style={{ fontSize: 12, lineHeight: 1.5, maxWidth: 520 }}>
+      {isDemoLei(status.counterparty?.lei) && status.status === 'PENDING'
+        ? 'This is the demo counterparty. Rijeka holds its key and signs for it when you confirm below, so the certificate is '
+          + 'marked a demo and not bilateral. A real counterparty signs for itself: on Rijeka, or from its own system.'
+        : <>{status.reason} Their countersignature has to come from their own system: confirm below, or send them the
+          confirmation request to sign with the command-line tool.</>}
     </div>
   )
 

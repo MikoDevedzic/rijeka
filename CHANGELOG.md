@@ -3,6 +3,27 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.24). Commits on `main` are the detail.
 
+## 0.42.8 · 15 November 2026
+
+**The confirm tab says one thing about the chain, and the truth about the demo bank.** The next of the first-time
+visitor's findings. Words only, and where an answer is drawn; nothing about signing or anchoring changes.
+
+- **One name for the chain.** The confirm tab said "the Sepolia registry" on its empty page and "the
+  TradeConfirmationRegistry on Ethereum" beside the button, and the home drew the registry's node as "Ethereum"
+  under a badge that said Sepolia. The app now asks the server which chain it anchors on and says that: "on
+  Sepolia, Ethereum's test network" on the hosted demo, "on Ethereum" where a self-host runs it there, and, on a
+  server with no chain configured, that the signatures are kept and nothing is anchored (the certificate already
+  said so after the fact; the tab now says it before).
+- **The demo bank.** Beside a pending trade against the demo counterparty the tab said "This counterparty isn't
+  on Rijeka yet" and to send it a confirmation request to sign with the command-line tool. Rijeka holds the demo
+  counterparty's key and signs for it; the tab says that, and that the certificate is marked a demo and not
+  bilateral. A real counterparty is told what it was told before.
+- **VERIFY's answer comes into view.** It was drawn under the certificate, below the fold of the tab, so pressing
+  VERIFY seemed to do nothing. It is scrolled into view when it arrives, clear of the ticket's footer.
+- The naming rule is one function with its cases tested (`frontend/src/lib/network.js`), and a journey gives the
+  tab each server (Sepolia, Ethereum, no chain) and each counterparty (the demo bank, a real one) and measures
+  the answer against the footer. The lessons are in the reviewer's and the browser tester's definitions.
+
 ## 0.42.7 · 15 November 2026
 
 **Unknown is not zero.** The next of the first-time visitor's findings: two Risk tabs said different things about

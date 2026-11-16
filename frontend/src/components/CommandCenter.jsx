@@ -18,6 +18,7 @@ import RoleSwitch from './layout/RoleSwitch'
 import { DeskNoteHome } from './layout/DeskNote'
 import { useVisibleNav } from './layout/useVisibleNav'
 import { getSessionMaybe } from '../lib/session'
+import { useNetwork } from '../lib/chain-status'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
 import './CommandCenter.css'
@@ -146,6 +147,7 @@ function DeskHome({ demo, navigate }) {
   // (every module then stays on, as before). Only provisioning that outlasts the wait can still show a launch
   // workspace the desk, and its P&L tile, first.
   const phone = usePhone()                                  // a phone keeps the home it has; a monitor gets the trader's (home/TraderHome.jsx)
+  const net = useNetwork()          // the chain this server anchors on, for the words that name it
   const [waited, setWaited] = useState(false)
   useEffect(() => { const id = setTimeout(() => setWaited(true), MODULES_WAIT_MS); return () => clearTimeout(id) }, [])
   const session = useAuthStore(s => s.session)
@@ -238,7 +240,7 @@ function DeskHome({ demo, navigate }) {
     <div className="dh-path">
       <span className="dh-path-k">START HERE</span>
       <Step n="1" done={trades.length > 0} text={`Book a swap${demo?.counterparty ? ` against ${demo.counterparty.name}` : ''}, an FX forward or a BTC forward`} onClick={() => navigate('/blotter')} />
-      <Step n="2" done={confirmed > 0} text="Confirm it on Sepolia from the trade's CONFIRM tab" onClick={() => navigate('/blotter')} />
+      <Step n="2" done={confirmed > 0} text={`Confirm it on ${net.name || 'chain'} from the trade's CONFIRM tab`} onClick={() => navigate('/blotter')} />
       <Step n="3" done={false} text="Verify the proof pack, trusting nothing of ours" href="https://rijeka.app/verify" />
     </div>
   )
@@ -433,10 +435,11 @@ function Ladder({ trades }) {
 
 // ── Confirmation chain (diagram, not a chart) ───────────────────────────────
 function ChainDiagram() {
+  const net = useNetwork()          // the registry's node says the chain it is on, as the confirm tab does
   const ref = useRef(null); const W = useSize(ref); const H = 96
   if (!W) return <div ref={ref} className="dh-chain" />
   const n = 4, cx = i => 36 + i * ((W - 72) / (n - 1))
-  const nodes = [['TRADE', 'canonical record'], ['keccak256', 'trade hash'], ['A · B', 'EIP-712 signatures'], ['REGISTRY', 'Ethereum']]
+  const nodes = [['TRADE', 'canonical record'], ['keccak256', 'trade hash'], ['A · B', 'EIP-712 signatures'], ['REGISTRY', net.anchored === false ? 'no chain configured' : net.name ? (net.testnet ? `${net.name} testnet` : net.name) : 'on chain']]
   return (
     <div ref={ref} className="dh-chain">
       <svg width={W} height={H}>

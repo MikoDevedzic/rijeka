@@ -72,6 +72,7 @@ Learned on 15 November 2026
 Learned on 15 November 2026 (the journey that checked nothing)
 - `locator.isVisible()` does not wait, whatever timeout it is given: a part of a journey guarded by `if (await x.isVisible())` is skipped on a page still loading and the test passes having looked at nothing. Wait with `waitFor({ state: 'visible' })`, and where a part is skipped because the stack has nothing to show, add an annotation saying so. After writing a journey, check that the pictures it takes exist.
 - A picture taken before a change is not evidence about the change: retake every picture a brief names after the last edit to the screen it shows.
+- `toBeInViewport()` says the browser's window holds a thing, not that a person can see it: a bar that stays in place over what scrolls (the ticket's footer, its tabs) covers it. Where a thing is brought into view inside a window with such a bar, measure its box against the bar's, and look at the picture: VERIFY's answer passed "in viewport" with all but its first line under the footer.
 
 Rules
 - Never run journeys against app.rijeka.app or the hosted API. Never enter real credentials anywhere.

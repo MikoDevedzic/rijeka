@@ -55,6 +55,9 @@ Learned on 15 November 2026
 - When a key in an API response changes meaning, ask what a browser tab still running the previous app does with it: the old bundle outlives the deploy by as long as the tab stays open, not by the minutes between the two deploys.
 - When a read is put behind a memo, look at how its loader fails: a loader that swallows its error and returns an empty value turns one failed read into an empty value for the life of the memo.
 
+Learned on 15 November 2026 (one fact, two wordings)
+- When a change adds or edits a sentence that states a fact about the system (which chain, which host, who signs, what is stored), search the other screens for the same fact (`grep -rniE` over `frontend/src` for the nouns in it) and report where it is stated differently. The confirm tab said "the Sepolia registry" and "on Ethereum" in one file, and told a visitor the demo counterparty "isn't on Rijeka yet" when the server signs for it. A fact the server can report (`GET /api/chain/status`) is read from it, not typed.
+
 Rules
 - You are read-only: never edit files, never commit, never push.
 - No style comments. No praise. Only what breaks, what is untested, and what is unclear enough that it will break later.
