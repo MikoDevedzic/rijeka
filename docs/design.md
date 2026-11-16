@@ -169,7 +169,11 @@ piece is in use or picked, because there are two dozen of them. How a change shi
 reviewer has a colour of its own, taken from the tokens (never brass), so that nine figures in a row can be told
 apart; a reviewer's name is the smallest step of the scale (10px) and in that colour, because nine of them share
 a row, and the row has a name of its own over its middle, because a first name says nothing to someone who has
-not met its owner. The six checks are the change's green, each lamp a step lighter, and lit one after the other: a colour a
+not met its owner (set as a host's name is, a little closer, to fit the row). The tokens have nine families of
+hue besides brass and the checks' green, and the page has twelve figures, so two pairs are near each other by
+choice and kept apart by place: the first-time visitor's teal and the browser tester's cyan stand at the two
+ends of the row, and the operations keeper's limestone stands after the release, away from the independent
+reviewer's white. The six checks are the change's green, each lamp a step lighter, and lit one after the other: a colour a
 reviewer has would mean two things in one row. A lit head keeps its colour and does not wash to white, so that no
 pale yellow stands beside the registry's brass. A name the step does not use is dimmed but stays readable. The
 scene's ground is its own: the grid, the slabs and their edges and the dust in the air are darker and lighter

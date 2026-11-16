@@ -43,7 +43,9 @@ what changes is who runs it.
   - **Edgar** when a migration, the runner or the approved list is in the diff.
   - **Marco** before a launch or a public post, and when what a newcomer meets first changes. He is the dearest
     of the agents to run (he takes and reads a picture of every stop), so not on every change.
-  - **Grace** after an outage and before a launch, for the account and the measurements.
+  - **Grace** after an outage, before a launch, after a change of plan, host or size, and when a release adds
+    work to a request or a batch: for the account and the measurements. The builder sets her account in
+    `docs/ops/incidents.md`.
 - **The builder, who says so in the report**: **Ada** (`tests/reference`, the engine and replication tests, the
   pinned book, and a reason in `GOLDEN_CHANGES.md` for every number that moved), **Nikola** (the map against the
   diff), **Quinn** (the journeys), **Jarvis** (the release checklist), **Petra** (the backlog), and **Grace**'s reading of the hosts' dashboards,
