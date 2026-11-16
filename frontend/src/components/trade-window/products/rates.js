@@ -574,7 +574,7 @@ registerProduct({
       text: state.optionSide === 'SELL' ? '↓ SELL FLOOR · premium received, pay below the strike' : '↓ BUY FLOOR · protection vs falling rates',
       color: 'var(--accent)',
     }),
-    footerText: 'Bachelier (Normal) · put-call vol symmetry via |K−ATM| · OIS discounting · SOFR in-arrears',
+    footerText: 'Bachelier (Normal) · one strike, one vol: read at K−ATM, signed · OIS discounting · SOFR in-arrears',
     Component: FloorTermsBody,
   },
 

@@ -67,12 +67,18 @@ the file and what it gates.
 ```bash
 gh pr create --base main --head <branch> ...
 gh pr checks <n>                       # all six: backend tests, frontend build, integration tests, browser journeys, registry contract tests, self-host smoke
+backend/.venv/bin/python .github/scripts/watch.py        # production as it stands, before anything is pushed: it must say "nothing wrong"
 git push origin <sha>:main             # retry on a transient refusal
 curl -s https://rijeka-api.onrender.com/api/ops/health   # until "commit" is the sha (only when the commit changes a file under backend/ that is not Markdown: Render deploys nothing else)
 gh workflow run release-sync
 curl -s https://app.rijeka.app/version.json              # until "commit" is the sha
 backend/.venv/bin/python .github/scripts/watch.py --api-commit <sha> --app-commit <sha>   # everything a visitor touches, from outside (docs/ops/monitoring.md); leave a flag out when that side did not deploy
 ```
+
+The watch before the push is there because of 15 November 2026: the database had stopped answering half an hour
+before a release was pushed, the release went out onto a service that was already failing, and the first hour of
+the outage was spent suspecting the release. A failing watch is understood first. If what fails is the thing the
+release mends, say so in the report; otherwise nothing is pushed until production is whole.
 
 A failed check is read from the job log (`gh api repos/<owner>/<repo>/actions/jobs/<id>/logs`), fixed on the
 branch and re-run. Nothing is pushed to `main` around a red check.

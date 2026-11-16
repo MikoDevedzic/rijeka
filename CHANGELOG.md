@@ -1,7 +1,74 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.23). Commits on `main` are the detail.
+methodology document carries its own version (v1.24). Commits on `main` are the detail.
+
+## 0.42.3 · 15 November 2026
+
+**A risk report in a fifth of the time, on the same numbers.** The API is one process on one CPU, and a live
+market risk report was by far the dearest thing a visitor could ask of it: 5.7 seconds of that CPU for the twelve
+trades of the integration book, where a price is a hundredth of a second and an XVA run two hundredths. It is 1.1
+seconds now. No figure moves, to the last bit.
+
+- **The normal distribution is read directly.** A caplet's Bachelier value read the normal distribution through
+  `scipy.stats.norm`, whose wrapper checks its arguments at every call and took about 160 times as long as the two
+  functions inside it (`ndtr`, and `exp(-x²/2)/√(2π)`). A report asked for 155,000 of them: more than half its
+  time. The two functions are called themselves. A test prices 20,000 caplets both ways and requires the same
+  number, not a close one.
+- **A strip asks the surface once a strike.** A capped or floored leg looked its volatility up at every period,
+  for one strike, one forward and one surface: a fifth of the report's time. It is looked up once for each strike
+  of the strip.
+- The P&L report is twice as fast for the same reason (0.20s to 0.09s). What is left in a risk report is mostly
+  schedules built again at every valuation; that is not changed here.
+
+## 0.42.2 · 15 November 2026
+
+**A floor is read where a cap at its strike is.** The volatility of a cap or a floor is read from the cap surface
+at the strike's distance from the at-the-money forward. A floor was read at the size of that distance: a floor
+struck 100bp below the money took the volatility quoted 100bp above it, and never read the quotes below the money,
+while a cap at that same strike read them. On a surface that is not the same on both sides, one strike had two
+volatilities and a cap less a floor at one strike was not the swap at that strike.
+
+- **One strike, one volatility.** The distance is signed for a floor as it is for a cap. A surface quoted on one
+  side of the money only is mirrored for a strike on the other side.
+- **What moves.** A floor, and the floor of a collar or of a floored leg, struck on the other side of the money
+  from where it was read, on a surface that differs between the two sides: a 5Y floor at 2.5% with the money at
+  2.97% and 95bp quoted 100bp below, 80bp 100bp above, is read at 89.7bp where it was read at 82.6bp, and its
+  premium on 10m is 155,680 where it was 137,711. And a cap struck on a side of the money where the surface has no
+  quote at all: it was read on the straight line carried through the money and is now read on the mirrored smile
+  (87.5bp and 82.5bp, 50bp below the money, on a surface quoted at the money and above it only). The hosted
+  demo's surface is quoted on both sides and is the same on both, so nothing moves there; the pinned sample book
+  is unchanged. A surface a desk has saved itself may be neither.
+- **Held by parity.** A cap less a floor at one strike is worth the same priced off the surface and priced at any
+  one volatility handed in. The test fails on the old reading. The model validator priced the floor above and
+  the cap at its strike in a script of her own, to the cent, and found the cap less the floor equal to the swap
+  at two strikes, one each side of the money.
+- The ticket's footer for caps and floors said the volatility was read at the size of the distance; it says how
+  it is read now. Methodology v1.24 and the model inventory say how
+  the surface is read; the reading still has no outside reference.
+
+## 0.42.1 · 15 November 2026
+
+**After the outage of 15 November.** The database stopped answering from 19:32 to 21:50 UTC: it was still on the
+smallest machine after the plan had changed, and had been in swap all day. It is on a larger one now. Three things
+the outage showed are changed here. No figure moves.
+
+- **A report reads once what none of its valuations changes.** The ladder values each trade once for every bump
+  (since 0.40.0, every quoted tenor too), and each valuation asked the database again for the cap surface of the
+  date and for a swaption's legs. A live risk report on the integration book sent 233 statements, 129 of them the
+  cap surface and 57 a trade's legs; it sends 54. The market risk, P&L and counterparty credit reports each make
+  one reading (`backend/db/reading.py`); a price asked for from the ticket still reads the surface as it stands. A
+  test counts the statements.
+- **A batch is not started against a database that does not answer.** During the outage two scheduled steps were
+  recorded as having run, with "apply the migration" for their result: their presence checks had read a timeout as
+  a missing table. The scheduler now asks the database one cheap question before a group; when there is no
+  answer every step of the group is recorded as failed, saying so. The group is not marked as run, so it runs at
+  the next pass, a minute later, when the database is back, and not at its next turn (two hours, for the daily
+  one: the market data missed at 21:16 was rebuilt at 23:12).
+- **Production is looked at before a release is pushed** (`docs/ops/release.md`): the release of that afternoon
+  went out onto a service that had already failed, which hid the cause for an hour.
+- `docs/ops/environment.md` says what each hosted piece runs on, and that a plan and a machine size are two
+  settings.
 
 ## 0.42.0 · 15 November 2026
 

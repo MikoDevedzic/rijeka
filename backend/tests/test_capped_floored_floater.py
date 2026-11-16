@@ -711,7 +711,7 @@ class TestCapVolIsContinuous:
         assert self._vol(0.0450, 0.0300) == (pytest.approx(79.0), "INTERP")
         assert self._vol(0.0600, 0.0300) == (pytest.approx(76.0), "INTERP")              # beyond the last quote, on its line
         assert self._vol(0.0250, 0.0300) == (pytest.approx(90.0), "INTERP")
-        assert self._vol(0.0250, 0.0300, floor=True)[0] == pytest.approx(82.5)           # a floor: by the size of the distance
+        assert self._vol(0.0250, 0.0300, floor=True) == self._vol(0.0250, 0.0300)        # a floor is read where a cap at its strike is
 
     def test_a_strike_a_few_basis_points_from_the_money_is_not_given_the_atm_vol(self):
         # 3bp above the money: 3% of the way from 85 to 80. It used to be 85 until 5bp, then 84.75 at once.
@@ -753,3 +753,126 @@ class TestCapVolIsContinuous:
         # two bumps differ
         held = cap(0.0301, vol=base.vol_bp).npv - base.npv
         assert held < wide and (wide - held) > 5 * abs(wide - fine), (held, wide, fine)
+
+
+class TestTheNormalDistributionIsReadDirectly:
+    """bachelier_call reads the normal distribution as ndtr and exp(-x^2/2)/sqrt(2 pi) and no longer through
+    scipy.stats.norm, whose wrapper cost a live risk report more than half its time (15 November 2026). The two
+    must be the same number, not a close one: every cap, floor and collar price rests on it."""
+
+    def test_a_caplet_is_the_same_number_to_the_last_bit(self):
+        import math
+        import random
+        from scipy.stats import norm
+        from pricing.cap_floor import bachelier_call, bachelier_put
+        rng = random.Random(20261115)
+        for _ in range(20000):
+            F, K = rng.uniform(-0.01, 0.09), rng.uniform(-0.01, 0.09)
+            T, sigma = rng.uniform(0.003, 30.0), rng.uniform(0.0005, 0.03)
+            sT = sigma * math.sqrt(T)
+            d = (F - K) / sT
+            was = sT * (d * norm.cdf(d) + norm.pdf(d))
+            assert bachelier_call(F, K, T, sigma) == was, (F, K, T, sigma)
+            assert bachelier_put(F, K, T, sigma) == was - (F - K)
+        # far in and far out of the money, at the money, and an option that has expired
+        for F, K, T, sigma in [(0.03, 0.03, 5.0, 0.008), (0.30, 0.01, 1.0, 0.001), (0.01, 0.30, 1.0, 0.001), (0.03, 0.02, 0.0, 0.008), (0.03, 0.02, 2.0, 0.0)]:
+            if T <= 0 or sigma * math.sqrt(T) < 1e-12:
+                assert bachelier_call(F, K, T, sigma) == max(F - K, 0.0)
+            else:
+                sT = sigma * math.sqrt(T); d = (F - K) / sT
+                assert bachelier_call(F, K, T, sigma) == sT * (d * norm.cdf(d) + norm.pdf(d))
+
+
+class TestAStripAsksTheSurfaceOnceAStrike:
+    def test_a_strip_of_one_strike_reads_the_surface_once_and_prices_as_it_did(self, monkeypatch, swap_periods):
+        import pricing.cap_floor as CF
+        asked = []
+        real = CF.lookup_cap_vol
+        monkeypatch.setattr(CF, "lookup_cap_vol", lambda **kw: asked.append(kw["strike_rate"]) or real(**kw))
+        curve = Curve(valuation_date=VAL_DATE, flat_rate=0.03)
+        kw = dict(periods=swap_periods, strike_schedule_obj={"direction": "BUY", "schedule": []}, default_strike=0.035, notional_schedule=None,
+                  default_notional=10_000_000, forecast_curve=curve, discount_curve=curve, valuation_date=VAL_DATE, swap_tenor_y=5.0)
+        strip = CF.price_caplet_strip_over_periods(surface_rows=SKEW, **kw)
+        assert strip.n_periods >= 19 and asked == [0.035], "twenty periods at one strike ask the surface once"
+        # the price is the one every period's own question gave: the same volatility at every period. Handed in from
+        # the result's own at-the-money forward, which is kept to eight places, it agrees to a cent on 10m
+        vol, _ = real(strike_rate=0.035, atm_forward=strip.atm_forward, cap_tenor_y=5.0, surface_rows=SKEW)
+        handed = CF.price_caplet_strip_over_periods(surface_rows=SKEW, vol_override_bp=vol, **kw)
+        assert strip.npv > 0 and strip.npv == pytest.approx(handed.npv, abs=0.01) and strip.vega == pytest.approx(handed.vega, abs=0.01)
+        assert {c["vol_bp"] for c in strip.caplets} == {strip.caplets[0]["vol_bp"]}, "one strike, one volatility at every period"
+
+    def test_a_strip_of_stepped_strikes_asks_once_for_each(self, monkeypatch, swap_periods):
+        import pricing.cap_floor as CF
+        asked = []
+        real = CF.lookup_cap_vol
+        monkeypatch.setattr(CF, "lookup_cap_vol", lambda **kw: asked.append(kw["strike_rate"]) or real(**kw))
+        curve = Curve(valuation_date=VAL_DATE, flat_rate=0.03)
+        half = swap_periods[len(swap_periods) // 2].period_start
+        steps = {"direction": "BUY", "schedule": [{"date": str(swap_periods[0].period_start), "strike": 0.035}, {"date": str(half), "strike": 0.04}]}
+        strip = CF.price_caplet_strip_over_periods(periods=swap_periods, strike_schedule_obj=steps, default_strike=0.035, notional_schedule=None,
+                                                   default_notional=10_000_000, forecast_curve=curve, discount_curve=curve, valuation_date=VAL_DATE,
+                                                   surface_rows=SKEW, swap_tenor_y=5.0)
+        assert sorted(set(asked)) == sorted(asked), "no strike is asked for twice"
+        assert len({c["strike"] for c in strip.caplets}) == len(asked)
+
+class TestOneStrikeOneVolatility:
+    """Until 0.42.2 a floor was read at the size of its distance from the money: a floor struck 50bp below it took the
+    volatility 50bp above (82.5 on SKEW) while a cap at that strike read 50bp below (90). One strike then had two
+    volatilities, and a cap less a floor at one strike was not the swap at that strike (Emmy, 15 November 2026)."""
+
+    ABOVE = [r for r in SKEW if r["strike_spread_bp"] >= 0]          # quoted at the money and above it only
+    BELOW = [r for r in SKEW if r["strike_spread_bp"] <= 0]          # quoted at the money and below it only
+
+    def _vol(self, strike, rows, floor):
+        from pricing.cap_floor import lookup_cap_vol
+        return lookup_cap_vol(strike_rate=strike, atm_forward=0.03, cap_tenor_y=5.0, surface_rows=rows, is_floor=floor)
+
+    def test_a_cap_and_a_floor_at_one_strike_are_read_at_one_point_on_either_side_of_the_money(self):
+        for strike, vol, tier in [(0.0200, 95.0, "QUOTED"), (0.0250, 90.0, "INTERP"), (0.0300, 85.0, "QUOTED"), (0.0350, 82.5, "INTERP"), (0.0400, 80.0, "QUOTED")]:
+            for floor in (False, True):
+                assert self._vol(strike, SKEW, floor) == (pytest.approx(vol), tier), (strike, floor)
+
+    def test_a_surface_quoted_on_one_side_only_is_mirrored_for_a_strike_on_the_other(self):
+        for floor in (False, True):
+            # nothing is quoted below the money: 50bp below is read 50bp above, 100bp below at the quote 100bp above
+            assert self._vol(0.0250, self.ABOVE, floor) == (pytest.approx(82.5), "INTERP")
+            assert self._vol(0.0200, self.ABOVE, floor) == (pytest.approx(80.0), "QUOTED")
+            # and the other way about
+            assert self._vol(0.0350, self.BELOW, floor) == (pytest.approx(90.0), "INTERP")
+            # on the side that is quoted nothing changes
+            assert self._vol(0.0350, self.ABOVE, floor) == (pytest.approx(82.5), "INTERP")
+            assert self._vol(0.0250, self.BELOW, floor) == (pytest.approx(90.0), "INTERP")
+
+    def test_a_cap_less_a_floor_at_one_strike_is_worth_the_same_whatever_the_surface(self):
+        # Put-call parity: cap(K) - floor(K) is the swap at K, which has no volatility in it. Priced off the surface
+        # and priced at any one volatility handed in, the difference is the same number; with the floor read on the
+        # other side of the money it was not (a 5Y floor at 2.5% on SKEW was priced at 82.5bp, its cap at 90bp).
+        from pricing.cap_floor import price_cap, price_floor
+        curve = Curve(valuation_date=VAL_DATE, flat_rate=0.03)
+        def both(strike, rows, vol=None):
+            kw = dict(notional=10_000_000, tenor_y=5.0, discount_curve=curve, valuation_date=VAL_DATE, surface_rows=rows, vol_override_bp=vol)
+            return price_cap(cap_rate=strike, **kw), price_floor(floor_rate=strike, **kw)
+        for strike in (0.0200, 0.0250, 0.0290, 0.0310, 0.0350, 0.0400):
+            cap, floor = both(strike, SKEW)
+            flat_cap, flat_floor = both(strike, SKEW, vol=60.0)
+            assert cap.vol_bp == pytest.approx(floor.vol_bp), strike
+            assert cap.npv - floor.npv == pytest.approx(flat_cap.npv - flat_floor.npv, abs=0.05), strike      # premiums are kept to the cent
+            assert abs(cap.vol_bp - 60.0) > 1.0, "the surface's volatility is not the one handed in, so the test says something"
+
+    def test_the_edges_a_strike_at_the_money_a_surface_of_one_quote_and_a_collars_floor(self):
+        from pricing.cap_floor import lookup_cap_vol, price_collar, price_floor
+        for floor in (False, True):
+            # at the money nothing is mirrored and the at-the-money quote is read, on any surface
+            for rows in (SKEW, self.ABOVE, self.BELOW):
+                assert self._vol(0.03, rows, floor) == (85.0, "QUOTED")
+            # a surface that is the at-the-money quote alone is flat, on both sides
+            atm_only = [r for r in SKEW if r["is_atm"]]
+            assert lookup_cap_vol(strike_rate=0.025, atm_forward=0.03, cap_tenor_y=5.0, surface_rows=atm_only, is_floor=floor)[0] == 85.0
+            assert lookup_cap_vol(strike_rate=0.035, atm_forward=0.03, cap_tenor_y=5.0, surface_rows=atm_only, is_floor=floor)[0] == 85.0
+        # the floor of a collar is the floor on its own: read below the money, where its strike is
+        curve = Curve(valuation_date=VAL_DATE, flat_rate=0.03)
+        kw = dict(notional=10_000_000, tenor_y=5.0, discount_curve=curve, valuation_date=VAL_DATE, surface_rows=SKEW)
+        collar = price_collar(cap_rate=0.035, floor_rate=0.025, **kw)
+        alone = price_floor(floor_rate=0.025, **kw)
+        assert alone.vol_bp > 85.0, "below the money this surface is above its at-the-money quote: the old reading gave less"
+        assert collar["floor"].vol_bp == pytest.approx(alone.vol_bp) and collar["floor"].npv == pytest.approx(alone.npv)

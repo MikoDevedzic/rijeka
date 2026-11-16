@@ -90,6 +90,14 @@ def save_settings(db: Session, firm_id, body: dict, by: str, by_name: str) -> di
 
 
 def report(db: Session, user: dict, d: Optional[date] = None) -> dict[str, Any]:
+    """The market risk report for a book. What every valuation in it reads from the database unchanged (a cap
+    surface for the date, a swaption's legs) is read once for the whole report (db/reading.py)."""
+    from db.reading import one_reading
+    with one_reading():
+        return _report(db, user, d)
+
+
+def _report(db: Session, user: dict, d: Optional[date] = None) -> dict[str, Any]:
     uid = user["sub"]
     dates = Market.dates(db, uid, upto=d or date.today())
     if not dates:

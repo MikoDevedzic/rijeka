@@ -502,8 +502,16 @@ checklist in `docs/ops/release.md`.
 
 ## What runs where, honestly
 
+- What each action costs the one CPU, measured on the integration book (twelve trades) on 15 November 2026: a
+  price about 0.01s, an XVA run about 0.02s, a live P&L or credit report about 0.1s, a live market risk report 1.1s
+  (5.7s until 0.42.3). The risk report is the one to watch as a book grows: it values every trade once for every
+  quoted tenor it is sensitive to.
 - One API process, in-request Monte Carlo and full-revaluation VaR, rate-limited per account
   (`api/routes/_limits.py`). A larger book moves these to a worker without changing the engines.
+- A report (market risk, P&L, counterparty credit) values each trade many times and reads once what none of those
+  valuations changes: the cap surface for the date, a swaption's legs (`db/reading.py`). The scheduler asks the
+  database one question before a group of batches and does not start a group that gets no answer; the group runs
+  at the next pass.
 - Job state for background runs (counterparty credit, the risk backfill) is in process memory until the
   stored row lands; a deploy mid-run loses the "running" flag, not the data.
 - The hosted demo prices on public-source market data rebuilt daily and, for digital assets, on a venue's option
