@@ -53,7 +53,7 @@ export default function XvaReservesPage() {
       {!rep && !err && <div className="pnl-empty">Loading…</div>}
       {rep && !x && <div className="pnl-empty">No reserve levels yet: the counterparty-credit run stores them (Risk → Counterparty credit → RUN NOW).</div>}
       {x && (<>
-        <div className="pnl-cards" style={{ gridTemplateColumns: `repeat(${comps.length + 1}, 1fr)` }}>
+        <div className="pnl-cards" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}>
           {comps.map(k => (
             <div key={k} className="pnl-card" style={netted.has(k.toUpperCase()) ? undefined : { opacity: 0.75 }}>
               <div className="pnl-card-l">{LABEL[k] || k} {netted.has(k.toUpperCase()) ? <small className="pnl-note">· netted</small> : <small className="pnl-note">· memo</small>}</div>
@@ -62,8 +62,8 @@ export default function XvaReservesPage() {
             </div>
           ))}
           <div className="pnl-card" style={{ borderColor: 'var(--accent)' }}>
-            <div className="pnl-card-l" style={{ color: 'var(--accent)' }}>DAY · NETTED INTO P&L</div>
-            <div className="pnl-card-b" style={{ color: 'var(--accent)' }}>{day ? sgn(day.netted) : '—'}</div>
+            <div className="pnl-card-l">DAY · NETTED INTO P&L</div>
+            <div className="pnl-card-b">{day ? sgn(day.netted) : '—'}</div>
             <div className="pnl-card-s">all components {day ? sgn(day.all) : '—'} · MTD {x.mtd ? sgn(x.mtd.netted) : '—'} · YTD {x.ytd ? sgn(x.ytd.netted) : '—'}</div>
           </div>
         </div>

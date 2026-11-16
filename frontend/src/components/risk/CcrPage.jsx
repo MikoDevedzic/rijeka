@@ -71,7 +71,7 @@ export default function CcrPage() {
           {rep && <span className={`pnl-chip ${standing.tone}`} data-testid="ccr-standing">{standing.text}</span>}
           {rep?.from_store && <span className="pnl-note">stored run · {fmtD(rep.date)} · {fmtT(rep.stored_at)}</span>}
           {/* a run computed for this look is not kept: the Collateral tab reads the stored one, and says so */}
-          {rep && !rep.from_store && cps.length > 0 && <span className="pnl-note" data-testid="ccr-not-stored">computed now, not stored · RUN NOW stores it</span>}
+          {rep && !rep.from_store && cps.length > 0 && <span className="pnl-note" data-testid="ccr-not-stored">{rep.tables === false ? 'computed now · this server cannot store a run (the credit tables are not applied)' : 'computed now, not stored · RUN NOW stores it'}</span>}
           <button className="pnl-btn" onClick={run} disabled={busy || job?.running}>{job?.running ? `RUNNING… ${job.done}/${job.total} ${job.current || ''}` : 'RUN NOW'}</button>
           <button className="pnl-btn ghost" onClick={() => load(true)} disabled={busy}>COMPUTE LIVE</button>
           <button className="pnl-btn ghost" onClick={() => navigate('/configurations/market-risk/limits')}>LIMITS →</button>

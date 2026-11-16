@@ -31,10 +31,10 @@ describe('one sensitivity, one name and one sign', () => {
   it('no Risk or P&L screen prints SPOT01, SPOT 01, spot01 or FUND01', () => {
     const here = new URL('.', import.meta.url), pnl = new URL('../pnl/', import.meta.url)
     const files = (dir) => readdirSync(dir).filter(f => /\.jsx$/.test(f) || ['limits-page.js', 'ipv-page.js'].includes(f)).map(f => new URL(f, dir))
-    const printed = (src) => src.replace(/\/\/[^\n]*|\{\/\*[\s\S]*?\*\/\}|\/\*[\s\S]*?\*\//g, '')   // comments say what the names were
+    const printed = (src) => src.replace(/(?<!:)\/\/[^\n]*|\{\/\*[\s\S]*?\*\/\}|\/\*[\s\S]*?\*\//g, '')   // comments say what the names were
       .replace(/startsWith\('SPOT01:'\)|\['SPOT01:<asset>'\]|=== 'SPOT01'/g, '')                     // the stored key, read not shown
-    const old = /SPOT ?01|FUND01|['"`>] ?spot ?01\b/
-    const found = [...files(here), ...files(pnl)].filter(f => old.test(printed(readFileSync(f, 'utf8')))).map(f => f.pathname.split('/').slice(-2).join('/'))
+    const old = (t) => /SPOT ?01|FUND01/.test(t) || /(?<![.\w])spot ?01\b/i.test(t)                  // not `r.spot01`, a field read
+    const found = [...files(here), ...files(pnl)].filter(f => old(printed(readFileSync(f, 'utf8')))).map(f => f.pathname.split('/').slice(-2).join('/'))
     expect(found).toEqual([])
   })
 })

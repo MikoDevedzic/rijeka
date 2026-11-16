@@ -248,13 +248,20 @@ One rule for the whole app, held by Iris (`.claude/agents/iris.md`) and by a che
   step of the scale at the fixed root of 14px, a tie upward (0.75rem, 10.5px, is a label's 11; 0.875rem, 12.25px,
   is a value's 12.5; a rail's link is 12). The next pages are P&L and Risk, each with pictures before and after
   (`LOOK_TAG=before npx playwright test -c playwright.perf.config.js look.spec.js`).
-- **Unknown is not zero.** A figure the page cannot have is a dash, with the reason in the line under it and the
-  way to get it one press away; it is never 0 or $0. A total that leaves something out says how much it leaves
-  out. A chip that reports a test (WITHIN LIMITS) is shown only where something was tested: with no limit set it
-  says NO LIMITS SET, in no colour (`frontend/src/components/risk/states.js`).
-- **A card** is its name, its figure and the line under it, set by one rule whichever names the component gives
-  them (`pnl-kl`/`pnl-big`/`rk-sub` or `pnl-card-l`/`-b`/`-s`). A class a component names has a rule in a
-  stylesheet: the cards of four pages named three that had none, and were set in the page's plain type.
+- **Unknown is not zero, and zero is not unknown.** A figure the page cannot have is a dash; the reason is said
+  once, where the eye starts (the bar), with the way to get it beside it as a way there (a ghost button with an
+  arrow), never as a filled button that does nothing here. It is never 0 or $0. A figure that is truly nothing
+  (no CSA, no trade) is a zero, not a dash. A total that leaves something out says how much it leaves out. The
+  cases are read from what produces the figure, every way it can come back empty, and written as one function
+  (`frontend/src/components/risk/states.js`). A chip that reports a test (WITHIN LIMITS) is shown only where a
+  test ran: with no limit set it says NO LIMITS SET, with none that could be given a value NO LIMIT TESTED, in
+  no colour.
+- **A card** is its name, its figure and the line under it, whichever names the component gives them
+  (`pnl-kl`/`pnl-big`/`rk-sub` or `pnl-card-l`/`-b`/`-s`): the name and the line in mono at the label's size,
+  the figure in mono, bold, 1.35rem; only the three cards of Trading P&L are larger (1.7rem). Neither the name
+  nor the figure is brass; a card that must stand out has a brass border. A card does not grow past its column
+  and a figure too long for it breaks inside it. A class a component names has a rule in a stylesheet: the
+  cards of four pages named three that had none, and were set in the page's plain type.
 - **A sum of what stands beside it** (FVA = FCA + FBA) is a row of its own under its parts, named by its formula,
   quiet, with a rule over the columns it adds. It is never a column of the total and is never added twice. On a
   phone, where the strip is turned on its side, it is left out and the note under the strip says it.

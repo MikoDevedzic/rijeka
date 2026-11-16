@@ -69,6 +69,10 @@ Learned on 15 November 2026
 - A page with a form beside a drawing: type in the form with the drawing fed live data and check the drawing is not started again (an object built per draw and handed to an effect restarts it at every key).
 - CI runs in UTC, and so did every journey: a calendar day read as a moment (`new Date('2026-11-14')`) is a day early for everyone west of UTC, and no journey could see it. A date shown on a screen is checked in a journey that sets a western time zone (`test.use({ timezoneId: 'America/Los_Angeles' })`, `e2e/dates.spec.js`); Marco found it on a machine in New York.
 
+Learned on 15 November 2026 (the journey that checked nothing)
+- `locator.isVisible()` does not wait, whatever timeout it is given: a part of a journey guarded by `if (await x.isVisible())` is skipped on a page still loading and the test passes having looked at nothing. Wait with `waitFor({ state: 'visible' })`, and where a part is skipped because the stack has nothing to show, add an annotation saying so. After writing a journey, check that the pictures it takes exist.
+- A picture taken before a change is not evidence about the change: retake every picture a brief names after the last edit to the screen it shows.
+
 Rules
 - Never run journeys against app.rijeka.app or the hosted API. Never enter real credentials anywhere.
 - Do not edit product code to make a journey pass. You may fix a journey whose selector went stale because the product legitimately changed, and say so.

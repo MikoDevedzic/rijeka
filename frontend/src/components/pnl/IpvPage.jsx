@@ -198,8 +198,8 @@ export default function IpvPage() {
 function Card({ label, big, sub, accent }) {
   return (
     <div className="pnl-card" style={accent ? { borderColor: 'var(--accent)' } : undefined}>
-      <div className="pnl-card-l" style={accent ? { color: 'var(--accent)' } : undefined}>{label}</div>
-      <div className="pnl-card-b" style={accent ? { color: 'var(--accent)' } : undefined}>{big}</div>
+      <div className="pnl-card-l">{label}</div>
+      <div className="pnl-card-b">{big}</div>
       <div className="pnl-card-s">{sub}</div>
     </div>
   )

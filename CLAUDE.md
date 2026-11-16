@@ -130,3 +130,6 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   the screens, and the unit test that forbids the name is written over the same files: the first search for SPOT01
   left "spot01" on the IPV page. And when a page is mended, its neighbours in the picture are read too: the cards
   beside the figure being fixed had never been styled.
+- Before a screen says "not known", read the code that produces the figure and list every way it comes back
+  empty (not asked for, asked and failed, asked and truly nothing): the first rule for the Collateral tab called a
+  counterparty with no trades "not yet run", and a limit that could not be valued "within limits".

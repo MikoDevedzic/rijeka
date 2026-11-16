@@ -9,45 +9,110 @@ const patch = (app, path, change) => app.route(path, async route => {
   const res = await route.fetch(); const json = await res.json()
   await route.fulfill({ response: res, json: change(json) ?? json })
 })
+// Whether a thing comes to be on the page: waits for it, and says in the report when a part of a journey had nothing to look at.
+const shown = async (loc, what = '') => loc.waitFor({ state: 'visible', timeout: 30_000 }).then(() => true, () => { test.info().annotations.push({ type: 'not on this stack', description: what || String(loc) }); return false })
+// The names and figures of a row of cards that are set in brass (the accent), by computed colour.
+const inBrass = (app, cards) => cards.locator('.pnl-card-l, .pnl-card-b').evaluateAll(els => {
+  const p = document.createElement('i'); p.style.color = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(); document.body.append(p)
+  const brass = getComputedStyle(p).color; p.remove()
+  return els.filter(el => getComputedStyle(el).color === brass).map(el => el.textContent)
+})
 const csa = (r) => !['NO_CSA', 'NONE', ''].includes(String(r.csa_type || 'NO_CSA').toUpperCase())
 
-test('the Collateral tab says a position is not known where no credit run is stored, and never $0', async ({ app, problems }) => {
-  // no run stored for anyone
+const SUBS = { 'VM HELD': 'their variation margin we hold today', 'VM POSTED': 'our variation margin they hold', 'INITIAL MARGIN': 'posted and received alike, where the CSA exchanges it', 'CARRY PER YEAR': 'what the margin earns over cash at OIS' }
+const blank = (r) => Object.assign(r, { has_run: false, trades: null, vm_held_usd: 0, vm_posted_usd: 0, im_usd: 0, carry_per_year_usd: 0, posted: [], held: [] })
+const two = (b) => { while (b.counterparties.filter(csa).length < 2) b.counterparties.push({ ...(b.counterparties.find(csa) || b.counterparties[0]), counterparty_id: `x${b.counterparties.length}`, counterparty: 'SECOND BANK', csa_type: 'VM' }); return b.counterparties.filter(csa) }
+
+test('the Collateral tab says a position is not known where it is not, and never $0 for it', async ({ app, problems }) => {
+  // 1. no run is stored at all: every total is a dash, the reason is said once, in the bar, and the way to a run is beside it
   await patch(app, '**/api/collateral/book*', (b) => {
-    for (const r of b.counterparties) Object.assign(r, { has_run: false, vm_held_usd: 0, vm_posted_usd: 0, im_usd: 0, carry_per_year_usd: 0, posted: [], held: [], note: 'no stored credit run for this counterparty: positions unknown until Risk → Counterparty credit runs' })
-    Object.assign(b.totals, { vm_held_usd: 0, vm_posted_usd: 0, im_usd: 0, carry_per_year_usd: 0, on_chain_share: null }); b.date = null
     if (!b.counterparties.some(csa)) b.counterparties[0].csa_type = 'VM_IM'
+    b.counterparties.forEach(blank)
+    Object.assign(b.totals, { vm_held_usd: 0, vm_posted_usd: 0, im_usd: 0, carry_per_year_usd: 0, on_chain_share: null }); b.date = null; b.stored_at = null
   })
   await app.goto('/risk/collateral')
   const cards = app.locator('.pnl-cards').first()
   await expect(app.getByTestId('col-unknown')).toHaveText('no credit run is stored: positions not known', { timeout: 30_000 })
-  for (const label of ['VM HELD', 'VM POSTED', 'INITIAL MARGIN', 'CARRY PER YEAR']) {
+  for (const [label, sub] of Object.entries(SUBS)) {
     const card = cards.locator('.pnl-card', { hasText: label })
     await expect(card.locator('.pnl-card-b'), `${label} is a dash, not $0`).toHaveText('—')
-    await expect(card.locator('.pnl-card-s')).toHaveText('not known: no credit run is stored')
+    await expect(card.locator('.pnl-card-s'), 'the card keeps its own words; the reason is in the bar').toHaveText(sub)
   }
   await expect(cards).not.toContainText('$0')
-  await cards.screenshot({ path: 'e2e/.out/shots/collateral-unknown.png' })
-  // the way to make it known is one press away
-  await app.getByRole('button', { name: 'RUN ONE →' }).click()
+  // the cards are set as the Market Risk page's: the figure in the figures' face, larger than its name
+  const card = cards.locator('.pnl-card').first()
+  const [face, big, small] = await card.evaluate(el => { const b = getComputedStyle(el.querySelector('.pnl-card-b')), l = getComputedStyle(el.querySelector('.pnl-card-l')); return [b.fontFamily, parseFloat(b.fontSize), parseFloat(l.fontSize)] })
+  expect(face).toMatch(/mono/i); expect(big).toBeGreaterThan(small + 4)
+  // a counterparty's cell is its name over its terms, read to the end, in a row no taller than three lines
+  const row = app.locator('.pnl-tree .pnl-tr.d1').first()
+  expect((await row.boundingBox()).height, 'the row is not stretched by a reason in its first cell').toBeLessThan(80)
+  await expect(row).not.toContainText('no stored credit run')
+  await app.screenshot({ path: 'e2e/.out/shots/collateral-unknown.png' })
+  // the way to make it known goes to the tab that stores a run; it is a way there, not an action here
+  const go = app.getByRole('button', { name: 'COUNTERPARTY CREDIT →' })
+  await expect(go).toHaveClass(/ghost/)
+  await go.click()
   await expect(app).toHaveURL(/\/risk\/ccr/)
 
-  // one of the CSA counterparties has a run: a total, and how many it leaves out
+  // 2. a run is stored; it could not simulate one counterparty: a total, and what it leaves out
   await app.unroute('**/api/collateral/book*')
   await patch(app, '**/api/collateral/book*', (b) => {
-    while (b.counterparties.filter(csa).length < 2) b.counterparties.push({ ...b.counterparties.find(csa) || b.counterparties[0], counterparty_id: `x${b.counterparties.length}`, counterparty: 'SECOND BANK', csa_type: 'VM' })
-    const [a, c] = b.counterparties.filter(csa)
-    Object.assign(a, { has_run: true, vm_held_usd: 301078, vm_posted_usd: 0, im_usd: 0, note: null })
-    Object.assign(c, { has_run: false, vm_held_usd: 0, vm_posted_usd: 0, im_usd: 0 })
-    for (const r of b.counterparties.filter(csa).slice(2)) r.has_run = true
-    Object.assign(b.totals, { vm_held_usd: 301078, vm_posted_usd: 0, im_usd: 0 })
+    const [a, c, ...rest] = two(b)
+    Object.assign(a, { has_run: true, trades: 3, vm_held_usd: 301078, vm_posted_usd: 0, im_usd: 0 })
+    Object.assign(blank(c), { trades: 2 })                       // in the run, nothing simulated
+    for (const r of rest) Object.assign(r, { has_run: true, trades: 1 })
+    Object.assign(b.totals, { vm_held_usd: 301078, vm_posted_usd: 0, im_usd: 0 }); b.date = b.date || '2026-11-02'
   })
   await app.goto('/risk/collateral')
   const held = app.locator('.pnl-cards').first().locator('.pnl-card', { hasText: 'VM HELD' })
   await expect(held.locator('.pnl-card-b')).toHaveText(/301,078/, { timeout: 30_000 })
-  await expect(held.locator('.pnl-card-s')).toContainText('1 counterparty not yet run')
-  await expect(app.getByTestId('col-unknown')).toContainText(/^1 of \d+ with a CSA not yet run$/)
-  await app.locator('.pnl-cards').first().screenshot({ path: 'e2e/.out/shots/collateral-partly-known.png' })
+  await expect(app.getByTestId('col-unknown')).toHaveText(/^1 of \d+ with a CSA could not be simulated in the stored run: not in the totals$/)
+  await app.screenshot({ path: 'e2e/.out/shots/collateral-partly-known.png' })
+
+  // 3. a run is stored and a counterparty is not in it: it had no live trade, nothing is margined, and zero is true
+  await app.unroute('**/api/collateral/book*')
+  await patch(app, '**/api/collateral/book*', (b) => {
+    const [a, c, ...rest] = two(b)
+    Object.assign(a, { has_run: true, trades: 3, vm_held_usd: 301078 }); blank(c)
+    for (const r of rest) Object.assign(r, { has_run: true, trades: 1 })
+    Object.assign(b.totals, { vm_held_usd: 301078 }); b.date = b.date || '2026-11-02'
+  })
+  await app.goto('/risk/collateral')
+  await expect(app.locator('.pnl-cards').first().locator('.pnl-card', { hasText: 'VM HELD' }).locator('.pnl-card-b')).toHaveText(/301,078/, { timeout: 30_000 })
+  await expect(app.getByTestId('col-unknown')).toHaveCount(0)
+  await expect(app.getByRole('button', { name: 'COUNTERPARTY CREDIT →' })).toHaveCount(0)
+  expectClean(problems)
+})
+
+test('the cards of the XVA reserves and IPV pages are set as cards, hold a far larger figure, and name no spot01', async ({ app, problems }) => {
+  await app.goto('/pnl/xva')
+  const cards = app.locator('.pnl-cards').first()
+  // (isVisible does not wait: a branch guarded by it is skipped on a page still loading, and the test passes on nothing)
+  if (await shown(cards.locator('.pnl-card').first())) {
+    const fig = cards.locator('.pnl-card-b').first()
+    expect(await fig.evaluate(el => getComputedStyle(el).fontFamily)).toMatch(/mono/i)
+    // brass is an action or a seal, never a label or a figure
+    expect(await inBrass(app, cards), 'a card\'s name or figure in brass on XVA reserves').toEqual([])
+    for (const width of [1440, 1100]) {
+      await app.setViewportSize({ width, height: 900 })
+      await fig.evaluate(el => { el.textContent = '−1,234,567,890' })
+      const over = await cards.locator('.pnl-card').evaluateAll(els => els.filter(el => el.scrollWidth - el.clientWidth > 1).length)
+      expect(over, `a card wider than its column at ${width}px`).toBe(0)
+      expect(await cards.evaluate(el => el.scrollWidth - el.clientWidth), `the cards run past the page at ${width}px`).toBeLessThanOrEqual(1)
+    }
+    await app.screenshot({ path: 'e2e/.out/shots/xva-cards-large.png' })
+    await app.setViewportSize({ width: 1440, height: 900 })
+  }
+  await app.goto('/pnl/ipv')
+  const inputs = app.locator('.pnl-tr', { hasText: '_SPOT' })
+  if (await shown(inputs.first())) {
+    await expect(inputs.first()).toContainText(/FX01|CRY01/)
+    await inputs.first().click()                                          // its pillars: the header and the column name it too
+    await expect(app.locator('.pnl-panel', { hasText: /VERIFY\s+BY PILLAR/ }).first()).toContainText(/(FX01|CRY01) per pillar/)
+    expect(await inBrass(app, app.locator('.pnl-cards').first()), 'a card\'s name or figure in brass on IPV').toEqual([])
+    await expect(app.locator('.pnl')).not.toContainText(/spot ?01/i)
+    await app.screenshot({ path: 'e2e/.out/shots/ipv-names.png' })
+  }
   expectClean(problems)
 })
 
@@ -60,6 +125,18 @@ test('a page with no limit set says so, and says WITHIN LIMITS only where one wa
   // a run computed for this look is said not to be kept
   await expect(app.getByTestId('ccr-not-stored')).toHaveText('computed now, not stored · RUN NOW stores it')
   await app.locator('.pnl-bar').first().screenshot({ path: 'e2e/.out/shots/ccr-no-limits.png' })
+
+  // a limit is set, and could not be given a value (its counterparty has no run): nothing was tested
+  await app.unroute('**/api/ccr/report*')
+  await patch(app, '**/api/ccr/report*', (r) => { r.limits = [{ id: 'n', metric: 'PFE_PEAK:NOBODY', scope: 'ALL', limit: 1, warn_pct: 80, value: null, utilisation_pct: null, status: 'NA' }]; r.breaches = 0 })
+  await app.goto('/risk/ccr')
+  await expect(chip).toHaveText('NO LIMIT TESTED', { timeout: 60_000 })
+  await expect(chip).not.toHaveClass(/\bok\b/)
+  // a server without the credit tables cannot store a run, and the note does not say that it can
+  await app.unroute('**/api/ccr/report*')
+  await patch(app, '**/api/ccr/report*', (r) => { r.from_store = false; r.tables = false })
+  await app.goto('/risk/ccr')
+  await expect(app.getByTestId('ccr-not-stored')).toHaveText(/cannot store a run/, { timeout: 60_000 })
 
   await app.unroute('**/api/ccr/report*')
   await patch(app, '**/api/ccr/report*', (r) => {

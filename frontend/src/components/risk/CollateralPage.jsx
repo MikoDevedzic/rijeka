@@ -14,7 +14,7 @@ import RegimesReport, { Card, RunControls } from './RegimesReport'
 import { api, fmtD, fmtT, useCapitalPortfolio } from './regimes-report'
 import { fmt, fmtSigned } from './capital-page'
 import { summary } from '../onboarding/collateral-schedule'
-import { positions } from './states'
+import { positionKnown, positionOf, positions } from './states'
 import '../pnl/PnlPage.css'
 import './RiskPage.css'
 
@@ -30,11 +30,13 @@ export default function CollateralPage() {
   useEffect(() => { (async () => { try { setBook(await api('/api/collateral/book')) } catch (e) { setErr(e.message) } })() }, [])
   const t = book?.totals || {}
   const rows = book?.counterparties || []
-  // unknown is not zero: a total is a figure only where a stored credit run gives a position to add up
-  const pos = positions(rows)
+  // unknown is not zero (risk/states.js): a total is a figure only where a stored credit run gives positions to add
+  // up, and a row's cell is a dash only where its position is not known; the reason is said once, in the bar
+  const stored = !!book?.date
+  const pos = positions(rows, stored)
   const tot = (v, f = fmt) => pos.known ? f(v) : '—'
-  const less = pos.known && pos.missing ? ` · ${pos.missing} counterpart${pos.missing > 1 ? 'ies' : 'y'} not yet run` : ''
-  const why = (said) => pos.known ? `${said}${less}` : 'not known: no credit run is stored'
+  const WHY = { unrun: 'no credit run is stored', failed: 'the stored credit run could not simulate this counterparty' }
+  const cell = (r, v, f = fmt) => positionKnown(r, stored) ? f(v || 0) : <span title={WHY[positionOf(r, stored)]}>—</span>
   const grid = 'minmax(15rem,1fr) 7.5rem 7.5rem 6.5rem minmax(14rem,1.4fr) minmax(14rem,1.4fr) 7.5rem 6rem'
 
   return (
@@ -44,8 +46,8 @@ export default function CollateralPage() {
         <div className="pnl-title">COLLATERAL <span className="pnl-sub">schedules · margin positions · what they are held in · carry over OIS · the book under regimes</span></div>
         <div className="pnl-ctl">
           {book?.date && <span className="pnl-note">positions from the credit run of {fmtD(book.date)}{book.stored_at ? ` · ${fmtT(book.stored_at)}` : ''}</span>}
-          {book && pos.missing > 0 && <span className="pnl-note" data-testid="col-unknown">{pos.known ? `${pos.missing} of ${pos.csa} with a CSA not yet run` : 'no credit run is stored: positions not known'}</span>}
-          {book && pos.missing > 0 && <button className="pnl-btn" onClick={() => navigate('/risk/ccr')}>RUN ONE →</button>}
+          {book && pos.why && <span className="pnl-note" data-testid="col-unknown">{pos.why}</span>}
+          {book && pos.why && <button className="pnl-btn ghost" onClick={() => navigate('/risk/ccr')}>COUNTERPARTY CREDIT →</button>}
           <button className="pnl-btn ghost" onClick={() => navigate('/configurations/counterparties')}>SCHEDULES →</button>
           <button className="pnl-btn ghost" onClick={() => navigate('/configurations/collateral/instruments')}>INSTRUMENTS →</button>
         </div>
@@ -54,10 +56,10 @@ export default function CollateralPage() {
       {!book && !err && <div className="pnl-empty">Loading…</div>}
       {book && (<>
         <div className="pnl-cards" style={{ gridTemplateColumns: 'repeat(5,1fr)' }}>
-          <Card label="VM HELD" big={tot(t.vm_held_usd)} sub={why('their variation margin we hold today')} title="the collateral called against the netted value where it is in our favour, net of threshold and MTA" />
-          <Card label="VM POSTED" big={tot(t.vm_posted_usd)} sub={why('our variation margin they hold')} />
-          <Card label="INITIAL MARGIN" big={tot(t.im_usd)} sub={why('posted and received alike, where the CSA exchanges it')} />
-          <Card label="CARRY PER YEAR" big={tot(t.carry_per_year_usd, fmtSigned)} sub={why('what the margin earns over cash at OIS')} title="face × carry over OIS of what each side is held in; cash is zero" />
+          <Card label="VM HELD" big={tot(t.vm_held_usd)} sub="their variation margin we hold today" title="the collateral called against the netted value where it is in our favour, net of threshold and MTA" />
+          <Card label="VM POSTED" big={tot(t.vm_posted_usd)} sub="our variation margin they hold" />
+          <Card label="INITIAL MARGIN" big={tot(t.im_usd)} sub="posted and received alike, where the CSA exchanges it" />
+          <Card label="CARRY PER YEAR" big={tot(t.carry_per_year_usd, fmtSigned)} sub="what the margin earns over cash at OIS" title="face × carry over OIS of what each side is held in; cash is zero" />
           <Card label="ON CHAIN" big={pct(t.on_chain_share)} sub={`${t.with_schedule || 0} of ${t.counterparties || 0} with a schedule`} title="the share of today's margin requirement on an on-chain rail" />
         </div>
 
@@ -70,13 +72,13 @@ export default function CollateralPage() {
             </div>
             {rows.map(r => (
               <div key={r.counterparty_id} className="pnl-tr d1" style={{ gridTemplateColumns: grid, cursor: 'default' }}>
-                <span className="pnl-tn rk-over" style={{ paddingLeft: 8 }}>{r.counterparty}<small>{r.csa_type}{r.csa_type !== 'NO_CSA' ? ` ${r.csa_currency}${r.threshold_m ? ` · thr ${r.threshold_m}m` : ''}${r.mta_k ? ` · mta ${r.mta_k}k` : ''}` : ''}{r.schedule ? ` · ${summary(r.schedule)}` : ' · no schedule: cash'}{r.note ? ` · ${r.note}` : ''}</small></span>
-                <span className="pnl-tv">{r.has_run ? fmt(r.vm_held_usd) : '—'}</span>
-                <span className="pnl-tv">{r.has_run ? fmt(r.vm_posted_usd) : '—'}</span>
-                <span className="pnl-tv">{r.has_run ? fmt(r.im_usd) : '—'}</span>
-                <span className="pnl-tn" style={{ whiteSpace: 'normal', fontSize: 11, color: 'var(--text-dim)' }}>{legs(r.posted)}</span>
+                <span className="pnl-tn rk-over" style={{ paddingLeft: 8 }}>{r.counterparty}<small>{r.csa_type}{r.csa_type !== 'NO_CSA' ? ` ${r.csa_currency}${r.threshold_m ? ` · thr ${r.threshold_m}m` : ''}${r.mta_k ? ` · mta ${r.mta_k}k` : ''}` : ''}{r.schedule ? ` · ${summary(r.schedule)}` : ' · no schedule: cash'}</small></span>
+                <span className="pnl-tv">{cell(r, r.vm_held_usd)}</span>
+                <span className="pnl-tv">{cell(r, r.vm_posted_usd)}</span>
+                <span className="pnl-tv">{cell(r, r.im_usd)}</span>
+                <span className="pnl-tn" style={{ whiteSpace: 'normal', fontSize: 11, color: 'var(--text-dim)', paddingLeft: 12 }}>{legs(r.posted)}</span>
                 <span className="pnl-tn" style={{ whiteSpace: 'normal', fontSize: 11, color: 'var(--text-dim)' }}>{legs(r.held)}</span>
-                <span className="pnl-tv" style={{ color: r.carry_per_year_usd > 0.5 ? 'var(--up)' : r.carry_per_year_usd < -0.5 ? 'var(--down)' : 'var(--text-dim)' }}>{r.has_run || String(r.csa_type).toUpperCase() === 'NO_CSA' ? fmtSigned(r.carry_per_year_usd) : '—'}</span>
+                <span className="pnl-tv" style={{ color: r.carry_per_year_usd > 0.5 ? 'var(--up)' : r.carry_per_year_usd < -0.5 ? 'var(--down)' : 'var(--text-dim)' }}>{cell(r, r.carry_per_year_usd, fmtSigned)}</span>
                 <span className="pnl-tv"><span className={`pnl-chip ${r.rail === 'on_chain' ? 'ok' : ''}`}>{r.rail === 'on_chain' ? 'ON CHAIN' : 'BILATERAL'}</span></span>
               </div>
             ))}

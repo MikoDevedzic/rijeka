@@ -19,9 +19,12 @@
 .pnl-card.meta b { font-family:var(--mono); font-size:0.95rem; color:var(--text); } .pnl-card.meta .warn { color:var(--amber); }
 /* A card: its name, its figure, the line under it. `pnl-card-l/-b/-s` are the same three, as the cards of the XVA
    reserves, IPV, Capital and Collateral pages name them: they had no rule of their own and were set in the page's
-   plain type. One rule for both names. */
+   plain type. One rule for both names; the figure of the Trading P&L's three cards is the larger (`pnl-big`), every
+   other card's is `rk-big`'s size (risk/RiskPage.css, which each of those pages loads). A card never grows past its
+   column, and a figure too long for it breaks inside it. */
 .pnl-kl, .pnl-card-l { font-family:var(--mono); font-size:0.86rem; letter-spacing:0.1em; color:var(--text-dim); }
-.pnl-big, .pnl-card-b { font-family:var(--mono); font-size:1.7rem; font-weight:600; line-height:1.1; color:var(--text); }
+.pnl-big, .pnl-card-b { font-family:var(--mono); font-weight:600; line-height:1.1; color:var(--text); } .pnl-big { font-size:1.7rem; }
+.pnl-card { min-width:0; } .pnl-card-b { overflow-wrap:anywhere; }
 .pos { color:var(--up); } .neg { color:var(--down); }
 .pnl-split { display:flex; flex-direction:column; gap:0.25rem; margin-top:0.2rem; }
 .pnl-split > div { display:grid; grid-template-columns:4.2rem 1fr 5.5rem; align-items:center; gap:0.5rem; font-family:var(--mono); font-size:0.86rem; letter-spacing:0.1em; color:var(--text-dim); }

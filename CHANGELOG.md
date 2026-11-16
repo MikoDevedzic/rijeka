@@ -10,26 +10,36 @@ the same collateral, and a page said WITHIN LIMITS with no limit set. No figure 
 
 - **The Collateral tab.** Its positions come from the latest stored credit run. With none stored, its totals read
   $0 (variation margin held and posted, initial margin, carry) while the Counterparty Credit tab, which had
-  computed a run for the look and not kept it, showed the collateral held. The totals are now a dash, with "not
-  known: no credit run is stored" under each and a RUN ONE button that goes to the tab that stores one. Where
-  some counterparties have a run and some have not, the total is shown and says how many it leaves out. A
-  counterparty's carry is a dash where its position is, and the reason beside its name is written to its end
-  (it was cut off after a few words).
+  computed a run for the look and not kept it, showed the collateral held. The page now tells three cases apart.
+  No run stored: the totals are a dash, the bar says so once, and a button beside it goes to the tab that stores a
+  run. A run stored that could not simulate a counterparty (no spot, an error): the totals are shown and the bar
+  says how many counterparties they leave out; with none simulated they are a dash. A run stored and a
+  counterparty not in it: it had no live trade when the run was made, nothing is margined, and its zero is a
+  zero. A row's cells follow the same rule, the dash carrying its reason on hover; a counterparty without a CSA
+  reads zero, not a dash. The cell with the counterparty's name is its name over its terms, read to the end (the
+  name was squeezed into four lines and the terms cut off).
 - **The Counterparty Credit tab** says when the run on the screen was computed for the look and not stored, and
-  that RUN NOW stores it.
-- **NO LIMITS SET.** The chip beside the title of Counterparty Credit said WITHIN LIMITS beside "LIMITS 0". With
-  no limit set it now says NO LIMITS SET, in no colour; Market Risk follows the same rule (it has a standard
-  limit for every curve, so its chip always has something to report).
+  that RUN NOW stores it; on a server without the credit tables it says that a run cannot be stored there.
+- **Nothing tested is not WITHIN LIMITS.** The chip beside the title of Counterparty Credit said WITHIN LIMITS
+  beside "LIMITS 0". With no limit set it says NO LIMITS SET; with limits set and none that could be given a
+  value (a limit on a counterparty with no run), NO LIMIT TESTED; both in no colour. Market Risk follows the
+  same rule: a book with a ladder has a standard limit on every curve, so there the chip reports on them.
 - **The cards of four pages.** The summary cards of Collateral, Capital, XVA reserves and IPV named three
   classes that no stylesheet had, and were set in the page's plain type, the figure the size of its label. They
-  are set by the rule the Market Risk and P&L cards have.
-- **One more old name.** The IPV page wrote "spot01" for a spot input's sensitivity; it writes FX01 or CRY01. The
-  test that forbids the old names now reads the P&L screens as well, in capitals or not.
-- The two rules are functions with their cases tested (`frontend/src/components/risk/states.js`), a journey gives
+  are set as the Market Risk cards are. A card no longer grows past its column: the XVA reserves cards wrap to a
+  second row in a narrow window, and a figure too long for its card breaks inside it. The two cards whose name
+  and figure were in brass (the day's netted change, the official P&L) keep the brass border and lose the brass
+  type: brass is an action or a seal, not a figure.
+- **One more old name.** The IPV page wrote "spot01" for a spot input's sensitivity, in its table and its pillar
+  panel; it writes FX01 or CRY01. The test that forbids the old names now reads the P&L screens as well, in
+  capitals or not, quoted or in running text.
+- The rules are functions with their cases tested (`frontend/src/components/risk/states.js`), a journey gives
   each page each state by changing the API's own answer, the rules are in `docs/design.md` (Figures), and the
-  lessons are in the design keeper's definition.
+  lessons are in the design keeper's and the browser tester's definitions.
 - Not changed, and said here so it is not lost: the IPV page names the sensitivity of a digital asset's funding
-  level IR01, which no other screen does; what it should be called there is the owner's to say.
+  level IR01, which no other screen does, and its waterfall still sets the official line in brass; the ON CHAIN
+  share and the tables by instrument and by class are over the counterparties the run simulated, which the bar's
+  note covers and the tables do not repeat.
 
 ## 0.42.6 · 15 November 2026
 
