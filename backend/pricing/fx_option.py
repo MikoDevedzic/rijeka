@@ -60,6 +60,15 @@ def gk_value(F: float, K: float, T: float, sigma: float, call: bool, df: float =
     return df * (K * _N(-d2) - F * _N(-d1))
 
 
+def european_npv(*, direction: str, option_type: str, base_notional: float, strike: float, forward: float, df_quote: float,
+                 t_expiry: float, vol: float) -> float:
+    """A European option's value from our side, in the quote currency, at a forward, a discount factor to
+    settlement, a time to expiry and a vol: ±N·gk_value. It is the figure price_fx_option reports as `npv`, by the
+    same expression, so a scenario that names those four inputs is priced as the ticket was, to the last bit."""
+    sign = 1.0 if str(direction).upper() == "BUY" else -1.0
+    return sign * (float(base_notional) * gk_value(forward, strike, t_expiry, vol, str(option_type).upper() == "CALL", df_quote))
+
+
 def forward_delta(F: float, K: float, T: float, sigma: float, call: bool) -> float:
     """Φ(d1) for a call, Φ(d1) − 1 for a put: the premium-excluded forward delta the market quotes smiles on."""
     if T <= 0 or sigma <= 0:

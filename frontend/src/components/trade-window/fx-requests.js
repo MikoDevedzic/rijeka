@@ -10,7 +10,8 @@
 // server for every landed quote.
 //
 //   marketKey          the stored market a quote priced on: the pairs answer is read once for it
-//   scenarioTerms      an option's terms as the engine's scenario route takes them
+//   scenarioRoute      which of the engine's two scenario routes prices a quote: an option's, or a forward's
+//   scenarioTerms      a trade's terms as that route takes them
 //   scenarioRequest    one request for every figure a scenario shows: each market priced once, and only if not held
 //   scenarioMerge      the answers held, by the option's terms and by market
 //   scenarioRead       what a name reads: the value at its own market for these terms, or nothing
@@ -30,11 +31,21 @@ export function marketKey(quote) {
   return [quote.pair, orNull(quote.vol_snapshot), orNull(quote.vol_marks), points].join('|')
 }
 
-// ── an option the engine prices under a scenario (POST /api/currency/option/scenario) ──
-// The option's terms as that route takes them: the style and its levels, the years to expiry the quote reports, and
-// the spot it was priced at (the side of a barrier the market stands on).
+// ── a trade the engine prices under a scenario ──
+// An option of any style: POST /api/currency/option/scenario. A spot, forward or NDF: POST /api/currency/forward/scenario.
+const isOption = (quote) => quote?.shape === 'OPTION'
+export const scenarioRoute = (quote) => (isOption(quote) ? '/api/currency/option/scenario' : '/api/currency/forward/scenario')
+
+// The trade's terms as its route takes them. An option: the style and its levels, the years to expiry the quote
+// reports, and the spot it was priced at (the side of a barrier the market stands on). A forward: its side, its size
+// and the rate it is struck at; null when the quote names no rate (there is then nothing to value against).
 export function scenarioTerms(quote) {
   if (!quote) return null
+  if (!isOption(quote)) {
+    const k = quote.forward_rate
+    if (!(typeof k === 'number' && Number.isFinite(k) && k > 0)) return null
+    return { direction: quote.direction, base_notional: quote.base_notional, forward_rate: k }
+  }
   return {
     option_type: quote.option_type, direction: quote.direction, base_notional: quote.base_notional, strike: orNull(quote.strike), t_expiry: quote.t_expiry, spot: quote.spot,
     style: quote.style, payout: orNull(quote.payout), payout_currency: quote.payout_currency || 'QUOTE', barrier_type: orNull(quote.barrier_type), barrier: orNull(quote.barrier),
@@ -42,8 +53,11 @@ export function scenarioTerms(quote) {
   }
 }
 
-const stateId = (s) => [s.spot, s.forward, s.df_quote, s.vol_pct].join('|')
-const usableState = (s) => !!s && [s.spot, s.forward, s.df_quote, s.vol_pct].every(v => typeof v === 'number' && Number.isFinite(v) && v > 0)
+// A market as the route reads it: an option's value takes a spot, a forward, a discount factor and a vol; a forward's
+// takes the forward and the discount factor alone, so two scenarios that differ only in spot or vol are one market to it.
+const FIELDS = { option: ['spot', 'forward', 'df_quote', 'vol_pct'], forward: ['forward', 'df_quote'] }
+const stateId = (s, fields) => fields.map(f => s[f]).join('|')
+const usableState = (s, fields) => !!s && fields.every(f => typeof s[f] === 'number' && Number.isFinite(s[f]) && s[f] > 0)
 export const SCENARIO_KEPT = 400      // markets whose value is kept for one option, the oldest dropped first
 
 // One request for every figure a scenario shows. `named`: [[name, market]], a market being { spot, forward, df_quote,
@@ -58,12 +72,13 @@ export function scenarioRequest(quote, named, held = null) {
   if (!terms || !Array.isArray(named)) return null
   const termsKey = JSON.stringify(terms)
   const have = held && held.terms === termsKey && held.by ? held.by : {}
+  const fields = isOption(quote) ? FIELDS.option : FIELDS.forward
   const index = {}, ids = [], states = []
   for (const [name, s] of named) {
-    if (!usableState(s)) continue
-    const id = stateId(s)
+    if (!usableState(s, fields)) continue
+    const id = stateId(s, fields)
     index[name] = id
-    if (!(id in have) && !ids.includes(id)) { ids.push(id); states.push({ spot: s.spot, forward: s.forward, df_quote: s.df_quote, vol_pct: s.vol_pct }) }
+    if (!(id in have) && !ids.includes(id)) { ids.push(id); states.push(Object.fromEntries(fields.map(f => [f, s[f]]))) }
   }
   if (!Object.keys(index).length) return null
   const body = states.length ? { ...terms, states } : null

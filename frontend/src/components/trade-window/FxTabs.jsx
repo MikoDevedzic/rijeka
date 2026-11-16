@@ -30,7 +30,7 @@ import { pillars } from './fx-vol'
 import { shockAtTime as shiftAtTime, shockSaid as shockWords } from './rates-scenario'
 import { RISK_FACTORS } from '../../lib/risk-factors'
 import { RESULT_FIG, XVA_ROW, XVA_LEFT, XVA_RIGHT } from './xva-shared'
-import { marketKey, scenarioMerge, scenarioRead, scenarioRequest } from './fx-requests'
+import { marketKey, scenarioMerge, scenarioRead, scenarioRequest, scenarioRoute } from './fx-requests'
 import { NOT_A_NUMBER, crybasis01, formatRead, parseNumber } from './fx-ticket'
 import {
   FIXING_DAYS, FX_SPOT_LAG_DAYS, RATE_SHOCK_BOUND, SPOT_BOUND_PCT, applyTenorDrag, carryFactor, carryPoints, chartLevels, curveNodes, daysBetween,
@@ -574,13 +574,16 @@ function LegCashflows({ quote, crypto }) {
 // (fx-scenario.js shockedState). The forward is read off the curve on the chart: spot plus the points
 // interpolated to the settlement date, after the spot shock, the rate shocks and whatever was dragged; the
 // discount factor is DF·exp(−Δr·T) for the shock the quote curve shows at the settlement date.
-// A forward and a European option are then priced here by the engine's closed form (reprice), so the chart, the
-// tiles and the ladder move together with no round trip: with no shock it agrees with the engine to cents (an
-// option's Φ here is a polynomial). Every other style of option (American, digital, barrier, double barrier,
-// touch) is priced by the engine itself at that market (POST /api/currency/option/scenario): the same factors,
-// the same shocks and the same table, a quarter of a second after the last change; with no shock the figure is
-// the ticket's own. In both, a spot shock scales the quoted points with spot, and on quoted points the pricer
-// would not move the forward with the rate sliders. The banner and the caption under the sliders say so.
+// Every single trade is then priced by the engine itself at that market, a quarter of a second after the last
+// change: an option of any style by POST /api/currency/option/scenario, a spot, forward or NDF by POST
+// /api/currency/forward/scenario, each the pricer the ticket was priced with, so with no shock the figure is the
+// ticket's own. A forward and a European option also have the engine's closed form here (reprice): it stands in
+// for a figure while the engine's answer is on its way, so the chart, the tiles and the ladder follow a drag with
+// no round trip, and it agrees with the engine to cents (an option's Φ here is a polynomial). Every other style
+// (American, digital, barrier, double barrier, touch) has no closed form here: its figure is a dash until the
+// answer is back. A package's figures are still the closed form's over its legs, and its chip says APPROXIMATION.
+// In all of them a spot shock scales the quoted points with spot, and on quoted points the pricer would not move
+// the forward with the rate sliders. The banner and the caption under the sliders say so.
 const ENGINE_DELAY_MS = 250           // the engine is asked once the scenario has stood still this long
 // an amount the trade would settle: the cell's figure, and the second one beside it where there are two
 const SETTLE_FIG = (v) => ({ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 500, color: tone(v, 2) })
@@ -606,25 +609,26 @@ function FixingSource({ source, time, date, settles, american, last, cash, dp })
   )
 }
 
-// A styled option's prices: one request for every market the tab needs and does not hold (fx-requests.js
-// scenarioRequest), sent once the scenario has stood still, only while the tab is showing and the quote is not being
-// repriced, and dropped in flight when the scenario moves on. It draws nothing: the tab's chip says REPRICING…
-// meanwhile, and a figure whose market is not answered yet is a dash.
-function EngineAsk({ req, on, onAnswer, onFailure }) {
+// The engine's prices: one request for every market the tab needs and does not hold (fx-requests.js
+// scenarioRequest), to the trade's own route, sent once the scenario has stood still, only while the tab is showing
+// and the quote is not being repriced, and dropped in flight when the scenario moves on. It draws nothing: the tab's
+// chip says REPRICING… meanwhile, and a figure whose market is not answered yet is the closed form's where there
+// is one, else a dash.
+function EngineAsk({ req, path, on, onAnswer, onFailure }) {
   const key = req?.key || null
   useEffect(() => {
     if (!on || !key) return undefined
     const stop = new AbortController()
     const timer = setTimeout(async () => {
       try {
-        const r = await apiFetch('/api/currency/option/scenario', { method: 'POST', signal: stop.signal, headers: { 'Content-Type': 'application/json' }, body: key })
+        const r = await apiFetch(path, { method: 'POST', signal: stop.signal, headers: { 'Content-Type': 'application/json' }, body: key })
         const j = await r.json().catch(() => ({}))
         if (!r.ok) throw new Error(typeof j.detail === 'string' ? j.detail : `the engine answered ${r.status}`)
         if (!stop.signal.aborted) onAnswer(req, Array.isArray(j.values) ? j.values : [])
       } catch (e) { if (!stop.signal.aborted) onFailure({ key, message: e.message }) }
     }, ENGINE_DELAY_MS)
     return () => { clearTimeout(timer); stop.abort() }
-  }, [on, key])   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [on, key, path])   // eslint-disable-line react-hooks/exhaustive-deps
   return null
 }
 
@@ -654,7 +658,11 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const dp = rateDp(quote)
   const option = quote?.shape === 'OPTION'
   const european = !option || !quote.style || quote.style === 'EUROPEAN'
-  const engine = option && !european                     // a style the engine prices: asked at the scenario's market, not worked out here
+  const styled = option && !european                     // a style with no closed form here: its figures are the engine's or nothing
+  // Asked of the engine at the scenario's market: a styled option always; a single forward or European option too
+  // (since 0.47.0), with the closed form standing in while the answer is on its way. A package's legs are still the
+  // closed form's alone.
+  const engine = styled || !pkg
   const done = settledState(quote)
   const marketId = marketKey(quote)
 
@@ -757,12 +765,15 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
     const st = shockedState(quote, shocks)
     if (!st) return null
     named.push([name, st])
-    return { name, forward: st.forward }
+    // `soon`: the closed form's figure at the same market, shown until the engine's own is back
+    return { name, forward: st.forward, soon: styled ? null : reprice(quote, shocks)?.npv ?? null }
   }
   const all = (o = {}) => ({ spotPct: spot, quoteBp: rq, baseBp: rb, volPts: vAll, dPoints, pip, ...o })
   const at = (name, o) => (dPoints == null ? null : figure(name, all(o)))
   // the market itself is the ticket's own price: nothing is asked for it
-  const base = !model ? null : engine ? (Number.isFinite(quote.npv) && Number.isFinite(quote.forward) ? { forward: quote.forward, npv: quote.npv } : null) : reprice(quote)
+  // (a forward or a European option that the closed form cannot read has no scenario, as before: nothing is put in its place)
+  const base = !model ? null : !engine ? reprice(quote)
+    : Number.isFinite(quote.npv) && Number.isFinite(quote.forward) && (styled || reprice(quote)) ? { forward: quote.forward, npv: quote.npv } : null
   const now = base ? at('now') : null
   const curve = model ? shockedCurve({ spot: quote.spot, pip, nodes, moves: moved, spotPct: spot, quoteBp: rq, baseBp: rb }) : null
   // the scenario as every leg reads it, and the package at the market and under it; null when a leg is not the closed form's
@@ -949,7 +960,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   }[cur.key]
   const rungs = ladder ? ladder.xs.map(x => ({ x, f: step(`lad:${cur.key}:${x}`, ladder.more(x)) })) : []
 
-  // ── a styled option: every figure named above goes to the engine in one request, and is read from its answer ──
+  // ── every figure named above goes to the engine in one request, and is read from its answer ──
   const req = engine ? scenarioRequest(quote, named, held) : null
   const reqKey = req?.key || null                                             // null when every market wanted is already held
   const engineError = engine && !!reqKey && failed?.key === reqKey ? failed.message : null
@@ -959,7 +970,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const got = (f) => {
     if (!f || !engine || !f.name) return f
     const a = scenarioRead(held, req, f.name)
-    return { forward: f.forward, npv: a ? a.npv : null, touched: !!a?.touched, error: a?.error || null }
+    return { forward: f.forward, npv: a ? a.npv : f.soon ?? null, touched: !!a?.touched, error: a?.error || null }
   }
   const nowR = got(now)
   const aloneR = Object.fromEntries(Object.entries(alone).map(([k, f]) => [k, got(f)]))
@@ -1198,8 +1209,8 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
                 ? <span data-testid="fx-scn-engine" style={{ fontSize: 11, color: 'var(--text-dim)', border: '1px solid var(--border-hi)', borderRadius: 'var(--r-1)', padding: '1px 7px', letterSpacing: '0.06em' }}>{busy ? 'REPRICING…' : 'ENGINE PRICED'}</span>
                 : <span style={{ fontSize: 11, color: 'var(--amber)', border: '1px solid var(--amber-dim)', borderRadius: 'var(--r-1)', padding: '1px 7px', letterSpacing: '0.06em' }}>APPROXIMATION</span>}
               <Note inline testId="fx-scenario-banner">{engine
-                ? `Scenario: the shocks' effect on spot, the forward, the discount factor and the vol is worked out in the browser, as on every currency ticket, and the engine prices the option there (${quote.method || 'the style\'s own model'}). With no shock the figure is the ticket's own; nothing is saved.`
-                : 'Scenario: an approximation in the browser. It is the engine\'s own closed form, worked here so the figures follow the drag, and with no shock it is the ticket\'s value to cents; the engine is not asked again. Nothing is saved.'}</Note>
+                ? `Scenario: the shocks' effect on spot, the forward, the discount factor${option ? ' and the vol' : ''} is worked out in the browser, as on every currency ticket, and the engine prices the ${option ? 'option' : 'trade'} there (${option ? quote.method || 'the style\'s own model' : 'its own line, ±N·(F − K)·DF'}). With no shock the figure is the ticket's own${styled ? '' : '; while an answer is on its way a figure is the same formula worked here'}; nothing is saved.`
+                : 'Scenario: an approximation in the browser. A package\'s figures are the engine\'s closed form over its legs, worked here; with no shock they are the legs\' values to cents, and the engine is not asked again. Nothing is saved.'}</Note>
             </div>
             {engineError && <div data-testid="fx-scn-error" style={{ fontSize: 12, color: 'var(--amber)', padding: '0 0 6px' }}>The engine could not price this scenario: {engineError}</div>}
             {!engineError && cellError && <div data-testid="fx-scn-cell-error" style={{ fontSize: 12, color: 'var(--amber)', padding: '0 0 6px' }}>The engine could not price every market of this scenario, and those figures are dashes: {cellError}</div>}
@@ -1215,7 +1226,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
           </div>
           {packageBlock}
           {ladderBlock}
-          {engine && <EngineAsk req={req} on={active && !stale && !!reqKey && failed?.key !== reqKey} onAnswer={(asked, values) => { setHeld(h => scenarioMerge(h, asked, values)); setFailed(null) }} onFailure={setFailed} />}
+          {engine && <EngineAsk req={req} path={scenarioRoute(quote)} on={active && !stale && !!reqKey && failed?.key !== reqKey} onAnswer={(asked, values) => { setHeld(h => scenarioMerge(h, asked, values)); setFailed(null) }} onFailure={setFailed} />}
         </div>
       </div>
     </div>

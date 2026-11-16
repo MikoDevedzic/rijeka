@@ -37,7 +37,7 @@ from db.models import Trade
 from db.session import get_db
 from middleware.auth import verify_token
 from api.routes._errors import internal
-from pricing.currency_forward import price_currency_forward
+from pricing.currency_forward import forward_npv, price_currency_forward
 from pricing.fx_option import price_fx_option
 from pricing.fx_exotic import METHOD as STYLE_METHOD, ExoticSpec, price_exotic, scenario_npv
 from pricing.fx_vol import TENOR_YEARS as VOL_TENORS, lookup_vol, parse_surface, quotes_from_grid
@@ -1186,6 +1186,34 @@ def option_scenario(req: OptionScenarioRequest, user: dict = Depends(verify_toke
             # one market the pricer cannot value is that cell's answer, not the request's: the rest are still priced
             values.append({"npv": None, "touched": False, "error": str(e) if isinstance(e, ValueError) else "outside what the pricer can value"})
     return {"style": spec.style, "method": STYLE_METHOD[spec.style], "values": values}
+
+
+class ForwardStateIn(BaseModel):
+    """A market a forward is valued at: the two inputs its value takes."""
+    forward: float = Field(..., gt=0, le=1e12, description="to the date the forward is read at")
+    df_quote: float = Field(..., gt=0, le=10, description="the discount factor to the date the amount is paid, as the priced quote reports it")
+
+
+class ForwardScenarioRequest(BaseModel):
+    direction: str = Field("BUY", description="BUY | SELL of the base currency")
+    base_notional: float = Field(..., gt=0)
+    forward_rate: float = Field(..., gt=0, le=1e12, description="the rate the trade is struck at, K")
+    states: list[ForwardStateIn] = Field(..., min_length=1, max_length=SCENARIO_STATES_MAX)
+
+
+@router.post("/forward/scenario")
+def forward_scenario(req: ForwardScenarioRequest, user: dict = Depends(verify_token)):
+    """A spot, forward or NDF valued at each of a list of markets, for the ticket's scenario tab: the pricer's own
+    line (pricing/currency_forward.py forward_npv) at a forward and a discount factor the caller names. Nothing is
+    read from the stored market and nothing is saved: the tab works out what its shocks do to those two inputs, as
+    it does for an option, and the engine values the forward there."""
+    if str(req.direction).upper() not in ("BUY", "SELL"):
+        raise HTTPException(status_code=422, detail="direction must be BUY or SELL")
+    values = []
+    for s in req.states:
+        npv = forward_npv(req.direction, req.base_notional, s.forward, req.forward_rate, s.df_quote)
+        values.append({"npv": npv} if math.isfinite(npv) else {"npv": None, "error": "outside what the pricer can value"})
+    return {"method": "±N·(F − K)·DF to the payment date", "values": values}
 
 
 class FlatRateRequest(BaseModel):

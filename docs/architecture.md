@@ -271,10 +271,14 @@ follow a shock (the market, each shocked curve alone, all together, a ladder), a
 last change. No new route, table or setting. A Bermudan swaption's `vol_shift_bp` moves the Hull-White σ its tree
 is built on.
 
-An option of a style the browser has no closed form for (American, digital, barrier, double barrier, touch) is
-priced under a scenario by `POST /api/currency/option/scenario` (0.44.0): the option's terms and a list of at most
-40 markets (a spot, a forward, a discount factor, a vol), each valued by the pricer the ticket was priced with
-(`pricing/fx_exotic.py` `scenario_npv`). The route is signed-in, reads nothing from the database and saves
+A single currency or digital-asset trade is priced under a scenario by the engine. An option of any style goes to
+`POST /api/currency/option/scenario` (0.44.0; a European option since 0.47.0): the option's terms and a list of at
+most 40 markets (a spot, a forward, a discount factor, a vol), each valued by the pricer the ticket was priced with
+(`pricing/fx_exotic.py` `scenario_npv`, which values a European by `pricing/fx_option.py` `european_npv`). A spot,
+a forward or an NDF goes to `POST /api/currency/forward/scenario` (0.47.0): its side, size and rate and a list of
+at most 40 markets (a forward, a discount factor to the payment date), each valued by the pricer's own line
+(`pricing/currency_forward.py` `forward_npv`). For a forward and a European option the browser has the same closed
+form and shows it while an answer is on its way; every other style has none there. The route is signed-in, reads nothing from the database and saves
 nothing: the tab works out the markets (`fx-scenario.js` `shockedState`, the same arithmetic its closed form uses
 for a European option) and sends every figure it shows in one request (`fx-requests.js` `scenarioRequest`), a
 quarter of a second after the last change. `POST /api/currency/option/ladder`, which the tab used before for a
@@ -282,8 +286,10 @@ spot-by-vol grid, is no longer called by the app and stays as a route.
 
 The CURVE SCENARIO tab of a currency or digital-asset ticket (`trade-window/FxScenarioChart.jsx`,
 `fx-scenario.js`) draws the pair's recent fixings and its forward curve, lets the curve be dragged by tenor or as a
-whole, and reprices in the browser with the pricer's own closed form and the backend's interpolation of forward
-points: an approximation, exact with no shock, labelled as one, and pinned to the backend by shared vectors
+whole, and works out the moved market in the browser with the backend's interpolation of forward points; its own
+closed form for a forward and a European option (what a figure shows until the engine answers, and what a
+package's figures are: an approximation, exact with no shock, labelled as one on a package) is pinned to the
+backend by shared vectors
 (`backend/tests/vectors/fx_scenario.json`, read by a test on each side). A ticket with further legs is seen as
 one on the footer, CASHFLOWS and this tab (`trade-window/fx-package.js`): sums of what each leg's own price
 carries, and one scenario read by each leg at its own settlement date; nothing is priced a second way, nothing

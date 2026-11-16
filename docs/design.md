@@ -356,11 +356,12 @@ vol, a currency option's in vol points ("+1 pt"), because that is how each is qu
 shock as "+10 bp · 2 points".
 
 A rates ticket's figures are the pricing engine's on the moved market, and its chip says FULL REVALUATION; a
-currency forward's and a European option's are the tab's own closed form, and the chip says APPROXIMATION; an
-option of any other style (American, digital, barrier, double barrier, touch) is priced by the engine at the
-market the tab works out, and the chip says ENGINE PRICED. A chip of the engine's says REPRICING… while an answer
-is awaited, and the figures of the last answer stay until it is back; a figure with no answer is a dash, never a
-figure from somewhere else. A rates ticket whose terms were changed after its price says so in amber and keeps the
+single currency or digital-asset trade (a spot, a forward, an NDF, an option of any style) is priced by the engine
+at the market the tab works out, and the chip says ENGINE PRICED; a package of legs is the tab's own closed form
+over its legs, and the chip says APPROXIMATION, in amber, on that alone. A chip of the engine's says REPRICING…
+while an answer is awaited, and the figures of the last answer stay until it is back. A figure with no answer yet
+is the closed form's own where the trade has one (a forward, a European option: the same formula, so the figure
+follows a drag) and a dash where it has none (every other style), never a figure from somewhere else. A rates ticket whose terms were changed after its price says so in amber and keeps the
 scenario of the terms as priced.
 
 A style is not a reason for another tab: a barrier or a touch option has the same curves, the same shocks, the

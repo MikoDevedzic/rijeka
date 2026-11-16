@@ -132,3 +132,73 @@ def test_the_route(monkeypatch):
         assert mixed[0] == {"npv": 1.0, "touched": False} and mixed[1]["npv"] is None and "pricer" in mixed[1]["error"]
     finally:
         main.app.dependency_overrides.clear()
+
+
+# ── a European option and a forward: the scenario is the ticket's own pricer, not a second one ────────────────
+
+def test_a_european_options_own_market_gives_the_tickets_own_value_to_the_last_bit():
+    """The ticket's European is priced by pricing/fx_option.py on the forward and the discount factor themselves.
+    The scenario's state at that market is the same figure, bit for bit, bought or sold, call or put; a shocked
+    state is the same function at the shocked inputs."""
+    from datetime import date
+
+    from pricing.fx_option import european_npv, price_fx_option
+    val, exp, settle = date(2026, 11, 16), date(2027, 2, 12), date(2027, 2, 16)
+    for typ in ("CALL", "PUT"):
+        for direction in ("BUY", "SELL"):
+            t = price_fx_option(base_currency="EUR", quote_currency="USD", base_notional=N, option_type=typ, strike=1.17, spot=S0, forward=F0,
+                                df_quote=DF0, valuation_date=val, expiry_date=exp, settlement_date=settle, vol=VOLA, direction=direction,
+                                spot_date=date(2026, 11, 18))
+            spec = ExoticSpec("EUROPEAN", typ, strike=1.17)
+            npv, hit = scenario_npv(spec, base_notional=N, spot=S0, forward=F0, df_quote=DF0, t_expiry=t.t_expiry, vol=VOLA, direction=direction)
+            assert not hit and npv == t.npv, (typ, direction, npv, t.npv)
+            there = dict(forward=F0 * 1.01 + 0.0008, df_quote=DF0 * math.exp(-0.0025 * T), t_expiry=t.t_expiry, vol=VOLA + 0.015)
+            moved, _ = scenario_npv(spec, base_notional=N, spot=S0 * 1.01, direction=direction, **there)
+            assert moved == european_npv(direction=direction, option_type=typ, base_notional=N, strike=1.17, **there) and moved != npv
+    # a European has no barrier: no spot is "touched"
+    assert not scenario_npv(ExoticSpec("EUROPEAN", "CALL", strike=1.17), **{**MARKET, "spot": 5.0})[1]
+
+
+def test_a_forwards_scenario_is_the_pricers_own_line():
+    from datetime import date
+
+    from pricing.currency_forward import forward_npv, price_currency_forward
+    from pricing.curve import Curve
+    val, settle = date(2026, 10, 28), date(2027, 1, 28)
+    usd, eur = Curve(valuation_date=val, flat_rate=0.04), Curve(valuation_date=val, flat_rate=0.02)
+    for direction in ("BUY", "SELL"):
+        for pay in (None, date(2027, 2, 1)):                        # paid on the date it is read at, and an NDF paid two days after its fixing
+            r = price_currency_forward(base_currency="EUR", quote_currency="USD", base_notional=N, forward_rate=1.10, spot=1.1133, valuation_date=val,
+                                       settlement_date=settle, quote_curve=usd, base_curve=eur, direction=direction, payment_date=pay)
+            # the ticket's own market: its forward and the discount factor to the date it is paid
+            assert forward_npv(direction, N, r.forward, 1.10, r.df_pay) == r.npv, (direction, pay)
+    assert forward_npv("BUY", N, 1.12, 1.10, 0.99) == pytest.approx(N * 0.02 * 0.99) and forward_npv("SELL", N, 1.12, 1.10, 0.99) == pytest.approx(-N * 0.02 * 0.99)
+
+
+def test_the_forwards_route():
+    from api.routes import currencies
+    import main
+    from fastapi.testclient import TestClient
+    from pricing.currency_forward import forward_npv
+    c = TestClient(main.app)
+    body = {"direction": "SELL", "base_notional": N, "forward_rate": 1.10,
+            "states": [{"forward": 1.12, "df_quote": 0.99}, {"forward": 1.08, "df_quote": 0.985}]}
+    assert c.post("/api/currency/forward/scenario", json=body).status_code in (401, 403)            # signed in, or nothing
+    main.app.dependency_overrides[currencies.verify_token] = lambda: {"sub": str(uuid4()), "user_metadata": {"role": "trader"}}
+    try:
+        r = c.post("/api/currency/forward/scenario", json=body)
+        assert r.status_code == 200, r.text
+        assert r.json()["values"] == [{"npv": forward_npv("SELL", N, 1.12, 1.10, 0.99)}, {"npv": forward_npv("SELL", N, 1.08, 1.10, 0.985)}]
+        assert c.post("/api/currency/forward/scenario", json={**body, "direction": "HOLD"}).status_code == 422
+        assert c.post("/api/currency/forward/scenario", json={**body, "states": []}).status_code == 422
+        assert c.post("/api/currency/forward/scenario", json={**body, "states": body["states"][:1] * (currencies.SCENARIO_STATES_MAX + 1)}).status_code == 422
+        assert c.post("/api/currency/forward/scenario", json={**body, "states": [{"forward": 0, "df_quote": 0.99}]}).status_code == 422
+        assert c.post("/api/currency/forward/scenario", json={**body, "forward_rate": -1}).status_code == 422
+        # the option route prices a European by the ticket's own pricer
+        opt = {"option_type": "CALL", "direction": "BUY", "base_notional": N, "strike": 1.17, "t_expiry": T, "spot": S0, "style": "EUROPEAN",
+               "states": [{"spot": S0, "forward": F0, "df_quote": DF0, "vol_pct": VOLA * 100}]}
+        j = c.post("/api/currency/option/scenario", json=opt).json()
+        from pricing.fx_option import european_npv
+        assert j["style"] == "EUROPEAN" and j["values"] == [{"npv": european_npv(direction="BUY", option_type="CALL", base_notional=N, strike=1.17, forward=F0, df_quote=DF0, t_expiry=T, vol=VOLA * 100 / 100.0), "touched": False}]
+    finally:
+        main.app.dependency_overrides.clear()

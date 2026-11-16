@@ -1,6 +1,6 @@
 // Which request an answer on a currency ticket's tabs belongs to (fx-requests.js). The quotes are made up.
 import { describe, it, expect } from 'vitest'
-import { SCENARIO_KEPT, marketKey, scenarioTerms, scenarioRequest, scenarioMerge, scenarioRead, xvaTermsKey, xvaResultMatches } from './fx-requests'
+import { SCENARIO_KEPT, marketKey, scenarioTerms, scenarioRequest, scenarioRoute, scenarioMerge, scenarioRead, xvaTermsKey, xvaResultMatches } from './fx-requests'
 
 const option = (o = {}) => ({
   pair: 'BTCUSD', shape: 'OPTION', base_currency: 'BTC', quote_currency: 'USD', option_type: 'CALL', direction: 'BUY', base_notional: 10,
@@ -37,6 +37,35 @@ describe('marketKey: the stored market a quote priced on', () => {
   it('no quote, or a quote without a pair: null', () => {
     expect(marketKey(null)).toBe(null)
     expect(marketKey({})).toBe(null)
+  })
+})
+
+describe('a forward under a scenario: its own route, its own terms, and the two inputs its value takes', () => {
+  const fwd = forward({ forward_rate: 1.1, direction: 'SELL', base_notional: 4_000_000 })
+  const here = { spot: 1.165, forward: 1.1701, df_quote: 0.9902, vol_pct: null }
+  const spotUp = { spot: 1.2, forward: 1.1701, df_quote: 0.9902, vol_pct: null }        // the same forward and discount factor: the same market to a forward
+  const moved = { spot: 1.165, forward: 1.18, df_quote: 0.99, vol_pct: null }
+  it('a forward goes to the forward route and an option, of any style, to the option route', () => {
+    expect(scenarioRoute(fwd)).toBe('/api/currency/forward/scenario')
+    expect(scenarioRoute(forward({ shape: 'NDF' }))).toBe('/api/currency/forward/scenario')
+    expect(scenarioRoute(option())).toBe('/api/currency/option/scenario')
+    expect(scenarioRoute(option({ style: 'EUROPEAN' }))).toBe('/api/currency/option/scenario')
+  })
+  it('its terms are its side, its size and the rate it is struck at; with no rate there is nothing to value against', () => {
+    expect(scenarioTerms(fwd)).toEqual({ direction: 'SELL', base_notional: 4_000_000, forward_rate: 1.1 })
+    expect(scenarioTerms(forward({ forward_rate: null }))).toBe(null)
+    expect(scenarioTerms(forward({ forward_rate: undefined }))).toBe(null)
+    expect(scenarioRequest(forward({ forward_rate: null }), [['now', here]])).toBe(null)
+  })
+  it('a market is a forward and a discount factor: no vol is needed, and a spot alone does not make a second one', () => {
+    const r = scenarioRequest(fwd, [['now', here], ['only:spot', spotUp], ['only:fwd', moved], ['bad', { ...here, forward: 0 }]])
+    expect(r.body).toEqual({ direction: 'SELL', base_notional: 4_000_000, forward_rate: 1.1, states: [{ forward: 1.1701, df_quote: 0.9902 }, { forward: 1.18, df_quote: 0.99 }] })
+    expect(r.index.now).toBe(r.index['only:spot'])
+    expect('bad' in r.index).toBe(false)
+    const held = scenarioMerge(null, r, [{ npv: -277.5 }, { npv: -316.8 }])
+    expect(scenarioRead(held, r, 'now')).toEqual({ npv: -277.5, touched: false, error: null })
+    expect(scenarioRead(held, r, 'only:fwd').npv).toBe(-316.8)
+    expect(scenarioRequest(fwd, [['now', here], ['only:fwd', moved]], held).key).toBe(null)      // both held: nothing to ask
   })
 })
 

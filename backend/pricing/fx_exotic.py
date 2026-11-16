@@ -38,7 +38,7 @@ from typing import Optional
 
 import numpy as np
 
-from pricing.fx_option import _N, gk_value
+from pricing.fx_option import _N, european_npv, gk_value
 
 STYLES = ("EUROPEAN", "AMERICAN", "DIGITAL", "BARRIER", "DOUBLE_BARRIER", "TOUCH")
 BARRIER_TYPES = ("UP_IN", "UP_OUT", "DOWN_IN", "DOWN_OUT")
@@ -438,6 +438,12 @@ def scenario_npv(spec: ExoticSpec, *, base_notional: float, spot: float, forward
         raise ValueError("expiry must be after the valuation date")
     if vol <= 0 or spot <= 0 or forward <= 0 or df_quote <= 0:
         raise ValueError("spot, forward, discount factor and vol must be positive")
+    if spec.style == "EUROPEAN":
+        # the ticket's European is priced on the forward and the discount factor themselves (fx_option.py), not on
+        # rates read back out of them: the scenario is priced the same way, so the ticket's own market gives the
+        # ticket's own figure to the last bit
+        return european_npv(direction=direction, option_type=spec.option_type, base_notional=base_notional, strike=spec.strike,
+                            forward=forward, df_quote=df_quote, t_expiry=t_expiry, vol=vol), False
     sign = 1.0 if str(direction).upper() == "BUY" else -1.0
     r = -math.log(df_quote) / t_expiry
     rb = r - math.log(forward / spot) / t_expiry

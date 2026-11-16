@@ -93,6 +93,15 @@ def implied_base_rate(forward: float, spot: float, df_q: float, df_q_spot: float
     return -math.log(forward * (df_q / df_q_spot) / spot) / tau
 
 
+def forward_npv(direction: str, base_notional: float, forward: float, strike: float, df: float) -> float:
+    """A forward's value from our side, in the quote currency: ±N·(F − K)·DF, F the forward to the date it is read
+    at and DF the discount factor to the date it is paid. The one line price_currency_forward values a trade with,
+    so a scenario that names a forward and a discount factor (POST /api/currency/forward/scenario) is priced by
+    the same arithmetic, to the last bit, as the ticket it stands on."""
+    sign = 1.0 if str(direction).upper() == "BUY" else -1.0
+    return sign * base_notional * (forward - strike) * df
+
+
 def price_currency_forward(
     *,
     base_currency: str,
@@ -180,7 +189,7 @@ def price_currency_forward(
     t_disc = t if in_base else t_pay           # the time the quote curve discounts over
     df_read = df_q                              # to the date the forward is read at
     df_q = df_pay                               # every value below is discounted from the payment date
-    npv = sign * base_notional * (F - K) * df_q
+    npv = forward_npv(d, base_notional, F, K, df_q)
 
     tau = max(t - t_s, 0.0)
     npv_b = sign * base_notional * (F * math.exp(-1e-4 * tau) - K) * df_q * math.exp(-1e-4 * gap)   # base curve +1bp
