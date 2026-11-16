@@ -246,9 +246,11 @@ def _register(db: Session, n: int) -> dict:
     except Exception as e:
         log.debug("register failed: %s", e)
         db.rollback()
-    total = _scalar(db, "SELECT count(*) FROM trade_events WHERE event_type = 'CONFIRMED' AND confirmation_hash IS NOT NULL")
-    bilateral = _scalar(db, "SELECT count(*) FROM trade_events WHERE event_type = 'CONFIRMED' AND confirmation_hash IS NOT NULL "
-                            "AND (payload->'attestation'->>'bilateral') = 'true'")
+    # the page prints `total` as CONFIRMATIONS ANCHORED over this list: it is counted as the list is made (anchored, a
+    # package once), and so is the count of those both parties signed with their own keys. Until 0.46.5 both took
+    # every confirmation with a hash, anchored or not, a package once per leg: 32 over a list of 27.
+    total = _scalar(db, ANCHORED_SQL)
+    bilateral = _scalar(db, ANCHORED_SQL + " AND (payload->'attestation'->>'bilateral') = 'true'")
     return {"total": total, "bilateral": bilateral, "confirmations": rows}
 
 

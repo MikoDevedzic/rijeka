@@ -227,4 +227,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   (a package of legs), not only the plain one.
 - An effect that acts on a value from the address or the store acts once: the address changes a render later than
   the store does, and the same name opened two tickets.
+- A fault found in one count is looked for in every count of the same thing before the change is called done. The
+  door's count of anchored confirmations was mended while the register page's header, a second query for the same
+  number forty lines below, kept the old one; reading production back against the list found it.
 

@@ -40,6 +40,9 @@ def test_only_a_confirmation_the_registry_holds_is_counted(booked, ids, stack):
         assert public._scalar(db, public.ANCHORED_SQL) == before + 2
         assert public.build(db)["confirmations"] == before + 2
         listed = public._register(db, 200)
+        # the register's own header is the same count as its list and as the door: not every confirmation with a hash
+        assert listed["total"] == before + 2 == len(listed["confirmations"]) or (listed["total"] == before + 2 and len(listed["confirmations"]) == 200)
+        assert listed["bilateral"] <= listed["total"]
         assert sum(1 for r in listed["confirmations"] if r.get("package_hash") == pkg["hash"] or r.get("trade_hash") == pkg["hash"]) <= 1
     finally:
         tx.rollback()

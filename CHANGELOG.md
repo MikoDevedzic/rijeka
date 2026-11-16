@@ -5,7 +5,7 @@ methodology document carries its own version (v1.28). Commits on `main` are the 
 
 ## 0.46.5 · 16 November 2026
 
-**Three things the second cold read found that 0.46.4 left as they were.**
+**Three things the second cold read found that 0.46.4 left as they were, and one it mended in one place only.**
 
 - **The blotter's STORE column** said WORKING on every trade, and its filter had two answers that were always
   empty: nothing on the desk moves a trade to another store yet. The column and the filter are shown from the
@@ -16,6 +16,11 @@ methodology document carries its own version (v1.28). Commits on `main` are the 
 - **The risk report's vega is two totals.** `ladder.vega_usd` added vega per vol point to vega per basis point of
   normal vol. The report now gives `vega_point_usd` and `vega_normal_bp_usd`, and not their sum. No screen read
   the old figure.
+
+- **The public register's own count.** 0.46.4 mended the door's CONFIRMATIONS ANCHORED; the register page's header
+  under the same words, and its count of confirmations signed with both parties' own keys, still took every
+  confirmation with a hash, anchored or not, a package once per leg. Both are counted as the list under them is
+  made.
 
 Still as it was: a currency forward's and a European option's scenario are the browser's closed form and say
 APPROXIMATION. Pricing them with the engine, as every other style is, is being built as a change of its own.
