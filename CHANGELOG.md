@@ -14,7 +14,7 @@ other than what it does.
   button: Prometheus and the support room, each a way in at that conversation, and a cross. The window opens when
   asked, where it was last left. A phone is not greeted, as before.
 - **The blotter's rail on a short window.** NEW TRADE and the summary stay in view (they were cut below about 900 px
-  of height); the filters above them scroll. Asset classes the desk does not trade yet (credit, equity, commodity)
+  of height); the filters above them scroll, and the rail's foot fades while more is below. Asset classes the desk does not trade yet (credit, equity, commodity)
   are named with ROADMAP and cannot be pressed, where each used to answer that the blotter was empty. The summary
   adds up: a CLOSED row holds what is neither pending, confirmed nor live.
 - **A link that names a trade opens that trade.** An item under NEEDS YOU on the home landed on the blotter with
@@ -37,7 +37,8 @@ other than what it does.
   more: its all-in rate is now above par. ColVA is in the rate, as it was already in the all-in in money beside
   it. The model inventory has a row for this conversion and says what it is not (a swap struck again at that rate).
 - **The Risk page's vega card** added a swaption vega per basis point of normal vol to currency vegas per vol
-  point and called the sum "FX VOL". It shows the two apart, each with its unit. (The API's `vega_usd` is still
+  point and called the sum "FX VOL". It shows the two apart, each with its unit; on this card and the one beside
+  it a name is no longer parted from its figure where the line breaks. (The API's `vega_usd` is still
   that sum; no screen reads it.) With too few days of history the
   VaR card and the VaR panel print a dash, as the home does, not zero.
 - **Rate curves list.** Each stored curve's rate is read before it is printed; the list showed the built-in

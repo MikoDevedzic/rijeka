@@ -19,7 +19,11 @@
   padding: 12px 0;
 }
 /* the filters take what room there is and scroll within it; the summary and NEW TRADE keep their place below */
-.bl-left-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.bl-left-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 20px;
+  /* the foot fades while there is more below it: a rail cut at a row's middle says nothing of the rows under it.
+     The 20px of room lets the last row stand clear of the fade when the rail is at its end. */
+  -webkit-mask-image: linear-gradient(to bottom, black calc(100% - 22px), transparent);
+          mask-image: linear-gradient(to bottom, black calc(100% - 22px), transparent); }
 .bl-left-header { padding: 0 12px 10px; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
 .bl-left-title { font-family: var(--sans); font-size: 0.9375rem; font-weight: 600; letter-spacing: 0.14em; color: var(--text-hi); }
 .bl-left-sub    { font-family: var(--sans); font-size: 0.8125rem; color: var(--text-mute); margin-top: 3px; letter-spacing: 0.04em; }
@@ -39,7 +43,7 @@
 .bl-filter-btn:hover  { color: var(--text); background: var(--panel); }
 .bl-filter-btn.active { color: var(--text-hi); font-weight: 500; background: var(--panel-3); box-shadow: inset 2px 0 0 var(--accent); }
 .bl-filter-btn.next, .bl-filter-btn.next:hover { color: var(--text-mute); background: none; cursor: default; }
-.bl-filter-next { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--text-mute); }
+.bl-filter-next { font-family: var(--sans); font-size: 10px; letter-spacing: 0.06em; font-weight: 600; color: var(--text-mute); }      /* the Configurations rail's ROADMAP: words, not a figure */
 .bl-filter-dot {
   width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
 }

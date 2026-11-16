@@ -83,12 +83,13 @@ export default function RiskPage() {
       {rep && !rep.date && <div className="pnl-empty">{rep.note}</div>}
       {rep?.date && (<>
         <div className="pnl-cards rk-cards">
-          <Card label={`VAR ${pct(v.confidence)} · ${v.horizon_days}D`} big={v.enough ? fmt(v.var_h) : '—'} sub={v.enough ? `ES ${fmt(v.es_h)} · ${pct(v.secondary_confidence)} VaR ${fmt(v.var_1d_secondary)}` : 'too few days for a VaR'}
-                note={v.enough ? `${v.observations} days · ${fmtD(v.window_from)} → ${fmtD(v.window_to)}` : `only ${v.observations} days of history · needs ${v.min_observations}`} warn={!v.enough} />
+          <Card label={`VAR ${pct(v.confidence)} · ${v.horizon_days}D`} big={v.enough ? fmt(v.var_h) : '—'} sub={v.enough ? `ES ${fmt(v.es_h)} · ${pct(v.secondary_confidence)} VaR ${fmt(v.var_1d_secondary)}` : `${v.observations ?? 0} days of history · a VaR needs ${v.min_observations}`}
+                note={v.enough ? `${v.observations} days · ${fmtD(v.window_from)} → ${fmtD(v.window_to)}` : undefined} warn={!v.enough} />
           <Card label="IR01 · ALL CURVES" big={sgn(lad.ir01_usd)} sub={`per bp · ${lad.bump_bp}bp bump`} note={`${(lad.ladder || []).length} curves`} />
-          <Card label="FX01 · CRY01" big={Object.entries(lad.spot01 || {}).map(([a, x]) => `${a} ${sgn(x)}`).join(' · ') || '—'} sub="PV for +1% spot" note={`by asset${basis(lad, '_usd') ? ` · CRYBASIS01 ${sgn(basis(lad, '_usd'))}` : ''}`} />
-          {(lad.vega || []).length > 0 && <Card label="VEGA" testId="rk-vega" big={[vg.point != null && `${vg.normalBp != null ? 'FX ' : ''}${sgn(vg.point)}`, vg.normalBp != null && `${vg.point != null ? 'RATES ' : ''}${sgn(vg.normalBp)}`].filter(Boolean).join(' · ')}
-                sub={[vg.point != null && `${vg.normalBp != null ? 'FX: ' : ''}PV for +1 vol point`, vg.normalBp != null && `${vg.point != null ? 'rates: ' : 'PV '}for +1 bp of normal vol`].filter(Boolean).join(' · ')} note={vg.curves.join(' · ')} />}
+          <Card label="FX01 · CRY01" big={Object.keys(lad.spot01 || {}).length ? <Pairs of={Object.entries(lad.spot01).map(([a, x]) => [a, sgn(x)])} /> : '—'} sub="PV for +1% spot" note={`by asset${basis(lad, '_usd') ? ` · CRYBASIS01 ${sgn(basis(lad, '_usd'))}` : ''}`} />
+          {(lad.vega || []).length > 0 && <Card label="VEGA" testId="rk-vega"
+                big={vg.point != null && vg.normalBp != null ? <Pairs of={[['FX', sgn(vg.point)], ['RATES', sgn(vg.normalBp)]]} /> : sgn(vg.point ?? vg.normalBp)}
+                sub={vg.point != null && vg.normalBp != null ? 'per vol pt · per bp normal vol' : vg.point != null ? 'PV for +1 vol point' : 'PV for +1 bp of normal vol'} note={vg.curves.join(' · ')} />}
           <Card label="WORST STRESS" big={worst ? sgn(worst.pnl_usd) : '—'} sub={worst?.name || ''} note={`${(rep.stress || []).length} scenarios`} warn={worst && worst.pnl_usd < 0} />
           <Card label="NPV" big={sgn(lad.npv_usd)} sub={`${(rep.ladder_rows || []).length} trades${lad.problems?.length ? ` · ${lad.problems.length} not priced` : ''}`} note={`${lad.valuations} valuations`} />
         </div>
@@ -220,6 +221,12 @@ function Backtest({ bt }) {
       <div className="pnl-foot">Clean P&amp;L is the market P&amp;L of the positions held at the previous close, which is what the VaR claims to cover; hypothetical strips carry; dirty includes trading. The traffic light is the cumulative binomial probability of the exception count (green below 95%, yellow to 99.99%, red beyond: at 250 days and 99% the familiar 0-4, 5-9, 10+). Kupiec's test is two-sided: far too few exceptions is also a finding.</div>
     </>
   )
+}
+
+// Names with their figures on a card's big line ("BTC +16,808 · EUR +386,194"): a line breaks between two pairs,
+// never between a name and its own figure.
+function Pairs({ of }) {
+  return of.map(([name, figure], i) => <span key={name}>{i > 0 && ' · '}<span style={{ whiteSpace: 'nowrap' }}>{name} {figure}</span></span>)
 }
 
 function Card({ label, big, sub, note, warn, testId }) {

@@ -36,6 +36,8 @@ test('after a sign-in a small card greets; it leads into the messenger, which mo
 
   // on the blotter the rows keep their figures: the card is over the last of them at most
   await app.getByRole('button', { name: /^BLOTTER/ }).first().click()                // the home's own bar
+  await expect(app).toHaveURL(/\/blotter$/)
+  await expect(app.locator('.bl-root tbody tr').first()).toBeVisible({ timeout: 30_000 })
   await expect(card, 'it is still there on the next page').toBeVisible()
   await app.screenshot({ path: 'e2e/.out/shots/chat-greets-blotter.png' })
 

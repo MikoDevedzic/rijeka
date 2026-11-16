@@ -91,14 +91,21 @@ test('the Risk page keeps a vega per vol point and a vega per basis point of nor
   await expect(card).toBeVisible({ timeout: 60_000 })
   const rates = vega.filter(v => /SWVOL/.test(v.curve)), fx = vega.filter(v => !/SWVOL/.test(v.curve))
   const sum = (xs) => xs.reduce((a, v) => a + v.total, 0)
-  if (fx.length) { await expect(card).toContainText(signed(sum(fx))); await expect(card).toContainText('+1 vol point') }
-  if (rates.length) { await expect(card).toContainText(signed(sum(rates))); await expect(card).toContainText('+1 bp of normal vol') }
+  if (fx.length) await expect(card).toContainText(signed(sum(fx)))
+  if (rates.length) await expect(card).toContainText(signed(sum(rates)))
   if (fx.length && rates.length) {
     await expect(card).toContainText(`FX ${signed(sum(fx))} · RATES ${signed(sum(rates))}`)
+    await expect(card).toContainText('per vol pt · per bp normal vol')
     await expect(card, 'the two are not added').not.toContainText(signed(rep.ladder.vega_usd))
+    // a name is not parted from its own figure where the line breaks
+    for (const pair of await card.locator('.pnl-big span span').all()) expect(await pair.evaluate(el => el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).fontSize)), 'a name and its figure on one line').toBeLessThan(2)
+  } else await expect(card).toContainText(fx.length ? 'PV for +1 vol point' : 'PV for +1 bp of normal vol')
+  // a VaR with too few days is a dash, as on the home, not a figure, and the reason is said once
+  if (rep.var && !rep.var.enough) {
+    const var_ = app.locator('.rk-cards .pnl-card').first()
+    await expect(var_.locator('.pnl-big')).toHaveText('—')
+    await expect(var_).toContainText('days of history · a VaR needs')
   }
-  // a VaR with too few days is a dash, as on the home, not a figure
-  if (rep.var && !rep.var.enough) await expect(app.locator('.rk-cards .pnl-card').first().locator('.pnl-big')).toHaveText('—')
   await app.screenshot({ path: 'e2e/.out/shots/second-look-risk-cards.png' })
   expectClean(problems)
 })

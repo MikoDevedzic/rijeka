@@ -140,12 +140,23 @@ at a desk: its tables may scroll sideways inside their panel on a narrow window,
 (the accounts of the Adoption panel), each row becomes lines of its own, never a table pushed sideways. A summary
 tile there is the P&L page's card (`pnl-card`, its label and its figure at 16px), not a new one.
 
-**The messenger is met, not found.** It opens once after a sign-in, where it was last left, and never again until
-the next sign-in once it is closed; on a phone it is not opened for the user. The button at the corner carries its
+**The messenger is met, not found.** It greets once after a sign-in as a two-line card above the CHAT button
+(Prometheus, Rijeka Support): each line a way into that conversation, pressed like any row, its name in the
+panel's own brass; the cross puts it away for the sign-in. The card is never dragged or resized, never taller than
+two lines, and is gone once the messenger has been opened or stood in a window of its own, however that came
+about. The window itself opens only when asked, where it was last left; a phone is not greeted. The button at the
+corner carries its
 star and, under it, the word for what it opens (CHAT, 10px, in the text's high colour): a glyph alone is not a
 label. The messenger and a trade window are both windows on the desk: the one last opened or pressed is in front,
-and the button stays above both. A window that opens by itself starts small enough to leave the page's headings
-and first rows in view.
+the greeting card with the messenger, and the button stays above both. Nothing opens a window by itself: what
+greets is small, is pictured over each page it greets on, and what lies under it there is named (on the home, a
+row of the risk column; on the blotter, the last rows' right-hand cells).
+
+**Not offered yet.** A filter or a rail item for something the desk does not do yet is named, cannot be pressed,
+is in the mute colour, and carries the word ROADMAP as the Configurations rail writes it (interface face, 10px
+capitals, 0.06em, weight 600). It is never a filter that answers with an empty page. It becomes live when a trade
+carries the class. A rail whose filters do not all fit scrolls them and fades its foot while more is below; what
+is under them (the summary, NEW TRADE) does not move.
 
 ## Buttons, fields, rows
 
@@ -276,6 +287,9 @@ One rule for the whole app, held by Dragan (`.claude/agents/dragan.md`) and by a
   step of the scale at the fixed root of 14px, a tie upward (0.75rem, 10.5px, is a label's 11; 0.875rem, 12.25px,
   is a value's 12.5; a rail's link is 12). The next pages are P&L and Risk, each with pictures before and after
   (`LOOK_TAG=before npx playwright test -c playwright.perf.config.js look.spec.js`).
+- **A stored figure being read is an ellipsis** in the dim colour, never the built-in figure it will replace. A
+  rate solved for a field is to eight decimals with the zeros that end them left off (3.480009): it is a field
+  to type in, and the booked rate is the same number.
 - **Unknown is not zero, and zero is not unknown.** A figure the page cannot have is a dash; the reason is said
   once, where the eye starts (the bar), with the way to get it beside it as a way there (a ghost button with an
   arrow), never as a filled button that does nothing here. It is never 0 or $0. A figure that is truly nothing
