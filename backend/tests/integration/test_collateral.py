@@ -28,7 +28,8 @@ def test_instruments_seed_and_a_firm_row(client, auth_a, auth_b):
     # an instrument is the whole firm's, and every yield, carry and regime made from it would be spoiled
     raw = {**auth_a, "Content-Type": "application/json"}
     for body in ('{"code":"NANX","cls":"CASH","yield_kind":"FIXED","yield_bp":NaN}', '{"code":"NANX","cls":"CASH","yield_kind":"FIXED","yield_bp":Infinity}',
-                 '{"code":"NANX","cls":"CASH","csa_haircut_pct":NaN}', '{"code":"NANX","cls":"CASH","chain_id":99999999999}'):
+                 '{"code":"NANX","cls":"CASH","csa_haircut_pct":NaN}', '{"code":"NANX","cls":"CASH","chain_id":99999999999}',
+                 '{"code":"NANX","cls":"CASH","chain_id":1' + "0" * 400 + '}', '{"code":"NANX","cls":"CASH","yield_kind":"FIXED","yield_bp":1' + "0" * 400 + '}'):
         r = client.post("/api/collateral/instruments", content=body, headers=raw)
         assert r.status_code == 422, (body, r.status_code, r.text[:200])
     assert client.post("/api/collateral/instruments", json={"code": "NANX", "cls": "CASH", "name": "n" * 201}, headers=auth_a).status_code == 422

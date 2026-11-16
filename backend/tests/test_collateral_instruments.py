@@ -44,7 +44,7 @@ def test_what_a_firm_types_is_a_finite_number_in_range_and_a_text_with_an_end():
     NaN and a numeric column stores it, so one such value would spoil the firm's figures: it is refused at the door,
     and a stored row that fails is skipped by its reader (collateral/store.firm_rows catches ValueError)."""
     ok = {"code": "X", "cls": "CASH", "yield_kind": "FIXED"}
-    for bad in (float("nan"), float("inf"), float("-inf"), 10_001, -10_001, "abc"):
+    for bad in (float("nan"), float("inf"), float("-inf"), 10_001, -10_001, "abc", "1e400", 10 ** 400, [1], {"a": 1}):
         with pytest.raises(ValueError, match="yield_bp"):
             COL.instrument_from_row({**ok, "yield_bp": bad})
     assert COL.instrument_from_row({**ok, "yield_bp": -25.5}).yield_bp == -25.5 and COL.instrument_from_row({**ok, "yield_bp": ""}).yield_bp == 0.0
@@ -52,7 +52,7 @@ def test_what_a_firm_types_is_a_finite_number_in_range_and_a_text_with_an_end():
         with pytest.raises(ValueError, match="csa_haircut_pct"):
             COL.instrument_from_row({**ok, "csa_haircut_pct": bad})
     assert COL.instrument_from_row({**ok, "csa_haircut_pct": 0}).csa_haircut_pct == 0.0 and COL.instrument_from_row({**ok, "csa_haircut_pct": ""}).csa_haircut_pct is None
-    for bad in (0, -1, 2 ** 31, 1.5, float("nan"), "one"):
+    for bad in (0, -1, 2 ** 31, 1.5, float("nan"), "one", 10 ** 400):       # a whole number too long to be a float is refused, not a server error
         with pytest.raises(ValueError, match="chain_id"):
             COL.instrument_from_row({**ok, "chain_id": bad})
     assert COL.instrument_from_row({**ok, "chain_id": "11155111"}).chain_id == 11155111 and COL.instrument_from_row({**ok, "chain_id": ""}).chain_id is None
@@ -64,9 +64,10 @@ def test_what_a_firm_types_is_a_finite_number_in_range_and_a_text_with_an_end():
         with pytest.raises(ValueError, match="token_address"):
             COL.instrument_from_row({**ok, "token_address": bad})
     assert COL.instrument_from_row({**ok, "token_address": " 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 "}).token_address == "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
-    for bad in ("U", "US DOLLAR", "usd$", "A" * 11):
+    for bad in ("U", "US DOLLAR", "usd$", "A" * 11, "US\nD"):
         with pytest.raises(ValueError, match="currency"):
             COL.instrument_from_row({**ok, "currency": bad})
+    assert COL.instrument_from_row({**ok, "currency": " usd\n"}).currency == "USD"            # the space around it is not kept
     # every seed entry passes its own rule
     for inst in COL.SEED.values():
         assert COL.instrument_from_row({"code": inst.code, "name": inst.name, "cls": inst.cls, "currency": inst.currency, "issuer": inst.issuer, "rail": inst.rail,
@@ -75,12 +76,12 @@ def test_what_a_firm_types_is_a_finite_number_in_range_and_a_text_with_an_end():
 
 
 def test_a_schedules_numbers_are_finite_and_in_range():
-    for bad in (float("nan"), -1, 101, "x"):
+    for bad in (float("nan"), -1, 101, "x", 10 ** 400):
         with pytest.raises(ValueError, match="csa_haircut_pct"):
             _sched(eligible=[{"instrument": "USD_CASH", "csa_haircut_pct": bad}], posted={}, received={})
         with pytest.raises(ValueError, match="limit_pct"):
             _sched(eligible=[{"instrument": "USD_CASH", "limit_pct": bad}], posted={}, received={})
-    for bad in (float("nan"), float("inf"), 1e13, "x"):
+    for bad in (float("nan"), float("inf"), 1e13, "x", 10 ** 400):
         with pytest.raises(ValueError, match="weight"):
             _sched(posted={"USDC": bad})
     with pytest.raises(ValueError, match="note"):

@@ -186,4 +186,6 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   as the route ignored it, and the two neighbouring routes that read the same field hid that for weeks.
 - A number read from a request is finite and in range before it is stored or priced, and a text has a length: JSON
   admits NaN, a numeric column keeps it, and a value shared by a firm then spoils every figure made from it. The
-  security reviewer found it in a module written before the roles existed, when its tables were about to be made.
+  security reviewer found it in a module written before the roles existed, when its tables were about to be made. The
+  check itself is tried with what breaks a check: a whole number four hundred digits long is not a float, and
+  turning it into one raised an error the route did not catch.

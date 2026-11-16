@@ -404,7 +404,7 @@ _ADDRESS = re.compile(r"^[\x21-\x7e]{1,100}$")   # a token's address on whatever
 def _number(v, what: str, lo: float, hi: float) -> float:
     try:
         x = float(v)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):        # OverflowError: a whole number too long to be a float
         raise ValueError(f"{what} must be a number")
     if not math.isfinite(x) or not (lo <= x <= hi):
         raise ValueError(f"{what} must be between {lo:g} and {hi:g}")
@@ -435,8 +435,8 @@ def instrument_from_row(d: dict, firm: bool = True) -> Instrument:
         raise ValueError("code is required (up to 32 characters)")
     hc = d.get("csa_haircut_pct")
     hc = _number(hc, "csa_haircut_pct", 0.0, 100.0) if hc is not None and str(hc) != "" else None
-    currency = str(d.get("currency") or "USD").upper()
-    if not _CURRENCY.match(currency):
+    currency = str(d.get("currency") or "USD").strip().upper()
+    if not _CURRENCY.fullmatch(currency):                # the whole of it: `$` alone would let a trailing line break through
         raise ValueError("currency is 2 to 10 letters or digits")
     yield_bp = _number(d.get("yield_bp") if d.get("yield_bp") not in (None, "") else 0.0, "yield_bp", -YIELD_BP_MAX, YIELD_BP_MAX)
     chain_id = d.get("chain_id")
@@ -448,7 +448,7 @@ def instrument_from_row(d: dict, firm: bool = True) -> Instrument:
     else:
         chain_id = None
     token = str(d["token_address"]).strip() if d.get("token_address") else None
-    if token is not None and not _ADDRESS.match(token):
+    if token is not None and not _ADDRESS.fullmatch(token):
         raise ValueError("token_address is up to 100 printable characters with no spaces")
     return Instrument(code, _text(d.get("name") or code, "name", NAME_MAX), cls, currency, _text(d.get("issuer") or "—", "issuer", NAME_MAX), rail, yk,
                       (_text(d["yield_ref"], "yield_ref", REF_MAX) if d.get("yield_ref") else None), yield_bp, chain_id, token,
@@ -503,7 +503,7 @@ def schedule_from_request(d: Optional[dict], instruments: dict[str, Instrument])
                 raise ValueError(f"{key}: {code} is not on the eligible list")
             try:
                 w = float(w)
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 raise ValueError(f"{key}: the weight of {code} must be a number")
             if not math.isfinite(w) or w > WEIGHT_MAX:
                 raise ValueError(f"{key}: the weight of {code} must be a finite number")
