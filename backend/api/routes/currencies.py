@@ -1196,7 +1196,7 @@ class ForwardStateIn(BaseModel):
 
 class ForwardScenarioRequest(BaseModel):
     direction: str = Field("BUY", description="BUY | SELL of the base currency")
-    base_notional: float = Field(..., gt=0)
+    base_notional: float = Field(..., gt=0, le=1e15)
     forward_rate: float = Field(..., gt=0, le=1e12, description="the rate the trade is struck at, K")
     states: list[ForwardStateIn] = Field(..., min_length=1, max_length=SCENARIO_STATES_MAX)
 

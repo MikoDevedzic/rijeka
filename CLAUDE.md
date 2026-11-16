@@ -238,4 +238,6 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   form had said it of a European option for weeks; on 10m it was up to a whole unit off, which nobody saw until the
   engine's own figure stood beside it. And a chip that names who priced a figure is checked in the state where
   that one did not answer.
+- The security reviewer reads a change that touches a public route before it is released, not while it is: the
+  read of 0.46.5's heavier public count came back with a finding minutes after the release had been pushed.
 

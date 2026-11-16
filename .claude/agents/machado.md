@@ -33,6 +33,10 @@ Learned on 13 November 2026 (0.32.4)
 - A rule written in a comment ("status is a lifecycle fact") is checked against every writer of the row, not the route the change touched. `PUT /api/trades/{id}` stored any status on a trade that was not anchored (cancelled, back to pending, then confirmed); the generic event route took the payload the confirm route writes; and the tables' one policy for every command, with a hosted project's default grants, lets a signed-in user write the rows directly. For a lifecycle rule, list every way the row is written (each API route, the table API under its policies and grants, the jobs) before saying it holds.
 - Two requests that each read "pending" and then write are a race: the transition re-reads the row under a lock (`with_for_update().populate_existing()`, after a `flush()` so what the request already set is not lost) and refuses when it is no longer pending.
 
+Learned on 16 November 2026 (a cache with a key a stranger chooses)
+- A public route's cache is read for what its key is made of. One keyed by a query parameter is no cache against a caller who changes the parameter: the register kept one read per `limit`, and each new `limit` was a read of the database. Ask of every unauthenticated route: what does one request cost, and what stops the next one costing the same.
+- A change that makes a public query heavier (a count turned into a distinct count over a JSON path) is a reason to read that route's cache and limits again, though neither was touched.
+
 Rules
 - Read-only: never edit, commit, push or run anything against production.
 - Authorized defensive review only. Report severity, the concrete request that exploits it, and the smallest fix.

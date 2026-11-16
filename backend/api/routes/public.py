@@ -188,7 +188,8 @@ FROM trade_events e JOIN trades t ON t.id = e.trade_id
 WHERE e.event_type = 'CONFIRMED' AND e.confirmation_hash IS NOT NULL
 ORDER BY e.created_at DESC LIMIT :n
 """
-_reg_cache: dict[str, Any] = {"at": 0.0, "body": None, "n": 0}
+REGISTER_MAX = 200                    # the most rows the register gives out, and what one read of it fetches
+_reg_cache: dict[str, Any] = {"at": 0.0, "body": None}
 
 
 # What the register prints came from what desks typed (an LEI, a product) and from the chain. Each field is given
@@ -296,13 +297,16 @@ def policy_path(ccy: str = "USD", db: Session = Depends(get_db)):
 
 @router.get("/confirmations")
 def confirmations(limit: int = 50, db: Session = Depends(get_db)):
-    n = max(1, min(int(limit), 200))
+    """The public register, newest first. The database is read once in TTL_SECONDS, at the register's full length,
+    whatever `limit` a caller names: the answer is cut from that read. (The read was kept for one `limit` at a time,
+    so a caller who named a different one on every request made every request a read.)"""
+    n = max(1, min(int(limit), REGISTER_MAX))
     now = time.monotonic()
-    if _reg_cache["body"] is not None and _reg_cache["n"] == n and now - _reg_cache["at"] < TTL_SECONDS:
-        return _reg_cache["body"]
-    body = _register(db, n)
-    _reg_cache.update(at=now, body=body, n=n)
-    return body
+    if _reg_cache["body"] is None or now - _reg_cache["at"] >= TTL_SECONDS:
+        _reg_cache.update(at=now, body=_register(db, REGISTER_MAX))
+    body = _reg_cache["body"]
+    rows = body["confirmations"]
+    return body if n >= len(rows) else {**body, "confirmations": rows[:n]}
 
 
 @router.get("/calendar")

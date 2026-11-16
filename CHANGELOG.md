@@ -3,6 +3,17 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.29). Commits on `main` are the detail.
 
+## 0.47.1 · 16 November 2026
+
+**The public register is read once a minute, whatever length is asked for.** `GET /api/public/confirmations` kept
+its last read for one `limit` at a time. Each different `limit` was a fresh read of the database, and since 0.46.5
+a read counts the anchored records twice over as well as listing them. The register is now read once in sixty
+seconds at its full length (200 rows) and every answer is cut from that read; the counts above the list are the
+whole register's. Found by the security reviewer's read of the three releases before it. The new scenario route's
+notional has an upper bound, as its other inputs have.
+
+Tests: one read serves eight different limits, the counts with it.
+
 ## 0.47.0 · 16 November 2026
 
 **A currency forward's and a European option's scenario are priced by the engine.** The CURVE SCENARIO tab of a

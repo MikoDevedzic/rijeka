@@ -71,10 +71,10 @@ def _register_of(rows):
         r = MagicMock(); r.__iter__.return_value = iter(rows); r.scalar.return_value = len(rows); return r
     db.execute.side_effect = execute
     main.app.dependency_overrides[public.get_db] = lambda: db
-    public._reg_cache.update(at=0.0, body=None, n=0)
+    public._reg_cache.update(at=0.0, body=None)
     r = TestClient(main.app).get("/api/public/confirmations?limit=10")
     main.app.dependency_overrides.clear()
-    public._reg_cache.update(at=0.0, body=None, n=0)
+    public._reg_cache.update(at=0.0, body=None)
     assert r.status_code == 200
     return r.json()
 
@@ -141,3 +141,31 @@ def test_the_pulse_reads_the_demo_setting_the_way_everything_else_does(monkeypat
         assert public._demo_provisioning() is want and demo.enabled() is want, value
     import inspect
     assert 'os.getenv("RIJEKA_DEMO_PROVISION")' not in inspect.getsource(public)
+
+
+def test_the_register_is_read_once_a_minute_whatever_limit_is_asked():
+    """One read of the database serves every `limit`: a caller who names a different one each time gets the same
+    read, cut to length, and the counts with it."""
+    from api.routes import public
+    import main
+    rows = [_row({**_att(), "trade_hash": "0x" + f"{i:02x}" * 32}) for i in range(1, 8)]
+    reads = {"n": 0}
+    db = MagicMock()
+    def execute(sql, params=None):
+        if "ORDER BY e.created_at DESC" in str(sql):
+            reads["n"] += 1
+        r = MagicMock(); r.__iter__.return_value = iter(rows); r.scalar.return_value = len(rows); return r
+    db.execute.side_effect = execute
+    main.app.dependency_overrides[public.get_db] = lambda: db
+    public._reg_cache.update(at=0.0, body=None)
+    try:
+        c = TestClient(main.app)
+        seen = [c.get(f"/api/public/confirmations?limit={n}").json() for n in (3, 4, 3, 200, 1, 9999, 0, -5)]
+    finally:
+        main.app.dependency_overrides.clear()
+        public._reg_cache.update(at=0.0, body=None)
+    assert reads["n"] == 1
+    assert [len(b["confirmations"]) for b in seen] == [3, 4, 3, 7, 1, 7, 1, 1]
+    assert all(b["total"] == 7 for b in seen)                                  # the header is the whole register's, not the cut's
+    assert seen[0]["confirmations"] == seen[3]["confirmations"][:3]            # the newest first, the same rows
+
