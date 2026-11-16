@@ -172,7 +172,8 @@ a row, and the row has a name of its own over its middle, because a first name s
 not met its owner (set as a host's name is, a little closer, to fit the row). The tokens have nine families of
 hue besides brass and the checks' green, and the page has thirteen figures (the product lead, the project
 manager, the release manager and the operations keeper are not gates and stand in the text's own greys and the
-change's green), so two pairs are near each other by
+change's green; the product lead's grey is the faintest and the project manager's a step lighter, and the branch
+stands between the two), so two pairs are near each other by
 choice and kept apart by place: the first-time visitor's teal and the browser tester's cyan stand at the two
 ends of the row, and the operations keeper's limestone stands after the release, away from the independent
 reviewer's white. The six checks are the change's green, each lamp a step lighter, and lit one after the other: a colour a

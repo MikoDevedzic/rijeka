@@ -22,7 +22,10 @@ methodology document carries its own version (v1.26). Commits on `main` are the 
   in `CLAUDE.md`, the system page, the documents that describe how a change ships, and the journeys that name a
   reviewer. Not renamed, because they are records of their day: this changelog's earlier entries, `docs/archive`,
   review notes in code comments and tests, and the approved migration files. `CLAUDE.md` carries the list of old
-  and new names. A role is now referred to by its name, not by he or she.
+  and new names. A role is now referred to by its name, not by he or she. The model inventory, whose notes are
+  dated and are shown on the methodology's pages, now names the role and not the person ("the model validator, 11
+  Nov 2026"), so its record does not change when a name does. The system page's journey checks the first step of
+  a change, where the product lead and the project manager stand, and takes its picture.
 
 ---
 

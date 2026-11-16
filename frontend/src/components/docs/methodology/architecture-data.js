@@ -19,7 +19,7 @@ export const KINDS = {
 
 // The hosts: what stands on a slab runs there. x, z: its middle; w, d: its size; side: its name stands beside it.
 export const HOSTS = [
-  { id: 'github', name: 'GITHUB', x: -3.55, z: -9.6, w: 26.5, d: 3.6 },
+  { id: 'github', name: 'GITHUB', x: -3.9, z: -9.6, w: 27.2, d: 3.6 },
   { id: 'netlify', name: 'NETLIFY', x: -9.6, z: 3.4, w: 5.6, d: 4.4 },
   { id: 'browser', name: 'THE TRADER\'S BROWSER', x: 0, z: 5.0, w: 6.4, d: 3.6 },
   { id: 'render', name: 'RENDER', x: 0, z: -2.6, w: 7.0, d: 4.6, side: true },
@@ -74,7 +74,7 @@ export const PIECES = [
     note: 'A mirror of the messenger\'s trade cards, when a desk has it configured.' },
   { id: 'branch', kind: 'ship', name: 'A BRANCH', sub: 'one change', p: [-14.3, -9.4], shape: 'node', h: 1.15, cy: 0.5, plain: true,
     note: 'Every change is made on a branch. Nothing on a branch touches production.' },
-  { id: 'patrick', kind: 'ship', name: 'PATRICK', sub: 'Product lead', p: [-15.7, -10.2], shape: 'agent', h: 1.6, cy: 0.9, agent: true, css: 'var(--text-mute)', line: 0x8a9f94,
+  { id: 'patrick', kind: 'ship', name: 'PATRICK', sub: 'Product lead', p: [-16.4, -10.2], shape: 'agent', h: 2.15, cy: 0.9, agent: true, css: 'var(--text-faint)', line: 0x7b9388,
     note: 'Holds the mission and ranks what would most strengthen it: what to do next, for whom, and what to stop. Patrick proposes; the owner decides. Patrick builds and ships nothing.' },
   { id: 'hermie', kind: 'ship', name: 'HERMIE', sub: 'Project manager', p: [-12.9, -10.2], shape: 'agent', h: 2.15, cy: 0.9, agent: true, css: 'var(--text-dim)', line: 0xa9b9ae,
     note: 'Records every proposal and decision, with its status, before work starts.' },
