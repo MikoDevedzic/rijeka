@@ -28,7 +28,7 @@ import FxScenarioChart from './FxScenarioChart'
 import FxVolSurface from './FxVolChart'
 import FxRateCurve from './FxRateCurve'
 import { RISK_FACTORS } from '../../lib/risk-factors'
-import { XVA_ROW, XVA_LEFT, XVA_RIGHT } from './xva-shared'
+import { RESULT_FIG, XVA_ROW, XVA_LEFT, XVA_RIGHT } from './xva-shared'
 import { ladderKey, ladderShown, ladderWanted, marketKey } from './fx-requests'
 import { NOT_A_NUMBER, crybasis01, formatRead, parseNumber } from './fx-ticket'
 import {
@@ -933,7 +933,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const cols = `150px repeat(${curves.length + 2}, minmax(0, 1fr))`
   const rRow = { display: 'grid', gridTemplateColumns: cols, alignItems: 'stretch', padding: '0 12px 0 16px', minWidth: 640 }
   const rName = { ...lbl, padding: '8px 8px 7px 0', whiteSpace: 'nowrap' }
-  const rCell = { fontFamily: 'var(--mono)', fontVariantNumeric: 'tabular-nums', textAlign: 'right', padding: '7px 6px', whiteSpace: 'nowrap', fontSize: 13.5, fontWeight: 500 }
+  const rCell = { fontFamily: 'var(--mono)', fontVariantNumeric: 'tabular-nums', textAlign: 'right', padding: '7px 6px', whiteSpace: 'nowrap', fontSize: RESULT_FIG, fontWeight: 500 }
   const rSmall = { ...rCell, fontSize: 12, fontWeight: 400, color: 'var(--text-dim)', padding: '0 6px 7px' }
   const rTot = { background: 'var(--panel)', boxShadow: 'inset 1px 0 0 var(--border-hi)' }
   const money = (v, key, style = rCell) => <div key={key} style={{ ...style, ...(style === rCell ? { color: tone(v) } : null), ...(key === 'total' ? { ...rTot, ...(style === rCell ? { fontWeight: 600 } : null) } : null) }}>{v == null ? '—' : signedChange(v)}</div>

@@ -70,6 +70,25 @@ def test_a_swap_and_a_swaption_take_the_same_shift(client, auth_a):
     assert sw1["npv"] != sw["npv"]
     assert sw1["npv"] - sw["npv"] == pytest.approx(sw["ir01"], rel=0.15, abs=25.0)
 
+    # at the money (no strike sent): the moved curve prices the strike the saved curve gave, not a new one
+    atm = {k: v for k, v in SWAPTION.items() if k != "strike"}
+    a0 = _post(client, auth_a, "/api/price/swaption", {**atm, "effective_date": EFF, "maturity_date": MAT})
+    a1 = _post(client, auth_a, "/api/price/swaption", {**atm, "effective_date": EFF, "maturity_date": MAT, "curve_flat_bp": 10})
+    assert a1["strike"] == a0["strike"]
+    # ... at the vol it priced at (the pricer reads another vol off the surface once the forward has left the strike)
+    assert a1["npv"] - a0["npv"] == pytest.approx(a0["dv01_curve"] * 10, rel=0.15, abs=50.0)
+    up, dn = (_post(client, auth_a, "/api/price/swaption", {**atm, "effective_date": EFF, "maturity_date": MAT, "curve_flat_bp": bp}) for bp in (1, -1))
+    assert up["npv"] - a0["npv"] == pytest.approx(a0["dv01_curve"], rel=0.1, abs=5.0)
+    assert dn["npv"] - a0["npv"] == pytest.approx(-a0["dv01_curve"], rel=0.1, abs=5.0)          # down is down: no jump at the money
+    # a vol shift moves the vol it priced at, by about the vega a bp; a typed strike away from the money too
+    v1 = _post(client, auth_a, "/api/price/swaption", {**atm, "effective_date": EFF, "maturity_date": MAT, "vol_shift_bp": 1})
+    assert v1["npv"] - a0["npv"] == pytest.approx(a0["vega"], rel=0.05, abs=5.0)
+    otm = _post(client, auth_a, "/api/price/swaption", {**SWAPTION, "effective_date": EFF, "maturity_date": MAT})
+    otm1 = _post(client, auth_a, "/api/price/swaption", {**SWAPTION, "effective_date": EFF, "maturity_date": MAT, "vol_shift_bp": 1})
+    assert otm1["npv"] - otm["npv"] == pytest.approx(otm["vega"], rel=0.05, abs=5.0)
+    zero = _post(client, auth_a, "/api/price/swaption", {**SWAPTION, "effective_date": EFF, "maturity_date": MAT, "vol_shift_bp": 0, "curve_flat_bp": 0})
+    assert zero["npv"] == otm["npv"] and zero["vol_bp"] == otm["vol_bp"]
+
 
 @pytest.mark.parametrize("extra", [{"curve_flat_bp": 1001}, {"curve_shift_bp": {"5Y": -2000}}, {"vol_shift_bp": 5000}, {"curve_flat_bp": 600, "curve_shift_bp": {"5Y": 600}}])
 def test_a_shift_out_of_bounds_is_refused(client, auth_a, extra):

@@ -1024,6 +1024,10 @@ class SwaptionRequest(BaseModel):
     # A scenario on the curve as it is saved: every quote by `curve_flat_bp`, a tenor's by its own on top
     curve_flat_bp:  Optional[float] = None
     curve_shift_bp: Optional[Dict[str, float]] = None
+    # ... and on the vol: the vol the option is priced at on the curve as saved (the typed one at the money, the
+    # surface's own away from it) moved by this many bp. A scenario holds that vol and the strike while the curve
+    # moves: the curve does not strike the option again or move it along the smile.
+    vol_shift_bp:   Optional[float] = Field(default=None, ge=-1000.0, le=1000.0)
     # HW1F cross-check — if None skips cross-check
     hw1f_a:         Optional[float] = None
     hw1f_sigma_bp:  Optional[float] = None
@@ -1092,13 +1096,26 @@ def price_swaption_route(
     except Exception as exc:
         raise HTTPException(status_code=422, detail=f"Curve error: {exc}")
 
+    # A scenario (a moved curve, a moved vol) is priced against the curve as sent or saved: the strike and the vol
+    # are the ones that curve gives, and only then do the shifts act.
+    curve_moved = bool(req.curve_flat_bp or any((req.curve_shift_bp or {}).values()))
+    scenario = curve_moved or bool(req.vol_shift_bp)
+    saved_curve = curve
+    if curve_moved:
+        try:
+            saved_curve = _build_curve(CurveInput(curve_id=req.curve_id, quotes=base_quotes), val_date, db, user["sub"])
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Curve error: {exc}")
+
     # Resolve strike — ATM if not provided
     strike = req.strike
     if strike is None:
         from pricing.swaption import _annuity_and_forward
         try:
+            # A scenario that moves the curve does not strike the option again: at the money is where the curve as
+            # sent (or as saved) put it, and the moved curve prices that strike.
             _, fwd, _ = _annuity_and_forward(
-                req.expiry_y, req.tenor_y, curve,
+                req.expiry_y, req.tenor_y, saved_curve,
                 req.pay_freq_y, val_date,
                 swap_effective_date=req.effective_date,
                 swap_maturity_date=req.maturity_date,
@@ -1253,21 +1270,20 @@ def price_swaption_route(
 
     # Price
     try:
-        result = price_swaption(
-            notional             = req.notional,
-            expiry_y             = req.expiry_y,
-            tenor_y              = req.tenor_y,
-            strike               = strike,
-            vol_bp               = req.vol_bp,
-            is_payer             = req.is_payer,
-            discount_curve       = curve,
-            pay_freq_y           = req.pay_freq_y,
-            valuation_date       = val_date,
-            hw1f_params          = hw1f_params,
-            swap_effective_date  = req.effective_date,
-            swap_maturity_date   = req.maturity_date,
-            db                   = db,
-        )
+        terms = dict(notional=req.notional, expiry_y=req.expiry_y, tenor_y=req.tenor_y, strike=strike, is_payer=req.is_payer,
+                     pay_freq_y=req.pay_freq_y, valuation_date=val_date, hw1f_params=hw1f_params,
+                     swap_effective_date=req.effective_date, swap_maturity_date=req.maturity_date)
+        if scenario:
+            # the vol the option is priced at on the saved curve (the surface's own away from the money), then moved;
+            # the moved curve prices at that vol and does not read the surface again
+            held = price_swaption(**terms, vol_bp=req.vol_bp, discount_curve=saved_curve, db=db)
+            if held.error:
+                raise HTTPException(status_code=422, detail=held.error)
+            result = price_swaption(**terms, vol_bp=max(float(held.vol_bp) + (req.vol_shift_bp or 0.0), 0.01), discount_curve=curve)
+        else:
+            result = price_swaption(**terms, vol_bp=req.vol_bp, discount_curve=curve, db=db)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise internal(500, "Pricing error", exc)
 
