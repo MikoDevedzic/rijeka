@@ -9,6 +9,7 @@ import PolicyPath from './home/PolicyPath'
 import Lifecycle from './home/Lifecycle'
 import PnlTile from './home/PnlTile'
 import TraderHome from './home/TraderHome'
+import { bookStrip } from './home/trader-home'
 import { usePhone } from '../lib/phone'
 import { useModulesStore } from '../store/useModulesStore'
 import WeekAhead from './home/WeekAhead'
@@ -267,7 +268,7 @@ function DeskHome({ demo, navigate }) {
             <Kpi label="CONFIRMED" value={confirmed} tone={confirmed ? 'accent' : ''} loading={d.loading} />
             <div className="dh-kpi"><span className="dh-kpi-l">GROSS NOTIONAL</span><span className="dh-kpi-v small">{d.loading ? '…' : Object.entries(notional).map(([c, n]) => `${c} ${fmtM(n)}`).join(' · ') || '—'}</span></div>
           </div>
-          {trades.length > 0 && <RiskStrip sheet={sheet} />}
+          {trades.length > 0 && <RiskStrip sheet={sheet} riskOn={modules.MARKET_RISK !== false} />}
           {trades.length > 0 && modules.PNL !== false && <PnlTile />}
           <Ladder trades={trades} />
           <ul className="dh-list">
@@ -308,15 +309,39 @@ function DeskHome({ demo, navigate }) {
   )
 }
 
-// The desk's numbers: book NPV, IR01, FX01/CRY01 and theta, summed by the pricers on the
-// brief's fact sheet (backend/prometheus/book_brief.py). Nothing is computed here.
-function RiskStrip({ sheet }) {
+// The desk's numbers: book NPV, IR01, FX01/CRY01 and theta. Where the firm has market risk on, they are the stored
+// risk report's (home/trader-home.js bookStrip): the same figures, on the same date, as the Risk page and the
+// trader's home, so one book has one set of numbers on every screen. Where it has not, they are the brief's fact
+// sheet (backend/prometheus/book_brief.py): the book valued today on each pricer's own figures. Nothing is
+// computed here but the sums.
+function RiskStrip({ sheet, riskOn }) {
+  const [rep, setRep] = useState(null)
+  useEffect(() => {
+    if (!riskOn) return undefined
+    let dead = false
+    get('/api/risk/report').then(j => { if (!dead) setRep(j) }).catch(() => { if (!dead) setRep(false) })      // no answer: the brief's figures, said to be so
+    return () => { dead = true }
+  }, [riskOn])
+  const b = riskOn ? bookStrip(rep) : null
+  if (b) {
+    const one = (v) => v == null ? '—' : `${b.ccy} ${fmtN(v)}`, tone = (v) => v == null || v === 0 ? '' : v > 0 ? 'pos' : 'neg'
+    const spots = Object.entries(b.spot01)
+    return (
+      <div className="rk" aria-label="Book risk" data-testid="rk" data-from="risk-report">
+        <div><span className="dh-kpi-l">BOOK NPV</span><b className={tone(b.npv)} data-testid="rk-npv">{one(b.npv)}</b><small>ON {fmtD(b.date).toUpperCase()}</small></div>
+        <div><span className="dh-kpi-l">IR01</span><b data-testid="rk-ir01">{b.ir01 == null ? '—' : fmtN(b.ir01)}</b><small>{b.ccy} PER BP · ALL CURVES</small></div>
+        <div><span className="dh-kpi-l">FX01 · CRY01</span><b data-testid="rk-spot01">{spots.length ? spots.map(([a, v]) => `${a} ${fmtN(v)}`).join(' · ') : '—'}</b><small>{b.ccy} FOR +1% SPOT</small></div>
+        <div><span className="dh-kpi-l">THETA</span><b className={tone(b.theta)} data-testid="rk-theta">{one(b.theta)}</b><small>ONE DAY'S CARRY</small></div>
+      </div>
+    )
+  }
+  if (riskOn && rep === null) return <div className="rk" aria-label="Book risk" data-testid="rk" data-from="waiting" />      // the report is on its way: not the other sum in the meantime
   const t = sheet?.totals
   const money = (o) => { const e = Object.entries(o || {}); return e.length ? e.map(([c, v]) => `${c} ${fmtN(v)}`).join(' · ') : '—' }
   const sign = (o) => { const vs = Object.values(o || {}); return !vs.length ? '' : vs.every(v => v >= 0) ? 'pos' : vs.every(v => v <= 0) ? 'neg' : '' }
   const asOf = sheet?.valuation_date ? fmtD(sheet.valuation_date) : null
   return (
-    <div className="rk" aria-label="Book risk">
+    <div className="rk" aria-label="Book risk" data-testid="rk" data-from="brief">
       <div><span className="dh-kpi-l">BOOK NPV</span><b className={sign(t?.npv)}>{t ? money(t.npv) : '…'}</b><small>{asOf ? `ON ${asOf.toUpperCase()}` : 'PRICING'}</small></div>
       <div><span className="dh-kpi-l">IR01</span><b>{t ? (t.ir01 != null ? fmtN(t.ir01) : '—') : '…'}</b><small>PER BP · ALL CURVES</small></div>
       <div><span className="dh-kpi-l">FX01 · CRY01</span><b>{t ? money(t.spot01) : '…'}</b><small>PV FOR +1% SPOT</small></div>

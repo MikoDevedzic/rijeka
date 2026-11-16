@@ -106,6 +106,25 @@ export function carry(rep) {
   return xs.length ? xs.reduce((a, b) => a + b, 0) : null
 }
 
+// The book in four figures, from the risk report: what the home's strip shows on a phone and to a role with no home
+// of its own yet. They are the Risk page's own figures, on its date and from its ladder, in the report's currency,
+// so that one book has one set of numbers on every screen. Until 0.42.5 the strip read the brief's fact sheet:
+// the book valued today on each pricer's own figures, a different sum on a different day (IR01 14,226 against the
+// ladder's 10,176 on the integration book; Marco, 15 November 2026). Null where there is no report to read.
+export function bookStrip(rep) {
+  if (!rep || !rep.date) return null
+  const lad = rep.ladder || {}, curves = lad.ladder || []
+  const rows = (rep.ladder_rows || []).filter(r => r.usd_rate != null)
+  const spot01 = {}
+  for (const [asset, v] of Object.entries(lad.spot01 || {})) if (Number.isFinite(Number(v)) && Math.abs(v) >= 0.5) spot01[asset] = Number(v)
+  return {
+    date: String(rep.date).slice(0, 10), ccy: rep.reporting_ccy || 'USD',
+    npv: rows.length ? rows.reduce((a, r) => a + (Number(r.npv) || 0) * r.usd_rate, 0) : null,
+    ir01: curves.length ? curves.reduce((a, c) => a + (Number(c.total) || 0), 0) : null,
+    spot01, theta: carry(rep),
+  }
+}
+
 // Why a stored report is not the book as it stands, or null when it is: 'older' (stored before the report carried
 // the moves, the fixings, or a curve's risk at its quoted tenors), 'market' (the market data has a later date),
 // 'book' (a live trade it did not value, a valued trade that is no longer live, or a trade booked after it was

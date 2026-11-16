@@ -1,6 +1,6 @@
 // The trader's home: what it works out from the risk report, the trades and the P&L summary.
 import { describe, expect, it } from 'vitest'
-import { BUCKETS, maturityBucket, bucketReach, spotMeasure, factors, peak, lanes, canDay, heights, carry, staleness, limitLabel, limitMarks, standing, factorLimits, limitsOf, shownOn, against, scene, canLimit, columns, laneMarks, markFigure, MATERIAL, signedShort, laneFigures, figureAt, LIMIT_MAX, statement, moved, signed, MAX_LANES } from './trader-home'
+import { bookStrip, BUCKETS, maturityBucket, bucketReach, spotMeasure, factors, peak, lanes, canDay, heights, carry, staleness, limitLabel, limitMarks, standing, factorLimits, limitsOf, shownOn, against, scene, canLimit, columns, laneMarks, markFigure, MATERIAL, signedShort, laneFigures, figureAt, LIMIT_MAX, statement, moved, signed, MAX_LANES } from './trader-home'
 
 const TRADES = [{ id: 't1', maturity_date: '2027-02-13' }, { id: 't2', maturity_date: '2030-11-13' }, { id: 't3', maturity_date: '2026-12-13' }]
 const REP = {
@@ -451,5 +451,32 @@ describe("the trader's home: the P&L", () => {
   it('writes a figure with its sign, a zero bare and a missing one as a dash', () => {
     expect([31503.4, -478, 0.2, null, NaN].map(signed)).toEqual(['+31,503', '−478', '0', '—', '—'])
     expect(BUCKETS).toHaveLength(4)
+  })
+})
+
+
+describe("the home's strip: the book in four figures, from the risk report", () => {
+  const rep = {
+    date: '2026-11-13', reporting_ccy: 'USD',
+    ladder: { ladder: [{ curve: 'USD_SOFR', total: 10968 }, { curve: 'EUR_ESTR', total: -792 }], spot01: { EUR: 386306.4, BTC: 16805.7, JPY: 0.2 } },
+    ladder_rows: [
+      { trade_id: 'a', npv: -123654.6, usd_rate: 1, theta: -900 },
+      { trade_id: 'b', npv: 100000, usd_rate: 1.07, theta: 50 },          // in EUR: 107,000 dollars, 53.5 of carry
+      { trade_id: 'c', npv: 999, usd_rate: null, theta: 5 },               // not converted: not in the sums
+    ],
+  }
+  it('adds each trade in the report\'s currency, the ladder across its curves, and keeps the spot deltas by asset', () => {
+    const b = bookStrip(rep)
+    expect(b.date).toBe('2026-11-13'); expect(b.ccy).toBe('USD')
+    expect(b.npv).toBeCloseTo(-123654.6 + 107000, 6)
+    expect(b.ir01).toBe(10176)                                            // the Risk page's ladder, summed: not a pricer's own IR01
+    expect(b.spot01).toEqual({ EUR: 386306.4, BTC: 16805.7 })             // a delta under half a dollar is not shown
+    expect(b.theta).toBeCloseTo(-900 + 53.5, 6)
+  })
+  it('says nothing where there is no report, and leaves a figure out where the report has none', () => {
+    expect(bookStrip(null)).toBe(null)
+    expect(bookStrip({ note: 'No market dates' })).toBe(null)
+    const b = bookStrip({ date: '2026-11-13', ladder: {}, ladder_rows: [] })
+    expect(b.npv).toBe(null); expect(b.ir01).toBe(null); expect(b.spot01).toEqual({}); expect(b.theta).toBe(null)
   })
 })
