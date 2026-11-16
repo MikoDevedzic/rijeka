@@ -7,7 +7,7 @@ methodology document carries its own version (v1.27). Commits on `main` are the 
 
 **A new workspace's desk and book name no asset class.** A new workspace was given one desk called RATES with one
 book called G10 RATES, and the ticket started on them, so its currency and digital-asset trades rolled up under a
-rates desk on the blotter, in P&L and in the risk report. A new workspace now starts with a desk called TRADING
+rates desk in P&L and in the risk report. A new workspace now starts with a desk called TRADING
 and a book called MAIN. Only new workspaces: an existing one keeps its desk and book, and its owner renames either
 under Configurations. No figure changes. An integration test holds the names and the ticket's defaults.
 
