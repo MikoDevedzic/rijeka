@@ -90,6 +90,55 @@ def test_a_swap_and_a_swaption_take_the_same_shift(client, auth_a):
     assert zero["npv"] == otm["npv"] and zero["vol_bp"] == otm["vol_bp"]
 
 
+def test_the_saved_curve_shifted_is_the_curve_of_its_own_quotes_sent_shifted(client, auth_a):
+    """The two branches of the curve builder against each other: the saved snapshot moved by the server, and the same
+    quotes read from the snapshot, moved here and sent."""
+    from api.routes.pricer import _map_qt
+    snap = client.get("/api/market-data/snapshots/USD_SOFR/latest", headers=auth_a).json()
+    assert snap["exists"] and len(snap["quotes"]) > 10
+    own = {"5Y": 7.0, "2Y": -3.0}
+    sent = [{"tenor": q["tenor"], "quote_type": _map_qt(q.get("quote_type", "OIS")), "rate": float(q["rate"]) / 100 + (2.0 + own.get(q["tenor"], 0.0)) / 10000.0}
+            for q in snap["quotes"] if q.get("enabled", True) and q.get("rate") is not None]
+    body = {"legs": _legs(0.0375), "valuation_date": ASOF}
+    by_server = _post(client, auth_a, "/price/preview", {**body, "curves": [{"curve_id": "USD_SOFR", "quotes": [], "shift_flat_bp": 2.0, "shift_bp": own}]})
+    by_hand = _post(client, auth_a, "/price/preview", {**body, "curves": [{"curve_id": "USD_SOFR", "quotes": sent}]})
+    assert by_server["npv"] == pytest.approx(by_hand["npv"], abs=0.02)
+    assert by_server["npv"] != _post(client, auth_a, "/price/preview", {**body, "curves": [{"curve_id": "USD_SOFR", "quotes": []}]})["npv"]
+
+
+def test_a_receiver_and_a_swaption_away_from_the_money_move_with_the_curve_at_the_vol_they_priced_at(client, auth_a):
+    dates = {"effective_date": "2027-11-04", "maturity_date": "2032-11-04"}
+    for extra in ({"is_payer": False}, {"strike": 0.045}, {"strike": 0.03, "is_payer": False}):
+        body = {**SWAPTION, **dates, **extra}
+        base = _post(client, auth_a, "/api/price/swaption", body)
+        up, dn = (_post(client, auth_a, "/api/price/swaption", {**body, "curve_flat_bp": bp}) for bp in (1, -1))
+        assert up["npv"] - base["npv"] == pytest.approx(base["dv01_curve"], rel=0.1, abs=5.0), extra
+        assert dn["npv"] - base["npv"] == pytest.approx(-base["dv01_curve"], rel=0.1, abs=5.0), extra
+        assert up["strike"] == base["strike"]
+        # the scenario's answer names the vol it priced at: the one the saved curve gave, typed or the surface's
+        assert up["vol_bp"] == pytest.approx(base["sabr_vol_bp"] if base.get("is_sabr_vol") else base["vol_bp"], abs=1e-6)
+    # a vol shift far below zero stops at the floor and still prices
+    low = _post(client, auth_a, "/api/price/swaption", {**SWAPTION, **dates, "vol_shift_bp": -1000})
+    assert low["vol_bp"] == pytest.approx(0.01) and low["npv"] >= 0
+
+
+def test_a_bermudan_refuses_a_vol_shift_and_takes_a_curve_shift(client, auth_a):
+    berm = {**SWAPTION, "expiry_y": 5.0, "structure": "BERMUDAN", "exercise_schedule_y": [1, 2, 3, 4, 5], "effective_date": "2031-11-04", "maturity_date": "2036-11-04"}
+    r = client.post("/api/price/swaption", json={**berm, "vol_shift_bp": 5}, headers=auth_a)
+    assert r.status_code == 422 and "Bermudan" in r.text
+    base = client.post("/api/price/swaption", json=berm, headers=auth_a)
+    if base.status_code == 200:          # the stack has a Hull-White calibration: the tree prices, and the curve moves it
+        moved = _post(client, auth_a, "/api/price/swaption", {**berm, "curve_flat_bp": 10})
+        assert moved["npv"] != base.json()["npv"]
+
+
+@pytest.mark.parametrize("url,body", [("/api/price/swaption", SWAPTION), ("/api/price/floor", FLOOR), ("/api/price/collar", COLLAR)])
+@pytest.mark.parametrize("extra", [{"curve_flat_bp": 1001}, {"curve_shift_bp": {"5Y": -2000}}, {"vol_shift_bp": 5000}])
+def test_every_route_refuses_a_shift_out_of_bounds(client, auth_a, url, body, extra):
+    r = client.post(url, json={**body, **extra}, headers=auth_a)
+    assert r.status_code == 422, (url, extra, r.text[:200])
+
+
 @pytest.mark.parametrize("extra", [{"curve_flat_bp": 1001}, {"curve_shift_bp": {"5Y": -2000}}, {"vol_shift_bp": 5000}, {"curve_flat_bp": 600, "curve_shift_bp": {"5Y": 600}}])
 def test_a_shift_out_of_bounds_is_refused(client, auth_a, extra):
     r = client.post("/api/price/cap", json={**CAP, **extra}, headers=auth_a)

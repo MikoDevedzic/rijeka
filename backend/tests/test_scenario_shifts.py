@@ -73,6 +73,25 @@ class TestAVolShift:
         same = price_cap(10_000_000, 0.04, 5.0, curve, VAL, SURFACE, vol_atm_forward=held)
         assert (same.npv, same.vol_bp) == (base.npv, base.vol_bp)
 
+    def test_a_floor_and_a_collar_are_held_on_the_smile_as_a_cap_is(self, curve):
+        from pricing.cap_floor import compute_atm_forward
+        moved = Curve(valuation_date=VAL, flat_rate=0.036)
+        held = compute_atm_forward(curve, VAL, 5.0, 4)
+        base = price_floor(10_000_000, 0.03, 5.0, curve, VAL, SURFACE)
+        kept = price_floor(10_000_000, 0.03, 5.0, moved, VAL, SURFACE, vol_atm_forward=held)
+        assert kept.vol_bp == base.vol_bp
+        assert price_floor(10_000_000, 0.03, 5.0, moved, VAL, SURFACE).vol_bp != base.vol_bp
+        assert kept.npv < base.npv                              # rates up: a floor is worth less, at the same vol
+        was = price_collar(10_000_000, 0.045, 0.025, 5.0, curve, VAL, SURFACE)
+        both = price_collar(10_000_000, 0.045, 0.025, 5.0, moved, VAL, SURFACE, vol_atm_forward=held, vol_shift_bp=5.0)
+        assert both["cap"].vol_bp == pytest.approx(was["cap"].vol_bp + 5.0, abs=1e-3)
+        assert both["floor"].vol_bp == pytest.approx(was["floor"].vol_bp + 5.0, abs=1e-3)
+
+    def test_a_shift_down_to_the_floor_still_prices(self, curve):
+        low = price_cap(10_000_000, 0.04, 5.0, curve, VAL, SURFACE, vol_shift_bp=-1000.0)
+        assert low.vol_bp == pytest.approx(VOL_FLOOR_BP)
+        assert low.npv >= 0 and low.npv < price_cap(10_000_000, 0.04, 5.0, curve, VAL, SURFACE).npv
+
     def test_a_collar_moves_both_legs(self, curve):
         was = price_collar(10_000_000, 0.045, 0.025, 5.0, curve, VAL, SURFACE)
         same = price_collar(10_000_000, 0.045, 0.025, 5.0, curve, VAL, SURFACE, vol_shift_bp=0.0)
@@ -110,6 +129,13 @@ class TestACurveShift:
     def test_a_shift_out_of_bounds_is_refused(self, flat, by):
         with pytest.raises(ValueError):
             _curve_shift(_ci(shift_flat_bp=flat, shift_bp=by))
+
+    def test_a_flat_curve_takes_the_flat_shift_and_refuses_a_tenors(self):
+        flat = _build_curve(CurveInput(curve_id="USD_SOFR", flat_rate=0.035, shift_flat_bp=10.0), VAL, None, "u")
+        same = _build_curve(CurveInput(curve_id="USD_SOFR", flat_rate=0.036), VAL, None, "u")
+        assert flat.df(date(2031, 11, 3)) == same.df(date(2031, 11, 3))
+        with pytest.raises(ValueError):
+            _build_curve(CurveInput(curve_id="USD_SOFR", flat_rate=0.035, shift_bp={"5Y": 10.0}), VAL, None, "u")
 
     def test_a_curve_without_a_shift_is_the_curve_it_was(self):
         a, b = _build_curve(_ci(), VAL, None, "u"), _build_curve(_ci(shift_flat_bp=0.0, shift_bp={}), VAL, None, "u")

@@ -303,7 +303,10 @@ def _build_curve(ci: CurveInput, valuation_date: date, db: Session, user_id: str
         return curve
 
     if ci.flat_rate is not None:
-        return Curve(valuation_date=valuation_date, flat_rate=float(ci.flat_rate))
+        # a flat curve has one rate and no tenors: the flat shift moves it, a tenor's own shift has nothing to move
+        if any((ci.shift_bp or {}).values()):
+            raise ValueError("a flat curve has no tenors to shift: send shift_flat_bp")
+        return Curve(valuation_date=valuation_date, flat_rate=float(ci.flat_rate) + (ci.shift_flat_bp or 0.0) / 10000.0)
 
     # DB snapshot.
     # NOTE: this deliberately takes the LATEST snapshot with no date filter —
@@ -1172,6 +1175,11 @@ def price_swaption_route(
     # The Bachelier HW1F cross-check is N/A here (the tree IS HW1F, so
     # cross-checking it against itself is meaningless).
     if (req.structure or "EUROPEAN").upper() == "BERMUDAN":
+        if req.vol_shift_bp:
+            # the tree is priced at the Hull-White model's own volatility: a shift of the surface would be taken,
+            # do nothing, and be reported as a volatility with no value. A scenario moves a Bermudan's curve.
+            raise HTTPException(status_code=422, detail="A Bermudan swaption is priced on the Hull-White tree at the model's own "
+                                                        "volatility: a scenario moves its curve, not a vol (vol_shift_bp).")
         if not req.exercise_schedule_y or len(req.exercise_schedule_y) < 1:
             raise HTTPException(
                 status_code=422,
@@ -1279,7 +1287,8 @@ def price_swaption_route(
             held = price_swaption(**terms, vol_bp=req.vol_bp, discount_curve=saved_curve, db=db)
             if held.error:
                 raise HTTPException(status_code=422, detail=held.error)
-            result = price_swaption(**terms, vol_bp=max(float(held.vol_bp) + (req.vol_shift_bp or 0.0), 0.01), discount_curve=curve)
+            from pricing.cap_floor import shifted_vol_bp
+            result = price_swaption(**terms, vol_bp=shifted_vol_bp(float(held.vol_bp), req.vol_shift_bp or 0.0), discount_curve=curve)
         else:
             result = price_swaption(**terms, vol_bp=req.vol_bp, discount_curve=curve, db=db)
     except HTTPException:
@@ -1318,7 +1327,7 @@ def price_swaption_route(
         "tenor_y":        req.tenor_y,
         "strike":         round(strike, 8),
         "strike_pct":     round(strike * 100, 6),
-        "vol_bp":         req.vol_bp,
+        "vol_bp":         result.vol_bp if scenario else req.vol_bp,      # a scenario's answer says the vol it priced at
         "is_payer":       req.is_payer,
         "settlement":     "PHYSICAL",
         # Analytics

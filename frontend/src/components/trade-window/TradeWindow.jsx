@@ -479,6 +479,9 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   const [productState, setProductState] = useState(() => (viewMode && !view0.assetClass.match(/FX|CRYPTO/))
     ? viewProductState(initialTrade, []) : {})
   const [result, setResult]             = useState(null)
+  // the request `result` answers (a rates ticket): the CURVE SCENARIO tab shocks these terms, not the form as it now
+  // stands, so its value with nothing shocked is the value on screen
+  const [pricedPayload, setPricedPayload] = useState(null)
   const [pricing, setPricing]           = useState(false)
   const [awaitingPar, setAwaitingPar]   = useState(null)    // the product whose PRICE click is held while its par rate solves (null: none)
   const [error, setError]               = useState('')
@@ -727,13 +730,16 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             data = { ...opt, legs: booked.legs, curve_mode: booked.curve_mode, trade_id: booked.trade_id }
           } catch (e) { console.warn('[tw] swaption revaluation fell back to the booked legs', e) }
         }
+        setPricedPayload({ ...product.pricing.buildPayload(state), curves })
         setResult(product.pricing.parseResponse(data))
         return
       }
 
       const endpoint = typeof product.pricing.endpoint === 'function'
         ? product.pricing.endpoint(state) : product.pricing.endpoint
-      const data = await post(endpoint, { ...product.pricing.buildPayload(state), curves })
+      const sent = { ...product.pricing.buildPayload(state), curves }
+      const data = await post(endpoint, sent)
+      setPricedPayload(sent)
       setResult(product.pricing.parseResponse(data))
     } catch (e) {
       if (e?.name === 'AbortError') setError('Pricing request aborted')
@@ -1415,7 +1421,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
 
       {tabsVisited['CURVE SCENARIO'] && !isCurrency && (
         <div style={{ display: activeTab === 'CURVE SCENARIO' ? 'block' : 'none' }}>
-          <RatesScenario product={product} productKey={productKey} state={state} result={result} active={activeTab === 'CURVE SCENARIO'} curves={pricingCurves} />
+          <RatesScenario product={product} productKey={productKey} state={state} result={result} payload={pricedPayload} active={activeTab === 'CURVE SCENARIO'} curves={pricingCurves} booked={!!viewMode} />
         </div>
       )}
 

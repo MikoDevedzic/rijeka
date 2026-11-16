@@ -140,7 +140,10 @@ export function withFlat(shock, value, bound) {
 
 // ── the trade ────────────────────────────────────────────────────────────────────────────────
 export const KIND = { IR_SWAP: 'swap', IR_SWAPTION: 'swaption', RATES_CAP: 'cap', RATES_FLOOR: 'floor', RATES_COLLAR: 'collar' }
-export const hasVol = (productKey) => KIND[productKey] != null && KIND[productKey] !== 'swap'
+// Whether the trade is priced at a vol a scenario can move: an option, but not a Bermudan swaption, which is priced on
+// the Hull-White tree at the model's own volatility (the engine refuses a vol shift on it).
+export const isBermudan = (productKey, payload) => KIND[productKey] === 'swaption' && String(payload?.structure || '').toUpperCase() === 'BERMUDAN'
+export const hasVol = (productKey, payload) => KIND[productKey] != null && KIND[productKey] !== 'swap' && !isBermudan(productKey, payload)
 // The curves a request prices on, in the order the ticket names them: the one a cap, a floor, a collar or a swaption
 // names for itself, else those of the request's own list (a swap's).
 export function curveIds(payload) {
@@ -183,7 +186,8 @@ export function figures(productKey, r) {
     npv: swap && r.option_pv != null ? pick('npv') : collar ? pick('net_npv') : pick('npv'),
     ir01: collar ? pick('net_ir01') : pick('ir01'),
     vega: collar ? pick('net_vega') : pick('vega'),
-    vol: collar ? null : pick('vol_bp'),
+    // the vol the trade priced at: a swaption away from the money is priced at the surface's own, not the typed one
+    vol: collar ? null : (r.is_sabr_vol && finite(num(r.sabr_vol_bp)) ? num(r.sabr_vol_bp) : pick('vol_bp')),
     capVol: collar ? pick('cap_vol_bp') : null, floorVol: collar ? pick('floor_vol_bp') : null,
     ccy: r.currency || r.ccy || null,
   }

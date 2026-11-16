@@ -138,3 +138,11 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - A tab rebuilt for one product family is rebuilt from what the other family's tab already is, with the pieces
   shared (one chart for a curve and a vol, one size for a result's figure), and the first run on the stack's own
   data decides what is shown: thirty quoted tenors made a column no one could read.
+- A scenario input that a product's pricer does not read is refused by the route and not offered by the screen: a
+  Bermudan's vol shift was taken, did nothing, and showed a vega times the shock beside a change of zero.
+- A screen that reads market data does not keep a failed or empty answer (the rule for presence checks holds in the
+  browser too), and a tab that reprices sends the request the price on screen answered, not the form as it stands.
+- Before a design review of two screens that should match, their pictures are put side by side and the differences
+  listed by the builder: a brass label, two colours for one surface and a box on one tab only were all in pictures
+  already looked at one by one.
+- A date written into a document is the day's date where the work is done (`date`), not the server's clock's.

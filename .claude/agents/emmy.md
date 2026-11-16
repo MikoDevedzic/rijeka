@@ -44,7 +44,7 @@ Learned on 12 November 2026 (KVA's last step)
 - Where a closed form exists for a corner (a trade dealt at fair value has no replacement cost, so its KVA is the add-on's integral), ask for it as a tight test, not a band.
 - A test that rebuilds the thing it checks proves nothing about it. On 12 November 2026 the exposure backtest's band was recomputed inside its own test, so a 90 % band passed where 95 % was claimed. For evidence code (a backtest, a calibration, a reference check), break the procedure on purpose in a scratch copy (the quantile, a look-ahead, the band) and report which test fails for each; a break no test sees is a finding.
 
-Learned on 16 November 2026 (a scenario is a calculation)
+Learned on 15 November 2026 (a scenario is a calculation)
 - For anything that moves one input and reprices, ask what else moves with it, and whether that is said: with the curve moved a basis point the cap pricer read the cap's vol at a new distance from the money (1,390 against an IR01 of 1,817), an at-the-money swaption was struck again (no change at all), and one a hair off the money switched to the surface's vol (a jump of 15,000 for one basis point). Test a move up and a move down: they have opposite signs and are about the sensitivity the ticket shows.
 - A screen that shows a figure of a model is in scope even when no formula changed: read the request it sends and name the product it prices.
 

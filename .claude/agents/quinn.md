@@ -73,7 +73,7 @@ Learned on 15 November 2026 (the journey that checked nothing)
 - `locator.isVisible()` does not wait, whatever timeout it is given: a part of a journey guarded by `if (await x.isVisible())` is skipped on a page still loading and the test passes having looked at nothing. Wait with `waitFor({ state: 'visible' })`, and where a part is skipped because the stack has nothing to show, add an annotation saying so. After writing a journey, check that the pictures it takes exist.
 - A picture taken before a change is not evidence about the change: retake every picture a brief names after the last edit to the screen it shows.
 
-Learned on 16 November 2026 (the scenario tab that priced something else)
+Learned on 15 November 2026 (the scenario tab that priced something else)
 - Press every control on a tab and check that something answers: a request goes out, or a figure moves. The cap's volatility buttons on the old CURVE SCENARIO tab were wired to nothing in the ticket, and no journey pressed them.
 - On a product's tab, check that a figure is that product's: compare it with the ticket's own price for that product (the request it sends, the route it calls). The scenario tab of a cap repriced a swap with the cap's dates, and showed its value and IR01 under the cap.
 - A tab that every product has is walked on every product, not on the first: one journey a product, with the same steps.

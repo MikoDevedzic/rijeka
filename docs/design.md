@@ -10,7 +10,7 @@ code that draws on a canvas, and `theme.test.js` holds the two together.
 |---|---|---|
 | `--accent` (brass), `--accent-hi` | the action of the view (BOOK TRADE, + NEW TRADE), the selected tab's rule, what is sealed on chain, the saving on chain, the name RIJEKA | a label, a typed value, a positive number |
 | `--up`, `--down` | the sign of a number; a side that is chosen (coral for paying or selling, green for receiving or buying, the same in the swap's direction, an option's side, a forward's and a leg's); a state that is good or bad in itself (live, calibrated, a verify that passed; defaulted, a failed check) | a selection, an action |
-| `--amber` | a caution, something provisional, the PFE tail | an action |
+| `--amber` | a caution, something provisional, the PFE tail, the trade's own mark on a chart of a curve it is priced on (its vol, its strike) | an action |
 | `--blue` | the counterpart series on a chart (ENE), a link on paper, the second desk's paths in the logo | a selection; a figure in a table (it takes the colour of its sign) |
 | `--text-hi`, `--text`, `--text-dim`, `--text-mute`, `--text-faint` | limestone, in five steps. Contrast on `--bg` / `--panel` / `--panel-2`: `--text-mute` 6.2 / 5.6 / 4.8, `--text-faint` 5.3 / 4.8 / 4.1 | `--text-faint` on `--panel-2` or lighter |
 | `--panel`, `--panel-2`, `--panel-3` | a surface one step up; `--panel-3` is the fill of a selected chip | |
@@ -292,16 +292,32 @@ value, and one ladder for the selected curve. A point that was typed or dragged 
 field typed over its default does.
 
 **A volatility surface is one of the curves, and is moved as a rate curve is**: flat, point by point, or by
-dragging a point on its term structure. One drawing does both (`ScenarioCurve.jsx`): the market dashed, the
-scenario in the factor's colour, the points as rings that are dragged up or down, the trade's own date marked,
-and, on a vol, the vol the trade priced at as a dot. Beside a vol's term structure a second chart shows the
-surface at the trade's own expiry (the smile; across swap tenors for a swaption): it moves with the scenario and
-is not dragged. A shock between two points is read on the line between them, on every product.
+dragging a point on its term structure. One drawing does both (`ScenarioCurve.jsx`): in a box on the panel's
+ground, the market dashed, the scenario in the factor's colour, the points as rings that are dragged up or down,
+the trade's own date as a quiet dashed line with its word in the text's colour (never brass: it is a label), and,
+on a vol, the vol the trade priced at as an amber dot with its figure on a plate. The axis steps in round
+numbers. Under it a legend says what each line and the dot are, in the same words on every product
+(`CurveLegend`). Beside a vol's term structure a second chart shows the surface at the trade's own expiry (the
+smile; across swap tenors for a swaption) with the trade's own point marked: it moves with the scenario, is not
+dragged, and so draws its points as small dots, not rings. A chart's title is a label (`PLOT_TITLE`). A shock
+between two points is read on the line between them, on every product.
+
+What a shock is said in: a curve in basis points on both tabs ("+10 bp"); a rates vol in basis points of normal
+vol, a currency option's in vol points ("+1 pt"), because that is how each is quoted. A button says its curve's
+shock as "+10 bp · 2 points".
 
 A rates ticket's figures are the pricing engine's on the moved market, and its chip says FULL REVALUATION; a
-currency ticket's are the tab's own closed form, and its chip says APPROXIMATION. Not yet in the shape: a
-currency option that is not European (its ladder is the engine's; none of its curves is shocked) and a package's
-vol, which is shocked flat only. The result table's figure is one size on both (`RESULT_FIG`, `xva-shared.js`).
+currency ticket's are the tab's own closed form, and its chip says APPROXIMATION. A rates ticket whose terms were
+changed after its price says so in amber and keeps the scenario of the terms as priced.
+
+Where the two tabs still differ, and why: the currency tab has a forward and a fixing to show, so its tiles are
+FORWARD, NPV, CHANGE and the fixing where the rates tab's are NPV, CHANGE, IR01 and the vol; its shock row is
+"SHOCK AT SETTLEMENT" because every one of its curves is read at one date; its smile is still drawn on a canvas
+(in the vol's colour, read from the token) with the 25-delta lines and its own legend; a rate is shown to four
+decimals on a rates curve (a quote) and three on a currency curve (a zero rate). Not yet in the shape: a currency
+option that is not European (its ladder is the engine's; none of its curves is shocked), a package's vol, which
+is shocked flat only, and a Bermudan swaption's vol, which is the model's and is not shocked. The result table's
+figure is one size on both (`RESULT_FIG`, `xva-shared.js`).
 
 ## Risk factors
 
@@ -342,7 +358,8 @@ print their keycap.
 ## What is not done yet
 
 Colours and sizes written as literals in components, and a lint rule against new ones; brass where it still
-stands for the old accent (above); the lineage tree on a figure; the mark of where each field's number came from on the rates ticket (the
+stands for the old accent (above); the smile of a currency option on the scenario tab, still a canvas with its
+own palette for everything but the curve; the lineage tree on a figure; the mark of where each field's number came from on the rates ticket (the
 currency ticket marks an override with a brass rule); EPE on the XVA tab; the remaining pages read screen by
 screen; widths under 1440px, where the blotter scrolls sideways.
 

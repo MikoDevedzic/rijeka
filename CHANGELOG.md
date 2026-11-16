@@ -3,7 +3,7 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.25). Commits on `main` are the detail.
 
-## 0.43.0 · 16 November 2026
+## 0.43.0 · 15 November 2026
 
 **One scenario tab for every product, and volatility moved as a curve is.** The CURVE SCENARIO tab of a rates
 ticket looked and worked unlike a currency ticket's, and no ticket let a point of a volatility surface be moved.
@@ -26,15 +26,27 @@ No booked price, risk figure or report changes: with no shock every route answer
   expiry.
 - **The same on a currency or digital-asset option.** Its vol could be moved flat only. Each tenor of the
   pair's stored surface is now a point, typed or dragged on the term structure, which is drawn by the chart a
-  rate curve is drawn by; the option sees the shock at its expiry, between the two tenors around it.
+  rate curve is drawn by; the option sees the shock at its expiry, between the two tenors around it. The smile
+  beside it is drawn in the same colour.
+- **One chart.** A rate curve and a vol term structure are one drawing on every product: in a box, the market
+  dashed, the scenario in the factor's colour, round steps on the axis, a legend under it, the trade's date as a
+  quiet line. The date was marked in brass, which is not a label's colour.
 - **Curve and vol are told apart.** While a scenario's curve moves, the trade stays where the saved curve put it
   on the smile: a cap is read at the same distance from the at-the-money rate, a swaption struck at the money
-  keeps its strike, one away from the money keeps the vol the surface gave it. So the curve column is the
-  trade's sensitivity to the curve and the vol column its vega. Left alone, a 1bp curve move repriced a cap at
-  another vol (1,390 against an IR01 of 1,817 on the test book) and an at-the-money swaption jumped by 15,000.
+  keeps its strike, one away from the money keeps the vol the surface gave it. So the curve column is the price
+  on the rebuilt curve at a fixed vol, and the vol column the price at the moved vol. Left alone, a 1bp curve
+  move repriced a cap at another vol (1,390 against an IR01 of 1,817 on the test book) and an at-the-money
+  swaption jumped by 15,000. Beside them the tab shows the ticket's IR01 and vega times the shock; its note says
+  why the two lines differ (curvature, the discounting the ticket's IR01 holds still, a quote against a zero rate).
+- **What the tab says when it cannot.** A Bermudan swaption is priced on the tree at the model's own vol: the
+  tab offers no vol to shock and says why, and the engine refuses one. A ticket whose terms were changed after
+  it was priced keeps the scenario of the terms as priced and says so. A booked trade's scenario is of its terms
+  priced afresh, and says that its footer is the booked revaluation. The saved quotes are read each time the tab
+  is opened.
 - **The API.** `/price/preview` takes `shift_flat_bp` and `shift_bp` on a curve; `/api/price/swaption`, `/cap`,
   `/floor` and `/collar` take `curve_flat_bp`, `curve_shift_bp` and `vol_shift_bp`. Each is bounded (a thousand
-  basis points, eighty tenors) and refused beyond. No new route.
+  basis points, eighty tenors) and refused beyond; a flat curve takes the flat shift and refuses a tenor's. A
+  scenario's swaption answer reports the vol it priced at. No new route.
 - **Not done, and said on the tab or here:** a currency option that is not European (American, digital,
   barrier, touch) still has only the engine's ladder and no curve to shock; a package's vol is shocked flat; a
   currency ticket's scenario is still the browser's closed form (it says APPROXIMATION) where a rates ticket's
@@ -43,8 +55,8 @@ No booked price, risk figure or report changes: with no shock every route answer
 - Methodology v1.25 (Caps, Scenario; FX options) and the model inventory describe the shifts. Tests: the pricers
   and the curve builder with and without a shift, each route on the local stack, and journeys that shock, type
   and drag on a swap, a cap, a collar, a swaption, an FX option and a crypto option and compare the result with
-  the engine's own sensitivities. Removing the old tab lowered the hand-set counts: sizes in rem 412 to 350, hex
-  colours 189 to 177, fonts named directly 6 to 4.
+  the engine's own sensitivities. Removing the old tab lowered the hand-set counts: sizes in rem 412 to 346, hex
+  colours 189 to 177, fonts named directly 6 to 4, distinct sizes 50 to 49.
 
 ## 0.42.7 · 15 November 2026
 

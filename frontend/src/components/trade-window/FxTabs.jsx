@@ -1148,7 +1148,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
           <div style={{ padding: '10px 16px 6px', borderBottom: '1px solid var(--border)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
               {chartTitle && <span style={{ ...secHdr, margin: 0 }}>{chartTitle}</span>}<Note inline>{chartSays}</Note>
-              <span style={{ fontSize: 11, color: 'var(--amber)', border: '1px solid rgba(233,151,90,0.4)', borderRadius: 'var(--r-1)', padding: '1px 7px', letterSpacing: '0.06em' }}>APPROXIMATION</span>
+              <span style={{ fontSize: 11, color: 'var(--amber)', border: '1px solid var(--amber-dim)', borderRadius: 'var(--r-1)', padding: '1px 7px', letterSpacing: '0.06em' }}>APPROXIMATION</span>
               <Note inline testId="fx-scenario-banner">Scenario: an approximation in the browser, to cents with no shock; nothing is saved.{european ? '' : ` The ladder below is the engine's own, repriced on every cell (${quote.method || 'the style\'s own model'}), so it does not follow the dragged curve.`}</Note>
             </div>
             {selected}

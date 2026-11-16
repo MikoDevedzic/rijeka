@@ -108,6 +108,9 @@ describe('the request of a scenario', () => {
     const bare = { expiry_y: 1, tenor_y: 5, vol_bp: 86.5, curves: [{ curve_id: 'USD_SOFR', quotes: [] }] }
     expect(scenarioPayload('IR_SWAPTION', bare, { USD_SOFR: { flat: 10, own: {} } })).toMatchObject({ curve_flat_bp: 10, curve_shift_bp: {} })
     expect(hasVol('IR_SWAP')).toBe(false); expect(hasVol('RATES_FLOOR')).toBe(true); expect(hasVol('IR_SWAPTION')).toBe(true); expect(hasVol('FX_FORWARD')).toBe(false)
+    expect(hasVol('IR_SWAPTION', { structure: 'EUROPEAN' })).toBe(true)
+    expect(hasVol('IR_SWAPTION', { structure: 'bermudan' })).toBe(false)          // priced on the tree at the model's own vol
+    expect(hasVol('RATES_CAP', { structure: 'BERMUDAN' })).toBe(true)
     expect(horizon('IR_SWAP', SWAP).through).toBeCloseTo(5.0, 1)
     expect(horizon('RATES_CAP', CAP)).toEqual({ through: 5, expiry: 5 })
     expect(horizon('IR_SWAPTION', SWPN)).toEqual({ through: 6, expiry: 1, tenor: 5 })
@@ -116,6 +119,8 @@ describe('the request of a scenario', () => {
     expect(figures('IR_SWAP', { npv: 12.5, ir01: 4600 })).toMatchObject({ npv: 12.5, ir01: 4600, vega: null, vol: null })
     expect(figures('RATES_CAP', { npv: 232137, ir01: 2315, vega: 2578, vol_bp: 78.5 })).toMatchObject({ npv: 232137, vega: 2578, vol: 78.5 })
     expect(figures('RATES_COLLAR', { net_npv: -61702, net_ir01: 2067, net_vega: 900, cap_vol_bp: 80, floor_vol_bp: 90, npv: 1 })).toMatchObject({ npv: -61702, ir01: 2067, vega: 900, vol: null, capVol: 80, floorVol: 90 })
+    expect(figures('IR_SWAPTION', { npv: 1, vol_bp: 86.5, sabr_vol_bp: 91.2, is_sabr_vol: true }).vol).toBe(91.2)          // away from the money: the surface's
+    expect(figures('IR_SWAPTION', { npv: 1, vol_bp: 86.5, sabr_vol_bp: null, is_sabr_vol: false }).vol).toBe(86.5)
     expect(figures('RATES_CAP', null)).toBe(null)
   })
 })

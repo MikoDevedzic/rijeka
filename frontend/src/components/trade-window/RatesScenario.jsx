@@ -15,9 +15,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { apiFetch } from '../../lib/api'
 import { Note } from '../common/Note'
-import { RESULT_FIG, XVA_ROW, XVA_LEFT, XVA_RIGHT } from './xva-shared'
-import ScenarioCurve from './ScenarioCurve'
-import { CURVE_BOUND_BP, KIND, LADDER, NO_SHOCK, VOL_BOUND_BP, capSmile, capTerm, curveIds, curvePoints, curveQuotes, figures, hasVol, horizon, isShocked, shockAtPoint, shockAtTime,
+import { PLOT_TITLE, RESULT_FIG, XVA_ROW, XVA_LEFT, XVA_RIGHT } from './xva-shared'
+import ScenarioCurve, { CurveLegend } from './ScenarioCurve'
+import { CURVE_BOUND_BP, KIND, LADDER, NO_SHOCK, VOL_BOUND_BP, capSmile, capTerm, curveIds, curvePoints, curveQuotes, figures, hasVol, horizon, isBermudan, isShocked, shockAtPoint, shockAtTime,
   shockSaid, spread, swaptionAcross, swaptionTerm, wanted, withFlat, withOwn } from './rates-scenario'
 
 // A figure that rounds to nothing at the precision it is shown at is nothing: no sign, no colour (as on FxTabs.jsx).
@@ -44,18 +44,19 @@ function Tile({ label, value, color, sub: note, testId, raw }) {
   )
 }
 
-const snapshots = new Map()            // curve id → the request for its saved snapshot, shared by every ticket open
-const snapshot = (id) => {
-  if (!snapshots.has(id)) snapshots.set(id, apiFetch(`/api/market-data/snapshots/${id}/latest`).then(r => (r.ok ? r.json() : null)).catch(() => { snapshots.delete(id); return null }))
-  return snapshots.get(id)
-}
+// A curve's saved quotes, read when the tab is opened and each time it is opened again: market data saved since is then
+// what is shown, and an answer that failed is asked for again (nothing is kept between openings).
+const snapshot = (id) => apiFetch(`/api/market-data/snapshots/${id}/latest`).then(r => (r.ok ? r.json() : null)).then(j => (j?.exists ? j : null)).catch(() => null)
 
-// `curves`: the curve list the ticket sends with its own pricing request (TradeWindow.jsx handlePrice), so the
-// scenario's request with nothing shocked is that request.
-export default function RatesScenario({ product, productKey, state, result, active, curves }) {
-  const kind = KIND[productKey], option = hasVol(productKey)
+// `payload`: the request the ticket's price on screen answers (TradeWindow.jsx handlePrice), so the scenario's request
+// with nothing shocked is that request. `curves`: the curve list the ticket sends with a pricing request, to tell
+// whether the form has been changed since (`stale`). `booked`: the ticket is a stored trade, whose own value is its
+// revaluation as booked; the scenario is of its terms as the ticket shows them.
+export default function RatesScenario({ product, productKey, state, result, payload = null, active, curves, booked = false }) {
+  const kind = KIND[productKey], option = hasVol(productKey, payload), bermudan = isBermudan(productKey, payload)
   const ccy = state?.ccy || 'USD'
-  const payload = useMemo(() => { try { const p = product?.pricing?.buildPayload?.(state); return p ? { ...p, curves } : null } catch { return null } }, [product, state, curves])
+  const form = useMemo(() => { try { const p = product?.pricing?.buildPayload?.(state); return p ? JSON.stringify({ ...p, curves }) : null } catch { return null } }, [product, state, curves])
+  const stale = !!(payload && form && form !== JSON.stringify(payload))
   const endpoint = typeof product?.pricing?.endpoint === 'function' ? product.pricing.endpoint(state) : product?.pricing?.endpoint
   const ids = useMemo(() => curveIds(payload), [payload])
   const idKey = ids.join(','), swvolId = kind === 'swaption' ? `${ccy}_SWVOL_ATM` : null
@@ -64,10 +65,11 @@ export default function RatesScenario({ product, productKey, state, result, acti
   // the saved quotes of each curve the trade is priced on, and of the swaption surface
   const [snaps, setSnaps] = useState({})
   useEffect(() => {
+    if (!active) return undefined
     let on = true
-    for (const id of [...ids, swvolId].filter(Boolean)) snapshot(id).then(s => { if (on) setSnaps(x => (x[id] === s ? x : { ...x, [id]: s })) })
+    for (const id of [...ids, swvolId].filter(Boolean)) snapshot(id).then(s => { if (on) setSnaps(x => ({ ...x, [id]: s })) })
     return () => { on = false }
-  }, [idKey, swvolId])   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [idKey, swvolId, active])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // the scenario: a shock per curve and one for the vol; another product, currency or set of curves starts clean
   const scope = `${productKey}|${ccy}|${idKey}`
@@ -77,11 +79,11 @@ export default function RatesScenario({ product, productKey, state, result, acti
 
   const volPts = useMemo(() => (kind === 'swaption' ? swaptionTerm(snaps[swvolId]?.quotes, hz.tenor).points : option ? capTerm(result?.surface_rows) : []), [kind, option, snaps, swvolId, hz.tenor, result])
   const factors = useMemo(() => [
-    ...ids.map(id => ({ key: id, kind: 'curve', name: id.replace(/_/g, ' '), color: 'var(--rf-ir)', unit: 'bp', bound: CURVE_BOUND_BP, slide: 100, step: 1, d: 0,
-      sub: snaps[id]?.exists ? `the quotes saved for ${snaps[id].valuation_date}` : snaps[id] === undefined ? 'reading the saved quotes…' : 'no quotes saved: shocked flat only',
+    ...ids.map(id => ({ key: id, kind: 'curve', name: id.replace(/_/g, ' '), color: 'var(--rf-ir)', unit: 'bp', bound: CURVE_BOUND_BP, slide: 200, step: 5, d: 0,
+      sub: snaps[id] ? `saved ${snaps[id].valuation_date}` : snaps[id] === undefined ? 'reading the saved quotes…' : 'no quotes read: flat only',
       points: curvePoints(snaps[id]?.quotes, hz.through), quotes: curveQuotes(snaps[id]?.quotes) })),
     ...(option ? [{ key: 'vol', kind: 'vol', name: `${ccy} ${kind === 'swaption' ? 'SWAPTION' : 'CAP'} VOL`, color: 'var(--rf-vol)', unit: 'bp', bound: VOL_BOUND_BP, slide: 30, step: 0.5, d: 1,
-      sub: volPts.length ? `normal vol, bp · ${kind === 'swaption' ? `at-the-money by expiry, into ${swaptionTerm(snaps[swvolId]?.quotes, hz.tenor).tenor || 'the swap'}` : 'at-the-money by maturity'}` : 'no surface saved: shocked flat only',
+      sub: volPts.length ? 'normal vol · at the money' : 'no surface read: flat only',
       points: volPts }] : []),
   ], [ids, snaps, hz.through, hz.tenor, option, kind, ccy, volPts, swvolId])
   const cur = factors.find(f => f.key === held.sel && held.scope === scope) || factors[0]
@@ -156,13 +158,14 @@ export default function RatesScenario({ product, productKey, state, result, acti
         <span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.name}</span>
         <span style={{ display: 'block', fontSize: 11, fontWeight: 400, letterSpacing: 0, color: 'var(--text-mute)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.sub}</span>
       </span>
-      <span data-testid={`scn-says-${c.kind === 'vol' ? 'vol' : c.key}`} style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 400, letterSpacing: 0, color: isShocked(shocks[c.key]) ? 'var(--text-hi)' : 'var(--text-mute)', whiteSpace: 'nowrap' }}>{shockSaid(shocks[c.key], c.unit)}</span>
+      <span data-testid={`scn-says-${c.kind === 'vol' ? 'vol' : c.key}`} style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 400, letterSpacing: 0, color: isShocked(shocks[c.key]) ? 'var(--text-hi)' : 'var(--text-mute)', whiteSpace: 'nowrap' }}>{shockSaid(shocks[c.key], ` ${c.unit}`)}</span>
     </button>
   )
   const left = (
     <div style={XVA_LEFT} data-testid="scn-left">
       <div style={{ ...secHdr, marginTop: 4 }}>CURVES THAT PRICE THIS TRADE<Note inline>Every market input the price was built from, each in the colour of its risk factor. Select one to shock it flat, point by point, or by dragging on the chart.</Note></div>
       {factors.map(curveBtn)}
+      {bermudan && <div data-testid="scn-bermudan" style={{ fontSize: 11.5, color: 'var(--text-mute)', lineHeight: 1.45, margin: '2px 2px 0' }}>A Bermudan is priced on the Hull-White tree at the model's own volatility, so it has no vol surface to shock here: a scenario moves its curve.</div>}
       <div style={secHdr}>FLAT SHOCK · {cur.kind === 'vol' ? 'BP OF NORMAL VOL' : 'BASIS POINTS'}</div>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 84px', gap: 10, alignItems: 'center' }}>
         <input type="range" data-testid="scn-flat" aria-label={`Flat shock, ${cur.name}`} min={-cur.slide} max={cur.slide} step={cur.step} value={Math.max(-cur.slide, Math.min(cur.slide, shock.flat))}
@@ -173,7 +176,7 @@ export default function RatesScenario({ product, productKey, state, result, acti
       {cur.points.length > 0 && (<>
         <div style={secHdr}>POINT BY POINT<Note inline>{cur.kind === 'vol' ? 'Type a shock on one expiry of the surface, or drag it on the chart. The trade sees the vol at its own expiry: between two points the shock is read on the line between them.' : 'Type a shock on one tenor, or drag it on the chart. A quote between two of these tenors takes the shock on the line between them; the curve is built again from the moved quotes and the trade repriced on it.'}</Note></div>
         <table data-testid="scn-points" style={{ width: '100%', borderCollapse: 'collapse', fontVariantNumeric: 'tabular-nums' }}>
-          <thead><tr>{[cur.kind === 'vol' ? (kind === 'swaption' ? 'EXPIRY' : 'MATURITY') : 'TENOR', 'MARKET', 'BP', 'SCENARIO'].map((h, i) => <th key={h} style={{ ...lbl, textAlign: i ? 'right' : 'left', padding: '4px 4px 6px', borderBottom: '1px solid var(--border-hi)', whiteSpace: 'nowrap' }}>{h}</th>)}</tr></thead>
+          <thead><tr>{[cur.kind === 'vol' ? (kind === 'swaption' ? 'EXPIRY' : 'MATURITY') : 'TENOR', 'MARKET', 'SHOCK BP', 'SCENARIO'].map((h, i) => <th key={h} style={{ ...lbl, textAlign: i ? 'right' : 'left', padding: '4px 4px 6px', borderBottom: '1px solid var(--border-hi)', whiteSpace: 'nowrap' }}>{h}</th>)}</tr></thead>
           <tbody>{cur.points.map(p => { const own = Number(shock.own?.[p.id]) || 0, dp = cur.kind === 'vol' ? 1 : 4, scen = p.v + shockAtPoint(shock, p) / (cur.kind === 'vol' ? 1 : 100); return (
             <tr key={p.id} data-testid={`scn-point-${p.id}`} data-market={p.v} data-scenario={scen}>
               <td style={{ fontSize: 12.5, color: 'var(--text-dim)', padding: '3px 4px', borderBottom: '1px solid var(--border)' }}>{p.label}</td>
@@ -199,25 +202,40 @@ export default function RatesScenario({ product, productKey, state, result, acti
   const chartSays = isVol
     ? `The surface as it is saved: normal vol in basis points, at the money, by ${kind === 'swaption' ? 'expiry' : 'maturity'}. Drag a point up or down to shock it; the trade is repriced at the vol it priced at, moved by the shock at its own ${kind === 'swaption' ? 'expiry' : 'maturity'}.`
     : `The curve's quotes at its main tenors, up to the trade's last date and the two after it; those beyond cannot reach this trade. Drag one up or down to shock it: the quotes around it follow on the line to the next tenor, the curve is built again and the trade repriced on it.`
-  const dotOf = (v) => (v == null ? null : { t: hz.expiry, v: v + volShift, label: `${(v + volShift).toFixed(1)} bp` })
+  const volNow = tradeVol == null ? null : tradeVol + volShift
+  const dotOf = (t, label = true) => (volNow == null || !Number.isFinite(t) ? null : { t, v: volNow, label: label ? `${volNow.toFixed(1)} bp` : '' })
   const second = !isVol ? null : kind === 'swaption' ? swaptionAcross(snaps[swvolId]?.quotes, hz.expiry) : { points: capSmile(result?.surface_rows, hz.expiry), expiry: null }
-  const noPoints = <div data-testid="scn-no-points" style={{ padding: '36px 0', color: 'var(--text-dim)', fontSize: 12.5 }}>{isVol ? `No vol surface is saved for ${ccy}: the vol the trade priced at is shocked flat.` : cur.sub}</div>
+  // where the trade itself stands on the second chart: a cap's or a floor's strike less the at-the-money rate, a
+  // swaption's own swap tenor (a collar has two strikes, and is not marked)
+  const strikeOf = kind === 'cap' ? payload.cap_rate : kind === 'floor' ? payload.floor_rate : null
+  const own2 = kind === 'swaption' ? { t: hz.tenor, label: 'THE SWAP' }
+    : strikeOf != null && Number.isFinite(Number(result?.atm_forward)) ? { t: (Number(strikeOf) - Number(result.atm_forward)) * 1e4, label: 'THE STRIKE' } : null
+  const noPoints = <div data-testid="scn-no-points" style={{ padding: '36px 0', color: 'var(--text-dim)', fontSize: 12.5 }}>{isVol ? `No vol surface could be read for ${ccy}: the vol the trade priced at is shocked flat.` : `No saved quotes could be read for ${cur.name}: the curve is shocked flat.`}</div>
+  const legend = (
+    <CurveLegend testId="scn-legend" items={[
+      { mark: 'dash', color: 'var(--text-dim)', text: isShocked(shock) ? (isVol ? 'ATM AT THE MARKET' : 'AT THE MARKET') : (isVol ? 'ATM' : 'THE QUOTES') },
+      isShocked(shock) && { mark: 'line', color: cur.color, text: 'SHOCKED' },
+      isVol && volNow != null && { mark: 'dot', color: 'var(--amber)', text: 'THE VOL THIS TRADE PRICED AT' },
+    ]} />
+  )
   const term = cur.points.length
     ? <ScenarioCurve points={cur.points} own={shock.own} flat={shock.flat} shockAt={(p) => shockAtPoint(shock, p)} onPoint={(id, v) => setOwn(id, v)} color={cur.color}
-        scale={isVol ? 1 : 100} bound={cur.bound} step={cur.step} decimals={isVol ? 1 : 2} width={isVol && second?.points.length ? 460 : 880}
+        scale={isVol ? 1 : 100} bound={cur.bound} step={isVol ? 0.5 : 1} decimals={isVol ? 1 : 2} width={isVol && second?.points.length ? 460 : 880} height={isVol ? 220 : 250}
         mark={Number.isFinite(isVol ? hz.expiry : hz.through) ? { t: isVol ? hz.expiry : hz.through, label: isVol ? (kind === 'swaption' ? 'EXPIRES' : 'MATURES') : 'MATURES' } : null}
-        dot={isVol ? dotOf(tradeVol) : null} testId="scn-chart" ariaLabel={isVol ? 'The vol surface by expiry: market against scenario' : 'The curve\'s quoted rates: market against scenario'} />
+        dot={isVol ? dotOf(hz.expiry) : null} testId="scn-chart" ariaLabel={isVol ? 'The vol surface by expiry: market against scenario' : 'The curve\'s quoted rates: market against scenario'} />
     : noPoints
   const selected = isVol && second?.points.length ? (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: '12px 20px' }}>
-      <div><div style={{ ...lbl, margin: '2px 0 4px' }}>TERM STRUCTURE</div>{term}</div>
-      <div>
-        <div style={{ ...lbl, margin: '2px 0 4px' }}>{kind === 'swaption' ? `ACROSS SWAP TENORS · EXPIRY ${second.expiry}` : 'SMILE AT MATURITY · STRIKE − ATM, BP'}</div>
-        <ScenarioCurve points={second.points} own={{}} flat={volShift} shockAt={() => volShift} onPoint={() => {}} disabled color={cur.color} scale={1} bound={cur.bound} decimals={1} width={460}
-          testId="scn-chart-second" ariaLabel="The vol surface at the trade's expiry: market against scenario" />
+      <div style={{ minWidth: 0 }}><div style={PLOT_TITLE}>TERM STRUCTURE</div>{term}{legend}</div>
+      <div style={{ minWidth: 0 }}>
+        <div style={PLOT_TITLE}>{kind === 'swaption' ? `ACROSS SWAP TENORS · EXPIRY ${second.expiry}` : 'SMILE AT MATURITY · STRIKE − ATM, BP'}</div>
+        <ScenarioCurve points={second.points} own={{}} flat={volShift} shockAt={() => volShift} onPoint={() => {}} disabled color={cur.color} scale={1} bound={cur.bound} decimals={1} width={460} height={220}
+          mark={own2} dot={own2 ? dotOf(own2.t, false) : null} testId="scn-chart-second" ariaLabel="The vol surface at the trade's expiry: market against scenario" />
+        <CurveLegend items={[{ mark: 'dash', color: 'var(--text-dim)', text: volShift ? 'AT THE MARKET' : (kind === 'swaption' ? 'ATM' : 'THE SMILE') }, volShift ? { mark: 'line', color: cur.color, text: 'SHOCKED' } : null,
+          own2 && volNow != null ? { mark: 'dot', color: 'var(--amber)', text: 'THIS TRADE' } : null]} />
       </div>
     </div>
-  ) : term
+  ) : <div style={{ minWidth: 0 }}>{term}{cur.points.length > 0 && legend}</div>
 
   const cols = `150px repeat(${factors.length + (factors.length > 1 ? 2 : 1)}, minmax(0, 1fr))`
   const rRow = { display: 'grid', gridTemplateColumns: cols, alignItems: 'stretch', padding: '0 12px 0 16px', minWidth: 520 }
@@ -236,7 +254,7 @@ export default function RatesScenario({ product, productKey, state, result, acti
       </div>
       <div style={{ ...rRow, paddingTop: 7 }} data-testid="scn-shock">
         <div style={{ ...rName, padding: '0 8px 7px 0' }}>SHOCK</div>
-        {factors.map(c => <div key={c.key} style={rSmall}>{c.kind === 'vol' && isShocked(shocks.vol) ? `${plus(volShift, 2)}bp at the trade` : shockSaid(shocks[c.key], c.unit)}</div>)}
+        {factors.map(c => <div key={c.key} style={rSmall}>{c.kind === 'vol' && isShocked(shocks.vol) ? `${plus(volShift, 2)} bp at the trade` : shockSaid(shocks[c.key], ` ${c.unit}`)}</div>)}
         {factors.length > 1 && <div style={rSmall}>—</div>}<div style={{ ...rSmall, ...rTot }}>—</div>
       </div>
       <div style={rRow} data-testid="scn-change">
@@ -245,7 +263,7 @@ export default function RatesScenario({ product, productKey, state, result, acti
         {factors.length > 1 && money(cross, 'cross')}{money(total, 'total')}
       </div>
       <div style={rRow} data-testid="scn-first">
-        <div style={{ ...rName, padding: '0 8px 7px 0' }}>SENSITIVITY × SHOCK<Note inline>IR01 × the curve's flat shock{option ? ', VEGA × the vol shock at the trade' : ''}: the ticket's own risk figures. It is the change in value to first order, so the line above differs from it by what the trade's curvature adds. A curve shocked point by point has no single figure to multiply, and shows a dash.</Note></div>
+        <div style={{ ...rName, padding: '0 8px 7px 0' }}>SENSITIVITY × SHOCK<Note inline>IR01 × the curve's flat shock{option ? ', VEGA × the vol shock at the trade' : ''}: the ticket's own risk figures, to first order. The line above is the engine's price on the curve built again from the moved quotes. The two differ by the trade's curvature, by the discounting, which the ticket's IR01 holds still, and because a quote moved a basis point is not a zero rate moved a basis point. A curve shocked point by point has no single figure to multiply, and shows a dash.</Note></div>
         {factors.map((c, i) => money(firsts[i], c.kind === 'vol' ? 'vol' : c.key, rSmall))}
         {factors.length > 1 && <div style={rSmall}>—</div>}{money(firstTotal, 'total', rSmall)}
       </div>
@@ -282,8 +300,9 @@ export default function RatesScenario({ product, productKey, state, result, acti
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
               <span style={{ ...secHdr, margin: 0 }}>{chartTitle}</span><Note inline>{chartSays}</Note>
               <span data-testid="scn-engine" style={{ fontSize: 11, color: 'var(--text-dim)', border: '1px solid var(--border-hi)', borderRadius: 'var(--r-1)', padding: '1px 7px', letterSpacing: '0.06em' }}>{busy ? 'REPRICING…' : 'FULL REVALUATION'}</span>
-              <Note inline testId="scn-banner">Scenario: every figure is the pricing engine's own on the moved market, the same engine that prices the ticket. With nothing shocked it is the ticket's value. Nothing is saved.</Note>
+              <Note inline testId="scn-banner">Scenario: every figure is the pricing engine's own on the moved market, the same engine that prices the ticket. {booked ? 'A booked trade\'s scenario is of its terms as the ticket shows them, priced afresh; the value in the footer is the trade revalued as booked, and the two may differ.' : 'With nothing shocked it is the ticket\'s value.'} Nothing is saved.</Note>
             </div>
+            {stale && <div data-testid="scn-stale" style={{ fontSize: 12, color: 'var(--amber)', padding: '0 0 6px' }}>The terms have changed since the ticket was priced: this is the scenario of the terms as priced. Price the ticket again.</div>}
             {selected}
             {error && <div data-testid="scn-error" style={{ fontSize: 12, color: 'var(--amber)', padding: '4px 0 6px' }}>The engine could not price this scenario: {error}</div>}
           </div>
