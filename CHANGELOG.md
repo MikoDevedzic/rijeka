@@ -10,25 +10,35 @@ under a hash that changes every day and belongs to no account, so they could not
 how long an account took from sign-up to its first trade, or what it used. The API now counts that per account,
 and Configurations → SYSTEM shows it to the admin role.
 
-- **What is recorded.** For each account and day (UTC): that it was active, and which of a fixed list of things
-  it did (priced, ran a scenario or an XVA simulation, booked, confirmed, opened the risk, P&L, IPV or collateral
-  views, saved market data, used the assistant, sent a message, read the methodology), how many times, and the
-  first and last time. Nothing of a request is read: no body, no query, no id. It is counted in one place, outside
-  every route, after the request was answered, for the account the token check verified; the request never waits
-  for it (counters in memory, written at most every 30 seconds).
+- **Only what a person did on purpose.** The app reads the same data by itself (the blotter refreshes every
+  minute, the chat asks every few seconds, the home page reads the risk report), and a ticket prices as it is
+  typed; none of that is recorded. The app says two things to the API when signed in: a page was opened (kept as
+  the kind of page, never its address) and PRICE was pressed in a trade window (kept as the ticket's asset class).
+  The API records the rest when it carries out a request whose route alone is a deliberate act: a scenario or an
+  XVA run, a booking, a confirmation, an amendment or termination, a verification, an IPV or P&L run or sign-off,
+  a save of limits, collateral, market data or a counterparty, a counterparty credit run, a question to the
+  assistant, a message or a trade card. No body, no query and no id is read, and the request never waits
+  (counters in memory, written at most every 30 seconds).
+- **What is kept**: for each account and day (UTC), the kind, one word of detail from a fixed list, how many
+  times, and the first and last time. The row belongs to its account and is deleted with it.
 - **Nothing is recorded until its table is applied** (`docs/migrations/2026-11-16_activity.sql`, one new table,
   row-level security on, read and written by the API alone). Until then the view shows what the trading tables
   already hold: bookings and confirmations.
-- **The Adoption panel** (admin role): of all accounts, how many came back on a later day, priced, booked, ran XVA
-  and confirmed, and the median time from sign-up to the first booked trade; the last eight weeks of accounts
-  created, active, and active from an earlier week; each week's new accounts one, two and three weeks on; what was
-  used in the last 28 days by accounts and times; and each account's own row. Test accounts and the platform's
-  admins are not counted as accounts.
-- **Said where a visitor reads it.** The Privacy Notice (version 1.2) has a paragraph on activity by account, and
-  the sign-up page says that Rijeka counts which features an account uses, never what is entered.
-- `GET /api/ops/health` lists the table under `schema` as `activity`. Unit tests hold the list (each line names a
-  route the API has), the buffer and the figures; an integration test holds that an answered request is counted
-  for its account and a refused one is not, and that the read-out is the admin's; a journey holds the panel and
+- **The Adoption panel** (admin role). Of all accounts: how many used the desk at all, came back (active 24 hours
+  or more after first being active, so an evening that crosses midnight UTC is one visit), pressed PRICE, booked,
+  ran XVA and confirmed, and the median time from sign-up to the first booked trade. The last eight weeks of
+  accounts created, active, and active that were first active in an earlier week. Each week's new accounts one,
+  two and three weeks on. What was used in the last 28 days, by accounts and by days (not by times: one press can
+  be several requests). Each account's own row. What says "ever" is read from the whole record, not from a window
+  of days. Test accounts and the platform's admins are not counted as accounts. A read that fails is named on the
+  panel, so a short figure is not taken for none.
+- **Said where a visitor reads it.** The Privacy Notice (version 1.2) has a paragraph on activity by account that
+  names every kind, and the sign-up page says that Rijeka counts which features an account uses, never what is
+  entered.
+- `GET /api/ops/health` lists the table under `schema` as `activity`. Unit tests hold the lists (each line names a
+  route the API has; an address that is no page of the app is dropped), the buffer and the figures; integration
+  tests hold that a deliberate act is counted for its account and nothing else is, that a row goes with its
+  account, and that the read-out is the admin's; journeys hold what the app says and does not say, the panel, and
   that a trader is shown none.
 
 ---

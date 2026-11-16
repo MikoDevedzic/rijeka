@@ -87,8 +87,6 @@ export default function SystemPage() {
           </>)}
         </section>
 
-        <AdoptionPanel role={role} />
-
         <section className="pnl-panel" style={{ maxWidth: 980 }}>
           <header><span>BROWSER ERRORS · LAST 24 HOURS</span><span className="pnl-sub">{ce ? `${ce.last_24h} reports · ${ce.distinct} distinct · ${ce.kept} kept in memory` : 'not reported by this API'}</span></header>
           {ce && ce.top.length === 0 && <div className="pnl-empty">No uncaught errors reported from any browser in the last 24 hours.</div>}
@@ -109,6 +107,7 @@ export default function SystemPage() {
           <div className="pnl-foot">Reported by the app itself (window errors, unhandled promises, React boundaries), with tokens stripped before they are kept. The log is in the API's memory: the last 200 reports, at most 60 a minute per address, and it empties on a restart. Enough to know a page is breaking for someone before they write in.</div>
         </section>
       </>)}
+      <AdoptionPanel role={role} />
     </div>
   )
 }

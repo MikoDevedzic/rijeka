@@ -1,0 +1,47 @@
+{
+  "today": "2026-11-18", "recording": true, "tracking_since": "2026-11-03", "accounts": 3, "feature_days": 28, "rows_total": 3,
+  "unread": [], "dropped": 0,
+  "funnel": [
+    {"step": "created", "accounts": 3, "share": 1},
+    {"step": "used", "accounts": 3, "share": 1},
+    {"step": "returned", "accounts": 2, "share": 0.6667},
+    {"step": "priced", "accounts": 2, "share": 0.6667},
+    {"step": "booked", "accounts": 2, "share": 0.6667},
+    {"step": "xva", "accounts": 1, "share": 0.3333},
+    {"step": "confirmed", "accounts": 1, "share": 0.3333}
+  ],
+  "first_trade": {"accounts": 2, "median_hours": 25.5},
+  "weeks": [
+    {"week": "2026-09-28", "created": 0, "active": 0, "returning": 0},
+    {"week": "2026-10-05", "created": 0, "active": 0, "returning": 0},
+    {"week": "2026-10-12", "created": 0, "active": 0, "returning": 0},
+    {"week": "2026-10-19", "created": 0, "active": 0, "returning": 0},
+    {"week": "2026-10-26", "created": 0, "active": 0, "returning": 0},
+    {"week": "2026-11-02", "created": 1, "active": 1, "returning": 0},
+    {"week": "2026-11-09", "created": 1, "active": 2, "returning": 1},
+    {"week": "2026-11-16", "created": 1, "active": 2, "returning": 1}
+  ],
+  "cohorts": [
+    {"week": "2026-10-12", "accounts": 0, "active_after": [0, 0, 0]},
+    {"week": "2026-10-19", "accounts": 0, "active_after": [0, 0, 0]},
+    {"week": "2026-10-26", "accounts": 0, "active_after": [0, 0, 0]},
+    {"week": "2026-11-02", "accounts": 1, "active_after": [1, 1, null]},
+    {"week": "2026-11-09", "accounts": 1, "active_after": [0, null, null]},
+    {"week": "2026-11-16", "accounts": 1, "active_after": [null, null, null]}
+  ],
+  "features": [
+    {"event": "view", "detail": "blotter", "accounts": 3, "days": 5},
+    {"event": "booked", "detail": "", "accounts": 2, "days": 2},
+    {"event": "priced", "detail": "crypto", "accounts": 1, "days": 1},
+    {"event": "priced", "detail": "rates", "accounts": 1, "days": 1},
+    {"event": "view", "detail": "market risk", "accounts": 1, "days": 1},
+    {"event": "xva", "detail": "rates", "accounts": 1, "days": 1},
+    {"event": "confirmed", "detail": "", "accounts": 1, "days": 1}
+  ],
+  "rows": [
+    {"email": "a.very.long.account.name.that.must.not.push.the.table@example-of-a-long-domain.com", "firm": "", "created": "2026-11-17", "first_active": "2026-11-17", "last_active": "2026-11-18", "days_active": 2, "priced_days": 0, "booked": 0, "xva_days": 0, "confirmed": 0},
+    {"email": "one@example.com", "firm": "ONE CAPITAL", "created": "2026-11-03", "first_active": "2026-11-03", "last_active": "2026-11-17", "days_active": 4, "priced_days": 1, "booked": 2, "xva_days": 1, "confirmed": 1},
+    {"email": "two@example.com", "firm": "TWO", "created": "2026-11-10", "first_active": "2026-11-10", "last_active": "2026-11-12", "days_active": 2, "priced_days": 1, "booked": 1, "xva_days": 0, "confirmed": 0}
+  ],
+  "note": "Accounts are sign-ups, without test accounts and the platform's admins."
+}

@@ -113,12 +113,12 @@ def _key_for(jwks: dict, kid: Optional[str]) -> Optional[PyJWK]:
     return None
 
 
-async def optional_token(authorization: Optional[str] = Header(None)) -> Optional[dict]:
+async def optional_token(authorization: Optional[str] = Header(None), request: Request = None) -> Optional[dict]:
     """None when no Authorization header is present; otherwise the verified user (401 on a bad token).
     For routes that accept either the cron secret or a signed-in user."""
     if not authorization:
         return None
-    return await verify_token(authorization)
+    return await verify_token(authorization, request)
 
 
 async def verify_token(authorization: Optional[str] = Header(None), request: Request = None) -> dict:

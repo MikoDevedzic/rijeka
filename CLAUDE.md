@@ -207,3 +207,10 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - Before the app does anything by itself (reloads, opens a window), list what the user has on screen that it
   would cover or throw away, from every surface that outlives a page: the trade windows, the messenger and what
   is typed in it. The reload looked only at trade windows; the messenger opened over a ticket's right side.
+- A count read off a route counts everything that calls the route. The first activity record took any answered
+  request for use: a tab left open was an active account, the home page was the Risk page, and a keystroke was a
+  price. Before a figure is given a name, list every caller of what it is read from (pages, timers, debounced
+  fields), and record what a person did where only that is known: here, in the browser.
+- A figure that will be shown as evidence has each of its words defined beside the code that computes it ("active",
+  "came back", "ever"), with the case that would flatter it tested: a visit that crosses midnight, a window of days
+  cutting what says "ever", a read that fails and shows none.

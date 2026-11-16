@@ -21,6 +21,7 @@
 
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react'
 import { usePhone, useStackedTables } from '../../lib/phone'
+import { priced } from '../../lib/activity'
 import { popOutTicket, isSoloTicket } from '../../lib/windows'
 import './styles.css'
 
@@ -1479,7 +1480,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         result={isCurrency ? fxQuote : result}
         state={state}
         pricing={pricing || !!awaitingPar}
-        onPrice={isCurrency && !viewMode ? () => fxRef.current?.price() : handlePrice}   // a booked currency trade has no ticket panel: PRICE revalues it as booked
+        onPrice={() => { priced(assetClass); return isCurrency && !viewMode ? fxRef.current?.price() : handlePrice() }}   // a booked currency trade has no ticket panel: PRICE revalues it as booked
         onBook={isCurrency ? handleBookCurrency : handleBook}
         booking={booking}
         bookErr={bookErr}

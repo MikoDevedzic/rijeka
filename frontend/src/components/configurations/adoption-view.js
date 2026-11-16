@@ -1,17 +1,17 @@
 // configurations/adoption-view.js — the words and figures of the Adoption panel (GET /api/ops/adoption), kept
 // out of the component so they are tested by themselves.
 const STEP = {
-  created: 'CREATED', returned: 'CAME BACK', priced: 'PRICED', booked: 'BOOKED', xva: 'RAN XVA', confirmed: 'CONFIRMED',
+  created: 'CREATED', used: 'USED IT', returned: 'CAME BACK', priced: 'PRICED', booked: 'BOOKED', xva: 'RAN XVA', confirmed: 'CONFIRMED',
 }
 const STEP_SAYS = {
-  created: 'accounts signed up', returned: 'active on a later day than the one they signed up',
-  priced: 'priced a trade', booked: 'booked a trade', xva: 'ran an XVA simulation', confirmed: 'confirmed a trade',
+  created: 'accounts signed up', used: 'did anything deliberate at all: opened a page, priced, booked',
+  returned: 'active 24 hours or more after the first time they were active',
+  priced: 'pressed PRICE in a trade window', booked: 'booked a trade', xva: 'ran an XVA simulation', confirmed: 'confirmed a trade',
 }
 const EVENT = {
-  priced: 'PRICED', scenario: 'SCENARIO', xva: 'XVA', capital: 'CAPITAL', booked: 'BOOKED', confirmed: 'CONFIRMED',
-  lifecycle: 'AMEND · TERMINATE', verified: 'VERIFIED A RECORD', risk: 'RISK', pnl: 'P&L', ipv: 'IPV', collateral: 'COLLATERAL',
-  cashflows: 'CASHFLOWS', market_data: 'MARKET DATA SAVED', static_data: 'COUNTERPARTIES · ENTITIES', assistant: 'PROMETHEUS',
-  chat: 'CHAT', methodology: 'METHODOLOGY',
+  view: 'OPENED', priced: 'PRICED', scenario: 'SCENARIO', xva: 'XVA', booked: 'BOOKED', confirmed: 'CONFIRMED',
+  lifecycle: 'AMENDED · TERMINATED', verified: 'VERIFIED A RECORD', risk: 'RISK', pnl: 'P&L', ipv: 'IPV',
+  saved: 'SAVED', assistant: 'PROMETHEUS', chat: 'CHAT',
 }
 
 export const stepLabel = (step) => STEP[step] || String(step || '').toUpperCase()
@@ -46,12 +46,19 @@ export function headline(a) {
   if (!a) return ''
   const n = `${a.accounts} account${a.accounts === 1 ? '' : 's'}`
   if (!a.recording) return `${n} · bookings and confirmations only: the activity table is not applied`
-  return `${n} · activity recorded since ${day(a.tracking_since)}`
+  return a.tracking_since ? `${n} · activity recorded since ${day(a.tracking_since)}` : `${n} · activity is recorded from now: nothing yet`
 }
 
-/** A cohort's cell: how many of its accounts were active that many weeks later; blank for a week that has not
- *  begun and for a week with no new accounts. */
+/** What could not be read just now, as a sentence; '' when everything was. */
+export function unreadSays(a) {
+  const u = a?.unread || []
+  return u.length ? `Not read just now: ${u.join(', ')}. The figures below are short by that, not zero; reload to ask again.` : ''
+}
+
+/** A cohort's cell: how many of its accounts were active that many weeks later. A week that has not begun is a dash
+ *  (a figure the page cannot have yet); a week in which no account was created has nothing to take a share of. */
 export function kept(n, of) {
-  if (n == null || !of) return ''                          // not begun, or a week in which no account was created
+  if (n == null) return '—'
+  if (!of) return ''
   return `${n} · ${Math.round((n / of) * 100)}%`
 }

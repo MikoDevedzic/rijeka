@@ -436,29 +436,38 @@ before it the trigger took the role from the client's sign-up metadata); provisi
 
 Usage counts (`api/routes/usage.py`, `usage_hits`) say how many visitors came, under a hash that changes every day
 and belongs to no account. They cannot say which accounts came back or what an account used. `activity/` can.
+Only what a person did on purpose is recorded: the app reads the same data by itself (the blotter's refresh, the
+chat's, the home page reading the risk report), and none of that is activity.
 
-- **Where it is counted.** One place, outside every route: `activity/recorder.py`, an ASGI layer added in `main.py`
-  inside CORS. The token check (`middleware/auth.py: verify_token`) leaves the verified account's id on the request;
-  when the response has gone out below 400 the recorder adds one to that account's counters for the day. No route
-  calls it and none can forget it. A request with no verified account is nobody's activity.
-- **What is counted.** Every answered signed-in request is `seen`. `activity/events.py` is a fixed list, by method
-  and path family, of what else a request is: priced, scenario, XVA, capital, booked, confirmed, lifecycle, verified,
-  the risk, P&L, IPV, collateral and cashflow views, market data and static data saved, the assistant, chat, the
-  methodology. The detail is one of a fixed list of words (rates, currency, crypto ...). Nothing of the request is
-  read: not its body, not its query, not an id in its path. The operator's, the public and the schedulers' routes
-  (`/api/ops`, `/api/public`, `/tick`) are no account's activity. A unit test fails when a line of the list names a
-  route the API no longer has.
+- **From the browser, what only it knows.** `lib/activity.js` says two things to `POST /api/me/activity` (signed in):
+  a page was opened (`App.jsx`, on a change of route) and PRICE was pressed in a trade window (`TradeWindow.jsx`; a
+  ticket also prices as it is typed, which is not said). The API reduces what it is told to its own words
+  (`activity/events.py: told`): a page's address to the page's family (blotter, market risk, methodology ...), a
+  ticket to its asset class (rates, fx, crypto). Anything else is answered and dropped; the address is not kept.
+- **From the API, what a route alone makes plain.** `activity/recorder.py`, an ASGI layer added in `main.py` inside
+  CORS and outside every route: the token check (`middleware/auth.py: verify_token`) leaves the verified account's
+  id on the request, and when the response has gone out below 400 the recorder asks `activity/events.py: classify`
+  whether the method and path are a deliberate act: a scenario or an XVA run, a booking, a confirmation, an
+  amendment or termination, a verification, an IPV or P&L run or sign-off, limits, collateral, market data or a
+  counterparty saved, a counterparty credit run, the assistant asked, a message or a trade card sent. No read (GET)
+  is on the list. Nothing of the request is read: not its body, not its query, not an id in its path. A unit test
+  fails when a line of the list names a route the API no longer has.
 - **Where it is kept.** `activity_daily` (`docs/migrations/2026-11-16_activity.sql`): one row per account, day
-  (UTC), event and detail, with the count and the first and last time. Counters are held in memory
-  (`activity/store.py`) and written in one statement at most every 30 seconds, off the request path, and when the
-  API stops; a process that dies loses at most that. **Without the table nothing is recorded**: the flush drops what
-  it holds. The presence check never remembers a no. Row-level security is on with no policy; only the API reads
-  and writes it.
-- **Who reads it.** `GET /api/ops/adoption`, admin role, shown on Configurations → SYSTEM (`AdoptionPanel.jsx`):
-  the funnel, eight weeks of created, active and returning accounts, each week's new accounts one to three weeks
-  on, what was used in the last 28 days, and each account's row. `activity/adoption.py` is the pure function that
-  makes those figures. Bookings and confirmations are read from `trades` and `trade_events` themselves, never from
-  the counters, so they go back to the first trade; test accounts and the platform's admins are not accounts.
+  (UTC), event and detail, with the count and the first and last time. The row refers to `auth.users` and is deleted
+  with its account. Counters are held in memory (`activity/store.py`) and written at most every 30 seconds, off the
+  request path, and when the API stops; a process that dies loses at most that. Rows are written in key order (two
+  API processes never lock crosswise); a batch refused as one statement is written again row by row, so one row that
+  cannot be written costs that row; what is lost is counted and shown. **Without the table nothing is recorded**:
+  the flush drops what it holds. The presence check never remembers a no. Row-level security is on with no policy;
+  only the API reads and writes it.
+- **Who reads it.** `GET /api/ops/adoption`, admin role, shown on Configurations → SYSTEM (`AdoptionPanel.jsx`).
+  `activity/adoption.py` is the pure function that makes the figures and says what each word means: an account is
+  active on a day it did something deliberate; it came back when it was active 24 hours or more after it was first
+  active; what says "ever" is read from the whole record, never from a window of days; what was used is counted in
+  accounts and in days, not in times (one press can be several requests). Bookings and confirmations are read from
+  `trades` and `trade_events` themselves, never from the counters, so they go back to the first trade. Test accounts
+  and the platform's admins are not accounts. A read that fails is named in the body (`unread`) and on the panel,
+  so a short figure is not taken for none.
 
 ## Data flow of a trade
 

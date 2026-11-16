@@ -4,6 +4,7 @@ import ErrorBoundary    from './components/ErrorBoundary'
 import Loading          from './components/common/Loading'
 import NewVersionBar from './components/common/NewVersionBar'
 import { hit } from './lib/usage'
+import { signedIn, viewed } from './lib/activity'
 import { useModulesStore, ROUTE_MODULES } from './store/useModulesStore'
 import { useAuthStore } from './store/useAuthStore'
 import AuthGuard        from './components/auth/AuthGuard'
@@ -167,6 +168,10 @@ function InLayout({ children }) {
 function PageBoundary({ children }) {
   const { pathname } = useLocation()
   useEffect(() => { hit('view', pathname) }, [pathname])
+  // for a signed-in account, that this page was opened (lib/activity.js): the visitor count above belongs to no account
+  const account = useAuthStore(st => st.session?.user?.id)
+  const token = useAuthStore(st => st.session?.access_token)
+  useEffect(() => { signedIn(token); viewed(pathname, account) }, [pathname, account, token])
   return <ErrorBoundary scope="page" resetKey={pathname}>{children}</ErrorBoundary>
 }
 
