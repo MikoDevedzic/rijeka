@@ -361,9 +361,14 @@ def test_a_digital_assets_workbooks_name_the_basis_as_the_screens_do():
     assert ws.cell(row=row, column=2).value == "=-B2*B1*(B7*EXP(-0.0001*B4)-B7)"
     engine = ws.cell(row=row, column=3).value
     assert isinstance(engine, (int, float)) and engine > 0                                           # a long forward gains when the basis widens
-    N, spot, T, df_btc = ws["B2"].value, ws["B1"].value, ws["B4"].value, ws["B7"].value
-    if all(isinstance(v, (int, float)) for v in (N, spot, T, df_btc)):                               # inputs that are values, not formulas
-        assert -N * spot * (df_btc * math.exp(-0.0001 * T) - df_btc) == pytest.approx(engine, rel=1e-9)
+    # the sheet's own inputs: notional and spot are typed, the time and the asset's factor are formulas of the dates
+    # and the funding rate above them, worked here as the sheet works them
+    N, spot, funding = ws["B2"].value, ws["B1"].value, ws["B6"].value
+    assert all(isinstance(v, (int, float)) for v in (N, spot, funding)), (N, spot, funding)
+    T = (ws["B3"].value.date() - mkt.valuation_date).days / 365 if hasattr(ws["B3"].value, "date") else None
+    assert T is not None and str(ws["B4"].value).startswith("=") and str(ws["B7"].value).upper().startswith("=EXP(")
+    df_btc = math.exp(-funding * T)
+    assert -N * spot * (df_btc * math.exp(-0.0001 * T) - df_btc) == pytest.approx(engine, rel=1e-9)
     # and it is the route's own definition of the figure: the negative of the asset-rate bump
     assert crybasis01(-engine) == pytest.approx(engine)
 

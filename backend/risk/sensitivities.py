@@ -24,7 +24,7 @@ cap surface is held by distance from the money (pricing/cap_floor.py lookup_cap_
 a higher forward reads a different volatility. The ticket's IR01 holds the volatility where it was, and is
 larger or smaller by that. For a rate curve a point is the move
 ipv.inputs.bumped makes; on a surface the ladder moves a tenor's rows together, as its buckets do, where the
-price verification moves each row. A funding level's FUND01 has one quote and no points."""
+price verification moves each row. A funding level's sensitivity (kept as fund01, shown as its negative CRYBASIS01) has one quote and no points."""
 from __future__ import annotations
 
 import logging
@@ -93,12 +93,12 @@ def _tilted(quotes: list[dict], lo: float, hi: float, bp: float) -> list[dict]:
 
 
 def _carry_points(trade, mkt: Market, bumped: Market, bp: float) -> Market:
-    """FUND01 when the forward is quoted: on a pair priced on forward points the stored funding rate does not enter
+    """The asset-rate bump (fund01; the desk shows its negative, CRYBASIS01) when the forward is quoted: on a pair priced on forward points the stored funding rate does not enter
     the value, the rate the points imply does. +1bp on the funding rate is then +1bp on that implied rate at every
-    tenor, which lowers each outright by F·T·1bp: the points are moved by that, so the ladder's FUND01 is the
+    tenor, which lowers each outright by F·T·1bp: the points are moved by that, so the ladder's figure is the
     ticket's out to the last quoted tenor. Beyond it the pricer carries parity plus the last quoted basis as a
     rate (pricing/forward_points.py, since 0.22.0), so the bump of the last tenor carries through: until then the
-    points were held flat there and a longer trade's FUND01 read low (a third low at three years; Emmy, 9 Nov 2026).
+    points were held flat there and a longer trade's figure read low (a third low at three years; Emmy, 9 Nov 2026).
     Without points the bumped market is returned as it is."""
     pc = points_curve(trade)
     pts = mkt.quotes(pc) if pc else None
@@ -115,7 +115,7 @@ def trade_ladder(db: Session, user: dict, trade, d: date, mkt: Market, valuer: V
     base = valuer(trade, d, mkt)
     kr01: dict[str, dict[str, float]] = {}
     vega: dict[str, dict[str, float]] = {}
-    fund01: dict[str, dict[str, float]] = {}          # a digital asset's funding rate: the desk's FUND01, kept out of IR01
+    fund01: dict[str, dict[str, float]] = {}          # a digital asset's funding rate (+1bp): kept out of IR01; the desk shows its negative, CRYBASIS01
     points: dict[str, dict[str, dict[str, float]]] = {"kr01": {}, "vega": {}}      # by (curve, quoted tenor): what each bucket is made of
     for cid in trade_curves(trade):
         q = mkt.quotes(cid)
@@ -174,7 +174,7 @@ def trade_ladder(db: Session, user: dict, trade, d: date, mkt: Market, valuer: V
             "book": trade.book or "UNASSIGNED", "ccy": base["ccy"], "npv": base["npv"], "kr01": kr01, "spot01": spot01, "vega": vega, "fund01": fund01,
             "points": points,
             # CRYBASIS01: +1 bp a year on the forward basis at a fixed spot and USD curve is −1 bp on the funding rate,
-            # so each bucket is the negative of its FUND01 bucket (the FUND01 rows themselves are unchanged)
+            # so each bucket is the negative of its fund01 bucket (the fund01 rows themselves are unchanged)
             "crybasis01": {cid: {b: 0.0 - v for b, v in buckets.items()} for cid, buckets in fund01.items()},
             "ir01": sum(sum(b.values()) for b in kr01.values()), "vega_total": sum(sum(b.values()) for b in vega.values()),
             "fund01_total": sum(sum(b.values()) for b in fund01.values()),

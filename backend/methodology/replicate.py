@@ -696,7 +696,7 @@ def _option_workbook(mkt: Market, case: dict):
                                       ("vega", "NPV(σ + 0.01) − NPV", "European!B14", "repriced; the analytic N·DF·F·n(d₁)·√T_e·0.01 on B13", "#,##0.00"),
                                       ("IR01", "NPV(F·e^(1bp·T_s), DF·e^(−1bp·T_s)) − NPV", "European!B15", f"+1bp on the {quote} curve: the forward up by the carry, the discount factor down", "#,##0.0000"),
                                       (fund, "−[NPV(F·e^(−1bp·T_s)) − NPV]" if crypto else "NPV(F·e^(−1bp·T_s)) − NPV", "European!B16",
-                                       "+1bp a year on the forward basis: the negative of the funding rate +1bp" if crypto else "+1bp on the base rate: the forward down by the carry", "#,##0.0000")]:
+                                       "+1bp a year on the forward basis, to first order: the negative of the funding rate +1bp, as the engine reports it" if crypto else "+1bp on the base rate: the forward down by the carry", "#,##0.0000")]:
         W.derive(wb, sym, notn, ref, note, fmt)
     # Scenario: NPV against spot, by the same closed form, with the payoff at expiry beside it
     sc = wb.create_sheet("Scenario")

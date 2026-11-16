@@ -34,7 +34,7 @@ one number.
 - **The walkthrough film is a script in the repository** (`frontend/e2e/film/`, `npm run film`): a Playwright
   recording of the desk on the local stack, with its Prometheus, methodology and Excel scenes. It had sat in an
   open pull request since 13 November. The journeys ignore it. The stack can be given an assistant key for one run
-  (`RIJEKA_STACK_ASSISTANT_KEY`), which the journeys and CI never set.
+  (`RIJEKA_STACK_ASSISTANT_KEY`), which CI never sets and a journey run takes only from a shell that exports it.
 - **The lessons of 13 November are in the roles' definitions**: three health reads before the release move and
   the release branch checked after it; a red check read before it is re-run; a rule in a comment checked against
   every writer of the row; a screen tried against every shape of the answer it prints; a store fed by a stream
@@ -43,7 +43,8 @@ one number.
   failed by itself, since it took whether a table exists from an earlier test; it now says which way of counting
   it means and covers both.
 - **The legal pages' script writes the site's look.** `frontend/scripts/build_legal.mjs` still wrote the public
-  site's earlier look; its output is now the live terms and privacy pages byte for byte.
+  site's earlier look; its output is now the two pages in the site's folder byte for byte (the host rewrites their links when it serves
+  them).
 - The README's counts of tests are today's.
 
 ---
