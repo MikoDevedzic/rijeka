@@ -29,6 +29,11 @@
 .th-behind { color: var(--text-mute); } .th-behind.warn { color: var(--amber); }
 .th .dh-strip { overflow: hidden; }
 .th .dh-strip-right { min-width: 0; overflow: hidden; text-overflow: ellipsis; }      /* the snapshot's line gives way before it runs off the page */
+/* ... and before it does, the strip's farthest quotes give way to it: the line says whose data this is and how old,
+   which a visitor must be able to read whole; the 30Y point and the 5Y9Y vol are on the curves pages. */
+@media (max-width: 1599px) { .th .dh-strip > .dh-q-far { display: none; } }
+@media (max-width: 1439px) { .th .dh-strip > .dh-q-last { display: none; } }
+@media (max-width: 1339px) { .th .dh-strip { gap: 14px; } }
 .th-stand .dh-path { padding-top: 12px; }
 
 .th-needs .lf-list li { padding: 6px 0; font-size: 13px; }

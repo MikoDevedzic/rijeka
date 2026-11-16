@@ -129,7 +129,7 @@ class NullBackend:
     registry = None
     anchored = False
 
-    _NOTE = "No chain configured (RIJEKA_CHAIN_RPC unset): attestation stored off-chain only."
+    _NOTE = "No chain is configured on this instance: the attestation is stored off-chain only."      # printed on the certificate: no setting's name in it
 
     def confirm(self, trade_hash, party_a, party_b, sig_a, sig_b, wait=None) -> AnchorReceipt:
         return AnchorReceipt(False, 0, None, None, None, None, None, note=self._NOTE)

@@ -43,6 +43,24 @@
 }
 /* a trade window was opened or pressed after the messenger: it is in front (both are at 1000, and the messenger is drawn later) */
 .ms-window.ms-behind { z-index: 999; }
+/* The greeting card: small, above the corner button, never dragged or resized. It is the messenger's panel in
+   every way but its name: `.ms-window` is the window itself, which the card is not. */
+.ms-greet {
+  position: fixed; z-index: 1000; right: 28px; bottom: 96px; width: 280px; display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid rgb(var(--accent-hi-rgb) / 0.28); border-radius: 3px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.6); overflow: hidden; font-family: var(--sans); color: var(--text);
+}
+.ms-greet.ms-behind { z-index: 999; }
+@media (max-width: 599px) { .ms-greet { display: none; } }          /* a window narrowed to a phone's width after the greeting: the card would be most of it */
+.ms-greet-x { position: absolute; top: 4px; right: 4px; z-index: 1; }
+.ms-greet-row {
+  display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 8px 36px 8px 14px; background: none; border: none;
+  color: var(--text); font-family: var(--sans); font-size: 12.5px; text-align: left; cursor: pointer;
+}
+.ms-greet-row + .ms-greet-row { border-top: 1px solid var(--border); }
+.ms-greet-row:hover { background: var(--row-hover); box-shadow: inset 3px 0 0 var(--row-rule); }
+.ms-greet-name { font-weight: 700; color: var(--accent-hi); white-space: nowrap; }
+.ms-greet-says { color: var(--text-dim); white-space: nowrap; }
 .ms-window.ms-expanded { inset: 56px 16px 16px 16px; }
 .ms-window.ms-phone { inset: 0; border-radius: 0; border: none; }
 .ms-resize { position: absolute; top: 0; left: 0; width: 14px; height: 14px; cursor: nwse-resize; z-index: 2; }

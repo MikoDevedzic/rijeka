@@ -417,13 +417,26 @@ export function standing(marks, pending = 0) {
   const over = marks.filter(m => m.status === 'BREACH').length, near = marks.filter(m => m.status === 'WARN').length, clear = marks.length - over - near
   const words = []
   if (!marks.length) words.push(['mute', 'No limits set'])
-  else if (over) words.push(['over', `${over} limit${over > 1 ? 's' : ''} passed`])
+  else if (over) words.push(['over', `${over} limit${over > 1 ? 's' : ''} breached`])          // the Risk page's word for the same thing
   else words.push(['ok', 'Inside every limit'])
   if (near) words.push(['near', `${near} close`])
   if (marks.length && clear) words.push(['dim', `${clear} clear`])
-  if (pending) words.push(['hollow', `${pending} to confirm`])
-  const t = marks[0]
-  return { words, standardOnly: marks.length > 0 && marks.every(m => m.standard), tight: t ? `Closest: ${t.name}${t.side ? (t.side > 0 ? ', long' : ', short') : ''}, at ${t.pct}% of its limit.` : '' }
+  if (pending) words.push(['hollow', `${pending} pending`])        // trades awaiting a signature, the blotter's word; whose turn it is, NEEDS YOU says
+  const t = marks[0]                                               // the marks come most used first: past its limit it is not "closest" to it
+  const lead = t && t.status === 'BREACH' ? 'Furthest past' : 'Closest'
+  return { words, standardOnly: marks.length > 0 && marks.every(m => m.standard), tight: t ? `${lead}: ${t.name}${t.side ? (t.side > 0 ? ', long' : ', short') : ''}, at ${t.pct}% of its limit.` : '' }
+}
+
+// The line under the three items NEEDS YOU shows: how many more there are, and where they are when they are all in
+// one place. An item about a trade is on the blotter and one about a limit on the Risk page; a batch that has not
+// run or the chain's node is on neither, so a mixed rest is only counted.
+export function more(rest) {
+  const n = rest.length
+  if (!n) return ''
+  const where = (a) => a.chat || /^\/messenger/.test(a.href || '') ? 'in chat' : /^\/blotter/.test(a.href || '') ? 'on the blotter' : /^\/risk/.test(a.href || '') ? 'on the Risk page' : ''
+  const places = new Set(rest.map(where))
+  const one = places.size === 1 ? [...places][0] : ''
+  return `and ${n} more${one ? ' ' + one : ''}`
 }
 
 // ── P&L ──────────────────────────────────────────────────────────────────────

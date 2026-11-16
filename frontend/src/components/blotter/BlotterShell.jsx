@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useTradesStore, shortUti } from '../../store/useTradesStore'
 import useBookingStore from '../../store/useBookingStore'
 import { productLabel } from '../../lib/labels'
@@ -54,6 +55,7 @@ function tenor(t) {
 }
 
 const ASSET_CLASSES = ['CRYPTO', 'FX', 'RATES', 'CREDIT', 'EQUITY', 'COMMODITY']
+const LIVE_CLASSES  = ['CRYPTO', 'FX', 'RATES']          // what the desk trades today; the rest are on the roadmap
 // The filter offers the words the rows show: every status a trade's record can carry (backend/projections/
 // trade_projection.py), in the order of a trade's life. Until 0.44.6 it offered PENDING, LIVE, MATURED and CANCELLED,
 // while most rows said CONFIRMED: a visitor could not filter for what the blotter showed.
@@ -68,7 +70,29 @@ export default function BlotterShell() {
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [menu, setMenu] = useState(null)                // { x, y, id }: the right-click menu of one row
 
-  useEffect(() => { fetchTrades(); return startLive() }, [])   // live while the blotter is on screen
+  const [fetched, setFetched] = useState(false)       // the book has been read since this page opened (the store may hold an older read, or none)
+  useEffect(() => {                                    // live while the blotter is on screen
+    let on = true
+    Promise.resolve(fetchTrades()).finally(() => { if (on) setFetched(true) })
+    const off = startLive()
+    return () => { on = false; off?.() }
+  }, [])
+
+  // A link that names a trade (`/blotter?trade=<id>`, the home's NEEDS YOU items) opens that trade's ticket, once:
+  // the name is taken off the address as it is used, so a reload or the back button does not open it again. A
+  // trade the book does not hold (closed out of sight, another desk's) leaves the blotter as it is.
+  const [params, setParams] = useSearchParams()
+  const wanted = params.get('trade')
+  const answered = useRef(null)                        // the name already acted on: the address changes a render later than the book does
+  useEffect(() => {
+    if (!wanted) { answered.current = null; return }
+    if (answered.current === wanted) return
+    const t = trades.find(x => String(x.id) === wanted)
+    if (!t && !fetched) return                         // not in what the store holds yet: wait for this page's own read
+    answered.current = wanted
+    if (t) useBookingStore.getState().open(t)
+    setParams(p => { const n = new URLSearchParams(p); n.delete('trade'); return n }, { replace: true })
+  }, [wanted, trades, fetched, setParams])
 
   const sort = col => {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
@@ -92,6 +116,7 @@ export default function BlotterShell() {
 
   const count = (s) => trades.filter(t => t.status === s).length
   const live = count('LIVE'), pending = count('PENDING'), confirmed = count('CONFIRMED')
+  const closed = trades.length - live - pending - confirmed            // matured, terminated, cancelled: so that the summary adds up
   // a status no button names (DEFAULTED, or one a later release adds) gets a button while a trade carries it
   const statuses = [...STATUSES, ...[...new Set(trades.map(t => t.status).filter(Boolean))].filter(s => !STATUSES.includes(s)).sort()]
 
@@ -105,6 +130,9 @@ export default function BlotterShell() {
           <div className="bl-left-sub">Trade · Lifecycle · Positions</div>
         </div>
 
+        {/* the filters scroll by themselves: the summary and NEW TRADE under them are always in view (on a window
+            shorter than the rail they were below its fold, the button cut or gone) */}
+        <div className="bl-left-scroll">
         <div className="bl-section-lbl">STATUS</div>
         {['ALL', ...statuses].map(s => (
           <button
@@ -120,16 +148,23 @@ export default function BlotterShell() {
         ))}
 
         <div className="bl-section-lbl">ASSET CLASS</div>
-        {['ALL', ...ASSET_CLASSES].map(ac => (
-          <button
-            key={ac}
-            className={`bl-filter-btn ${filters.assetClass === ac || (!filters.assetClass && ac === 'ALL') ? 'active' : ''}`}
-            onClick={() => setFilter('assetClass', ac === 'ALL' ? '' : ac)}
-          >
-            {ac === 'ALL' ? 'ALL CLASSES' : ac}
-            {ASSET_FACTOR[ac] && <span className="bl-filter-dot" style={{ background: `var(${RISK_FACTORS[ASSET_FACTOR[ac]].token})` }} />}
-          </button>
-        ))}
+        {['ALL', ...ASSET_CLASSES].map(ac => {
+          // a class the desk does not trade yet is named, as the roadmap names it, and is not a filter: pressed, it
+          // answered "Your blotter is empty" beside a full blotter. A trade that carries one makes it a filter.
+          const next = ac !== 'ALL' && !LIVE_CLASSES.includes(ac) && !trades.some(t => t.asset_class === ac)
+          return (
+            <button
+              key={ac}
+              className={`bl-filter-btn ${filters.assetClass === ac || (!filters.assetClass && ac === 'ALL') ? 'active' : ''}${next ? ' next' : ''}`}
+              disabled={next} title={next ? 'On the roadmap: not traded on this desk yet' : undefined}
+              onClick={() => setFilter('assetClass', ac === 'ALL' ? '' : ac)}
+            >
+              {ac === 'ALL' ? 'ALL CLASSES' : ac}
+              {next ? <span className="bl-filter-next">ROADMAP</span>
+                : ASSET_FACTOR[ac] && <span className="bl-filter-dot" style={{ background: `var(${RISK_FACTORS[ASSET_FACTOR[ac]].token})` }} />}
+            </button>
+          )
+        })}
 
         <div className="bl-section-lbl">STORE</div>
         {['ALL', ...STORES].map(s => (
@@ -142,7 +177,7 @@ export default function BlotterShell() {
           </button>
         ))}
 
-        <div className="bl-left-spacer" />
+        </div>
 
         <div className="bl-summary-block">
           <div className="bl-sum-row">
@@ -161,6 +196,12 @@ export default function BlotterShell() {
             <span className="bl-sum-lbl">LIVE</span>
             <span className="bl-sum-val" style={{ color: live ? 'var(--up)' : undefined }}>{live}</span>
           </div>
+          {closed > 0 && (
+            <div className="bl-sum-row" title="Matured, terminated, cancelled and any other status: the rows above and this one add up to the total">
+              <span className="bl-sum-lbl">CLOSED</span>
+              <span className="bl-sum-val" data-testid="bl-sum-closed">{closed}</span>
+            </div>
+          )}
         </div>
 
         <button className="bl-new-trade-btn" aria-keyshortcuts={ariaKey('new-trade')} onClick={() => useBookingStore.getState().open()}>

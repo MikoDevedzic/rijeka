@@ -1199,7 +1199,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
                 : <span style={{ fontSize: 11, color: 'var(--amber)', border: '1px solid var(--amber-dim)', borderRadius: 'var(--r-1)', padding: '1px 7px', letterSpacing: '0.06em' }}>APPROXIMATION</span>}
               <Note inline testId="fx-scenario-banner">{engine
                 ? `Scenario: the shocks' effect on spot, the forward, the discount factor and the vol is worked out in the browser, as on every currency ticket, and the engine prices the option there (${quote.method || 'the style\'s own model'}). With no shock the figure is the ticket's own; nothing is saved.`
-                : 'Scenario: an approximation in the browser, to cents with no shock; nothing is saved.'}</Note>
+                : 'Scenario: an approximation in the browser. It is the engine\'s own closed form, worked here so the figures follow the drag, and with no shock it is the ticket\'s value to cents; the engine is not asked again. Nothing is saved.'}</Note>
             </div>
             {engineError && <div data-testid="fx-scn-error" style={{ fontSize: 12, color: 'var(--amber)', padding: '0 0 6px' }}>The engine could not price this scenario: {engineError}</div>}
             {!engineError && cellError && <div data-testid="fx-scn-cell-error" style={{ fontSize: 12, color: 'var(--amber)', padding: '0 0 6px' }}>The engine could not price every market of this scenario, and those figures are dashes: {cellError}</div>}

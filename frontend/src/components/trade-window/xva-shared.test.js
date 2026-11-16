@@ -11,7 +11,7 @@ vi.mock('../../lib/session', () => ({ getSessionMaybe: async () => null, getSess
 
 import {
   VA_KEYS, SPREAD_DEFAULTS, defaultSpreads, fmtMoney, fmtDollar, toCurve, flatSpread, spreadCurvePayload, imUsdValue, imUsdProblem, CRYPTO_GROUPS, IM_NOTE, RATES_MVA_NOTE, FX_MVA_NOTE, numOrNull,
-  buildVaRows, withFunding, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, collateralLabel, onChainSaving,
+  buildVaRows, withFunding, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, collateralLabel, onChainSaving, rateBp01, allInRate,
   XVA_VIEW_KEY, defaultXvaView, storedXvaView, HIDDEN_INPUT_DEFAULTS, spreadsAreDefault, assumptionsAreDefault,
   ratesModelWords, fxModelWords, runAssumesLine, NO_CALIBRATION_LINE, wrongWayLine, CREDIT_LINKS, regimesWords, regimesParts,
   stepWord, stepUnit, stepsShown,
@@ -91,7 +91,25 @@ describe('buildVaRows', () => {
     expect(buildVaRows(null).map(r => r.key)).toEqual(VA_KEYS)
     expect(VA_KEYS).toEqual(['npv', 'cva', 'dva', 'fca', 'fba', 'kva', 'mva', 'colva', 'all_in'])
   })
-  it('rates: bp on rate = VA / IR01, NPV shows the par rate, ALL-IN the all-in rate', () => {
+  it('one bp on the rate is notional × the run\'s annuity × 1 bp, and nothing when the run carries no annuity', () => {
+    expect(rateBp01(10_000_000, 4.53)).toBeCloseTo(4530, 9)
+    expect(rateBp01('10000000', '4.53')).toBeCloseTo(4530, 9)
+    for (const [n, a] of [[10_000_000, null], [10_000_000, 0], [0, 4.5], [NaN, 4.5], [10_000_000, undefined]]) expect(rateBp01(n, a)).toBeNull()
+  })
+  it('the all-in rate is par plus the adjustments as a running rate; a dash when either is unknown', () => {
+    const run = { cva: -8357, dva: 1200, fca: -900, fba: 300, kva: -373, mva: -1630, colva: 55 }
+    const bp01 = rateBp01(10_000_000, 4.53)
+    // (−8357 + 1200 − 900 + 300 − 373 − 1630) / 4530 = −2.1545 bp; ColVA is not in the rate
+    expect(allInRate(3.48, run, bp01)).toBeCloseTo(3.48 - 0.021545, 6)
+    expect(allInRate(3.48, run, null)).toBeNaN()
+    expect(allInRate(NaN, run, bp01)).toBeNaN()
+    expect(allInRate(3.48, null, bp01)).toBeNaN()
+    const rows = Object.fromEntries(buildVaRows({ npv: 0, ...run, all_in: -9705 }, { kind: 'rate', dv01: null, parRate: 3.48, allInRate: NaN }).map(r => [r.key, r]))
+    expect(rows.cva.sub).toBeNull()
+    expect(rows.all_in.sub.text).toBe('—')
+    expect(rows.npv.sub.text).toBe('3.480%')
+  })
+  it('rates: bp on rate = VA over one bp on the rate, NPV shows the par rate, ALL-IN the all-in rate', () => {
     const rows = buildVaRows(xva, { kind: 'rate', dv01: 5000, parRate: 3.665, allInRate: 3.5389 })
     const by = Object.fromEntries(rows.map(r => [r.key, r]))
     expect(by.cva.sub).toMatchObject({ text: '-0.6bp', caption: 'bp on rate', weight: 600 })

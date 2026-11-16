@@ -1,6 +1,6 @@
 // The trader's home: what it works out from the risk report, the trades and the P&L summary.
 import { describe, expect, it } from 'vitest'
-import { bookStrip, BUCKETS, maturityBucket, bucketReach, spotMeasure, factors, peak, lanes, canDay, heights, carry, staleness, limitLabel, limitMarks, standing, factorLimits, limitsOf, shownOn, against, scene, canLimit, columns, laneMarks, markFigure, MATERIAL, signedShort, laneFigures, figureAt, LIMIT_MAX, statement, moved, signed, MAX_LANES } from './trader-home'
+import { bookStrip, BUCKETS, maturityBucket, bucketReach, spotMeasure, factors, peak, lanes, canDay, heights, carry, staleness, limitLabel, limitMarks, standing, more, factorLimits, limitsOf, shownOn, against, scene, canLimit, columns, laneMarks, markFigure, MATERIAL, signedShort, laneFigures, figureAt, LIMIT_MAX, statement, moved, signed, MAX_LANES } from './trader-home'
 
 const TRADES = [{ id: 't1', maturity_date: '2027-02-13' }, { id: 't2', maturity_date: '2030-11-13' }, { id: 't3', maturity_date: '2026-12-13' }]
 const REP = {
@@ -339,10 +339,21 @@ describe("the trader's home: limits", () => {
   })
   it('says where you stand from the statuses the API gave', () => {
     const s = standing(limitMarks(LIMS), 2)
-    expect(s.words).toEqual([['over', '1 limit passed'], ['near', '1 close'], ['dim', '2 clear'], ['hollow', '2 to confirm']])
-    expect(s.tight).toBe('Closest: USD SOFR 1-5Y · SWAPS, at 133% of its limit.')
+    expect(s.words).toEqual([['over', '1 limit breached'], ['near', '1 close'], ['dim', '2 clear'], ['hollow', '2 pending']])
+    expect(s.tight).toBe('Furthest past: USD SOFR 1-5Y · SWAPS, at 133% of its limit.')
     expect(standing(limitMarks(LIMS.slice(0, 1)), 0).words).toEqual([['ok', 'Inside every limit'], ['dim', '1 clear']])
     expect(standing([], 0)).toEqual({ words: [['mute', 'No limits set']], standardOnly: false, tight: '' })
+    // a limit near but not past is the closest; one past its limit is not "closest" to it
+    expect(standing(limitMarks(LIMS).filter(x => x.status !== 'BREACH'), 0).tight).toMatch(/^Closest: /)
+  })
+  it('says where the rest of what needs you is, when it is all in one place', () => {
+    const trade = { kind: 'AWAITING', href: '/blotter?trade=1' }, limit = { kind: 'LIMIT', href: '/risk' }, batch = { kind: 'BATCH', href: null }
+    expect(more([])).toBe('')
+    expect(more([trade, trade])).toBe('and 2 more on the blotter')
+    expect(more([limit])).toBe('and 1 more on the Risk page')
+    expect(more([{ kind: 'COUNTERSIGN', href: '/messenger?room=9' }, { kind: 'CHAT', chat: true }])).toBe('and 2 more in chat')
+    expect(more([batch, batch])).toBe('and 2 more')                    // a batch is on no page: only counted
+    expect(more([trade, batch, limit])).toBe('and 3 more')
   })
 })
 

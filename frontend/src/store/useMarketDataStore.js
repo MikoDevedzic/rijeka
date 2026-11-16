@@ -33,6 +33,7 @@ const useMarketDataStore = create((set, get) => ({
   // ── Snapshot state per curveId ────────────────────────────────────────────
   snapshotSaving: {},   // { [curveId]: bool }
   snapshotSaved:  {},   // { [curveId]: { date, source } }
+  snapshotTried:  {},   // { [curveId]: true } once the stored quotes have been asked for, whatever the answer
   snapshotError:  {},   // { [curveId]: string }
 
   // ── Actions ───────────────────────────────────────────────────────────────
@@ -203,6 +204,8 @@ const useMarketDataStore = create((set, get) => ({
       }));
     } catch {
       // Non-fatal
+    } finally {
+      set((s) => (s.snapshotTried[curveId] ? s : { snapshotTried: { ...s.snapshotTried, [curveId]: true } }));
     }
   },
 

@@ -289,7 +289,7 @@ export function SwapTermsBody({ state, update }) {
         const data = await res.json()
         if (cancelled || state.rateUserEdited) return
         if (typeof data.par_rate === 'number') {
-          update({ coupon: data.par_rate.toFixed(8), parRate: data.par_rate, parError: null })
+          update({ coupon: String(+data.par_rate.toFixed(8)), parRate: data.par_rate, parError: null })          // to eight decimals, without the zeros that end them: 3.480009, not 3.48000900
         }
       } catch (err) {
         if (!cancelled) update({ parError: 'Par solve failed: ' + err.message, parRate: null })

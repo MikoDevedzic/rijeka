@@ -403,6 +403,7 @@ button, input, select, textarea { font-family: inherit; }
 /* a figure in a list is limestone whatever its curve's class: the class is the badge beside it (docs/design.md: brass is an
    action or a seal, amber a caution, blue a chart's second series; none is a rate or a spot) */
 .ci-val.ac, .ci-val.am, .ci-val.bl, .ci-val.pu { color: var(--text); }
+.ci-val.ci-wait { color: var(--text-dim); }                                /* the stored quote is being asked for */
 
 /* ── Main pane ──────────────────────────────────────────────── */
 .main-pane { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-width: 0; }

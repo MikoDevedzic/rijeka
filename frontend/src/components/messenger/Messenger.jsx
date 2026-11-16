@@ -121,8 +121,10 @@ export default function Messenger() {
 
   useEffect(() => { if (session) init() }, [session, init])
 
-  // Once after a sign-in the messenger opens by itself, where it was last left (lib/greeting.js): the button at the
-  // corner is not found by someone who has not been told it is there.
+  // Once after a sign-in the messenger says it is there (lib/greeting.js): the button at the corner is not found by
+  // someone who has not been told of it. It greets as a small card above the button (MessengerGreeting), not as the
+  // whole window: the window, opened by itself, stood over the home's right-hand column and half the blotter's rows.
+  const [greeting, setGreeting] = useState(false)
   const hiddenHere = HIDDEN_ON.includes(location.pathname)
   const signIn = greetKey(session)
   useEffect(() => {
@@ -134,7 +136,7 @@ export default function Messenger() {
       if (metElsewhere({ key: signIn, seen, poppedOut: now.poppedOut })) { mark(); return }
       if (!shouldGreet({ key: signIn, seen, width: window.innerWidth, hidden: hiddenHere, poppedOut: now.poppedOut, open: now.open })) return
       mark()
-      useChatStore.setState({ open: true })
+      setGreeting(true)
     }, GREET_WAIT_MS)
     return () => clearTimeout(t)
   }, [signIn, hiddenHere, poppedOut])
@@ -152,7 +154,7 @@ export default function Messenger() {
     const down = (e) => {
       const at = e.target
       if (!at?.closest) return
-      if (at.closest('.ms-window')) setBehind(false)
+      if (at.closest('.ms-window, .ms-greet')) setBehind(false)
       else if (at.closest('.tbw-window')) setBehind(true)
     }
     document.addEventListener('pointerdown', down, true)
@@ -187,11 +189,15 @@ export default function Messenger() {
     // open but under a trade window: the button brings it forward, it does not close what the user cannot see
     if (open && behind && !covered) { setBehind(false); return }
     if (!open) setBehind(false)
+    setGreeting(false)                                        // the button opens the messenger itself: the card has done its work
     toggle()
   }
+  // from the card into the messenger: at a conversation, or at the list
+  const enter = (id) => { setGreeting(false); setBehind(false); if (id) useChatStore.getState().show(id); useChatStore.setState({ open: true }) }
   return (
     <>
       {open && !poppedOut && <MessengerWindow behind={behind} />}
+      {greeting && !open && !poppedOut && <MessengerGreeting behind={behind} onEnter={enter} onClose={() => setGreeting(false)} />}
       {!covered && (
         <button className={`ms-launcher${poppedOut ? ' out' : ''}${alerting ? ' alert' : ''}`} onClick={launch}
                 title={poppedOut ? 'Messenger is open in its own window — bring it forward' : 'Messages and Prometheus'}>
@@ -259,6 +265,27 @@ export function MessengerPage() {
         </div>
       </header>
       <MessengerPanes width={width} />
+    </div>
+  )
+}
+
+// The greeting: a small card above the corner button, once after a sign-in. It names the two things a newcomer has
+// here before they have met anyone, the assistant and the support room, each a way into the messenger at that
+// conversation; ✕ puts it away for this sign-in, and the button under it opens the messenger at the list as it
+// always does. It is two lines and no more: whatever opens by itself stands over the page it opened on.
+function MessengerGreeting({ behind = false, onEnter, onClose }) {
+  const support = useChatStore(s => s.rooms.find(r => r.kind === 'SUPPORT'))
+  return (
+    <div className={`ms-greet${behind ? ' ms-behind' : ''}`} role="complementary" aria-label="Messages and Prometheus" data-testid="ms-greet">
+      <button className="ms-icon ms-greet-x" onClick={onClose} title="Close" aria-label="Close">✕</button>
+      <button className="ms-greet-row" onClick={() => onEnter(PROMETHEUS)}>
+        <span className="ms-greet-name">✦ Prometheus</span><span className="ms-greet-says">ask about your book</span>
+      </button>
+      {support && (
+        <button className="ms-greet-row" onClick={() => onEnter(support.id)}>
+          <span className="ms-greet-name">✦ Rijeka Support</span><span className="ms-greet-says">ask us anything</span>
+        </button>
+      )}
     </div>
   )
 }

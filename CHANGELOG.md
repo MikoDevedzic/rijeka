@@ -3,6 +3,52 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.28). Commits on `main` are the detail.
 
+## 0.46.4 · 16 November 2026
+
+**What a second cold read of the released desk found, mended.** A first-time visitor's walk through 0.46.1 (every
+page, three window sizes) came back with fourteen findings. These are the ones that were a screen saying something
+other than what it does.
+
+- **The messenger greets with two lines, not a window.** Once after a sign-in it opened by itself, and the window
+  stood over the home's risk column and half the blotter's rows. It now greets as a small card above the corner
+  button: Prometheus and the support room, each a way in at that conversation, and a cross. The window opens when
+  asked, where it was last left. A phone is not greeted, as before.
+- **The blotter's rail on a short window.** NEW TRADE and the summary stay in view (they were cut below about 900 px
+  of height); the filters above them scroll. Asset classes the desk does not trade yet (credit, equity, commodity)
+  are named with ROADMAP and cannot be pressed, where each used to answer that the blotter was empty. The summary
+  adds up: a CLOSED row holds what is neither pending, confirmed nor live.
+- **A link that names a trade opens that trade.** An item under NEEDS YOU on the home landed on the blotter with
+  nothing open. `/blotter?trade=<id>` now opens the ticket once and takes the name off the address. The line under
+  the three items says where the rest are only when they are all in one place.
+- **The home's words.** "limits breached", the Risk page's word, for "limits passed"; "Furthest past" for a limit
+  beyond 100 % where it said "Closest"; "pending" for "to confirm", which read as the reader's own to-do beside
+  NEEDS YOU. The strip's snapshot line (whose data, how old) is no longer cut on a narrower window: the 30Y point
+  and the last vol give way to it.
+- **The door's CONFIRMATIONS ANCHORED counts anchored confirmations.** It counted every confirmation with a hash,
+  including those signed by both parties and kept off the chain. It now counts what the public register lists.
+- **XVA in basis points on a rates ticket.** The row under the strip said "bp = VA / IR01" and divided by notional
+  × years, with no discounting: about a tenth too large a divisor on a five-year swap, so every bp, and the all-in
+  rate's distance from par, read about a tenth too small. It is now each adjustment over notional × the run's own
+  annuity (Σ DF·Δt) × 1 bp, which the saving on chain's running figure already used, and the line says so. The
+  adjustments in money are unchanged.
+- **The Risk page's vega card** added a swaption vega per basis point of normal vol to currency vegas per vol
+  point and called the sum "FX VOL". It shows the two apart, each with its unit. With too few days of history the
+  VaR card and the VaR panel print a dash, as the home does, not zero.
+- **Rate curves list.** Each stored curve's rate is read before it is printed; the list showed the built-in
+  starting quote until a curve was pressed (3.65 % for a curve stored at 3.88 %).
+- **Smaller things.** The System page shows a trader no usage block (it stood there saying "not available"); a
+  ticket's unit reads "USD per EUR", not "USD/EUR"; the footer's button on a booked trade says CLOSE, CANCEL TRADE
+  being another thing; a solved coupon prints 3.480009, not 3.48000900; a certificate with no chain behind it no
+  longer prints a setting's name; the scenario tab says what its approximation is.
+
+Not changed, and why: the three chips of the scenario tab (they say three true things; a currency forward and a
+European option priced by the engine there is the mend, and is not in this release); the names of a digital
+asset's implied rate across the ticket, the IPV page and the scenario tab; the blotter's STORE column.
+
+Tests: 6 new browser journeys (`second-look.spec.js`), the greeting's journeys rewritten (6), the launch journey
+holds the XVA row to the run's annuity; unit tests for the home's words, the vega split and the rate's basis point;
+one integration test of the door's count against PostgreSQL.
+
 ## 0.46.3 · 16 November 2026
 
 **One name for a digital asset's basis sensitivity, wherever it is read.** The ticket, the home, the Risk pages and

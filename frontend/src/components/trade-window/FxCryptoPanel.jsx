@@ -557,7 +557,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const rate = (n) => formatInput(n, dp)
   const two = (n) => formatInput(n, 2)
   const base = cur?.base || 'base'
-  const perUnit = `${qc}/${base}`
+  const perUnit = `${qc} per ${base}`                        // the unit of a price of the pair; written "USD/EUR" it read as the pair turned over
   // SPOT: the stored spot as the field's value, and its own action at the end of the line under it
   const snapButton = (testId) => (
     <span className="tbw-fx-snap-wrap">·

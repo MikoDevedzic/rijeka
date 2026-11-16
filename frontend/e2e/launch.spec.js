@@ -98,6 +98,14 @@ test('launch workspace: the ticket has no CAPITAL tab and XVA opens simple, with
   const simple = await simulateWithComparison(app, win, '/api/xva/simulate')
   await expect(win.getByTestId('va-strip')).toContainText('CVA')
   await expect(win.getByTestId('saving-on-chain')).toContainText('SAVING ON CHAIN')
+  // the row under the strip is each adjustment as a running rate: over notional × the run's own annuity × 1 bp, which
+  // the line under it says (it said "VA / IR01" and divided by notional × years, a tenth too much on five years)
+  const x = simple.run.xva, bp01 = x.notional * x.annuity * 1e-4
+  expect(x.annuity, 'the run carries its annuity').toBeGreaterThan(0)
+  for (const k of ['cva', 'dva', 'kva', 'mva']) {
+    if (Math.abs(x[k] / bp01) >= 0.05) await expect(win.getByTestId('va-bp'), `${k} over one bp on the rate`).toContainText(Math.abs(x[k] / bp01).toFixed(1))
+  }
+  await expect(win.getByTestId('xva-outputs')).toContainText('bp on rate = VA / (notional × annuity × 1 bp)')
   await expectFullyInView(win.getByTestId('xva-outputs'), 'XVA results in the simple view')
   await expectNoHorizontalOverflow(win.getByTestId('xva-left'), 'XVA left column, simple view')
   await app.screenshot({ path: 'e2e/.out/shots/launch-xva-simple.png' })

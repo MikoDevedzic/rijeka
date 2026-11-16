@@ -250,8 +250,28 @@ export const CRYPTO_GROUPS = Object.freeze([
 // "+0.3bp", "-0.4bp", and a figure that rounds to zero as "0.0bp": never "+-0.0bp"
 const signed = (bp) => { const n = parseFloat(bp); return (n > 0 ? '+' : '') + (n === 0 ? String(bp).replace('-', '') : bp) + 'bp' }
 
+// What one basis point on the rate is worth over the trade's life: notional × annuity × 1 bp, the annuity being the
+// run's own Σ DF·Δt on its grid (the XVA block's `annuity`, which the saving on chain's running figure divides by
+// too). An adjustment over it is that adjustment as a running rate. null when the run carries no annuity: the cells
+// then print no bp and the all-in rate a dash, never a figure worked from an undiscounted life (notional × years,
+// which the tab used until 0.46.4 and which overstated the divisor by the discounting: 5,000 where this gives
+// about 4,530 on a five-year swap, so every bp read about a tenth too small).
+export function rateBp01(notional, annuity) {
+  const n = Number(notional), a = Number(annuity)
+  return Number.isFinite(n) && n > 0 && Number.isFinite(a) && a > 0 ? n * a * 1e-4 : null
+}
+
+// The all-in rate of a rates ticket, in percent: the par rate plus the adjustments as a running rate (their sum
+// over rateBp01, in bp). NaN when either is not known, which the strip prints as a dash.
+export function allInRate(parRate, xva, bp01) {
+  if (!xva || !(bp01 > 0) || !Number.isFinite(parRate)) return NaN
+  const total = ['cva', 'dva', 'fca', 'fba', 'kva', 'mva'].reduce((s, k) => s + (Number(xva[k]) || 0), 0)
+  return parRate + total / bp01 / 100
+}
+
 // The eight VA cells. basis.kind:
-//   'rate'     — the rates tab: bp = VA / IR01 (dv01), NPV shows the par rate, ALL-IN the all-in rate
+//   'rate'     — the rates tab: bp = VA / (notional × annuity × 1 bp) (dv01, from rateBp01), NPV shows the par
+//                rate, ALL-IN the all-in rate
 //   'notional' — FX and digital assets: bp = VA / (quote-currency notional × 1bp) on every cell,
 //                ALL-IN's line being the all-in in bp of notional
 // Each row: key, label, color, curve, desc, value (number|null) and sub (the second line) or null.
@@ -267,7 +287,7 @@ export function buildVaRows(xvaIn, basis = { kind: 'rate' }) {
         sub = { text: known ? basis.parRate.toFixed(3) + '%' : '—', caption: 'par rate',
           color: 'var(--text-dim)', captionColor: 'var(--text-mute)', weight: 600 }
       } else if (key === 'all_in') {
-        sub = { text: known ? basis.allInRate.toFixed(3) + '%' : '—', caption: 'all-in rate',
+        sub = { text: known && isFinite(basis.allInRate) ? basis.allInRate.toFixed(3) + '%' : '—', caption: 'all-in rate',
           color: 'var(--text-hi)', captionColor: 'var(--text-mute)', weight: 500 }
       } else if (val != null && basis.dv01 > 0) {
         sub = { text: signed((val / basis.dv01).toFixed(1)), caption: 'bp on rate',

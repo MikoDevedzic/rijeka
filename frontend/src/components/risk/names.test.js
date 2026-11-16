@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
-import { basis, limitName, spotMeasure } from './names'
+import { basis, limitName, spotMeasure, vegaByQuote } from './names'
 
 describe('one sensitivity, one name and one sign', () => {
   it('reads the basis as CRYBASIS01, and an older report by the negative of its FUND01', () => {
@@ -38,3 +38,16 @@ describe('one sensitivity, one name and one sign', () => {
     expect(found).toEqual([])
   })
 })
+
+describe('vega is summed only with vega quoted the same way', () => {
+  it('keeps a vol point and a basis point of normal vol apart', () => {
+    const rows = [{ curve: 'BTCUSD_VOL', total: 15000 }, { curve: 'EURUSD_VOL', total: -3000.5 }, { curve: 'USD_SWVOL_ATM', total: 15024.5 }]
+    expect(vegaByQuote(rows)).toEqual({ point: 11999.5, normalBp: 15024.5, curves: ['BTCUSD', 'EURUSD', 'USD'] })
+  })
+  it('says a family the book does not hold is not there, not zero', () => {
+    expect(vegaByQuote([{ curve: 'EURUSD_VOL', total: 10 }])).toMatchObject({ point: 10, normalBp: null })
+    expect(vegaByQuote([{ curve: 'USD_SWVOL_ATM', total: 7 }])).toMatchObject({ point: null, normalBp: 7 })
+    expect(vegaByQuote(undefined)).toEqual({ point: null, normalBp: null, curves: [] })
+  })
+})
+

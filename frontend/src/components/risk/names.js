@@ -16,3 +16,15 @@ export const basis = (x, key = '_total') => {
 // A limit's name without its scope (the row writes the scope beneath). It is the home's name for it; a key the home
 // has no name for (a standard size, a credit measure) is written in words, without its colons and underscores.
 export const limitName = (metric, scenarios = []) => limitLabel({ metric: String(metric || '').toUpperCase() }, scenarios || []).replace(/[:_]+/g, ' ').trim()
+
+// The book's vega, by how its vol is quoted. A currency or digital-asset surface ({PAIR}_VOL) is bumped by one vol
+// point and a swaption surface ({CCY}_SWVOL_…) by one basis point of normal vol, so the two are not one number:
+// each family is summed on its own (the rows are already in the reporting currency), and a family the book does
+// not hold is null. `curves` is the surfaces' names, shortened, in the rows' order.
+export function vegaByQuote(rows) {
+  const list = rows || []
+  const isRates = (r) => /SWVOL|CAPVOL|CAP_VOL/i.test(String(r.curve))
+  const sum = (xs) => xs.length ? xs.reduce((a, r) => a + (Number(r.total) || 0), 0) : null
+  return { point: sum(list.filter(r => !isRates(r))), normalBp: sum(list.filter(isRates)), curves: list.map(r => String(r.curve).replace(/_VOL$|_SWVOL_ATM$/, '')) }
+}
+

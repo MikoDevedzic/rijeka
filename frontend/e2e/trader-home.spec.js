@@ -173,9 +173,9 @@ test('with a history of moves and limits: the tip says what a usual day moves a 
 
   // where you stand: the words and the closest limit (the rail of marks under them is gone)
   const stand = app.getByTestId('th-stand')
-  await expect(stand).toContainText('1 limit passed')
+  await expect(stand).toContainText('1 limit breached')
   await expect(stand).toContainText('2 close')
-  await expect(stand).toContainText(/Closest: IR01, (long|short), at 110% of its limit\./)
+  await expect(stand).toContainText(/Furthest past: IR01, (long|short), at 110% of its limit\./)
   await expect(stand.getByTestId('th-rail')).toHaveCount(0)
   await expect(app.getByTestId('th-limits').locator('.th-lim'), 'the two that are on no stream: the VaR and the book\'s IR01').toHaveCount(2)
   await expect(app.getByTestId('th-factors')).toContainText('OTHER LIMITS')

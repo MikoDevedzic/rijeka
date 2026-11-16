@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import useMarketDataStore from '../../store/useMarketDataStore';
 import { CCY_GROUPS } from '../../data/ratesCurves';
 
@@ -25,6 +25,12 @@ const TYPE_LABEL = {
   FUNDING: 'FUND',
 };
 
+// The curves whose quotes are stored (a snapshot per curve): the rate the list prints for one of these is the
+// stored one, so it is asked for before it is printed. Until the answer is in, the row shows an ellipsis and not
+// the built-in starting quote, which is not the desk's rate (the list said 3.65% for a curve stored at 3.88%).
+const STORED = new Set(['OIS', 'BASIS']);
+const AT_ONCE = 4;                     // requests in flight while the list fills
+
 function curveDisplayVal(c) {
   if (c.curve_class === 'FUNDING') {
     const sp = Object.values(c.spreads);
@@ -49,7 +55,22 @@ export default function CurvesSidebar() {
   const { curves, selectedCurveId, typeFilter, openGroups, selectCurve, setTypeFilter, toggleGroup } =
     useMarketDataStore();
 
+  const tried = useMarketDataStore((s) => s.snapshotTried);
   const flt = search.toUpperCase();
+
+  // the stored quotes of every curve in an open group, a few at a time, each asked for once
+  useEffect(() => {
+    let stop = false;
+    const st = useMarketDataStore.getState();
+    const ids = CCY_GROUPS.filter((g) => openGroups[g.ccy]).flatMap((g) => g.ids).filter((id) => {
+      const c = st.curves.find((x) => x.id === id);
+      return c && STORED.has(c.curve_class) && !st.snapshotTried[id];
+    });
+    (async () => {
+      for (let i = 0; i < ids.length && !stop; i += AT_ONCE) await Promise.all(ids.slice(i, i + AT_ONCE).map((id) => st.loadLatestSnapshot(id)));
+    })();
+    return () => { stop = true; };
+  }, [openGroups]);
 
   return (
     <div className="crv-sidebar">
@@ -120,7 +141,7 @@ export default function CurvesSidebar() {
 
               <div className="ccy-items">
                 {groupCurves.map((c) => {
-                  const dv = curveDisplayVal(c);
+                  const dv = STORED.has(c.curve_class) && !tried[c.id] ? { val: '…', cls: 'ci-wait' } : curveDisplayVal(c);
                   const isSel = selectedCurveId === c.id;
                   const selBorder = isSel ? TYPE_SEL_BORDER[c.curve_class] : 'transparent';
 
@@ -137,7 +158,7 @@ export default function CurvesSidebar() {
                       <div className="ci-body">
                         <div className="ci-name">{c.name}</div>
                       </div>
-                      <div className={`ci-val ${dv.cls}`}>{dv.val}</div>
+                      <div className={`ci-val ${dv.cls}`} data-testid={`crv-val-${c.id}`}>{dv.val}</div>
                     </div>
                   );
                 })}

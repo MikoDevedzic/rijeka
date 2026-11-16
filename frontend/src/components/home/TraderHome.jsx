@@ -13,7 +13,7 @@ import PolicyPath from './PolicyPath'
 import WeekAhead from './WeekAhead'
 import BookBrief from './BookBrief'
 import Fixings from '../risk/Fixings'
-import { BUCKETS, BUCKET_LABEL, bucketReach, factors, lanes, peak, carry, limitMarks, standing, factorLimits, limitsOf, shownOn, against, scene, canLimit, columns, laneMarks, markFigure, laneFigures, figureAt, statement, moved, fmt0, signed, tone } from './trader-home'
+import { BUCKETS, BUCKET_LABEL, bucketReach, factors, lanes, peak, carry, limitMarks, standing, more, factorLimits, limitsOf, shownOn, against, scene, canLimit, columns, laneMarks, markFigure, laneFigures, figureAt, statement, moved, fmt0, signed, tone } from './trader-home'
 import { useGet, useRisk } from './use-risk'
 import './TraderHome.css'
 
@@ -111,7 +111,7 @@ export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], 
               )
             })}
           </ul>
-          {actions.length > NEEDS && <div className="th-note">and {actions.length - NEEDS} more on the blotter</div>}
+          {actions.length > NEEDS && <div className="th-note" data-testid="th-more">{more(actions.slice(NEEDS))}</div>}
         </div>
       </section>
 

@@ -11,7 +11,7 @@ import { getSessionMaybe } from '../../lib/session'
 import { productLabel } from '../../lib/labels'
 import RiskNav from './RiskNav'
 import Fixings from './Fixings'
-import { basis, limitName, spotMeasure } from './names'
+import { basis, limitName, spotMeasure, vegaByQuote } from './names'
 import { limitStanding } from './states'
 import '../pnl/PnlPage.css'
 import './RiskPage.css'
@@ -56,6 +56,7 @@ export default function RiskPage() {
   const [measure, setMeasure] = useState('clean')
   useEffect(() => { api(`/api/risk/backtest?measure=${measure}`).then(setBt).catch(() => setBt(null)) }, [measure])
   const v = rep?.var || {}, lad = rep?.ladder || {}
+  const vg = vegaByQuote(lad.vega)
   const worst = (rep?.stress || []).reduce((m, s) => s.pnl_usd < (m?.pnl_usd ?? 0) ? s : m, null)
   const breaches = rep?.breaches || 0, warnings = rep?.warnings || 0
   const standing = limitStanding(rep?.limits, breaches, warnings)
@@ -82,11 +83,12 @@ export default function RiskPage() {
       {rep && !rep.date && <div className="pnl-empty">{rep.note}</div>}
       {rep?.date && (<>
         <div className="pnl-cards rk-cards">
-          <Card label={`VAR ${pct(v.confidence)} · ${v.horizon_days}D`} big={fmt(v.var_h)} sub={`ES ${fmt(v.es_h)} · ${pct(v.secondary_confidence)} VaR ${fmt(v.var_1d_secondary)}`}
+          <Card label={`VAR ${pct(v.confidence)} · ${v.horizon_days}D`} big={v.enough ? fmt(v.var_h) : '—'} sub={v.enough ? `ES ${fmt(v.es_h)} · ${pct(v.secondary_confidence)} VaR ${fmt(v.var_1d_secondary)}` : 'too few days for a VaR'}
                 note={v.enough ? `${v.observations} days · ${fmtD(v.window_from)} → ${fmtD(v.window_to)}` : `only ${v.observations} days of history · needs ${v.min_observations}`} warn={!v.enough} />
           <Card label="IR01 · ALL CURVES" big={sgn(lad.ir01_usd)} sub={`per bp · ${lad.bump_bp}bp bump`} note={`${(lad.ladder || []).length} curves`} />
           <Card label="FX01 · CRY01" big={Object.entries(lad.spot01 || {}).map(([a, x]) => `${a} ${sgn(x)}`).join(' · ') || '—'} sub="PV for +1% spot" note={`by asset${basis(lad, '_usd') ? ` · CRYBASIS01 ${sgn(basis(lad, '_usd'))}` : ''}`} />
-          {(lad.vega || []).length > 0 && <Card label="VEGA · FX VOL" big={sgn(lad.vega_usd)} sub="PV for +1 vol point" note={(lad.vega || []).map(v => v.curve.replace('_VOL', '')).join(' · ')} />}
+          {(lad.vega || []).length > 0 && <Card label="VEGA" testId="rk-vega" big={[vg.point != null && `${vg.normalBp != null ? 'FX ' : ''}${sgn(vg.point)}`, vg.normalBp != null && `${vg.point != null ? 'RATES ' : ''}${sgn(vg.normalBp)}`].filter(Boolean).join(' · ')}
+                sub={[vg.point != null && `${vg.normalBp != null ? 'FX: ' : ''}PV for +1 vol point`, vg.normalBp != null && `${vg.point != null ? 'rates: ' : 'PV '}for +1 bp of normal vol`].filter(Boolean).join(' · ')} note={vg.curves.join(' · ')} />}
           <Card label="WORST STRESS" big={worst ? sgn(worst.pnl_usd) : '—'} sub={worst?.name || ''} note={`${(rep.stress || []).length} scenarios`} warn={worst && worst.pnl_usd < 0} />
           <Card label="NPV" big={sgn(lad.npv_usd)} sub={`${(rep.ladder_rows || []).length} trades${lad.problems?.length ? ` · ${lad.problems.length} not priced` : ''}`} note={`${lad.valuations} valuations`} />
         </div>
@@ -124,11 +126,11 @@ export default function RiskPage() {
             <Hist hist={v.histogram || []} varv={v.var_1d} />
             <div className="rk-kv">
               <div><span>WINDOW</span><b>{v.window_days}d · {v.observations} obs</b></div>
-              <div><span>VAR 1D</span><b>{fmt(v.var_1d)}</b></div>
-              <div><span>ES 1D</span><b>{fmt(v.es_1d)}</b></div>
+              <div><span>VAR 1D</span><b>{v.enough ? fmt(v.var_1d) : '—'}</b></div>
+              <div><span>ES 1D</span><b>{v.enough ? fmt(v.es_1d) : '—'}</b></div>
               <div><span>HORIZON</span><b>{v.horizon_days}d · √t</b></div>
-              {v.linear && <div><span>LINEAR (LADDER) VAR 1D</span><b>{fmt(v.linear.var_1d)}</b></div>}
-              {v.convexity_1d != null && <div><span>CONVEXITY</span><b className={tone(-v.convexity_1d)}>{sgn(v.convexity_1d)}</b></div>}
+              {v.linear && <div><span>LINEAR (LADDER) VAR 1D</span><b>{v.enough ? fmt(v.linear.var_1d) : '—'}</b></div>}
+              {v.convexity_1d != null && <div><span>CONVEXITY</span><b className={v.enough ? tone(-v.convexity_1d) : ''}>{v.enough ? sgn(v.convexity_1d) : '—'}</b></div>}
             </div>
             {v.note && <div className="pnl-foot"><em>{v.note}</em></div>}
             {(v.worst_days || []).length > 0 && <>
@@ -220,8 +222,8 @@ function Backtest({ bt }) {
   )
 }
 
-function Card({ label, big, sub, note, warn }) {
-  return <div className="pnl-card"><span className="pnl-kl">{label}</span><b className={`pnl-big rk-big${warn ? ' warn' : ''}`}>{big}</b><span className="rk-sub">{sub}</span>{note && <span className="pnl-note">{note}</span>}</div>
+function Card({ label, big, sub, note, warn, testId }) {
+  return <div className="pnl-card" data-testid={testId}><span className="pnl-kl">{label}</span><b className={`pnl-big rk-big${warn ? ' warn' : ''}`}>{big}</b><span className="rk-sub">{sub}</span>{note && <span className="pnl-note">{note}</span>}</div>
 }
 
 const curveName = (id) => String(id).replace(/_/g, ' ')          // USD SOFR, as the fixings panel and the home write it

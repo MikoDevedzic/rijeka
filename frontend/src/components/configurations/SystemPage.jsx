@@ -35,11 +35,10 @@ export default function SystemPage() {
   const [u, setU] = useState(null)
   const role = useAuthStore(s => s.profile?.role)
   useEffect(() => {
-    if (!role) {                                        // the profile has not loaded yet; do not wait for ever
-      const t = setTimeout(() => setU(u0 => u0 || { error: true }), 5000)
-      return () => clearTimeout(t)
-    }
-    if (role !== 'admin') { setU({ error: true }); return }   // the usage figures are an admin view: do not ask for a 403
+    if (!role) return undefined                         // the profile has not loaded yet: nothing is asked and nothing is said
+    // the usage figures are the admin's, as the two panels under them are: for anyone else the block is not on the
+    // page (it used to stand there saying "not available", with no reason), and no 403 is asked for
+    if (role !== 'admin') { setU(null); return undefined }
     import('../../lib/session').then(({ getSessionMaybe }) => getSessionMaybe()).then(s => fetch(`${API}/api/ops/usage`, { headers: { Authorization: `Bearer ${s?.access_token}` } }))
       .then(r => r.ok ? r.json() : Promise.reject(new Error(`usage ${r.status}`))).then(setU).catch(() => setU({ error: true }))
   }, [role])
@@ -71,8 +70,8 @@ export default function SystemPage() {
           <div className="pnl-foot">Freshness rules: news and spots within three hours; market data, P&amp;L, market risk and counterparty credit dated on or after the previous business day. The desk home shows a BATCH item in the inbox when a row is stale.</div>
         </section>
 
-        <section className="pnl-panel" style={{ maxWidth: 980 }}>
-          <header><span>USAGE · LAST {u?.days || 14} DAYS</span><span className="pnl-sub">{u && !u.error ? `${u.totals.visitors} visitors · ${u.totals.views} views · ${u.totals.signups} accounts · ${u.totals.trades} trades · ${u.totals.confirms} confirmations · ${u.totals.anchors} anchored` : u?.error ? 'not available' : 'loading…'}</span></header>
+        {role === 'admin' && <section className="pnl-panel" style={{ maxWidth: 980 }} data-testid="sys-usage">
+          <header><span>USAGE · LAST {u?.days || 14} DAYS</span><span className="pnl-sub">{u && !u.error ? `${u.totals.visitors} visitors · ${u.totals.views} views · ${u.totals.signups} accounts · ${u.totals.trades} trades · ${u.totals.confirms} confirmations · ${u.totals.anchors} anchored` : u?.error ? 'could not be read just now' : 'loading…'}</span></header>
           {u && !u.error && (<>
             <div className="rk-rows">
               <div className="rk-row dim" style={{ gridTemplateColumns: '7rem repeat(7, 1fr)' }}><span>DAY</span><span>VISITORS</span><span>VIEWS</span><span>SIGN-UP STARTED</span><span>ACCOUNTS</span><span>TRADES</span><span>CONFIRMED</span><span>ANCHORED</span></div>
@@ -86,7 +85,7 @@ export default function SystemPage() {
             </div>
             <div className="pnl-foot">{u.note} Hits are kept in {u.hits_stored_in}.</div>
           </>)}
-        </section>
+        </section>}
 
         <section className="pnl-panel" style={{ maxWidth: 980 }}>
           <header><span>BROWSER ERRORS · LAST 24 HOURS</span><span className="pnl-sub">{ce ? `${ce.last_24h} reports · ${ce.distinct} distinct · ${ce.kept} kept in memory` : 'not reported by this API'}</span></header>

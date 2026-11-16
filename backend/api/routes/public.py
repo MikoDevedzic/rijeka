@@ -99,6 +99,13 @@ def _chain() -> dict:
     return out
 
 
+# The door's "CONFIRMATIONS ANCHORED": confirmations whose record says the registry holds them, which is what the
+# public register lists (`_register` reads the same flag). A confirmation signed by both parties and kept off the
+# chain (no node, the relayer's budget spent, a self-host with no registry) has its hash and is not counted here.
+ANCHORED_SQL = ("SELECT count(*) FROM trade_events WHERE event_type = 'CONFIRMED' AND confirmation_hash IS NOT NULL "
+                "AND payload->'attestation'->'anchor'->>'anchored' = 'true'")
+
+
 def build(db: Session) -> dict:
     uid = _template_user_id(db)
     return {
@@ -106,8 +113,7 @@ def build(db: Session) -> dict:
         "vol": _snapshot(db, uid, "USD_SWVOL_ATM"),      # expiry x tenor ATM normal vols, "1Yx5Y" tenors
         "curves": _scalar(db, "SELECT count(DISTINCT curve_id) FROM market_data_snapshots "
                               "WHERE user_id = :u AND curve_id NOT LIKE 'TEST-%'", u=uid) if uid else None,
-        "confirmations": _scalar(db, "SELECT count(*) FROM trade_events "
-                                     "WHERE event_type = 'CONFIRMED' AND confirmation_hash IS NOT NULL"),
+        "confirmations": _scalar(db, ANCHORED_SQL),
         "news_24h": _scalar(db, "SELECT count(*) FROM news_items WHERE created_at > now() - interval '24 hours'"),
         "headlines": _headlines(db),
         "chain": _chain(),
