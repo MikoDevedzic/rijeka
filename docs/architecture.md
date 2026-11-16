@@ -51,6 +51,11 @@ blotter, the command centre and the messenger. On a screen up to 640px wide the 
 chat and news, from a bar at the foot. It is installable from a phone's home screen (`public/manifest.webmanifest`,
 "standalone"); there is no service worker and nothing is cached for use offline.
 
+The stored risk report (table `risk_daily`, one row a day an account) has three readers that must agree: the Risk
+page, the home, and since 0.44.5 the book brief (`prometheus/book_brief.py`), whose valuation figures are that
+report's and which never computes one of its own. Where no report is stored the brief shows no valuation; where a
+firm has market risk off it prices the trades with the pricers the blotter uses.
+
 On a monitor the command centre is the trader's home (`components/home/TraderHome.jsx`, since 0.36.0), the first of
 a home for each role. It computes nothing but a drawing: it reads the trades, the stored risk report
 (`GET /api/risk/report`: the ladder by bucket and, since 0.40.0, at each quoted tenor (`points`), the limits as evaluated, the VaR, and `moves`, each factor's usual daily move;

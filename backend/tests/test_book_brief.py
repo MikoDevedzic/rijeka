@@ -65,6 +65,7 @@ def test_narrate_uses_structured_output_and_fact_ids():
 def test_brief_without_a_key_returns_facts_only(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     bb._cache.clear()
+    monkeypatch.setattr(bb, "_report_stamp", lambda db, uid: None)
     with patch.object(bb, "fact_sheet", return_value={**SHEET, "trades": 2}):
         out = bb.brief(MagicMock(), {"sub": "u1"})
     assert out["enabled"] is False and out["paragraphs"] == [] and len(out["facts"]) == 4
@@ -73,11 +74,50 @@ def test_brief_without_a_key_returns_facts_only(monkeypatch):
 def test_brief_is_cached_per_user_and_survives_a_model_failure(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
     bb._cache.clear()
+    monkeypatch.setattr(bb, "_report_stamp", lambda db, uid: None)
     with patch.object(bb, "fact_sheet", return_value={**SHEET, "trades": 2}) as fs, \
          patch.object(bb, "narrate", side_effect=RuntimeError("overloaded")):
         a = bb.brief(MagicMock(), {"sub": "u2"})
         b = bb.brief(MagicMock(), {"sub": "u2"})
     assert a["paragraphs"] == [] and "narration_error" in a and fs.call_count == 1 and b is a
+
+
+class _Mods:
+    def __init__(self, on): self.on = on
+    def for_user(self, db, uid): return {"modules": {"MARKET_RISK": self.on}}
+
+
+def test_where_the_valuation_comes_from(monkeypatch):
+    """The stored risk report where there is one; nothing, said so, where one is due and none is stored; the pricers
+    only where the firm has market risk off and so has no report to disagree with. The brief never makes a report."""
+    import sys
+    from risk import report as R
+    db = MagicMock()
+    stored = {"date": "2026-11-02", "ladder": {"npv_usd": 1.0}, "ladder_rows": []}
+    monkeypatch.setitem(sys.modules, "modules", _Mods(True))
+    monkeypatch.setattr(R, "stored_report", lambda db, uid, d=None: stored)
+    monkeypatch.setattr(R, "report", lambda *a, **k: (_ for _ in ()).throw(AssertionError("the brief must not compute a report")))
+    assert bb._risk_report(db, "u") == (stored, bb.REPORT)
+    monkeypatch.setattr(R, "stored_report", lambda db, uid, d=None: None)
+    assert bb._risk_report(db, "u") == (None, bb.NONE)
+    monkeypatch.setattr(R, "stored_report", lambda db, uid, d=None: {"date": None, "note": "No market dates"})
+    assert bb._risk_report(db, "u") == (None, bb.NONE)
+    monkeypatch.setattr(R, "stored_report", lambda db, uid, d=None: (_ for _ in ()).throw(RuntimeError("down")))
+    assert bb._risk_report(db, "u") == (None, bb.NONE) and db.rollback.called
+    monkeypatch.setitem(sys.modules, "modules", _Mods(False))
+    assert bb._risk_report(db, "u") == (None, bb.PRICERS)
+
+
+def test_a_brief_kept_from_before_a_newer_risk_report_is_not_served_after_it(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    bb._cache.clear()
+    stamps = iter(["2026-11-02|08:00", "2026-11-02|08:00", "2026-11-03|08:00"])
+    monkeypatch.setattr(bb, "_report_stamp", lambda db, uid: next(stamps))
+    with patch.object(bb, "fact_sheet", return_value={**SHEET, "trades": 2}) as fs:
+        a = bb.brief(MagicMock(), {"sub": "u3"})
+        b = bb.brief(MagicMock(), {"sub": "u3"})            # the same report: the kept brief
+        c = bb.brief(MagicMock(), {"sub": "u3"})            # a newer report: made again
+    assert b is a and c is not a and fs.call_count == 2 and c["report_stamp"] == "2026-11-03|08:00"
 
 
 def test_route_needs_auth():

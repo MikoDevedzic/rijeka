@@ -5,11 +5,17 @@ The book brief: Prometheus narrates the book, but never originates a number.
     brief = narrate(facts)                   # structured prose bound to fact ids
     kept, dropped = audit(brief, facts)      # sentences the sheet cannot back are removed
 
-The fact sheet is computed by the same pricers the blotter uses: NPV and IR01
-per trade on today's curve, totals by currency, the move in the demo curves
-since the previous snapshot, pending confirmations, maturities within a
-month, CSA terms by counterparty, and the summarised news tagged to what the
-book holds. Prometheus is asked for short paragraphs, each citing fact ids,
+The fact sheet's valuation figures are the stored risk report's: each trade's
+NPV and IR01 as the report valued it, and the book's NPV, IR01, spot deltas,
+basis and carry as the Risk page and the home show them, on the report's own
+date. One book has one set of numbers on every screen; until 0.44.5 the brief
+priced each trade itself today and summed, a different sum on a different day.
+Where no report is stored yet the brief shows no valuation and says so; where
+the firm has market risk switched off there is no report to disagree with, and
+the trades are priced by the pricers the blotter uses, as before. Beside the
+valuation: the move in the demo curves since the previous snapshot, pending
+confirmations, maturities within a month, CSA terms by counterparty, and the
+summarised news tagged to what the book holds. Prometheus is asked for short paragraphs, each citing fact ids,
 through structured output. The audit then checks every number in the prose
 against the sheet (within rounding), requires at least one valid citation,
 and rejects forecasting or advisory language. Whatever fails is dropped and
@@ -148,11 +154,56 @@ def _r0(v: float) -> float:
     return round(v, 0) or 0.0
 
 
+# Where the valuation figures come from: the stored risk report; the pricers, where the firm has market risk off
+# and so has no report; nowhere, where a report is due and none is stored yet.
+REPORT, PRICERS, NONE = "risk_report", "pricers", "none"
+
+
+def _risk_report(db: Session, uid: str) -> tuple[Optional[dict], str]:
+    """(the account's latest stored risk report, REPORT), or (None, PRICERS | NONE). Never computes one: the brief
+    reads what the Risk page reads, it does not make a second report of its own."""
+    try:
+        import modules
+        if not modules.for_user(db, uid)["modules"].get("MARKET_RISK", True):
+            return None, PRICERS
+        from risk import report as R
+        rep = R.stored_report(db, uid)
+    except Exception as e:           # noqa: BLE001 — no report is an answer the sheet can state
+        db.rollback(); log.info("brief: the risk report could not be read: %s", str(e)[:120])
+        return None, NONE
+    if not rep or not rep.get("date") or not isinstance(rep.get("ladder"), dict):
+        return None, NONE
+    return rep, REPORT
+
+
+def _report_stamp(db: Session, uid: str) -> Optional[str]:
+    """Which stored report the account's latest is (its date and when it was made), without reading it: a brief
+    kept from before a newer report is not served after it."""
+    try:
+        r = db.execute(text("SELECT risk_date, created_at FROM risk_daily WHERE user_id = :u ORDER BY risk_date DESC LIMIT 1"), {"u": uid}).first()
+    except Exception:                # noqa: BLE001 — no table, no report
+        db.rollback(); return None
+    return f"{r.risk_date}|{r.created_at}" if r else None
+
+
+def _num(v) -> Optional[float]:
+    try:
+        x = float(v)
+    except (TypeError, ValueError):
+        return None
+    return x if x == x and abs(x) != float("inf") else None
+
+
 def fact_sheet(db: Session, user: dict, today: Optional[date] = None) -> dict:
-    """Every number the brief may use, computed by the engine; nothing here comes from a model."""
+    """Every number the brief may use, computed by the engine; nothing here comes from a model. The valuation
+    figures are the stored risk report's (see the module's header)."""
     from db.models import Counterparty, Trade
     today = today or date.today()
     uid = user["sub"]
+    report, source = _risk_report(db, uid)
+    rdate = str(report["date"])[:10] if report else None
+    rows = {str(r.get("trade_id")): r for r in (report or {}).get("ladder_rows") or [] if isinstance(r, dict)}
+    unvalued = {str(x.get("trade_ref")): str(x.get("reason") or "")[:120] for x in ((report or {}).get("ladder") or {}).get("problems") or [] if isinstance(x, dict)}
     trades = db.query(Trade).filter(Trade.user_id == uid, Trade.status.in_(("LIVE", "PENDING", "CONFIRMED"))) \
         .order_by(Trade.trade_date.desc().nullslast()).all()
     facts: list[Fact] = []
@@ -179,7 +230,21 @@ def fact_sheet(db: Session, user: dict, today: Optional[date] = None) -> dict:
                                  "counterparty": cp.name if cp else None, "status": t.status,
                                  "maturity": t.maturity_date.isoformat() if t.maturity_date else None}
         npv, npv_ccy, why = None, ccy, None
-        if priced < MAX_PRICED:
+        if source == REPORT:
+            row = rows.get(str(t.id))
+            if row is not None and _num(row.get("npv")) is not None:
+                npv, npv_ccy = round(_num(row["npv"]), 0), str(row.get("ccy") or ccy).upper()
+                if _num(row.get("ir01")):
+                    extra["ir01"] = round(_num(row["ir01"]), 0)
+                s01 = sum(v for v in (_num(x) for x in (row.get("spot01") or {}).values()) if v is not None)
+                if s01:
+                    extra["spot01"] = round(s01, 0)
+                priced += 1
+            else:
+                why = (f"not valued in the risk report of {rdate}: {unvalued[t.trade_ref]}" if unvalued.get(t.trade_ref)
+                       else f"not in the risk report of {rdate}: booked or changed since")
+                extra["pricing"] = why
+        elif source == PRICERS and priced < MAX_PRICED:
             try:
                 p = _price_one(db, user, t, today)
                 npv = p.get("npv")
@@ -211,12 +276,47 @@ def fact_sheet(db: Session, user: dict, today: Optional[date] = None) -> dict:
         facts.append(Fact(f"T{i}", "trade", label, npv, npv_ccy if npv is not None else "", txt, extra))
 
     facts[0].extra["priced"] = priced
-    facts[0].text += f"; {priced} of {len(trades)} priced on today's curve" if trades else ""
-    for ccy, v in sorted(totals.items()):
-        facts.append(Fact(f"N_{ccy}", "total", f"Book NPV in {ccy}", round(v, 0), ccy, f"Book NPV {round(v):,} {ccy} on today's curve"))
-    if ir01_total:
-        facts.append(Fact("IR01", "total", "Book IR01", round(ir01_total, 0), "per bp",
-                          f"Book IR01 {round(ir01_total):,} per basis point"))
+    if source == REPORT:
+        lad = report["ladder"]
+        rccy = str(report.get("reporting_ccy") or "USD").upper()
+        made = str(report.get("stored_at") or report.get("generated_at") or "")[:16].replace("T", " ")
+        facts[0].text += f"; {priced} of {len(trades)} valued in the risk report of {rdate}" if trades else ""
+        facts.append(Fact("R1", "book", "Where the valuation figures come from", None, "",
+                          f"Valuation figures are the stored risk report of {rdate}" + (f" (made {made} UTC)" if made else "")
+                          + ": the figures the Risk page and the home show, not a pricing of today", {"report_date": rdate}))
+        npv_r, ir01_r = _num(lad.get("npv_usd")), _num(lad.get("ir01_usd"))
+        if npv_r is not None and rows:
+            totals[rccy] = npv_r
+            facts.append(Fact(f"N_{rccy}", "total", f"Book NPV in {rccy}", _r0(npv_r), rccy, f"Book NPV {_r0(npv_r):,.0f} {rccy} in the risk report of {rdate}"))
+        if ir01_r:
+            ir01_total = ir01_r
+            facts.append(Fact("IR01", "total", "Book IR01", _r0(ir01_r), f"{rccy} per bp", f"Book IR01 {_r0(ir01_r):,.0f} {rccy} per basis point in the risk report of {rdate}"))
+        spot01 = {}
+        for asset, v in sorted((lad.get("spot01") or {}).items()):
+            x = _num(v)
+            if x is not None and abs(x) >= 0.5:
+                spot01[str(asset)] = x
+                facts.append(Fact(f"S_{asset}", "total", f"Book value for +1% of {asset} spot", _r0(x), rccy,
+                                  f"The book gains {_r0(x):,.0f} {rccy} for +1% of {asset} spot (FX01 on a currency, CRY01 on a digital asset) in the risk report of {rdate}"))
+        basis = _num(lad.get("crybasis01_usd"))
+        if basis is not None and abs(basis) >= 0.5:
+            facts.append(Fact("CRYBASIS01", "total", "Book CRYBASIS01", _r0(basis), f"{rccy} per bp",
+                              f"Book CRYBASIS01 {_r0(basis):,.0f} {rccy} for +1 bp a year of forward basis in the risk report of {rdate}"))
+        carry = [_num(r.get("theta")) * _num(r.get("usd_rate")) for r in rows.values() if _num(r.get("theta")) is not None and _num(r.get("usd_rate")) is not None]
+        theta = {rccy: sum(carry)} if carry else {}
+        if carry and abs(sum(carry)) >= 0.5:
+            facts.append(Fact("THETA", "total", "Book one-day carry", _r0(sum(carry)), rccy, f"One day's carry {_r0(sum(carry)):,.0f} {rccy} in the risk report of {rdate}"))
+    elif source == NONE:
+        facts[0].text += "; none valued: no risk report is stored yet" if trades else ""
+        facts.append(Fact("R1", "book", "Where the valuation figures come from", None, "",
+                          "No risk report is stored for this book yet, so this brief carries no valuation: the Risk page makes the report, and the brief then reads it"))
+    else:
+        facts[0].text += f"; {priced} of {len(trades)} priced on today's curve" if trades else ""
+        for ccy, v in sorted(totals.items()):
+            facts.append(Fact(f"N_{ccy}", "total", f"Book NPV in {ccy}", round(v, 0), ccy, f"Book NPV {round(v):,} {ccy} on today's curve"))
+        if ir01_total:
+            facts.append(Fact("IR01", "total", "Book IR01", round(ir01_total, 0), "per bp",
+                              f"Book IR01 {round(ir01_total):,} per basis point"))
 
     facts.extend(_curve_moves(db, ccys))
 
@@ -255,9 +355,11 @@ def fact_sheet(db: Session, user: dict, today: Optional[date] = None) -> dict:
                                   f"{r.source} reports: {r.title}. {r.summary}", {"url": r.url, "tags": list(r.tags or [])}))
                 if n >= 6:
                     break
-    return {"valuation_date": today.isoformat(), "generated_at": int(time.time()), "trades": len(trades),
+    return {"valuation_date": rdate or today.isoformat(), "generated_at": int(time.time()), "trades": len(trades),
             "priced": priced, "facts": [f.as_dict() for f in facts],
-            # the desk's numbers, straight from the pricers: what the home page shows above the trade list
+            # where the valuation figures came from, and which report: the page says it under the prose
+            "source": source, "report_date": rdate, "report_stored_at": (report or {}).get("stored_at"),
+            # the desk's numbers as the sheet has them: what the home shows above the trade list where market risk is off
             "totals": {"npv": {k: _r0(v) for k, v in sorted(totals.items())}, "ir01": _r0(ir01_total) if ir01_total else None,
                        "spot01": {k: _r0(v) for k, v in sorted(spot01.items())}, "theta": {k: _r0(v) for k, v in sorted(theta.items())}}}
 
@@ -270,7 +372,8 @@ def narrate(sheet: dict, client=None) -> list[dict]:
         import anthropic
         client = anthropic.Anthropic(timeout=120.0, max_retries=1)
     lines = [f"[{f['id']}] {f['text']}" for f in sheet["facts"]]
-    user = (f"Valuation date {sheet['valuation_date']}. {sheet['trades']} trades, {sheet['priced']} priced.\n\nFACTS\n"
+    how = {REPORT: f"valued in the stored risk report of {sheet.get('report_date')}", NONE: "valued (no risk report is stored yet)"}.get(sheet.get("source"), "priced")
+    user = (f"Valuation date {sheet['valuation_date']}. {sheet['trades']} trades, {sheet['priced']} {how}.\n\nFACTS\n"
             + "\n".join(lines))
     resp = client.messages.create(model=MODEL, max_tokens=4000, system=SYSTEM,
                                   output_config={"effort": "low", "format": {"type": "json_schema", "schema": SCHEMA}},
@@ -334,10 +437,11 @@ _cache: dict[str, dict] = {}
 def brief(db: Session, user: dict, refresh: bool = False, client=None) -> dict:
     uid = user["sub"]
     hit = _cache.get(uid)
-    if hit and not refresh and time.time() - hit["generated_at"] < CACHE_SECONDS:
+    stamp = _report_stamp(db, uid)          # a brief kept from before a newer risk report is not served after it
+    if hit and not refresh and time.time() - hit["generated_at"] < CACHE_SECONDS and hit.get("report_stamp") == stamp:
         return hit
     sheet = fact_sheet(db, user)
-    out = {**sheet, "generated_at": int(time.time()), "paragraphs": [], "dropped": [],
+    out = {**sheet, "generated_at": int(time.time()), "paragraphs": [], "dropped": [], "report_stamp": stamp,
            "model": MODEL if enabled() else None, "enabled": enabled()}
     if enabled() and sheet["trades"] > 0:
         try:

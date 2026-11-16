@@ -189,3 +189,6 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   security reviewer found it in a module written before the roles existed, when its tables were about to be made. The
   check itself is tried with what breaks a check: a whole number four hundred digits long is not a float, and
   turning it into one raised an error the route did not catch.
+- A figure shown on two screens is read from one place by both, and a new reader is listed beside the others on
+  the map: the brief summed the pricers' own figures for weeks after the home had been moved to the risk report,
+  because the home's fix had not asked who else showed the book's value.

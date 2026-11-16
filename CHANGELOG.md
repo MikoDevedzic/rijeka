@@ -3,6 +3,27 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.27). Commits on `main` are the detail.
 
+## 0.44.5 · 16 November 2026
+
+**The book brief reads the risk report.** Prometheus's brief of the book priced each trade itself, today, and
+added the results up. The Risk page and the home read the stored risk report. The same book could therefore show
+one NPV and IR01 in the brief and another on the Risk page, on different dates. The brief's valuation figures are
+now the stored report's: each trade's value as the report has it, and the book's NPV, IR01, spot deltas,
+CRYBASIS01 and carry as the Risk page and the home show them, with the report's date said in the facts and under
+the prose.
+
+- **No report, no figure.** Where a report is due and none is stored yet, the brief shows no valuation and says
+  that the Risk page makes one. It does not make a second report of its own, and it does not fall back to a
+  different sum. A trade the report did not value (booked since, or one it could not value) is listed without a
+  figure and says why.
+- **Market risk switched off.** A firm without the market-risk module has no report to disagree with: its brief
+  prices the trades with the pricers the blotter uses, as before.
+- **A newer report is a newer brief.** A brief is kept for an hour; one kept from before a newer risk report is
+  not served after it.
+- The audit is unchanged: every number in the prose is still checked against the facts it cites.
+
+---
+
 ## 0.44.4 · 16 November 2026
 
 **The IPV page names a digital asset's funding sensitivity as the rest of the app does.** The page called it IR01
