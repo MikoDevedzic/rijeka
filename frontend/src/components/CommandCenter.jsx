@@ -84,10 +84,14 @@ async function get(path) {
 const fmtN = (n, d = 0) => n == null || isNaN(n) ? '—' : Number(n).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d })
 // a size in millions; one too small for that (ten bitcoin is not "0.0m") is written out
 const fmtM = (n) => n == null ? '—' : Math.abs(n) >= 1e9 ? `${fmtN(n / 1e9, 2)}bn` : Math.abs(n) >= 1e5 ? `${fmtN(n / 1e6, 1)}m` : fmtN(n, Number.isInteger(Number(n)) ? 0 : 2)
-const fmtD = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+// A calendar day ("2026-11-14": a snapshot's date, a maturity) is that day wherever the reader is. Read as it comes
+// it is midnight in UTC, the evening before for anyone west of it: the ticker and the maturities were a day early
+// in New York until 0.42.5. Midnight of the reader's own day is asked for, as the other pages do.
+const asDay = (iso) => new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(iso)) ? `${iso}T00:00:00` : iso)
+const fmtD = (iso) => iso ? asDay(iso).toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 const ago = (iso) => { if (!iso) return ''; const h = (Date.now() - new Date(iso)) / 36e5; return h < 1 ? `${Math.max(1, Math.round(h * 60))}m` : h < 24 ? `${Math.round(h)}h` : `${Math.round(h / 24)}d` }
 const quote = (snap, tenor) => snap?.quotes?.find(q => q.tenor === tenor && q.enabled !== false)?.rate
-const daysOld = (iso) => iso ? Math.floor((Date.now() - new Date(iso)) / 864e5) : null
+const daysOld = (iso) => iso ? Math.floor((Date.now() - asDay(iso)) / 864e5) : null
 const years = (t) => { const m = /^(\d+)(D|W|M|Y)$/.exec(t); if (!m) return t === 'ON' ? 1 / 365 : null; const n = +m[1]; return { D: n / 365, W: n / 52, M: n / 12, Y: n }[m[2]] }
 
 function useSize(ref) {
@@ -385,7 +389,7 @@ function Ladder({ trades }) {
   const ref = useRef(null); const W = useSize(ref)
   const buckets = useMemo(() => {
     const m = new Map()
-    trades.forEach(t => { if (!t.maturity_date) return; const y = new Date(t.maturity_date).getFullYear(); m.set(y, (m.get(y) || 0) + Number(t.notional || 0)) })
+    trades.forEach(t => { if (!t.maturity_date) return; const y = asDay(t.maturity_date).getFullYear(); m.set(y, (m.get(y) || 0) + Number(t.notional || 0)) })
     return [...m.entries()].sort((a, b) => a[0] - b[0])
   }, [trades])
   const H = 64, top = Math.max(...buckets.map(b => b[1])) || 1, n = buckets.length || 1, slot = W / n, bw = Math.min(24, slot * 0.6)

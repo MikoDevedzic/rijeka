@@ -20,6 +20,10 @@ changes; the system page gains two figures and a step.
 - **On the system page.** Both are drawn where they stand: Marco last in the row of reviewers a change passes,
   Grace after the release, with a seventh step, "kept running". The row has a name of its own, because a first
   name says nothing to someone who has not met its owner (Marco's own finding, on his first walk).
+- **A date a day early, west of UTC.** The home's ticker read the snapshot's date, and the list under it a trade's
+  maturity, as a moment in time: midnight in London, which is the evening before in New York. Both were a day
+  early for anyone west of UTC (Marco's finding, on a machine in New York; CI runs in UTC and never saw it).
+  They are read as calendar days, and a journey now runs in Los Angeles time.
 - **A lesson is written down when it is learned.** What a reviewer missed and a later check caught goes into
   that reviewer's instructions in the same change that mends it; twenty-seven lessons of the past week that had
   waited are in, and the author of a change has a place for its own. A lesson that belongs to no reviewer is
