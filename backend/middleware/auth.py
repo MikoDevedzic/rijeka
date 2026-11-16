@@ -33,6 +33,7 @@ from jwt import PyJWK, PyJWTError
 log = logging.getLogger("rijeka.auth")
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://upuewetohnocfshkhafg.supabase.co").rstrip("/")
 JWKS_TTL = 3600.0
+JWKS_REFETCH_FLOOR = 10.0
 _jwks: dict = {"at": 0.0, "keys": None}
 ROLE_TTL = 30.0
 _roles: dict[str, tuple[float, Optional[str]]] = {}
@@ -94,6 +95,8 @@ async def _get_jwks(force: bool = False) -> Optional[dict]:
         return _jwks_from_file()
     if not force and _jwks["keys"] is not None and time.time() - _jwks["at"] < JWKS_TTL:
         return _jwks["keys"]
+    if force and _jwks["keys"] is not None and time.time() - _jwks["at"] < JWKS_REFETCH_FLOOR:
+        return _jwks["keys"]                # just fetched: a flood of unknown key ids does not become a flood of fetches
     try:
         async with httpx.AsyncClient(timeout=10.0) as c:
             r = await c.get(f"{SUPABASE_URL}/auth/v1/.well-known/jwks.json")
@@ -121,7 +124,9 @@ async def optional_token(authorization: Optional[str] = Header(None), request: R
     return await verify_token(authorization, request)
 
 
-async def verify_token(authorization: Optional[str] = Header(None), request: Request = None) -> dict:
+async def verified_claims(authorization: Optional[str], refetch: bool = True) -> dict:
+    """The token's claims once its signature and expiry have been checked: no database is read. 401 otherwise.
+    `refetch` False does not ask for the key set again on a key id the cache does not know."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing auth")
     token = authorization.split(" ", 1)[1].strip()
@@ -133,15 +138,31 @@ async def verify_token(authorization: Optional[str] = Header(None), request: Req
         raise HTTPException(status_code=401, detail="Invalid token")
     kid = header.get("kid")
     key = _key_for(await _get_jwks(), kid)
-    if key is None:
+    if key is None and refetch:
         key = _key_for(await _get_jwks(force=True), kid)       # a rotated key: refetch once
     if key is None:
         raise HTTPException(status_code=401, detail="Invalid token")
     try:
-        payload = dict(jwt.decode(token, key.key, algorithms=["ES256"], options={"verify_aud": False, "require": ["exp", "sub"]}))
+        return dict(jwt.decode(token, key.key, algorithms=["ES256"], options={"verify_aud": False, "require": ["exp", "sub"]}))
     except PyJWTError as e:
         log.info("token rejected: %s", type(e).__name__)
         raise HTTPException(status_code=401, detail="Invalid token")
+
+
+async def account_of(authorization: Optional[str]) -> Optional[str]:
+    """Whose sign-in this is, or None: for a public route that keeps the account when there is one and never refuses
+    for the lack of it (the browser's error report). No database, and no refetch of the key set: a stranger must not
+    be able to make this route call out or wait."""
+    if not authorization:
+        return None
+    try:
+        return str((await verified_claims(authorization, refetch=False))["sub"])
+    except Exception:                       # noqa: BLE001 — expired, malformed, an unknown key: nobody
+        return None
+
+
+async def verify_token(authorization: Optional[str] = Header(None), request: Request = None) -> dict:
+    payload = await verified_claims(authorization)
     meta = dict(payload.get("user_metadata") or {})
     role = db_role_for(str(payload["sub"])) or "viewer"       # never the token's own claim: the client writes it
     meta["role"] = role

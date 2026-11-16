@@ -226,14 +226,22 @@ def worker_status(db: Optional[Session]) -> dict:
         return {"present": False, "reason": type(e).__name__}
 
 
+_problems_cache: dict = {"at": 0.0, "body": None}
+
+
 def _problems_count(db: Session) -> dict:
     """A count only, for the public body: how many problems were kept in the last 24 hours (health/store.py). None
     when the table is not applied; never raises."""
+    now = time.time()
+    if _problems_cache["body"] is not None and now - _problems_cache["at"] < CACHE_SECONDS:
+        return _problems_cache["body"]
     try:
         from health import store as H
-        return {"last_24h": H.count_since(db), "recording": H.table_present(db)}
+        body = {"last_24h": H.count_since(db), "recording": H.enabled() and H.table_present(db)}
     except Exception:                     # noqa: BLE001
-        return {"last_24h": None, "recording": False}
+        body = {"last_24h": None, "recording": False}
+    _problems_cache.update(at=now, body=body)          # as the rest of the public body: asked of the database once a minute
+    return body
 
 
 @router.get("/migrations")
@@ -345,14 +353,8 @@ async def ops_client_error(request: Request):
 async def _account_of(request: Request) -> Optional[str]:
     """The account a report came from, when it carries a sign-in that verifies. A report is never refused for its
     token: a page fails most often just as a session ends, and the report matters more than who sent it."""
-    auth = request.headers.get("authorization")
-    if not auth:
-        return None
-    try:
-        from middleware.auth import verify_token
-        return str((await verify_token(auth))["sub"])
-    except Exception:                 # noqa: BLE001 — expired, malformed, or the key set is away: an anonymous report
-        return None
+    from middleware.auth import account_of
+    return await account_of(request.headers.get("authorization"))
 
 
 @router.get("/problems")
@@ -365,6 +367,10 @@ def ops_problems(hours: int = 24, db: Session = Depends(get_db), user: dict = De
     hours = max(1, min(int(hours), 24 * H.KEEP_DAYS))
     rows = H.rows_since(db, datetime.now(timezone.utc) - timedelta(hours=hours))
     from health import alerts
-    problems = [{**g, "line": alerts.describe(g)} for g in H.group(rows or [])[:100]]
-    return {"hours": hours, **H.status(db), "unread": rows is None, "occurrences": len(rows or []), "problems": problems,
-            "mail": alerts.mail_settings() is not None}
+    problems = [{**g, "line": alerts.describe(g), "rings": alerts.rings(g)} for g in H.group(rows or [])[:100]]
+    try:
+        rooms = len(alerts.admin_rooms(db))
+    except Exception:                     # noqa: BLE001
+        db.rollback(); rooms = 0
+    return {"hours": hours, **H.status(db), "unread": rows is None, "occurrences": len(rows or []), "truncated": len(rows or []) >= H.READ_MAX,
+            "problems": problems, "mail": alerts.mail_settings() is not None, "rooms": rooms}

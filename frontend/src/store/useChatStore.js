@@ -40,7 +40,9 @@ async function api(path, { timeoutMs = REQUEST_TIMEOUT_MS, ...opts } = {}) {
       },
     })
   } catch (e) {
-    // a request that never got an answer: the API cannot know of it, so the caller reports it (lib/errors.js)
+    // a request that never got an answer: the API cannot know of it, so the caller reports it (lib/errors.js), under a
+    // source that begins `net-`: it is kept and counted, and does not ring the operator, since most often it is one
+    // person's connection
     const lost = new Error(e.name === 'AbortError' ? "Rijeka didn't answer in time. Try again." : "Couldn't reach Rijeka. Check your connection and try again.")
     lost.unanswered = e.name === 'AbortError' ? 'no answer in time' : 'not reached'
     throw lost
@@ -142,7 +144,7 @@ export const useChatStore = create((set, get) => ({
       set({ status: 'ready' })
       get().watch()
     } catch (e) {
-      report(`chat: the messenger could not start (${e?.unanswered || e?.message || 'error'})`, 'chat')
+      report(`chat: the messenger could not start (${e?.unanswered || e?.message || 'error'})`, e?.unanswered ? 'net-chat' : 'chat')
       set({ status: 'error', error: e.message })
     }
   },
@@ -435,7 +437,7 @@ export const useChatStore = create((set, get) => ({
     try { r = await turn } catch (e) {
       set(without)
       // a message that was not sent because the API gave no answer (a refusal is the API's own to count)
-      if (e?.unanswered) report(`chat: a message was not sent (${e.unanswered})`, 'chat-send')
+      if (e?.unanswered) report(`chat: a message was not sent (${e.unanswered})`, 'net-chat-send')
       throw e
     }
     // the server's copy where the copy on its way stood (or where the stream already put it), not after whatever arrived since
@@ -544,7 +546,7 @@ export const useChatStore = create((set, get) => ({
       const checked = [...new Set((data.tools_used || []).map(t => CHECKED[t.tool]).filter(Boolean))]
       set({ prom: [...next, { role: 'assistant', content: data.content?.[0]?.text || 'No response.', checked, sources: data.sources || [] }] })
     } catch (e) {
-      if (e?.unanswered) report(`assistant: a question got no answer (${e.unanswered})`, 'assistant')
+      if (e?.unanswered) report(`assistant: a question got no answer (${e.unanswered})`, 'net-assistant')
       set({ prom: [...next, { role: 'assistant', content: e.message, error: true }] })
     } finally {
       set({ promLoading: false })

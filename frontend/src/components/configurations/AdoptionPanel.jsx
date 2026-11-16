@@ -36,9 +36,9 @@ export default function AdoptionPanel({ role }) {
       <header><span>ADOPTION</span><span className="pnl-sub" data-testid="adoption-head">{ok ? headline(a) : a?.error ? 'not answered by this API' : 'reading…'}</span></header>
       {ok && (<>
         {unreadSays(a) && <div className="pnl-err" data-testid="adoption-unread">{unreadSays(a)}</div>}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10 }} data-testid="adoption-funnel">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(118px, 1fr))', gap: 10 }} data-testid="adoption-funnel">
           {a.funnel.map(f => (
-            <div key={f.step} className="pnl-card" title={stepSays(f.step)} style={{ padding: '8px 10px' }}>
+            <div key={f.step} className="pnl-card" title={stepSays(f.step)}>
               <div className="pnl-card-l">{stepLabel(f.step)}</div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
                 <span className="pnl-card-b" style={{ fontSize: 16 }}>{f.accounts}</span>

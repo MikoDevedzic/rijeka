@@ -24,7 +24,6 @@ function payload(error, source, extra = {}) {
   const stack = String(error?.stack || extra.stack || '').slice(0, MAX_FIELD)
   return {
     message, stack, source,
-    url: String(window.location.href).slice(0, 300),
     route: window.location.pathname,
     user_agent: String(navigator.userAgent || '').slice(0, 200),
     release: RELEASE,

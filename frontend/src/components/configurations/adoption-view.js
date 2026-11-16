@@ -55,10 +55,9 @@ export function unreadSays(a) {
   return u.length ? `Not read just now: ${u.join(', ')}. The figures below are short by that, not zero; reload to ask again.` : ''
 }
 
-/** A cohort's cell: how many of its accounts were active that many weeks later. A week that has not begun is a dash
- *  (a figure the page cannot have yet); a week in which no account was created has nothing to take a share of. */
+/** A cohort's cell: how many of its accounts were active that many weeks later. A dash where there is no figure to
+ *  give: a week that has not begun, or a week in which no account was created. */
 export function kept(n, of) {
-  if (n == null) return '—'
-  if (!of) return ''
+  if (n == null || !of) return '—'
   return `${n} · ${Math.round((n / of) * 100)}%`
 }

@@ -16,7 +16,8 @@ NOW = datetime(2026, 11, 16, 15, 0, tzinfo=timezone.utc)
 
 
 @pytest.fixture(autouse=True)
-def _clean():
+def _clean(monkeypatch):
+    monkeypatch.setenv("RIJEKA_RECORD", "1")
     store._reset_for_tests(); activity._reset_for_tests()
     yield
     store._reset_for_tests(); activity._reset_for_tests()
@@ -136,11 +137,11 @@ def test_one_fault_hit_by_several_people_is_one_line_with_who():
             _row("api", "/api/xva/simulate", "POST /api/xva/simulate answered 500", U1, "one@example.com", status=500, source="POST"),
             _row("slow", "/api/ccr/run", "POST /api/ccr/run took 41 s", None, None, status=200, ms=41_000, source="POST")]
     g = store.group(rows)
-    assert [x["kind"] for x in g] == ["browser", "api", "slow"]                                  # most accounts first
-    page = g[0]
+    assert [x["kind"] for x in g] == ["api", "slow", "browser"]                                  # what the API saw for itself first
+    page = g[2]
     assert page["count"] == 4 and page["accounts"] == 2 and page["anonymous"] == 1 and page["emails"] == ["one@example.com", "two@example.com"]
     assert page["first"] == NOW.isoformat() and page["last"] == (NOW + timedelta(minutes=2)).isoformat()
-    assert g[2]["slowest_ms"] == 41_000 and g[2]["accounts"] == 0 and g[2]["anonymous"] == 1
+    assert g[1]["slowest_ms"] == 41_000 and g[1]["accounts"] == 0 and g[1]["anonymous"] == 1
 
 
 # ── what the operator is told ────────────────────────────────────────────────
@@ -151,12 +152,13 @@ def test_the_message_says_what_and_how_many_and_names_nobody():
     body = alerts.compose(g)
     assert body.split("\n") == [
         "**3 problems on the desk**",
-        "- On /risk: This page could not be loaded · 2 accounts and visitors not signed in, 3 times",
         "- POST /api/xva/simulate answered 500 · 1 account, once",
         "- POST /api/ccr/run took 41 s · a visitor not signed in, once",
+        "- On /risk: This page could not be loaded · 2 accounts and visitors not signed in, 3 times",
         "Who was affected, and the details: Configurations → SYSTEM."]
     assert "example.com" not in body and U1 not in body
     assert alerts.compose(g[:1]).startswith("**A problem on the desk**")
+    assert alerts.describe({**g[0], "source": "pro*pfind](x)"}).startswith("PROPFINDX /api/xva/simulate answered 500")      # a method is letters only
     many = [{**g[0], "fingerprint": str(i)} for i in range(11)]
     assert alerts.compose(many).split("\n")[-2] == "- and 3 more" and len(alerts.compose(many).split("\n")) == 11
     assert alerts.plain(body).startswith("3 problems on the desk")
@@ -166,6 +168,9 @@ def test_a_strangers_words_cannot_become_a_link_or_formatting_in_the_operators_m
     nasty = "**URGENT** [verify your account](https://evil.example/login) <img src=x onerror=1> `rm` mail bad@evil.example\nnext line www.evil.example/x javascript://x"
     line = alerts.said(nasty)
     assert line == "URGENT verify your account an address img src=x onerror=1 rm mail an address next line an address an address"
+    # a mail reader makes a link of a bare name with a dot in it: none is left between two words
+    assert alerts.said("sign in again at evil.example/login or rijeka.app.evil.example") == "sign in again at evil example/login or rijeka app evil example"
+    assert alerts.said("Cannot read properties of undefined (reading 'npv'). Value 1.25 kept.") == "Cannot read properties of undefined reading 'npv'. Value 1.25 kept."
     for mark in ("*", "[", "]", "<", ">", "`", "http", "evil", "\n"):
         assert mark not in line
     assert alerts.said("see https://app.rijeka.app/assets/RiskPage-DqcMWrxG.js") == "see an address"
@@ -175,13 +180,14 @@ def test_a_strangers_words_cannot_become_a_link_or_formatting_in_the_operators_m
     assert "evil" not in body and "](" not in body and body.count("**") == 2                     # only the heading's own marks
 
 
-def test_only_what_the_api_saw_or_a_signed_in_account_reported_rings():
-    anonymous = store.group([_row(), _row()])[0]
-    signed_in = store.group([_row(user=U1)])[0]
-    server = store.group([_row("api", "/api/x", "POST /api/x answered 500", None, status=500, source="POST")])[0]
-    slow = store.group([_row("slow", "/api/x", "x", None, status=200, ms=40_000, source="POST")])[0]
-    assert alerts.rings(anonymous) is False                                                      # anyone can post one, saying anything
-    assert alerts.rings(signed_in) and alerts.rings(server) and alerts.rings(slow)
+def test_what_rings_a_fault_of_the_apis_a_slow_answer_a_signed_in_accounts_report():
+    one = lambda **k: store.group([_row(**k)])[0]                                                 # noqa: E731
+    assert alerts.rings(store.group([_row(), _row()])[0]) is False                                # not signed in: anyone can post one, saying anything
+    assert alerts.rings(one(user=U1)) is True
+    assert alerts.rings(one(user=U1, source="net-chat-send", message="chat: a message was not sent (not reached)")) is False    # one person's connection
+    for status, want in ((500, True), (502, True), (504, True), (501, False), (503, False)):      # "not supported" and "not configured" are answers
+        assert alerts.rings(one(kind="api", route="/api/x", message=f"POST /api/x answered {status}", status=status, source="POST")) is want, status
+    assert alerts.rings(one(kind="slow", route="/api/x", message="x", status=200, ms=40_000, source="POST")) is True
 
 
 def test_all_browsers_together_can_make_the_api_keep_only_so_much(monkeypatch):
@@ -189,6 +195,23 @@ def test_all_browsers_together_can_make_the_api_keep_only_so_much(monkeypatch):
     assert [store.add("browser", message=f"m{i}") for i in range(5)] == [True, True, True, False, False]
     assert store.add("api", source="GET", route="/api/x", status=500) is True                    # what the API saw is not theirs to crowd out
     assert store.status(_Db())["dropped"] == 2
+    store._reset_for_tests(); monkeypatch.setattr(store, "BROWSER_PER_10_MIN", 100); monkeypatch.setattr(store, "BROWSER_PER_DAY", 2)
+    assert [store.add("browser", message=f"m{i}") for i in range(3)] == [True, True, False]       # and in a day
+
+
+def test_a_report_nobody_signed_keeps_only_the_start_of_its_stack():
+    store.add("browser", message="m", stack="s" * 9000); store.add("browser", message="m", stack="s" * 9000, user_id=U1)
+    db = _Db(); store.flush(lambda: db)
+    assert len(db.rows[0]["stack"]) == store.ANONYMOUS_STACK and len(db.rows[1]["stack"]) == 4000
+    store.add("browser", message="a\x00b"); store.flush(lambda: db)
+    assert db.rows[2]["message"] == "ab"                                                         # the database takes no NUL
+
+
+def test_only_the_hosted_api_keeps_problems_a_developers_own_server_does_not(monkeypatch):
+    monkeypatch.delenv("RIJEKA_RECORD", raising=False); monkeypatch.delenv("RENDER", raising=False)
+    assert store.add("api", source="GET", route="/api/x", status=500) is False and store.status(_Db())["recording"] is False
+    monkeypatch.setenv("RENDER", "true")
+    assert store.add("api", source="GET", route="/api/x", status=500) is True
 
 
 def test_the_days_summary_is_sent_when_there_was_nothing_too():
@@ -227,6 +250,22 @@ def test_without_the_table_the_step_does_nothing_and_never_raises():
     assert alerts.step(Broken(), now=NOW) == {"failed": "RuntimeError"}
 
 
+def test_the_token_check_for_a_public_route_reads_no_database_and_asks_for_no_keys(monkeypatch):
+    """The browser's report is public: its sign-in is read for the account only, a bad one is nobody, and a stranger
+    cannot make the route call out for the key set or wait on the database."""
+    from middleware import auth
+    asked = []
+    async def keys(force=False):
+        asked.append(force)
+        return {"keys": []}
+    monkeypatch.setattr(auth, "_get_jwks", keys)
+    monkeypatch.setattr(auth, "db_role_for", lambda sub: (_ for _ in ()).throw(AssertionError("the database was read")))
+    unknown = "Bearer eyJhbGciOiJFUzI1NiIsImtpZCI6Im5vdC1hLWtleSIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ4In0.c2ln"      # ES256, a key id nobody has
+    assert asyncio.run(auth.account_of(unknown)) is None and asked == [False]                    # asked the cache once, never forced
+    assert asyncio.run(auth.account_of("Bearer nonsense")) is None and asyncio.run(auth.account_of(None)) is None
+    assert asyncio.run(auth.account_of("Basic abc")) is None
+
+
 def test_the_routes_are_public_to_report_and_the_admins_to_read():
     import main
     from fastapi.testclient import TestClient
@@ -244,7 +283,8 @@ def test_the_panels_canned_body_has_the_shape_the_api_gives():
         pytest.skip("not a full checkout")
     canned = json.load(open(path))
     g = store.group([_row(user=U1, email="one@example.com")])
-    real = {"hours": 24, **store.status(_Db()), "unread": False, "occurrences": 1, "problems": [{**x, "line": alerts.describe(x)} for x in g], "mail": False}
+    real = {"hours": 24, **store.status(_Db()), "unread": False, "occurrences": 1, "truncated": False,
+            "problems": [{**x, "line": alerts.describe(x), "rings": alerts.rings(x)} for x in g], "mail": False, "rooms": 1}
     assert set(canned) == set(real)                                           # what api/routes/ops.py: ops_problems returns
     assert set(canned["problems"][0]) == set(real["problems"][0])
     for p in canned["problems"]:

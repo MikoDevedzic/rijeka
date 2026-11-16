@@ -157,7 +157,7 @@ export const STORIES = [
   ] },
   { id: 'clock', name: 'THE CLOCK', follow: 'FOLLOW THE CLOCK', lede: 'What the system does by itself, with nobody signed in. The scheduler runs inside the API.', steps: [
     { k: 't0', name: 'EVERY MINUTE', pieces: ['api', 'chain', 'pg'], joins: ['api_chain', 'api_pg'],
-      say: 'Every pass of the scheduler\'s loop, about a minute: it follows a confirmation whose block had not arrived when the request returned, and finishes it when the chain has it. One cheap query when nothing is waiting; it needs a table the hosted demo does not have yet, and does nothing there.' },
+      say: 'Every pass of the scheduler\'s loop, about a minute: it follows a confirmation whose block had not arrived when the request returned, and finishes it when the chain has it; and it tells the operator of a problem a user met (an error in a browser, a request the API failed or was slow to answer). One cheap query each when nothing is waiting; each needs a table of its own and does nothing without it.' },
     { k: 't1', name: 'EVERY 10 MINUTES', pieces: ['venue', 'api', 'pg'], joins: ['api_venue', 'api_pg'],
       say: 'Every ten minutes: three requests to the venue for option marks and forwards on BTC, ETH and SOL, and three for the spot, stored as the digital-asset surfaces.' },
     { k: 't2', name: 'EVERY 30 MINUTES', pieces: ['pub', 'api', 'pg', 'ai'], joins: ['api_pub', 'api_pg', 'api_ai'],

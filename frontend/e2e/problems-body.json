@@ -1,8 +1,74 @@
 {
-  "hours": 24, "recording": true, "buffered": 0, "dropped": 0, "keep_days": 30, "slow_seconds": 30.0, "unread": false, "occurrences": 6, "mail": false,
-  "problems": [
-    {"fingerprint": "a1", "kind": "browser", "source": "boundary-load", "route": "/risk", "status": null, "message": "Failed to fetch dynamically imported module", "count": 4, "accounts": 2, "emails": ["one@example.com", "a.very.long.account.name.that.must.wrap@example-of-a-long-domain.com"], "anonymous": 1, "first": "2026-11-16T14:02:00+00:00", "last": "2026-11-16T14:31:00+00:00", "slowest_ms": null, "release": "063bb5f4b8bf", "line": "On /risk: Failed to fetch dynamically imported module · 2 accounts and visitors not signed in, 4 times"},
-    {"fingerprint": "b2", "kind": "api", "source": "POST", "route": "/api/xva/simulate", "status": 500, "message": "POST /api/xva/simulate answered 500", "count": 1, "accounts": 1, "emails": ["one@example.com"], "anonymous": 0, "first": "2026-11-16T15:10:00+00:00", "last": "2026-11-16T15:10:00+00:00", "slowest_ms": 812, "release": null, "line": "POST /api/xva/simulate answered 500 · 1 account, once"},
-    {"fingerprint": "c3", "kind": "slow", "source": "POST", "route": "/api/ccr/run", "status": 200, "message": "POST /api/ccr/run took 41 s", "count": 1, "accounts": 0, "emails": [], "anonymous": 1, "first": "2026-11-16T11:00:00+00:00", "last": "2026-11-16T11:00:00+00:00", "slowest_ms": 41400, "release": null, "line": "POST /api/ccr/run took 41 s · a visitor not signed in, once"}
-  ]
+ "hours": 24,
+ "recording": true,
+ "buffered": 0,
+ "dropped": 0,
+ "keep_days": 30,
+ "slow_seconds": 30.0,
+ "unread": false,
+ "occurrences": 6,
+ "mail": false,
+ "problems": [
+  {
+   "fingerprint": "b2",
+   "kind": "api",
+   "source": "POST",
+   "route": "/api/xva/simulate",
+   "status": 500,
+   "message": "POST /api/xva/simulate answered 500",
+   "count": 1,
+   "accounts": 1,
+   "emails": [
+    "one@example.com"
+   ],
+   "anonymous": 0,
+   "first": "2026-11-16T15:10:00+00:00",
+   "last": "2026-11-16T15:10:00+00:00",
+   "slowest_ms": 812,
+   "release": null,
+   "line": "POST /api/xva/simulate answered 500 \u00b7 1 account, once",
+   "rings": true
+  },
+  {
+   "fingerprint": "c3",
+   "kind": "slow",
+   "source": "POST",
+   "route": "/api/ccr/run",
+   "status": 200,
+   "message": "POST /api/ccr/run took 41 s",
+   "count": 1,
+   "accounts": 0,
+   "emails": [],
+   "anonymous": 1,
+   "first": "2026-11-16T11:00:00+00:00",
+   "last": "2026-11-16T11:00:00+00:00",
+   "slowest_ms": 41400,
+   "release": null,
+   "line": "POST /api/ccr/run took 41 s \u00b7 a visitor not signed in, once",
+   "rings": true
+  },
+  {
+   "fingerprint": "a1",
+   "kind": "browser",
+   "source": "boundary-load",
+   "route": "/risk",
+   "status": null,
+   "message": "Failed to fetch dynamically imported module",
+   "count": 4,
+   "accounts": 2,
+   "emails": [
+    "one@example.com",
+    "a.very.long.account.name.that.must.wrap@example-of-a-long-domain.com"
+   ],
+   "anonymous": 1,
+   "first": "2026-11-16T14:02:00+00:00",
+   "last": "2026-11-16T14:31:00+00:00",
+   "slowest_ms": null,
+   "release": "063bb5f4b8bf",
+   "line": "On /risk: Failed to fetch dynamically imported module \u00b7 2 accounts and visitors not signed in, 4 times",
+   "rings": true
+  }
+ ],
+ "truncated": false,
+ "rooms": 1
 }

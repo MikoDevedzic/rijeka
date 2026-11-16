@@ -486,19 +486,27 @@ tells the operator.
 - **Where it is kept.** `health_events` (`docs/migrations/2026-11-16_health.sql`), written by `health/store.py` off
   the request path, 30 days, row-level security on with no policy. The account is a reference that is set to null
   when the account is deleted. A browser's report is text from outside: cut to a length, scrubbed of anything
-  shaped like a token, and all browsers together are kept to 300 reports in ten minutes. Without the table the
-  older memory log is all there is, and nobody is alerted.
-- **Who is told, and when** (`health/alerts.py`, the scheduler's `health_alerts` step, every pass). A new problem
-  that the API saw for itself, or that a signed-in account's browser reported, is told once: one SYSTEM message
-  from "Rijeka health" in the support room of every admin account (the messenger's badge, chime and desktop
-  notification do the rest), and a mail through Resend when `RESEND_API_KEY` and `RIJEKA_ALERT_EMAIL_TO` are set.
-  The same fault is not told again for six hours; at most six messages an hour; a report from a browser that is
-  not signed in never rings by itself (anyone can post one). Once a day after 13:00 UTC a summary of the last 24
-  hours is sent, also when there was nothing. No message names an account, and a browser's words are reduced to
-  plain text with every address replaced before they are repeated.
+  shaped like a token; all browsers together are kept to 120 reports in ten minutes and 5,000 a day, and a report
+  nobody signed keeps only the start of its stack. Only the hosted API keeps problems (`RIJEKA_RECORD`). Without
+  the table the older memory log is all there is, and nobody is alerted.
+- **Who is told, and when** (`health/alerts.py`, the scheduler's `health_alerts` step, every pass, under an
+  advisory lock so that two instances never both run it). What rings: a request failed with 500, 502 or 504, a slow
+  answer, a signed-in account's browser report. What is kept and shown and does not ring: a 501 or a 503, a report
+  whose source begins `net-` (the browser could not reach the API), and any report nobody signed (anyone can post
+  one: it can neither ring nor silence a real fault, since only a fault that rang counts as told). A new fault is
+  told once: one SYSTEM message from "Rijeka health" in the support room of every admin account (the messenger's
+  badge, chime and desktop notification do the rest), and a mail through Resend when `RESEND_API_KEY` and
+  `RIJEKA_ALERT_EMAIL_TO` are set. Not again for six hours; at most six messages an hour (the rest wait, untold,
+  for room); once a day after 13:00 UTC a summary of the last 24 hours, also when there was nothing. A fault is
+  marked told in the same transaction that posts the message, and only when a room or a mailbox was reached;
+  otherwise it stays untold and the step raises `Undelivered`, which the scheduler records as a failed step on
+  `GET /api/ops/health`. No message names an account, and a browser's words are reduced to plain text with every
+  address replaced before they are repeated.
 - **Who reads it.** `GET /api/ops/problems` (admin): the same problem as one line, how often, how many accounts and
   who; shown on Configurations → SYSTEM (`ProblemsPanel.jsx`). `GET /api/ops/health` carries a count
-  (`problems.last_24h`) and nothing else. The older `GET /api/ops/client-errors` (signed-in, the memory log, no
+  (`problems.last_24h`, asked of the database once a minute) and nothing else. The public route that takes a
+  report reads the sign-in for the account alone (`middleware/auth.py: account_of`): no database, no refetch of
+  the key set, and a sign-in that does not verify is nobody. The older `GET /api/ops/client-errors` (signed-in, the memory log, no
   account) is unchanged.
 - **What this is not.** It hears of a problem only while the API is up to hear it. An API that is down, or a
   browser that cannot reach it, is the outside check's to see (`docs/ops/monitoring.md`).

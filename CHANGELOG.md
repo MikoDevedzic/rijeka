@@ -14,16 +14,27 @@ the host's log; a chat message that never left was nowhere.
   server error; a request it takes 30 seconds or more to answer. Each is kept for 30 days with the account that
   met it, when there was one: a signed-in page now sends its report with the session. Of a failed request only
   the route as declared is kept, never the address, so no identifier is.
-- **Who is told.** A new problem that the API saw for itself, or that a signed-in account reported, is told once:
-  a message from "Rijeka health" in the support room of every admin account, where the messenger's badge and
-  chime announce it, and a mail when the two mail settings are set (`docs/ops/environment.md`). The same fault is
-  not told again for six hours, and never more than six messages an hour. Once a day there is a summary of the
-  last 24 hours, also when nothing went wrong, so that silence means nothing went wrong. No message names an
-  account; a browser's own words are reduced to plain text before they are repeated.
+- **Who is told.** A new fault is told once: a message from "Rijeka health" in the support room of every admin
+  account, where the messenger's badge and chime announce it, and a mail when the two mail settings are set
+  (`docs/ops/environment.md`). What rings: a request the API fails with 500, 502 or 504, a slow answer, and what a
+  signed-in account's browser reports. What is kept and shown but does not ring: a 501 or a 503 (an answer, not a
+  fault), a browser that could not reach the API (one person's connection), and any report from a browser that
+  is not signed in, which anyone can send and which therefore can neither ring nor silence a real fault. A fault
+  the operator was told of is not told again for six hours; at most six messages an hour, and what is over waits
+  and rings when the hour has room. Once a day there is a summary of the last 24 hours, also when nothing went
+  wrong, so that silence means nothing went wrong. No message names an account; a browser's own words are
+  reduced to plain text, with no address and nothing a mail reader would turn into a link.
+- **An alarm that reaches nobody says so.** A fault is marked told only when the message reached a support room
+  or a mailbox. When it reached nobody (no admin has opened the messenger and no mail is set) the fault stays
+  untold, the scheduler's step is reported as failed on `GET /api/ops/health`, the watch fails on it, and the
+  SYSTEM page says NOBODY IS TOLD.
 - **Who it hit.** Configurations → SYSTEM has a panel for the admin role: each problem as one line, how often, how
   many accounts, and who they are.
 - **Nothing is kept or told until its table is applied** (`docs/migrations/2026-11-16_health.sql`). Until then the
   older log in the API's memory is all there is.
+- Only the hosted API keeps problems (`RIJEKA_RECORD`, as the activity record): a developer's own server reads the
+  same database, and its errors are not the desk's. A browser's report no longer carries the page's full address,
+  only its route.
 - **What it cannot see.** A problem reaches the API only while the API is up. An outage is the outside check's to
   see (`docs/ops/monitoring.md`), which is the owner's to set up.
 - The Privacy Notice (version 1.2) says what an error report carries, that it is kept with the account for 30

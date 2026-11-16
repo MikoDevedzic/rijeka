@@ -38,7 +38,7 @@ export RIJEKA_JWKS_FILE='$JWKS'
 export SUPABASE_URL='http://stack.local'
 export RIJEKA_DEMO_PROVISION=0
 export RIJEKA_SCHEDULER=0
-export RIJEKA_RECORD=1          # the activity record is written on the stack as on the host (activity/store.py)
+export RIJEKA_RECORD=1          # the activity and health records are written on the stack as on the host
 export RIJEKA_DEMO_MARKET_DATA=0
 export RIJEKA_CHAIN_DEV_SEED=stack-local
 # empty on purpose: db/session.py loads backend/.env, and a set variable (even empty) is never overridden,

@@ -25,7 +25,7 @@ describe('adoption-view', () => {
     expect(unreadSays({ unread: [] })).toBe(''); expect(unreadSays(null)).toBe('')
     expect(unreadSays({ unread: ['accounts', 'trades'] })).toBe('Not read just now: accounts, trades. The figures below are short by that, not zero; reload to ask again.')
   })
-  it('a cohort cell is a count and its share, a dash for a week that has not begun, nothing for a week with no new accounts', () => {
-    expect(kept(3, 4)).toBe('3 · 75%'); expect(kept(0, 4)).toBe('0 · 0%'); expect(kept(0, 0)).toBe(''); expect(kept(null, 4)).toBe('—'); expect(kept(null, 0)).toBe('—')
+  it('a cohort cell is a count and its share, and a dash where there is no figure to give', () => {
+    expect(kept(3, 4)).toBe('3 · 75%'); expect(kept(0, 4)).toBe('0 · 0%'); expect(kept(0, 0)).toBe('—'); expect(kept(null, 4)).toBe('—'); expect(kept(null, 0)).toBe('—')
   })
 })
