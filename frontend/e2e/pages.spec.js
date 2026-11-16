@@ -50,6 +50,9 @@ for (const [url, expected, where] of PAGES) {
     const text = await app.locator('body').innerText()
     expect(text, `${url} shows an error boundary`).not.toMatch(BOUNDARY)
     expect(app.url(), `${url} redirected away (signed out or a missing route)`).toContain(url)
+    // for a reader who does not see the page: it says which page it is, once, and marks its main content, once
+    expect(await app.locator('h1').count(), `${url} has one first heading`).toBe(1)
+    expect(await app.locator('main, [role=main]').count(), `${url} has one main`).toBe(1)
     // ISDA SIMM is licensed and not computed here: a record's page does not name it as the margin's basis (the
     // local stack's counterparty carries the old default on purpose, and is read as MODEL)
     if (/counterparties|legal-entities/.test(url)) expect(text, `${url} names SIMM`).not.toMatch(/\bSIMM\b/)

@@ -10,7 +10,7 @@ describe('a page says which page it is', () => {
     expect(pageName('/configurations/market-data/curves')).toBe('Configurations')
   })
   it('a page with a heading of its own, or one it does not know, gets none', () => {
-    for (const p of ['/methodology', '/methodology/fx-options', '/login', '/terms', '/blotterx', '/']) expect(pageName(p)).toBe(null)
+    for (const p of ['/methodology', '/methodology/fx-options', '/login', '/terms', '/blotterx', '/', '/news', '/roadmap', '/configurations/counterparties', '/configurations/legal-entities']) expect(pageName(p)).toBe(null)
   })
 })
 
@@ -26,6 +26,7 @@ describe('Enter or Space does what a click does, on the thing itself', () => {
   it('not on another key, and not for a key pressed in a control inside it (a row\'s checkbox)', () => {
     const fn = vi.fn(), on = pressKey(fn)
     on(ev('a')); on(ev('Tab')); on(ev('Enter', false)); on(ev(' ', false))
+    on({ ...ev('Enter'), ctrlKey: true }); on({ ...ev('Enter'), metaKey: true }); on({ ...ev(' '), altKey: true })        // Ctrl+Enter is the ticket's BOOK
     expect(fn).not.toHaveBeenCalled()
   })
 })

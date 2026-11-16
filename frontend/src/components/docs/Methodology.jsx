@@ -203,7 +203,7 @@ export default function Methodology() {
           </div>
         </nav>
 
-        <main className="mr-main" ref={top}>
+        <div className="mr-main" ref={top}>
           <select className="mr-pick" aria-label="Section" value={id} onChange={e => go(e.target.value)}>
             {GROUPS.map(([g, ids]) => <optgroup key={g} label={g}>{ids.map(x => <option key={x} value={x}>{EXTRA[x] ? '' : `§${x}  `}{plain(x)}</option>)}</optgroup>)}
           </select>
@@ -288,7 +288,7 @@ export default function Methodology() {
             {prev ? <button type="button" className="mr-btn" data-testid="mr-prev" onClick={() => go(prev)}>← {EXTRA[prev] ? '' : `§${prev} `}{plain(prev)}</button> : <span />}
             {next ? <button type="button" className="mr-btn" data-testid="mr-next" onClick={() => go(next)}>{EXTRA[next] ? '' : `§${next} `}{plain(next)} →</button> : <span />}
           </div>
-        </main>
+        </div>
       </div>
     </div>
   )

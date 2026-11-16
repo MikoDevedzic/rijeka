@@ -358,7 +358,7 @@ function MessengerPanes({ width }) {
       <div className={`ms-body${twoPane ? ' two' : ''}`}>
         {showList && <ConversationList onCompose={setCompose} />}
         {showMain && (
-          <main className="ms-main">
+          <div className="ms-main">
             {compose?.mode === 'alerts' ? <AlertSettings onDone={() => setCompose(null)} />
               : compose ? <Compose compose={compose} onDone={() => setCompose(null)} />
               : activeId === PROMETHEUS ? <PrometheusThread back={!twoPane} />
@@ -370,7 +370,7 @@ function MessengerPanes({ width }) {
                     : 'Pick one on the left, or start a new one. Trades you share in a room arrive as cards the other side can countersign.'}</div>
                   {status !== 'no-firm' && <div className="k">+ NEW · START A CONVERSATION</div>}
                 </div></div>}
-          </main>
+          </div>
         )}
       </div>
   )

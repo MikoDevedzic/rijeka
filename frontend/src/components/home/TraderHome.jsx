@@ -16,6 +16,7 @@ import Fixings from '../risk/Fixings'
 import { BUCKETS, BUCKET_LABEL, bucketReach, factors, lanes, peak, carry, limitMarks, standing, more, factorLimits, limitsOf, shownOn, against, scene, canLimit, columns, laneMarks, markFigure, laneFigures, figureAt, statement, moved, fmt0, signed, tone } from './trader-home'
 import { useGet, useRisk } from './use-risk'
 import { pressKey } from '../../lib/a11y'
+import PageHeading from '../common/PageHeading'
 import './TraderHome.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -75,7 +76,8 @@ export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], 
   const off = (key) => onRequest.includes(key) ? 'on request' : canEdit ? 'switched off' : "switched off by your firm's admin"
 
   return (
-    <div className="dh th" data-testid="trader-home">
+    <div className="dh th" data-testid="trader-home" role="main">
+      <PageHeading />
       {strip}
 
       <section className="th-st">

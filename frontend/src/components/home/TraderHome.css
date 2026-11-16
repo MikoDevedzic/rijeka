@@ -64,7 +64,8 @@ table.th-t { width: 100%; border-collapse: collapse; }
 .th-panel .th-t tbody tr { cursor: pointer; }
 .th-panel .th-t tbody tr:hover td, .th-panel .th-t tbody tr:focus-visible td { background: var(--row-hover); color: var(--text-hi); }
 .th-panel .th-t tbody tr:hover td:first-child, .th-panel .th-t tbody tr:focus-visible td:first-child { box-shadow: inset 2px 0 0 var(--row-rule); }
-.th-panel .th-t tbody tr:focus-visible { outline: none; }
+/* a row reached by the keyboard: the band the pointer gives it and the app's ring inside the row's own edge, as on the blotter */
+.th-panel .th-t tbody tr:focus-visible { outline: 1px solid var(--accent); outline-offset: -1px; }
 .th-links { display: flex; gap: 16px; }
 .th .dh-st { font-size: 11px; }
 

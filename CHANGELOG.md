@@ -13,16 +13,25 @@ and a dozen of its fields had no name, and that no page said in a heading which 
   Space opens its trade. A column that sorts is pressed the same way and says which way it is sorted. Each row's
   box, the box that selects all and the search field have names.
 - **What needs you, on the home**, is pressed by Enter or Space as by a click.
-- **The ticket is a dialog with a name** ("New trade", or the trade's reference). Every field on it is named by the
-  caption over it: on every product's TRADE tab, and on the XVA tab with its model inputs (25 of those had none).
-- **Every page says which page it is** in a first heading, read and not drawn, and marks its main content.
+- **The ticket is a dialog with a name** ("New trade", or the trade's reference). A field on it is named by the
+  caption over it, also one that appears later (a leg added, a block opened); where one caption stands over several
+  fields each is told apart. Held by a journey on ten products' TRADE tabs, an FX forward's other tabs and the rates
+  XVA tab with its model inputs (25 of those had none).
+- **A page says which page it is, once, and marks its main content, once**: a first heading, read and not drawn
+  where the top bar already shows the page. Held on each of the thirty-odd pages the suite opens. The messenger's
+  pane and the methodology's column were second main regions inside a page that had one.
+- **Focus is shown one way on a row**: the band the pointer gives it and the app's ring inside the row's edge, on
+  the blotter and on the home.
 
 Not changed: Escape does not close a ticket (an unbooked ticket lost to a stray key is the worse fault; CANCEL
 and CLOSE are reached by Tab). A blotter of many trades is as many stops; moving between rows by the arrow keys is
-not built. Contrast was measured roughly and nothing fell below 4.5 to 1; that wants a second measure.
+not built, and closing a ticket does not put the focus back on its row. Two new tickets open at once have the same
+name. Contrast was measured roughly and nothing fell below 4.5 to 1; that wants a second measure. The app's ring
+is one pixel.
 
-Tests: a keyboard journey (`keyboard.spec.js`): the blotter, every product's ticket and its tabs with no unnamed
-field, the home's items, the heading and the main landmark on five pages; unit tests for the two helpers.
+Tests: a keyboard journey (`keyboard.spec.js`): the blotter, ten products' tickets and their tabs with no unnamed
+field, the home's items; the pages journey holds each page it opens to one first heading and one main; unit tests
+for the helpers.
 
 ## 0.47.1 · 16 November 2026
 

@@ -104,6 +104,7 @@ test('the home says what it is, and what needs you is pressed by keyboard', asyn
   for (let i = 0; i < n; i++) { await expect(items.nth(i)).toHaveAttribute('tabindex', '0'); await expect(items.nth(i)).toHaveAttribute('role', 'button') }
   // the first that leads to a page: Enter goes there
   const before = app.url()
+  await expect(app.locator('.ms-window'), 'the messenger is closed to begin with').toHaveCount(0)
   await items.first().focus(); await expect(items.first()).toBeFocused()
   await app.keyboard.press('Enter')
   await expect.poll(async () => app.url() !== before || (await app.locator('.ms-window').count()) > 0, { message: 'Enter on the item did what a click does' }).toBe(true)

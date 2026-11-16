@@ -236,7 +236,8 @@
 .lf-n { font-size:0.86rem; color:var(--text-mute); } .lf-n.on { color:var(--amber); }
 .lf-list { list-style:none; margin:0; padding:0; }
 .lf-list li { display:grid; grid-template-columns:auto 1fr auto; gap:0.7rem; align-items:center; padding:0.42rem 0; border-bottom:1px solid var(--border); font-size:0.86rem; }
-.lf-list li.go { cursor:pointer; } .lf-list li.go:hover .lf-t b { color:var(--accent); }
+.lf-list li.go { cursor:pointer; } .lf-list li.go:hover .lf-t b, .lf-list li.go:focus-visible .lf-t b { color:var(--accent); }
+.lf-list li.go:focus-visible { outline:1px solid var(--accent); outline-offset:-1px; background:var(--row-hover); }
 .lf-t { display:flex; flex-direction:column; min-width:0; }
 .lf-t b { font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .lf-t small { font-family:var(--mono); font-size:0.86rem; letter-spacing:0.06em; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

@@ -161,17 +161,19 @@ shown until a second answer exists (the blotter's STORE).
 
 ## Without a mouse, without the page
 
-Every screen is held to these (`frontend/src/lib/a11y.js`, the journey `e2e/keyboard.spec.js`):
+What the screens the journeys open are held to (`frontend/src/lib/a11y.js`; the journeys `e2e/keyboard.spec.js` and
+`e2e/pages.spec.js`). A new screen is added to one of them.
 
 - **Whatever is pressed is reached by Tab and pressed by Enter or Space.** A button is one already. A table row or a
-  list item that is pressed (a blotter row, a NEEDS YOU item, a column that sorts) has `tabIndex`, a key handler
-  (`pressKey`) and the same band the pointer gives it, with the app's ring.
-- **Every field has a name.** The caption over a field names it (`useFieldLabel` in the ticket's field wrappers);
-  a field with no caption has an `aria-label`. A placeholder or a tooltip is not a name.
+  list item that is pressed (a blotter row, a NEEDS YOU item, a column that sorts) has `tabIndex` and a key handler
+  (`pressKey`: the key on the thing itself, no modifier held).
+- **A field has a name.** The caption over a field names it (`useFieldLabel` in the ticket's field wrappers, which
+  also names a field that appears later, and tells apart several fields under one caption); a field with no caption
+  has an `aria-label`. A placeholder or a tooltip is not a name.
 - **A window says it is one.** The ticket is `role="dialog"` with the trade's reference, or "New trade".
-- **A page says which page it is** in one first heading (`PageHeading`, read and not drawn, where the top bar
-  already shows it) and has one `main`.
-- **Focus is always shown**: the app's ring, or the row's band and rule where a ring would be cut by the table.
+- **A page says which page it is, once, and has one main.** Its own `h1` where it draws one; otherwise
+  `PageHeading`, a heading that is read and not drawn (`.rj-sr`), because the top bar already shows the page. A
+  pane inside a page (the messenger's, the methodology's column) is not a second `main`.
 
 ## Buttons, fields, rows
 
@@ -184,6 +186,10 @@ the word may not.
 Three things a user does to the screen, each with one look everywhere (`index.css`, the block "What can be
 pressed, typed into or pointed at"; tokens `--btn-*`, `--fld-*`, `--row-*`).
 
+- **Focus is always shown.** A row that is pressed takes the band the pointer gives it and the app's ring inside
+  the row's own edge (a ring outside it would be cut by the table): the blotter's rows, the home's trade rows, a
+  NEEDS YOU item. A field takes the two-pixel ring of its well. Everything else takes the app's ring
+  (`:focus-visible` in `index.css`, one pixel in the accent).
 - **A button is raised.** A lighter face than the panel it stands on, a bright edge, bright text, a darker foot
   under it; it lifts under the pointer and goes down onto the foot when pressed. Brass is still the one action of
   a view and stands on the same foot. A button whose colour says something (BUY or SELL, a selected mode, a
