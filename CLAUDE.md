@@ -230,4 +230,8 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - A fault found in one count is looked for in every count of the same thing before the change is called done. The
   door's count of anchored confirmations was mended while the register page's header, a second query for the same
   number forty lines below, kept the old one; reading production back against the list found it.
+- A screen that changed is looked at before a reviewer is asked, at the whole picture and to its right edge: a
+  column taken out of the blotter left its width in the table and the head short of the edge, in a picture already
+  on disk. And an edit made by a script is read back where it landed: a comment appended to the middle of a long
+  line cut the rest of the line off, and only a unit test said so.
 

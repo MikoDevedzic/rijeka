@@ -36,6 +36,10 @@ test('the blotter\'s rail on a short window: NEW TRADE in view, the roadmap\'s a
   await expect(rail.locator('.bl-section-lbl', { hasText: 'STORE' })).toHaveCount(elsewhere)
   await expect(app.locator('.bl-root thead th', { hasText: /^UTI$/ })).toHaveCount(1)
   expect(await app.locator('.bl-root thead th').count(), 'a head cell for every body cell').toBe(await app.locator('.bl-root tbody tr').first().locator('td').count())
+  expect(await app.locator('.bl-root colgroup col').count(), 'and a width for every one of them, no more').toBe(await app.locator('.bl-root thead th').count())
+  // the head reaches the table's right edge: a column's width left behind would leave a gap after UTI
+  const edge = await app.locator('.bl-root thead th').last().evaluate(el => { const t = el.closest('table').getBoundingClientRect(), c = el.getBoundingClientRect(); return Math.round(t.right - c.right) })
+  expect(edge, 'the last head cell ends where the table does').toBeLessThanOrEqual(1)
 
   // TOTAL = PENDING + CONFIRMED + LIVE + CLOSED (CLOSED is on the rail only when there is one)
   const n = async (loc) => Number((await loc.textContent()).replace(/\D/g, ''))

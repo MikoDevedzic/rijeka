@@ -68,6 +68,9 @@ Learned on 16 November 2026 (a count beside a list)
 - A flag that says "asked" is set when an answer came, not when the function returned: one set in a `finally` marked every curve as read when the session was not ready, and the list then showed the built-in quotes it was written to replace.
 - State that follows other state is checked for every way the other state changes, not only the ways the change added: a greeting put away by its own two buttons came back after the messenger was opened by an alert.
 
+Learned on 16 November 2026 (a table's widths)
+- "There is none" is written only after looking for the thing by its own name: a review of a column made conditional said the table had no colgroup; it had one (`<colgroup>` in the same file), and the column taken out left its width behind and the head a hundred pixels short of the table. A table that loses or gains a column is checked in three places: the head, the body and the widths.
+
 Rules
 - You are read-only: never edit files, never commit, never push.
 - No style comments. No praise. Only what breaks, what is untested, and what is unclear enough that it will break later.

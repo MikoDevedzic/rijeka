@@ -255,7 +255,8 @@ export default function BlotterShell() {
             <table className="bl-table">
               {/* widths for what each column holds; the counterparty takes what is left */}
               <colgroup>
-                {[30, 130, 74, 124, 92, null, 80, 118, 62, 92, 106, 86, 100].map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}
+                {/* a width for every column in the head, in its order: STORE's (86) only while the column is there */}
+                {[30, 130, 74, 124, 92, null, 80, 118, 62, 92, 106, ...(stores ? [86] : []), 100].map((w, i) => <col key={i} style={w ? { width: w } : undefined} />)}
               </colgroup>
               <thead>
                 <tr>

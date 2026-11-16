@@ -63,9 +63,10 @@ export function sensLabel(kind, curveId = '') {
 export const sensValue = (kind, curveId, v) => (v == null || !isBasis(kind, curveId) ? v : v === 0 ? 0 : -v)
 
 // The inputs table: one row per input, with the counts the controller reads first.
+// (A digital asset's row says "implied rate": its name, BTC_FUNDING, carries the asset, and the longer form was cut.)
 export function inputRows(run) {
   return (run?.inputs || []).map(i => ({
-    curve_id: i.curve_id, kind: i.kind, kindLabel: kindLabel(i.kind, i.curve_id), unit: i.unit, trades: i.trades, state: i.state,
+    curve_id: i.curve_id, kind: i.kind, kindLabel: isBasis(i.kind, i.curve_id) ? 'implied rate' : kindLabel(i.kind, i.curve_id), unit: i.unit, trades: i.trades, state: i.state,
     sensitivity: sensValue(i.kind, i.curve_id, i.sensitivity_total),
     sens: `${sensLabel(i.kind, i.curve_id)} ${fmtSigned(sensValue(i.kind, i.curve_id, i.sensitivity_total))}/${i.unit === 'pct' ? '%' : i.unit === 'vol_pt' ? 'pt' : 'bp'}`,
     desk: i.desk_snapshot_date ? `snapshot ${i.desk_snapshot_date}` : 'no snapshot',
