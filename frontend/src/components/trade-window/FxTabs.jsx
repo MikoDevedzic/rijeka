@@ -27,6 +27,8 @@ import { apiFetch } from '../../lib/api'
 import FxScenarioChart from './FxScenarioChart'
 import FxVolSurface from './FxVolChart'
 import FxRateCurve from './FxRateCurve'
+import { pillars } from './fx-vol'
+import { shockAtTime as shiftAtTime, shockSaid as shockWords } from './rates-scenario'
 import { RISK_FACTORS } from '../../lib/risk-factors'
 import { RESULT_FIG, XVA_ROW, XVA_LEFT, XVA_RIGHT } from './xva-shared'
 import { ladderKey, ladderShown, ladderWanted, marketKey } from './fx-requests'
@@ -42,6 +44,7 @@ const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 // 2px, and a 13px figure, over a 1px border: about 53px). Each tab ends with that much room so its last row is
 // never under the footer.
 const FOOTER_H = 56
+const VOL_PT_BOUND = 10               // the largest whole shock of a tenor of a vol surface, in vol points, either way
 
 // A figure that rounds to nothing at the precision it is shown at is nothing: no minus sign in front of the
 // zero and no colour. An at-the-money trade is worth 0, not a red -0.
@@ -658,6 +661,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const [qbp, setQbp] = useState(0)
   const [bbp, setBbp] = useState(0)
   const [vpt, setVpt] = useState(0)
+  const [vown, setVown] = useState({ pair: null, by: {} })      // the vol surface's own shocks, tenor by tenor, in vol points
   const [sel, setSel] = useState('spot')                               // the curve the left column and the chart are showing
   const [flatPts, setFlatPts] = useState({ pair: null, v: 0 })         // a currency pair's quoted points, all moved together, in pips, for one pair
   const [pill, setPill] = useState({ pair: null, quote: {}, base: {} }) // a rate curve's pillars shocked one by one: date → bp, for one pair
@@ -754,7 +758,14 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const flatPips = crypto ? 0 : fpips
   const moved = nodes.map(n => (moves[n.tenor] || 0) + flatPips)
   const dPoints = model ? interpPoints(Object.fromEntries(nodes.map((n, i) => [n.tenor, moved[i]])), model.days, model.tenorDays) : null
-  const at = (o = {}) => (dPoints == null ? null : reprice(quote, { spotPct: spot, quoteBp: rq, baseBp: rb, volPts: vpt, dPoints, pip, ...o }))
+  // The vol surface's own shocks: a tenor of the pair's stored surface, typed or dragged, as a rate curve's pillar is.
+  // The option sees the shock at its own expiry, read on the line between the two tenors around it; `vAll` is that and
+  // the flat shock together. A package's legs expire on different days and take the flat shock only.
+  const volPoints = !pkg && option && european && market?.pair === pair ? pillars(market.row?.vol_surface?.grid).map(p => ({ id: p.tenor, t: p.t, v: p.atm * 100, label: p.tenor })) : []
+  const volBy = vown.pair === pair ? vown.by : {}
+  const vAll = vpt + (volPoints.length ? shiftAtTime({ flat: 0, own: volBy }, volPoints, Number(quote.t_expiry)) : 0)
+  const setVolOwn = (tenor, v) => { const by = { ...volBy }; if (v) by[tenor] = v; else delete by[tenor]; setVown({ pair, by }) }
+  const at = (o = {}) => (dPoints == null ? null : reprice(quote, { spotPct: spot, quoteBp: rq, baseBp: rb, volPts: vAll, dPoints, pip, ...o }))
   const base = model ? reprice(quote) : null
   const now = base ? at() : null
   const curve = model ? shockedCurve({ spot: quote.spot, pip, nodes, moves: moved, spotPct: spot, quoteBp: rq, baseBp: rb }) : null
@@ -782,7 +793,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const d = (x) => x - base.npv
   const settleOf = (q) => daysBetween(q.valuation_date, q.settlement_date) ?? Math.round(legT(q) * 365)
   const longX = legQs ? Math.max(settleX, ...legQs.map(settleOf).filter(Number.isFinite)) : settleX
-  const reset = () => { setSpot(0); setQbp(0); setBbp(0); setVpt(0); setFpips(0); setMoves({}); setPill({ pair, quote: {}, base: {} }); setFixingText(null) }
+  const reset = () => { setSpot(0); setQbp(0); setBbp(0); setVpt(0); setVown({ pair, by: {} }); setFpips(0); setMoves({}); setPill({ pair, quote: {}, base: {} }); setFixingText(null) }
 
   // the chart reports a drag as a distance in price from where it began; the shocks are worked out here
   // (not while the ticket reprices: the curve on screen is the one before the last change of terms)
@@ -840,7 +851,8 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const optN = option ? 1 : whole ? pq.findIndex(q => q.shape === 'OPTION') + 1 : 0
   const optQ = optN ? (option ? quote : pq[optN - 1]) : null
   const volSurface = optQ && pairRow && 'vol_surface' in pairRow        // an answer without the field says nothing about a surface
-    ? <FxVolSurface quote={optQ} surface={pairRow.vol_surface || null} pair={pair} vpt={european ? vpt : 0} dp={dp} ready={ready} headerStyle={secHdr} />
+    ? <FxVolSurface quote={optQ} surface={pairRow.vol_surface || null} pair={pair} vpt={european ? vAll : 0} flat={european ? vpt : 0} own={volBy} bound={VOL_PT_BOUND}
+        onPoint={volPoints.length && !stale ? setVolOwn : null} color={`var(${RISK_FACTORS.vol.token})`} dp={dp} ready={ready} headerStyle={secHdr} />
     : null
 
   // ── the curves the price was built on, each in its risk factor's colour, and what has been done to each ──
@@ -858,7 +870,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
       says: said(crypto ? (european && bbp ? `${plus(bbp)} bp` : null) : (fpips ? `${plus(fpips)} pips` : null), points(nTen)) },
     european && { key: 'quote', name: quote.quote_curve || `${qc} CURVE`, sub: `${qc} discounting`, color: rf('ir'), says: said(qbp ? `${plus(qbp)} bp` : null, points(count(qPill, own.quote))) },
     european && !crypto && { key: 'base', name: quote.curves?.base?.id || `${bc} RATE`, sub: `${bc} discounting`, color: rf('ir'), says: said(bbp ? `${plus(bbp)} bp` : null, points(count(bPill, own.base))) },
-    optQ && { key: 'vol', name: `${pair} VOL`, sub: optQ.vol_source || 'the pair\'s surface', color: rf('vol'), says: said(european && vpt ? `${plus(vpt, 2)} pt` : null) },
+    optQ && { key: 'vol', name: `${pair} VOL`, sub: optQ.vol_source || 'the pair\'s surface', color: rf('vol'), says: said(european && (vpt || Object.values(volBy).some(Number)) ? shockWords({ flat: vpt, own: volBy }, ' pt') : null) },
   ].filter(Boolean)
   const cur = curves.find(c => c.key === sel) || curves[0]
   const rateKey = cur.key === 'quote' || cur.key === 'base' ? cur.key : null
@@ -888,14 +900,17 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
     : rateKey
       ? pills.map(p => { const mine = Number(own[rateKey][p.date]) || 0; return { id: p.date, name: tenorLabel(p.t), market: p.zero_pct.toFixed(3), scen: (p.zero_pct + (rateFlat + mine) / 100).toFixed(3), value: mine, d: 0,
           set: (v) => { const c = clampTo(Math.round(v), -RATE_SHOCK_BOUND - rateFlat, RATE_SHOCK_BOUND - rateFlat); setOwn(rateKey, p.date, c); return c } } })
-      : []
-  const pointUnit = cur.key === 'fwd' ? (crypto ? `MOVE ${qc}` : 'MOVE PIPS') : 'SHOCK BP'
+      : cur.key === 'vol'
+        ? volPoints.map(p => { const mine = Number(volBy[p.id]) || 0; return { id: p.id, name: p.label, market: p.v.toFixed(2), scen: (p.v + vpt + mine).toFixed(2), value: mine, d: 2,
+            set: (v) => { const c = clampTo(Math.round(v * 4) / 4, -VOL_PT_BOUND - vpt, VOL_PT_BOUND - vpt); setVolOwn(p.id, c); return c } } })
+        : []
+  const pointUnit = cur.key === 'fwd' ? (crypto ? `MOVE ${qc}` : 'MOVE PIPS') : cur.key === 'vol' ? 'SHOCK PT' : 'SHOCK BP'
   const resetCurve = () => {
     if (cur.key === 'spot') setSpot(0)
     if (cur.key === 'fwd') { setMoves({}); if (crypto) setBbp(0); else setFpips(0) }
     if (cur.key === 'quote') { setQbp(0); setPill({ pair, quote: {}, base: own.base }) }
     if (cur.key === 'base') { setBbp(0); setPill({ pair, quote: own.quote, base: {} }) }
-    if (cur.key === 'vol') setVpt(0)
+    if (cur.key === 'vol') { setVpt(0); setVown({ pair, by: {} }) }
   }
 
   // ── the result, factor by factor: each one's shock alone, what is left over when they act together, and the total ──
@@ -904,7 +919,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
     fwd: reprice(quote, { dPoints, baseBp: crypto ? rb : 0, pip }),
     quote: reprice(quote, { quoteBp: rq, pip }),
     ...(crypto ? {} : { base: reprice(quote, { baseBp: rb, pip }) }),
-    ...(option ? { vol: reprice(quote, { volPts: vpt, pip }) } : {}),
+    ...(option ? { vol: reprice(quote, { volPts: vAll, pip }) } : {}),
   } : {}
   // a package: the same decomposition, each factor's shock alone over every leg
   const ONLY = { spot: ['spotPct'], fwd: crypto ? ['dPoints', 'baseBp'] : ['dPoints'], quote: ['quoteBp'], base: ['baseBp'], vol: ['volPts'] }
@@ -918,12 +933,12 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const shockSaid = {
     spot: spot ? `${plus(spot, 2)}%` : '—',
     fwd: crypto ? said(bbp ? `${plus(bbp)} bp` : null, dPoints ? `${signed(dPoints * pip, dp)} ${qc}` : null) : (dPoints ? `${plus(dPoints, 1)} pips` : '—'),
-    quote: rq ? `${plus(rq, 1)} bp` : '—', base: rb ? `${plus(rb, 1)} bp` : '—', vol: vpt ? `${plus(vpt, 2)} pt` : '—',
+    quote: rq ? `${plus(rq, 1)} bp` : '—', base: rb ? `${plus(rb, 1)} bp` : '—', vol: (whole ? vpt : vAll) ? `${plus(whole ? vpt : vAll, 2)} pt` : '—',
   }
   // sensitivity × shock: what the ticket's own risk figures say the shock is worth (a dragged tenor has no figure of its own)
   const firstOf = (q, s) => ({
     spot: spot * (q.spot01 ?? 0), fwd: crypto ? bbp * (crybasis01(q) ?? 0) : null,
-    quote: s.quoteBp * (q.ir01_disc ?? 0), base: s.baseBp * (q.ir01_base ?? 0), vol: vpt * (q.shape === 'OPTION' ? (q.vega ?? 0) : 0),
+    quote: s.quoteBp * (q.ir01_disc ?? 0), base: s.baseBp * (q.ir01_base ?? 0), vol: (whole ? vpt : vAll) * (q.shape === 'OPTION' ? (q.vega ?? 0) : 0),
   })
   // a package: each leg's own figures times the shock that leg sees, summed (a dragged tenor still has no figure)
   const first = whole
@@ -967,7 +982,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
   const bpSteps = [-100, -50, -25, -10, 0, 10, 25, 50, 100]
   // a column of the ladder: `more` on top of the scenario. A package takes it on every leg; the forward shown is leg 1's.
   const step = (more) => {
-    if (!whole) return at({ spotPct: spot + (more.spotPct || 0), quoteBp: rq + (more.quoteBp || 0), baseBp: rb + (more.baseBp || 0), volPts: vpt + (more.volPts || 0), dPoints: dPoints + (more.dPoints || 0) })
+    if (!whole) return at({ spotPct: spot + (more.spotPct || 0), quoteBp: rq + (more.quoteBp || 0), baseBp: rb + (more.baseBp || 0), volPts: vAll + (more.volPts || 0), dPoints: dPoints + (more.dPoints || 0) })
     const r = repricePackage(pq, scen, { extra: more })
     return r ? { forward: r.rows[0].forward, npv: r.npv } : null
   }
@@ -1074,7 +1089,7 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
         </div>
       </>)}
       {pointRows.length > 0 && (<>
-        <div style={secHdr}>POINT BY POINT<Note inline>{cur.key === 'fwd' ? 'Type a move on one tenor, or drag that tenor on the chart: a drag carries its neighbours with it, a typed move does not.' : 'Type a shock on one pillar, or drag it on the chart. A trade that settles on one date sees the curve at that date, and the shock there is read as the engine\'s curve reads it (linear in the log of the discount factor between pillars): +50 bp on one pillar is less than +50 bp at a date beside it.'} A typed point carries the brass rule.</Note></div>
+        <div style={secHdr}>POINT BY POINT<Note inline>{cur.key === 'fwd' ? 'Type a move on one tenor, or drag that tenor on the chart: a drag carries its neighbours with it, a typed move does not.' : cur.key === 'vol' ? 'Type a shock on one tenor of the surface, in vol points, or drag it on the chart. The option sees the vol at its own expiry: between two tenors the shock is read on the line between them.' : 'Type a shock on one pillar, or drag it on the chart. A trade that settles on one date sees the curve at that date, and the shock there is read as the engine\'s curve reads it (linear in the log of the discount factor between pillars): +50 bp on one pillar is less than +50 bp at a date beside it.'} A typed point carries the brass rule.</Note></div>
         <table data-testid="fx-scn-points" style={{ width: '100%', borderCollapse: 'collapse', fontVariantNumeric: 'tabular-nums' }}>
           <thead><tr>{['TENOR', 'MARKET', pointUnit, 'SCENARIO'].map((h, i) => <th key={h} style={{ ...lbl, textAlign: i ? 'right' : 'left', padding: '4px 4px 6px', borderBottom: '1px solid var(--border-hi)', whiteSpace: 'nowrap' }}>{h}</th>)}</tr></thead>
           <tbody>{pointRows.map(r => (

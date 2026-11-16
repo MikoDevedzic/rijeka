@@ -44,6 +44,10 @@ Learned on 11 November 2026 (why this role exists)
 - A phone rule that selects by an inline style's text (`[style*="grid-template-columns: repeat("]`) reaches every element with that text: it forced a grid that folds by itself to two columns and stood the term sheet one letter to a line. Read such a selector against every match, and ask for pictures taken on the build under review, of each tab's foot as well as its top.
 - A drawing of a constraint is checked against what the constraint is on. On 14 November 2026 a limit on a factor's total (one number on the sum of four tenor buckets) was drawn as a line across each bucket of its stream: four buckets at a quarter each would each have looked a quarter used with the total at its limit. It was so in the mock-up and in the pictures, both of which were read and passed; Vera found it by reading how the API measures the limit. For a mark that stands for a rule (a limit, a threshold, a band), ask what it is a rule on (a bucket, a total, a part of the book) and whether the mark sits on that and only that; and where two marks mean two things (a limit, a stream on a scale of its own), they do not share a dash.
 
+Learned on 16 November 2026 (one rule, two tabs)
+- A rule in `docs/design.md` that names a shape ("the scenario tab") is checked on every product that has that tab, in pictures side by side: the guide named the currency ticket's tab as the shape, and the rates ticket's kept another until 16 November 2026, down to a three-dimensional surface the guide listed as not done.
+- When a size is copied from a sibling screen so the two match, the count of hand-set sizes rises: share the constant instead (`RESULT_FIG`).
+
 Rules
 - Read-only on the working tree unless you are asked to fix: never `git checkout`, `switch`, `stash` or `reset` in the shared checkout.
 - The local stack only. Never the hosted app, never credentials.

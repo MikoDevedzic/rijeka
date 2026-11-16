@@ -29,7 +29,7 @@ pair pages, the HW1F calibration, counterparties and legal entities. There a fig
 curve's class, a convention's value is a value and not a colour by kind, a row's own label (a tenor, an expiry, a strike) is a label, a state that is good in itself (saved, loaded,
 connected, quoted, a close fit) is green, a selected chip is the lighter panel, and brass is left to the page's
 actions and the selected rule. Elsewhere brass still colours what the teal accent did: about three hundred and
-twenty uses remain, among them the CURVE SCENARIO and DETAILS tabs, P&L and Risk. Two things on those pages are
+twenty uses remain, among them the DETAILS tab, P&L and Risk. Two things on those pages are
 not decided and were left as they were: the colour a curve's CLASS takes in its badge (OIS brass, basis blue,
 cross-currency purple: a category, where the rule gives colour to a meaning), and the messenger's two warm
 colours (its own brass against Prometheus's lighter gold).
@@ -284,11 +284,24 @@ results they drive.
 
 ## The scenario tab
 
-The XVA tab's shape (`FxTabs.jsx` `ScenarioBody`, `FxRateCurve.jsx`): at the left the curves the price was
-built on, each a button with its risk factor's mark and what has been done to it, then the selected curve's
-flat shock and its points; at the right the selected curve's chart, the result as one table (factors across,
-TOTAL the column that stands out), the scenario's forward, value and fixing, and one ladder for the selected
-curve. A point that was typed or dragged carries the brass rule, as a field typed over its default does.
+One shape on every product (a currency trade's is `FxTabs.jsx` `ScenarioBody`, a rates ticket's
+`RatesScenario.jsx`): at the left the curves the price was built on, each a button with its risk factor's mark and
+what has been done to it, then the selected curve's flat shock and its points; at the right the selected curve's
+chart, the result as one table (factors across, CROSS, and TOTAL the column that stands out), the scenario's
+value, and one ladder for the selected curve. A point that was typed or dragged carries the brass rule, as a
+field typed over its default does.
+
+**A volatility surface is one of the curves, and is moved as a rate curve is**: flat, point by point, or by
+dragging a point on its term structure. One drawing does both (`ScenarioCurve.jsx`): the market dashed, the
+scenario in the factor's colour, the points as rings that are dragged up or down, the trade's own date marked,
+and, on a vol, the vol the trade priced at as a dot. Beside a vol's term structure a second chart shows the
+surface at the trade's own expiry (the smile; across swap tenors for a swaption): it moves with the scenario and
+is not dragged. A shock between two points is read on the line between them, on every product.
+
+A rates ticket's figures are the pricing engine's on the moved market, and its chip says FULL REVALUATION; a
+currency ticket's are the tab's own closed form, and its chip says APPROXIMATION. Not yet in the shape: a
+currency option that is not European (its ladder is the engine's; none of its curves is shocked) and a package's
+vol, which is shocked flat only. The result table's figure is one size on both (`RESULT_FIG`, `xva-shared.js`).
 
 ## Risk factors
 
@@ -329,8 +342,7 @@ print their keycap.
 ## What is not done yet
 
 Colours and sizes written as literals in components, and a lint rule against new ones; brass where it still
-stands for the old accent (above); the three-dimensional vol surface on the scenario tab, still in its own
-colours; the lineage tree on a figure; the mark of where each field's number came from on the rates ticket (the
+stands for the old accent (above); the lineage tree on a figure; the mark of where each field's number came from on the rates ticket (the
 currency ticket marks an override with a brass rule); EPE on the XVA tab; the remaining pages read screen by
 screen; widths under 1440px, where the blotter scrolls sideways.
 

@@ -133,3 +133,8 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - Before a screen says "not known", read the code that produces the figure and list every way it comes back
   empty (not asked for, asked and failed, asked and truly nothing): the first rule for the Collateral tab called a
   counterparty with no trades "not yet run", and a limit that could not be valued "within limits".
+- A checkpoint commit is staged by explicit path like any other: `git add -A` was typed for a local commit in a
+  worktree and was refused by the guard, rightly.
+- A tab rebuilt for one product family is rebuilt from what the other family's tab already is, with the pieces
+  shared (one chart for a curve and a vol, one size for a result's figure), and the first run on the stack's own
+  data decides what is shown: thirty quoted tenors made a column no one could read.

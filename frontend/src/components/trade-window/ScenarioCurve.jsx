@@ -6,7 +6,7 @@
 // Drawn as SVG at a fixed coordinate size and scaled to its box, so a drag is read in the drawing's own units.
 import { useRef, useState } from 'react'
 
-const H = 250, L = 64, R = 20, TOP = 18, BOT = 30
+const L = 64, R = 20, TOP = 18, BOT = 30
 
 // `points`: [{id, t, v, label}] in order (v in the axis's unit); `shockAt(p)`: its whole shock (flat plus its own), in
 // the shock's unit; `onPoint(id, shock)`: the point's own shock after a drag; `own`: {id → its own shock};
@@ -14,9 +14,10 @@ const H = 250, L = 64, R = 20, TOP = 18, BOT = 30
 // `bound`: the largest whole shock either way; `step`: what a drag is rounded to; `mark`: {t, label} the trade's date;
 // `dot`: {t, v, label} a figure of the trade's own on the curve (the vol it priced at), moved with the scenario;
 // `lines`: [{values, color, dash}] other lines of the same surface, drawn thin, not dragged; `width`: the drawing's own
-// width in its units (880 across a tab; half of it where two stand side by side, so the type stays its size).
+// width in its units (880 across a tab; half of it where two stand side by side, so the type stays its size), and
+// `height` its height.
 export default function ScenarioCurve({ points, shockAt, onPoint, own, flat = 0, scale = 100, bound = 300, step = 1, mark, dot, lines = [],
-  decimals = 2, color = 'var(--rf-ir)', disabled = false, testId = 'scn-curve', ariaLabel = 'The curve: market against scenario', width: W = 880 }) {
+  decimals = 2, color = 'var(--rf-ir)', disabled = false, testId = 'scn-curve', ariaLabel = 'The curve: market against scenario', width: W = 880, height: H = 250 }) {
   const svg = useRef(null)
   const drag = useRef(null)
   const [frozen, setFrozen] = useState(null)                          // the scale holds still while a point is dragged
