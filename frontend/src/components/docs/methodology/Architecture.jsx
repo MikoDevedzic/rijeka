@@ -17,7 +17,7 @@ const shade = (h, k) => (Math.round(((h >> 16) & 255) * k) << 16) | (Math.round(
 // a piece's colours: its kind's, or its own (a reviewer, a check)
 const tone = (n) => n.line != null ? { line: n.line, body: shade(n.line, 0.3), lit: shade(n.line, 0.5), css: n.css } : { ...KINDS[n.kind] }
 const AT = Object.fromEntries(PIECES.map(n => [n.id, n]))
-const HOME = [0.1, -2.4], HOME_DIST = 33, HOME_PITCH = 0.68       // where the eye rests for the whole map
+const HOME = [-0.3, -2.4], HOME_DIST = 33, HOME_PITCH = 0.68       // where the eye rests for the whole map
 const ANCHORS = ['app', 'api', 'pg', 'chain']                      // the names a narrow screen keeps on the whole map
 const FOV = 34, TAN = Math.tan((FOV / 2) * Math.PI / 180)
 const TOUR_MS = 6500                                               // long enough for a change to pass the gates
@@ -220,6 +220,9 @@ function buildStage(T, renderer, canvas, host, els, onPick) {
   }
   const ease = (x) => 1 - Math.pow(1 - Math.max(0, Math.min(1, x)), 3)
   const ciTop = nodes.ci.top.clone().add(new T.Vector3(0, 0.9, 0))
+  // the reviewers' row has a name of its own, over its middle: their names alone say nothing to someone who has not met them
+  const gates = PIECES.filter(n => n.gate != null)
+  const rowAt = new T.Vector3((gates[0].p[0] + gates[gates.length - 1].p[0]) / 2, 3.6, gates[0].p[1])
   let checkShown = -2, t0 = null, stepAt = null
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => widths.clear()).catch(() => {})      // a name measured before its face loaded is measured again
   const frame = (ms) => {
@@ -300,6 +303,7 @@ function buildStage(T, renderer, canvas, host, els, onPick) {
     for (const id of Object.keys(nodes)) place(els.pieces[id], nodes[id].top, '-100%')
     for (const e of edges) if (e.on) place(els.tags[e.id], e.half, '-50%')
     place(els.check, ciTop, '-100%')
+    place(els.row, rowAt, '-100%')
     canvas.dataset.ready = 'true'
   }
   raf = requestAnimationFrame(frame)
@@ -324,7 +328,7 @@ export default function Architecture() {
   const [scene, setScene] = useState('loading')          // loading | on | off (the browser cannot draw it)
   const [health, setHealth] = useState(undefined)        // undefined: asked; null: no answer
   const canvas = useRef(null), host = useRef(null), stage = useRef(null)
-  const els = useRef({ pieces: {}, hosts: {}, tags: {}, check: null })
+  const els = useRef({ pieces: {}, hosts: {}, tags: {}, check: null, row: null })
   const st = STORIES[story], s = step >= 0 ? st.steps[step] : null
 
   useEffect(() => {
@@ -386,11 +390,12 @@ export default function Architecture() {
         <canvas ref={canvas} aria-label="The pieces of the system in space, the hosts they run on, and what joins them" />
         <div className="mr-labels">
           {scene === 'on' && HOSTS.map(h => <span key={h.id} ref={el => { els.current.hosts[h.id] = el }} className="mr-h3">{h.name}</span>)}
+          {scene === 'on' && <span ref={el => { els.current.row = el }} className="mr-h3 mr-row" data-testid="mr-reviewers">THE REVIEWERS A CHANGE PASSES · PRESS ONE</span>}
           {PIECES.map(n => {
             const on = !!s && s.pieces.includes(n.id), dim = !!s && !on && !(s.passed && n.gate != null)
             return (
               <button key={n.id} type="button" ref={el => { els.current.pieces[n.id] = el }} data-testid={`mr-piece-${n.id}`} aria-pressed={picked === n.id}
-                aria-label={n.agent || n.plain ? `${n.name}: ${n.sub}` : undefined}
+                aria-label={n.agent || n.plain ? `${n.name}: ${n.sub}` : undefined} title={n.agent ? `${n.name[0]}${n.name.slice(1).toLowerCase()}, ${n.sub.toLowerCase()}` : undefined}
                 className={'mr-l3' + (n.agent ? ' ag' : '') + (n.plain ? ' pl' : '') + (n.big ? ' hero' : '') + (ANCHORS.includes(n.id) ? ' anc' : '') + (on ? ' on' : '') + (dim ? ' dim' : '') + (picked === n.id ? ' sel' : '') + (scene === 'on' ? '' : ' flow')}
                 style={{ '--c': n.css || KINDS[n.kind].css }} onClick={() => setPicked(p => (p === n.id ? null : n.id))}>
                 <span className="nm">{n.name}</span>{!n.agent && !n.plain && <span className="sb">{n.sub}</span>}

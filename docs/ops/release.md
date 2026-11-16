@@ -75,8 +75,8 @@ curl -s https://app.rijeka.app/version.json              # until "commit" is the
 backend/.venv/bin/python .github/scripts/watch.py --api-commit <sha> --app-commit <sha>   # everything a visitor touches, from outside (docs/ops/monitoring.md); leave a flag out when that side did not deploy
 ```
 
-The watch before the push is there because of 15 November 2026: the database had stopped answering half an hour
-before a release was pushed, the release went out onto a service that was already failing, and the first hour of
+The watch before the push is there because of 15 November 2026: the database had stopped answering an hour and a
+half before a release was pushed, the release went out onto a service that was already failing, and the first hour of
 the outage was spent suspecting the release. A failing watch is understood first. If what fails is the thing the
 release mends, say so in the report; otherwise nothing is pushed until production is whole.
 

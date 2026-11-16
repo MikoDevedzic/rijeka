@@ -19,6 +19,8 @@ Every change goes through the same gates. Each gate has a name and an agent defi
 | **Magnus** | Security reviewer | sign-in, roles, tenancy, keys, payments, public endpoints, user-supplied text | no finding left open |
 | **Nikola** | Architect | any change that adds or removes a service, an outside dependency or data source, a table, a scheduled job, a setting or a public endpoint | `docs/architecture.md` and `docs/ops/environment.md` match the code, checked by a fresh agent against the diff; the new piece follows the pattern the system already has for its kind |
 | **Edgar** | Database keeper | any change that adds or alters a table, column, function, trigger, policy or grant, writes to the database in a new way, or touches the migration runner or its approved list | migrations are one feature each, safe to re-run, locked down and tolerated when absent; `docs/schema.sql` agrees with them; nothing is on the approved list that the owner did not approve in his own words |
+| **Marco** | First-time visitor | a release that changes what someone new meets first (the door, sign-up, the home, a ticket's first screen, a new page); before a launch or a public post | he has walked the app cold on the local stack and read a picture of every stop; what would confuse a newcomer is fixed or answered |
+| **Grace** | Operations keeper | before a launch or a public post; after a change of hosting plan, host or machine size; after an outage; when a release adds work to a request or a batch | the sizes in `docs/ops/environment.md` are true; the dearest action is measured and the headroom said; the watch says nothing wrong; an outage has its account in `docs/ops/incidents.md` |
 | **Jarvis** | Release manager | every deploy | `docs/ops/release.md` followed; the commit read back from production |
 | **Petra** | Project manager | every proposal and decision | recorded in `_docs/BACKLOG.md` (local only) with its status |
 
@@ -39,9 +41,13 @@ what changes is who runs it.
   - **Magnus** when sign-in, roles, tenancy, keys, payments or a public endpoint change. Text a user types that does
     not reach a public page is a question in Vera's brief.
   - **Edgar** when a migration, the runner or the approved list is in the diff.
+  - **Marco** before a launch or a public post, and when what a newcomer meets first changes. He is the dearest
+    of the agents to run (he takes and reads a picture of every stop), so not on every change.
+  - **Grace** after an outage and before a launch, for the account and the measurements.
 - **The builder, who says so in the report**: **Ada** (`tests/reference`, the engine and replication tests, the
   pinned book, and a reason in `GOLDEN_CHANGES.md` for every number that moved), **Nikola** (the map against the
-  diff), **Quinn** (the journeys), **Jarvis** (the release checklist), **Petra** (the backlog). A moved number the
+  diff), **Quinn** (the journeys), **Jarvis** (the release checklist), **Petra** (the backlog), and **Grace**'s reading of the hosts' dashboards,
+  which needs the owner signed in. A moved number the
   builder cannot explain goes to Ada as an agent.
 - The owner can ask for any role as an agent on any change.
 

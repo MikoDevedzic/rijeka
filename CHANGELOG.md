@@ -3,6 +3,28 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.24). Commits on `main` are the detail.
 
+## 0.42.4 · 15 November 2026
+
+**Two more reviewers, and a project that writes down what it learns.** No figure, route or screen of the desk
+changes; the system page gains two figures and a step.
+
+- **Marco, the first-time visitor.** Walks the app cold on a local copy of the whole system, as a desk head who
+  has never seen it and has ten minutes, takes a picture at every stop and reports what could not be worked out.
+  He runs before a launch and before a release that changes what a newcomer meets first. The people who build an
+  app and the people who read its code know too much to see it.
+- **Grace, the operations keeper.** Holds what the hosted system runs on against what is asked of it: machine
+  sizes, the database's memory and connections, what each action costs the API's one CPU, what the scheduler
+  recorded. She looks before a launch, after a change of host or size and when a release adds work, and writes
+  the account of an outage the day it happens. Nobody held this until the outage of 15 November, whose account
+  is the first entry of `docs/ops/incidents.md`.
+- **On the system page.** Both are drawn where they stand: Marco last in the row of reviewers a change passes,
+  Grace after the release, with a seventh step, "kept running". The row has a name of its own, because a first
+  name says nothing to someone who has not met its owner (Marco's own finding, on his first walk).
+- **A lesson is written down when it is learned.** What a reviewer missed and a later check caught goes into
+  that reviewer's instructions in the same change that mends it; twenty-seven lessons of the past week that had
+  waited are in, and the author of a change has a place for its own. A lesson that belongs to no reviewer is
+  told to the owner as a reviewer that is missing: that is how these two came to be.
+
 ## 0.42.3 · 15 November 2026
 
 **A risk report in a fifth of the time, on the same numbers.** The API is one process on one CPU, and a live

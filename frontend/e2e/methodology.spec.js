@@ -54,9 +54,11 @@ test('methodology: the system page follows a trade, a change and the clock, name
   await expect(app.getByTestId('mr-tour')).toHaveText('▶ FOLLOW A CHANGE')
   await app.getByTestId('mr-step-c2').click()
   await expect(say).toContainText('2 · THE GATES')
-  for (const id of ['quinn', 'ada', 'emmy', 'iris', 'vera', 'magnus', 'nikola', 'edgar']) await expect(app.getByTestId(`mr-piece-${id}`), `${id} is passed`).toHaveClass(/\bpass\b/, { timeout: 15_000 })
-  const colours = await app.evaluate(() => ['quinn', 'ada', 'emmy', 'iris', 'vera', 'magnus', 'nikola', 'edgar'].map(id => getComputedStyle(document.querySelector(`[data-testid="mr-piece-${id}"] .nm`)).color))
-  expect(new Set(colours).size, 'eight reviewers, eight colours').toBe(8)
+  const REVIEWERS = ['quinn', 'ada', 'emmy', 'iris', 'vera', 'magnus', 'nikola', 'edgar', 'marco']
+  for (const id of REVIEWERS) await expect(app.getByTestId(`mr-piece-${id}`), `${id} is passed`).toHaveClass(/\bpass\b/, { timeout: 15_000 })
+  const colours = await app.evaluate((ids) => ids.map(id => getComputedStyle(document.querySelector(`[data-testid="mr-piece-${id}"] .nm`)).color), REVIEWERS)
+  expect(new Set(colours).size, 'nine reviewers, nine colours').toBe(9)
+  await expect(app.getByTestId('mr-reviewers'), 'the row says what these names are').toBeVisible()
   await stage.screenshot({ path: 'e2e/.out/shots/system-gates.png' })
   // a reviewer says what it does (pressed here, where the step has the row in view)
   await app.getByTestId('mr-piece-vera').click()
@@ -65,6 +67,13 @@ test('methodology: the system page follows a trade, a change and the clock, name
   await app.getByTestId('mr-step-c3').click()
   await expect(app.getByTestId('mr-check')).toContainText('all six', { timeout: 15_000 })
   await stage.screenshot({ path: 'e2e/.out/shots/system-checks.png' })
+  // after the release, the one who keeps it running
+  await app.getByTestId('mr-step-c7').click()
+  await expect(say).toContainText('7 · KEPT RUNNING')
+  await app.getByTestId('mr-piece-grace').click()
+  await expect(app.getByTestId('mr-piece')).toContainText('GRACE · OPERATIONS KEEPER')
+  await app.getByTestId('mr-piece-grace').click()
+  await stage.screenshot({ path: 'e2e/.out/shots/system-kept.png' })
   // the clock: what runs by itself
   await app.getByTestId('mr-story-clock').click()
   await expect(say).toContainText('1 · EVERY MINUTE')

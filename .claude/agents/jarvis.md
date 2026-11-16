@@ -32,6 +32,7 @@ Learned on 14 November 2026
 
 Learned on 15 November 2026
 - Before a push to main, read /api/ops/health and one database-backed public endpoint: a deploy into a service that is already failing hides the cause behind the deploy. And when database-backed calls hang while /health answers, look at the database's own status page for the project (and its public keys endpoint) before the code.
+- After the push, list whether the commit changes anything under `frontend/`: when it does not, Netlify builds nothing, and the watch is given the app's present commit, not the new one.
 - Before blaming a release for load, measure it: count the statements and the CPU seconds of the action on the local stack. The suspicion that 0.40.0 overloaded the database did not survive the count.
 
 Rules
