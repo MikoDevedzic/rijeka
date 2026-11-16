@@ -172,6 +172,13 @@ def test_a_forwards_scenario_is_the_pricers_own_line():
                                        settlement_date=settle, quote_curve=usd, base_curve=eur, direction=direction, payment_date=pay)
             # the ticket's own market: its forward and the discount factor to the date it is paid
             assert forward_npv(direction, N, r.forward, 1.10, r.df_pay) == r.npv, (direction, pay)
+    # an NDF whose amount is paid in the base currency two days after its fixing (the base curve carries it there), and
+    # a forward whose base side is a rate, not a curve (a digital asset's): the market is still the forward and df_pay
+    for kw in (dict(base_curve=eur, payment_date=date(2027, 2, 1), settle_in_base=True), dict(base_rate=0.045), dict(base_rate=0.045, payment_date=date(2027, 2, 1))):
+        for direction in ("BUY", "SELL"):
+            r = price_currency_forward(base_currency="EUR", quote_currency="USD", base_notional=N, forward_rate=1.10, spot=1.1133, valuation_date=val,
+                                       settlement_date=settle, quote_curve=usd, direction=direction, **kw)
+            assert forward_npv(direction, N, r.forward, 1.10, r.df_pay) == r.npv, (direction, kw)
     assert forward_npv("BUY", N, 1.12, 1.10, 0.99) == pytest.approx(N * 0.02 * 0.99) and forward_npv("SELL", N, 1.12, 1.10, 0.99) == pytest.approx(-N * 0.02 * 0.99)
 
 

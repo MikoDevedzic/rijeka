@@ -17,6 +17,7 @@
 // One rule for every function: an input it needs that is missing or not finite gives null,
 // never a number put in its place. The caller shows a dash or a different view.
 // ────────────────────────────────────────────────────────────────────────────────────
+import { normCdf } from './fx-vol'
 
 // Days from the spot date to each quoted tenor. GET /api/currency/pairs sends the backend's own map as
 // tenor_days (tenorMap below); this copy stands in only for an API answer that does not carry it.
@@ -274,7 +275,10 @@ export function tenorLabel(t) {
 
 // ── the closed form ──────────────────────────────────────────────────────────────────
 
-export const Phi = (x) => { const t = 1 / (1 + 0.2316419 * Math.abs(x)); const d = 0.3989422804014327 * Math.exp(-x * x / 2); const p = d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429)))); return x >= 0 ? 1 - p : p }
+// Φ is the precise one (fx-vol.js: the series and the continued fraction, to the last digits of a double). It was a
+// five-term polynomial, good to seven places: 0.1 to 1.0 of the quote currency on a 10m European option, which
+// showed once the engine's own figure stood beside the closed form's (the model validator, 16 November 2026).
+export const Phi = normCdf
 
 export function gk(F, K, T, sigma, call, df) {
   if (!positive(F) || !positive(K) || !finite(T) || !finite(sigma) || !finite(df) || typeof call !== 'boolean') return null

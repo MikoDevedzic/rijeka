@@ -579,7 +579,7 @@ function LegCashflows({ quote, crypto }) {
 // /api/currency/forward/scenario, each the pricer the ticket was priced with, so with no shock the figure is the
 // ticket's own. A forward and a European option also have the engine's closed form here (reprice): it stands in
 // for a figure while the engine's answer is on its way, so the chart, the tiles and the ladder follow a drag with
-// no round trip, and it agrees with the engine to cents (an option's Φ here is a polynomial). Every other style
+// no round trip, and it agrees with the engine to far less than a cent (the same formula and the same Φ). Every other style
 // (American, digital, barrier, double barrier, touch) has no closed form here: its figure is a dash until the
 // answer is back. A package's figures are still the closed form's over its legs, and its chip says APPROXIMATION.
 // In all of them a spot shock scales the quoted points with spot, and on quoted points the pricer would not move
@@ -1206,13 +1206,16 @@ function ScenarioBody({ quote, crypto, terms, active, stale, pkg = null }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
               {chartTitle && <span style={{ ...secHdr, margin: 0 }}>{chartTitle}</span>}<Note inline>{chartSays}</Note>
               {engine
-                ? <span data-testid="fx-scn-engine" style={{ fontSize: 11, color: 'var(--text-dim)', border: '1px solid var(--border-hi)', borderRadius: 'var(--r-1)', padding: '1px 7px', letterSpacing: '0.06em' }}>{busy ? 'REPRICING…' : 'ENGINE PRICED'}</span>
+                ? engineError
+                  // the engine did not answer: the chip does not say it priced. A forward or a European option then shows the closed form's figures, a style with none shows dashes
+                  ? <span data-testid="fx-scn-engine" style={{ fontSize: 11, color: 'var(--amber)', border: '1px solid var(--amber-dim)', borderRadius: 'var(--r-1)', padding: '1px 7px', letterSpacing: '0.06em' }}>{styled ? 'NOT PRICED' : 'APPROXIMATION'}</span>
+                  : <span data-testid="fx-scn-engine" style={{ fontSize: 11, color: 'var(--text-dim)', border: '1px solid var(--border-hi)', borderRadius: 'var(--r-1)', padding: '1px 7px', letterSpacing: '0.06em' }}>{busy ? 'REPRICING…' : 'ENGINE PRICED'}</span>
                 : <span style={{ fontSize: 11, color: 'var(--amber)', border: '1px solid var(--amber-dim)', borderRadius: 'var(--r-1)', padding: '1px 7px', letterSpacing: '0.06em' }}>APPROXIMATION</span>}
               <Note inline testId="fx-scenario-banner">{engine
-                ? `Scenario: the shocks' effect on spot, the forward, the discount factor${option ? ' and the vol' : ''} is worked out in the browser, as on every currency ticket, and the engine prices the ${option ? 'option' : 'trade'} there (${option ? quote.method || 'the style\'s own model' : 'its own line, ±N·(F − K)·DF'}). With no shock the figure is the ticket's own${styled ? '' : '; while an answer is on its way a figure is the same formula worked here'}; nothing is saved.`
+                ? `Scenario: the shocks' effect on spot, the forward, the discount factor${option ? ' and the vol' : ''} is worked out in the browser, as on every currency ticket, and the engine prices the ${option ? 'option' : 'trade'} there (${option ? quote.method || 'the style\'s own model' : 'its own line, ±N·(F − K)·DF'}). With no shock the figure is the ticket's own${styled ? '' : '; while an answer is on its way, or when none comes, a figure is the same formula worked here'}.${quotedForward ? ' On quoted points the market is not the one a fresh price would use: a spot shock scales the points with spot where the pricer would add the same points to the moved spot, and a curve shock moves the forward by its carry where the pricer would hold a quoted forward.' : ''} Nothing is saved.`
                 : 'Scenario: an approximation in the browser. A package\'s figures are the engine\'s closed form over its legs, worked here; with no shock they are the legs\' values to cents, and the engine is not asked again. Nothing is saved.'}</Note>
             </div>
-            {engineError && <div data-testid="fx-scn-error" style={{ fontSize: 12, color: 'var(--amber)', padding: '0 0 6px' }}>The engine could not price this scenario: {engineError}</div>}
+            {engineError && <div data-testid="fx-scn-error" style={{ fontSize: 12, color: 'var(--amber)', padding: '0 0 6px' }}>The engine could not price this scenario: {engineError}{styled ? '' : ' The figures shown are the closed form\'s, worked here.'}</div>}
             {!engineError && cellError && <div data-testid="fx-scn-cell-error" style={{ fontSize: 12, color: 'var(--amber)', padding: '0 0 6px' }}>The engine could not price every market of this scenario, and those figures are dashes: {cellError}</div>}
             {engine && nowR.touched && <div data-testid="fx-scn-touched" style={{ fontSize: 12, color: 'var(--amber)', padding: '0 0 6px' }}>{touchedWords(quote)}</div>}
             {selected}

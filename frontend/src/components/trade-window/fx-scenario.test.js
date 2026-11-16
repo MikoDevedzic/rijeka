@@ -3,13 +3,7 @@
 import { describe, it, expect } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import {
-  TENOR_DAYS, SPOT_BOUND_PCT, FORWARD_FLOOR, interpPoints, daysBetween, spotLagDays, carryPoints, curveNodes,
-  rippleWeights, tenorBounds, applyTenorDrag, clampSpotPct, spotPctFromDrag, carryFactor, shockedCurve, reprice, gk,
-  settlementAmount, latestFixing, fixingSeries, fixingTime, settledState, settledFacts, styleTerms, provisionalReasons, chartLevels, chartStrike,
-  tenorMap, niceStep, valueRange, horizonDays, chartGeometry,
-  isoDate, addDays, axisDates, roundTo, signedChange, strikeAsBooked, modelWords,
-} from './fx-scenario'
+import { TENOR_DAYS, SPOT_BOUND_PCT, FORWARD_FLOOR, interpPoints, daysBetween, spotLagDays, carryPoints, curveNodes, rippleWeights, tenorBounds, applyTenorDrag, clampSpotPct, spotPctFromDrag, carryFactor, shockedCurve, reprice, gk, settlementAmount, latestFixing, fixingSeries, fixingTime, settledState, settledFacts, styleTerms, provisionalReasons, chartLevels, chartStrike, tenorMap, niceStep, valueRange, horizonDays, chartGeometry, isoDate, addDays, axisDates, roundTo, signedChange, strikeAsBooked, modelWords, Phi } from './fx-scenario'
 
 describe('interpPoints: the backend rule (currencies.py interp_points)', () => {
   it('uses the backend tenor days', () => {
@@ -929,3 +923,20 @@ describe('touchedWords: what a touched option is worth, as the engine values it'
     expect(touchedWords(null)).toBe(null)
   })
 })
+
+describe('the closed form is the engine\'s own to the last digits, not to cents', () => {
+  // the engine's Φ (pricing/fx_option.py _N, 0.5·(1 + erf)) and its Garman–Kohlhagen value on 10m, computed by the engine
+  const PHI = [[0, 0.5], [1, 0.8413447460685429], [-1, 0.15865525393145707], [2.5, 0.9937903346742238], [-3.7, 0.00010779973347740945], [0.1, 0.539827837277029], [-0.004, 0.49840423513376836], [6.0, 0.9999999990134123]]
+  const GK = [[1.1701, 1.17, 0.25, 0.085, true, 0.9902, 196919.0917715739], [1.1701, 1.2, 0.25, 0.085, false, 0.9902, 381036.2790539869], [104250.0, 110000.0, 0.0822, 0.485, true, 0.9967, 34876388963.56943], [1.12, 1.1, 2.0, 0.11, false, 0.93, 551288.3815977653]]
+  it('Φ agrees with the engine\'s to thirteen places (the polynomial it replaced was good to seven)', () => {
+    for (const [x, want] of PHI) expect(Math.abs(Phi(x) - want), `Φ(${x})`).toBeLessThan(1e-13)
+  })
+  it('a 10m European option is the engine\'s value to a thousandth of a cent, where the polynomial left up to a whole unit', () => {
+    for (const [F, K, T, vol, call, df, want] of GK) {
+      const got = 1e7 * gk(F, K, T, vol, call, df)
+      expect(Math.abs(got - want) / Math.max(1, Math.abs(want)), `${call ? 'call' : 'put'} ${K}`).toBeLessThan(1e-11)
+      if (Math.abs(want) < 1e9) expect(Math.abs(got - want)).toBeLessThan(1e-5)
+    }
+  })
+})
+

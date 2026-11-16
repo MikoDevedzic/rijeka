@@ -141,7 +141,9 @@ for (const [name, product, route, priceRoute] of [
     // with no shock the engine's figure is the ticket's own: the same number, not one near it
     const body = asked.request().postDataJSON(), values = (await asked.json()).values
     expect(body.states.length).toBeGreaterThan(0)
-    expect(values.some(v => v.npv === quote.npv), 'the engine\'s value at the ticket\'s own market is the ticket\'s NPV to the last digit').toBe(true)
+    // (a forward's to the last digit; an option's vol goes over as vol points and comes back divided by 100, which
+    // can move its last digit: a part in 10^15 of the vol)
+    expect(values.some(v => (route.startsWith('forward') ? v.npv === quote.npv : Math.abs(v.npv - quote.npv) < 1e-6)), 'the engine\'s value at the ticket\'s own market is the ticket\'s NPV').toBe(true)
     expect(await num(npv)).toBeCloseTo(quote.npv, 2)
 
     // a shock while the engine is held back: the figure moves at once (the closed form), the chip says the engine is asked
@@ -165,7 +167,7 @@ for (const [name, product, route, priceRoute] of [
     await expect(win.getByTestId('fx-scn-engine')).toHaveText('ENGINE PRICED')
     const after = await num(npv)
     await expect.poll(() => engine.some(v => Math.abs(v - after) < 0.005), { message: 'the figure on screen is one the engine answered' }).toBe(true)
-    expect(Math.abs(after - soon.npv), 'and the closed form had it to cents').toBeLessThan(0.05)
+    expect(Math.abs(after - soon.npv), 'and the closed form had it to far less than a cent').toBeLessThan(0.001)
     app.off('response', keep)
     await app.unroute(`**/api/currency/${route}`)
     expectClean(problems)
@@ -219,8 +221,29 @@ test('a scenario the engine cannot price says so, and shows no figure in its pla
   await win.locator('.tbw-chip', { hasText: /^BARRIER$/ }).click()
   await win.getByRole('button', { name: 'CURVE SCENARIO', exact: true }).click()
   await expect(win.getByTestId('fx-scn-error')).toContainText('an up barrier must be above spot')
+  await expect(win.getByTestId('fx-scn-engine'), 'the chip does not say the engine priced it').toHaveText('NOT PRICED')
   await expect(win.getByTestId('fx-scenario-npv')).toHaveText('—')
   await expect(win.getByTestId('fx-scenario-change')).toHaveText('—')
   await expect(win.getByTestId('fx-scn-tab')).toHaveAttribute('data-busy', 'false')
   expectClean(problems.filter(p => !/422/.test(String(p))))
 })
+
+test('a forward the engine does not answer for: the closed form\'s figures, and a chip that says so', async ({ app, problems }) => {
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  await win.getByRole('button', { name: 'FX', exact: true }).click()
+  await app.route('**/api/currency/forward/scenario', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ detail: 'the engine is not there' }) }))
+  const priced = app.waitForResponse(r => /\/api\/currency\/forward\/price$/.test(r.url()) && r.request().method() === 'POST' && r.ok(), { timeout: 60_000 })
+  await win.getByRole('button', { name: /^FX FORWARD$/i }).click()
+  const quote = await (await priced).json()
+  await win.getByRole('button', { name: 'CURVE SCENARIO', exact: true }).click()
+  await expect(win.getByTestId('fx-scn-error')).toContainText('the engine is not there')
+  await expect(win.getByTestId('fx-scn-error')).toContainText('closed form')
+  await expect(win.getByTestId('fx-scn-engine')).toHaveText('APPROXIMATION')
+  await expect(win.getByTestId('fx-scn-tab')).toHaveAttribute('data-busy', 'false')
+  expect(await num(win.getByTestId('fx-scenario-npv')), 'the closed form at the ticket\'s own market').toBeCloseTo(quote.npv, 4)
+  expectClean(problems.filter(p => !/503/.test(String(p))))
+})
+

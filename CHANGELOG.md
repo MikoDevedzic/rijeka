@@ -7,23 +7,38 @@ methodology document carries its own version (v1.29). Commits on `main` are the 
 
 **A currency forward's and a European option's scenario are priced by the engine.** The CURVE SCENARIO tab of a
 barrier or a touch option said ENGINE PRICED, and the tab of a plain forward said APPROXIMATION in amber: the
-simplest trades carried the warning. Their figures were the engine's closed form worked in the browser, right to
-cents, but the engine was not asked.
+simplest trades carried the warning. Their figures were the engine's closed form worked in the browser, and the
+engine was not asked.
 
 - **A single forward, NDF, spot or European option is now asked of the engine**, as every other style already
   was: a quarter of a second after the last change, every figure the tab shows in one request. A forward is
   valued by the pricer's own line (`POST /api/currency/forward/scenario`, new: signed-in, reads nothing stored,
   saves nothing), a European option by the function the ticket was priced with, on the forward and the discount
-  factor themselves. With no shock the figure is the ticket's own, to the last digit. The chip says ENGINE PRICED.
+  factor themselves. With no shock the figure is the ticket's own: a forward's to the last digit, an option's to
+  the last digits of its vol. The chip says ENGINE PRICED.
 - **A figure still follows a drag.** For these two the browser has the same formula, and shows it for a figure
-  until the engine's answer is back. The two agree to cents.
+  until the engine's answer is back. The browser's normal distribution function was a polynomial good to seven
+  places, which left a European option up to one unit of the quote currency from the engine on 10m; it is now the
+  precise one, and the two agree to a thousandth of a cent on that size. A package's figures move by the same
+  amount.
+- **A chip that does not claim more than was done.** When the engine does not answer, the chip says APPROXIMATION
+  (the closed form's figures are shown) or NOT PRICED (a style with no closed form: dashes), not ENGINE PRICED. On
+  quoted forward points the line beside the chip says what the tab's market is not: a spot shock scales the points
+  with spot where the pricer would add the same points to the moved spot, and a curve shock moves the forward by
+  its carry where the pricer would hold a quoted forward.
 - **A package of legs is as it was**: the closed form over its legs, labelled APPROXIMATION. That label is now on
   a package alone.
 - Methodology v1.29 (who prices a scenario); the model inventory has a row for it.
 
-Tests: the scenario's value at the ticket's own market equals the ticket's NPV bit for bit (a European call and
-put, a forward and an NDF paid after its fixing, each bought and sold); the new route; the request's terms and
-markets for a forward; the scenario journeys read the chip and the unshocked figure on a forward and a European.
+Tests: the scenario's value at the ticket's own market equals the ticket's NPV (a European call and put; a
+forward, an NDF paid after its fixing in either currency and a forward carried by a rate, each bought and sold);
+the new route; the browser's Φ and option formula against the engine's own values; the request's terms and
+markets for a forward; journeys for the chip, the unshocked figure, a figure shown while the answer is awaited,
+and an engine that does not answer.
+
+Known, and said in the model inventory: the market a scenario leaves a trade on is still worked out in the
+browser. For an NDF paid in the base currency after its fixing the tab shocks the whole discount factor by the
+quote curve, where the two days to payment are carried by the base curve (about 30 on 600,000 at 100 bp).
 
 ## 0.46.5 · 16 November 2026
 

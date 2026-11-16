@@ -96,8 +96,8 @@ export function smileVol(atm, rr, bf, callDelta) {
 // ── the delta ────────────────────────────────────────────────────────────────────────
 
 // The error function to the last few bits of a double: its power series (Abramowitz & Stegun 7.1.6) below 1.5 and
-// the continued fraction of its complement (7.1.14) above. The polynomial Φ of fx-scenario.js is good to seven
-// places, which prices a ticket to cents but would leave this reading visibly off the engine's.
+// the continued fraction of its complement (7.1.14) above. fx-scenario.js prices with this Φ too (since 0.47.0; its
+// own was a polynomial good to seven places, a currency unit off on a 10m option).
 const SQRT_PI = 1.772453850905516
 export function erf(x) {
   if (typeof x !== 'number' || Number.isNaN(x)) return NaN
