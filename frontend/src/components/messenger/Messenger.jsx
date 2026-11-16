@@ -8,7 +8,8 @@ import NewsCard from './NewsCard'
 import { broadcast, onBroadcast, popOutMessenger, focusMessengerWindow, MESSENGER_PATH } from '../../lib/windows'
 import { getSessionSafe } from '../../lib/session'
 import { TONES, VOLUMES, playTone, askDesktop, desktopState } from '../../lib/chatAlerts'
-import { GREETED_KEY, greetKey, shouldGreet } from '../../lib/greeting'
+import { GREETED_KEY, GREET_WAIT_MS, greetKey, metElsewhere, shouldGreet } from '../../lib/greeting'
+import useBookingStore from '../../store/useBookingStore'
 import './Messenger.css'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -92,7 +93,9 @@ function saveGeom(g) {
   try { localStorage.setItem(GEOM_KEY, JSON.stringify(g)) } catch { /* per-viewer convenience only */ }
 }
 function defaultGeom() {
-  const w = Math.min(460, window.innerWidth - 32), h = Math.min(640, window.innerHeight - 140)
+  // tall enough for the list of rooms and a conversation, short enough to leave a page's headings and first rows in
+  // view now that it opens by itself; the user's own size is kept once they set one
+  const w = Math.min(460, window.innerWidth - 32), h = Math.min(520, window.innerHeight - 140)
   return { x: window.innerWidth - w - 24, y: window.innerHeight - h - 88, w, h }
 }
 function clamp(g) {
@@ -123,12 +126,38 @@ export default function Messenger() {
   const hiddenHere = HIDDEN_ON.includes(location.pathname)
   const signIn = greetKey(session)
   useEffect(() => {
-    let seen = null
-    try { seen = window.sessionStorage.getItem(GREETED_KEY) } catch { /* no storage: it opens on each load */ }
-    if (!shouldGreet({ key: signIn, seen, width: window.innerWidth, hidden: hiddenHere, poppedOut, open: useChatStore.getState().open })) return
-    try { window.sessionStorage.setItem(GREETED_KEY, signIn) } catch { /* as above */ }
-    useChatStore.setState({ open: true })
+    const t = setTimeout(() => {
+      let seen = null
+      try { seen = window.sessionStorage.getItem(GREETED_KEY) } catch { /* no storage: it opens on each load */ }
+      const mark = () => { try { window.sessionStorage.setItem(GREETED_KEY, signIn) } catch { /* as above */ } }
+      const now = useChatStore.getState()
+      if (metElsewhere({ key: signIn, seen, poppedOut: now.poppedOut })) { mark(); return }
+      if (!shouldGreet({ key: signIn, seen, width: window.innerWidth, hidden: hiddenHere, poppedOut: now.poppedOut, open: now.open })) return
+      mark()
+      useChatStore.setState({ open: true })
+    }, GREET_WAIT_MS)
+    return () => clearTimeout(t)
   }, [signIn, hiddenHere, poppedOut])
+
+  // The messenger and a trade window are both windows on the desk: the one last opened or pressed is in front. (They
+  // shared one level, and the messenger, drawn later, always won: a ticket opened under an open messenger had its
+  // right side covered and could not be brought forward.)
+  const [behind, setBehind] = useState(false)
+  useEffect(() => {
+    // a ticket that opens comes to the front; with none left there is nothing to stand behind
+    const off = useBookingStore.subscribe((now, was) => {
+      if (now.windows.length > was.windows.length) setBehind(true)
+      else if (!now.windows.length) setBehind(false)
+    })
+    const down = (e) => {
+      const at = e.target
+      if (!at?.closest) return
+      if (at.closest('.ms-window')) setBehind(false)
+      else if (at.closest('.tbw-window')) setBehind(true)
+    }
+    document.addEventListener('pointerdown', down, true)
+    return () => { off(); document.removeEventListener('pointerdown', down, true) }
+  }, [])
 
   // Track the popped-out messenger window, if there is one.
   useEffect(() => {
@@ -150,16 +179,19 @@ export default function Messenger() {
   }, [setPoppedOut])
 
   if (!session || hiddenHere) return null
+  // A full-screen window has its own close button; the launcher would sit on SEND.
+  const covered = open && (expanded || window.innerWidth < 600)
   const launch = () => {
     if (poppedOut && focusMessengerWindow()) return
     setPoppedOut(false)
+    // open but under a trade window: the button brings it forward, it does not close what the user cannot see
+    if (open && behind && !covered) { setBehind(false); return }
+    if (!open) setBehind(false)
     toggle()
   }
-  // A full-screen window has its own close button; the launcher would sit on SEND.
-  const covered = open && (expanded || window.innerWidth < 600)
   return (
     <>
-      {open && !poppedOut && <MessengerWindow />}
+      {open && !poppedOut && <MessengerWindow behind={behind} />}
       {!covered && (
         <button className={`ms-launcher${poppedOut ? ' out' : ''}${alerting ? ' alert' : ''}`} onClick={launch}
                 title={poppedOut ? 'Messenger is open in its own window — bring it forward' : 'Messages and Prometheus'}>
@@ -231,7 +263,7 @@ export function MessengerPage() {
   )
 }
 
-function MessengerWindow() {
+function MessengerWindow({ behind = false }) {
   const { close, compose, expanded, setExpanded } = useChatStore()
   const [geom, setGeom] = useState(() => clamp(loadGeom() || defaultGeom()))
   const [phone, setPhone] = useState(window.innerWidth < 600)
@@ -266,7 +298,7 @@ function MessengerWindow() {
   const popOut = () => { if (popOutMessenger()) useChatStore.setState({ open: false, expanded: false }) }
 
   return (
-    <div className={`ms-window${expanded ? ' ms-expanded' : ''}${phone ? ' ms-phone' : ''}`} style={style}
+    <div className={`ms-window${expanded ? ' ms-expanded' : ''}${phone ? ' ms-phone' : ''}${behind ? ' ms-behind' : ''}`} style={style}
          onKeyDown={e => e.key === 'Escape' && !compose && close()}>
       {!expanded && !phone && <div className="ms-resize" onPointerDown={start('resize')} title="Resize" />}
       <header className="ms-titlebar" onPointerDown={start('move')}>

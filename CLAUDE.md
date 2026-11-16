@@ -200,3 +200,10 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - A release is read from the seat of someone with the app already open, not only from a fresh load: each deploy of
   a day replaced the pages' files under the owner's open window, and the first page pressed after one showed the
   browser's raw error. The release checklist's read-back loads the app afresh and could not see it.
+- The browser's words for an error are not its cause. "Failed to fetch dynamically imported module" was taken for
+  a release and the tab reloaded itself; the same words come from a dropped connection and from a file missing
+  from a deploy. Before the app acts on a guess about why something failed, it asks whoever knows (here the host's
+  build), and what it cannot tell apart it does not act on by itself.
+- Before the app does anything by itself (reloads, opens a window), list what the user has on screen that it
+  would cover or throw away, from every surface that outlives a page: the trade windows, the messenger and what
+  is typed in it. The reload looked only at trade windows; the messenger opened over a ticket's right side.

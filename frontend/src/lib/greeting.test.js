@@ -1,6 +1,6 @@
 // The messenger opens by itself once after a sign-in, and not again until the next one.
 import { describe, it, expect } from 'vitest'
-import { GREET_MIN_WIDTH, greetKey, shouldGreet } from './greeting'
+import { GREET_MIN_WIDTH, greetKey, shouldGreet, metElsewhere } from './greeting'
 
 describe('greetKey', () => {
   it('is the user and the moment of the sign-in', () => {
@@ -28,5 +28,14 @@ describe('shouldGreet', () => {
   })
   it('never without a sign-in or a width', () => {
     expect(shouldGreet()).toBe(false); expect(shouldGreet({ key: null, width: 1440 })).toBe(false); expect(shouldGreet({ key: 'k' })).toBe(false)
+  })
+})
+
+describe('metElsewhere', () => {
+  it('a messenger in a window of its own has met this sign-in already', () => {
+    expect(metElsewhere({ key: 'u|t', seen: null, poppedOut: true })).toBe(true)
+    expect(metElsewhere({ key: 'u|t', seen: 'u|t', poppedOut: true })).toBe(false)        // already marked
+    expect(metElsewhere({ key: 'u|t', seen: null, poppedOut: false })).toBe(false)
+    expect(metElsewhere({ key: null, seen: null, poppedOut: true })).toBe(false); expect(metElsewhere()).toBe(false)
   })
 })

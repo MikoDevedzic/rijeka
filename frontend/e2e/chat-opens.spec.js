@@ -3,7 +3,7 @@
 // bar, and once closed stays closed until the next sign-in; the button at the corner says CHAT under its star.
 import { test, expect, expectClean } from './fixtures.js'
 
-const fresh = (app) => app.addInitScript(() => { window.__greetMe = true; try { if (!window.sessionStorage.getItem('rijeka.greet-test')) { window.sessionStorage.removeItem('rijeka.messenger.greeted'); window.sessionStorage.setItem('rijeka.greet-test', '1') } } catch { /* no storage */ } })
+const fresh = (app) => app.addInitScript(() => { try { if (!window.sessionStorage.getItem('rijeka.greet-test')) { window.sessionStorage.removeItem('rijeka.messenger.greeted'); window.sessionStorage.setItem('rijeka.greet-test', '1') } } catch { /* no storage */ } })
 
 test('after a sign-in the messenger is open, moves by its title bar, and once closed stays closed', async ({ app, problems }) => {
   await fresh(app)                                                          // this tab has not been greeted for this sign-in
@@ -38,6 +38,33 @@ test('after a sign-in the messenger is open, moves by its title bar, and once cl
   await expect(win).toBeVisible()
   const again = await win.boundingBox()
   expect(Math.abs(again.x - to.x), 'where it was left').toBeLessThanOrEqual(2)
+  expectClean(problems)
+})
+
+test('a trade window opened under the open messenger is in front of it; the button brings the messenger forward', async ({ app, problems }) => {
+  await app.setViewportSize({ width: 1440, height: 900 })
+  await fresh(app)
+  await app.goto('/blotter')
+  const chat = app.locator('.ms-window')
+  await expect(chat).toBeVisible()
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  const a = await chat.boundingBox(), b = await win.boundingBox()
+  // a point both windows cover
+  const x = Math.round((Math.max(a.x, b.x) + Math.min(a.x + a.width, b.x + b.width)) / 2)
+  const y = Math.round((Math.max(a.y, b.y) + Math.min(a.y + a.height, b.y + b.height)) / 2)
+  expect(Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x), 'the two overlap at their default places').toBeGreaterThan(40)
+  const top = () => app.evaluate(([px, py]) => { const el = document.elementFromPoint(px, py); return el?.closest('.tbw-window') ? 'ticket' : el?.closest('.ms-window') ? 'chat' : 'other' }, [x, y])
+  expect(await top(), 'the ticket, opened last, is in front').toBe('ticket')
+  await app.screenshot({ path: 'e2e/.out/shots/chat-under-ticket.png' })
+  // the button at the corner stays above both: pressed, it brings the open messenger forward (it does not close a
+  // window the user cannot see); the ticket pressed, the ticket is in front again
+  await app.locator('.ms-launcher').click()
+  await expect(chat).toBeVisible()
+  expect(await top(), 'the button brings the messenger forward').toBe('chat')
+  await app.mouse.click(Math.round(b.x + 60), Math.round(b.y + 14))
+  expect(await top(), 'and the ticket is in front again when it is pressed').toBe('ticket')
   expectClean(problems)
 })
 

@@ -88,10 +88,14 @@ branch and re-run. Nothing is pushed to `main` around a red check.
 Report: the commit and version on the API and on the app, what changed for a user, what the user must do (a
 hard refresh, a migration to approve), and what was not verified.
 
-**An app that was open.** A release replaces the files each page is loaded from. A tab opened before it reloads
-by itself on the next page it opens (no trade window open) or says the desk was updated and offers the reload (a
-trade window open); it no longer shows the browser's error. Say so when reporting a release to someone who had the
-app open, and release changes that are ready together as one.
+**An app that was open.** A release replaces the files each page is loaded from. A tab opened before it asks the
+host which build it serves when a page's file does not arrive: after a release it reloads by itself on the next
+page it opens (no trade window open, no message being typed) or says the desk was updated and offers the reload;
+it no longer shows the browser's error. A file that does not arrive while the host still serves the same build is
+not a release: the page says so, and it reaches the error log as `boundary-load`. One of those after a deploy
+means a file is missing from the build: after the read-back look at the count of browser errors on
+`GET /api/ops/health` (`client_errors`) and, signed in, at the entries themselves. Say so when
+reporting a release to someone who had the app open, and release changes that are ready together as one.
 
 ## 6. Rollback
 

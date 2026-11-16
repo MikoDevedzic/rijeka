@@ -87,7 +87,7 @@ export const test = base.extend({
     await page.addInitScript(([key, value, greeted]) => {
       try {
         window.sessionStorage.setItem(key, value); window.sessionStorage.setItem('rijeka.booted', '1')
-        if (window.sessionStorage.getItem('rijeka.messenger.greeted') == null && !window.__greetMe) window.sessionStorage.setItem('rijeka.messenger.greeted', greeted)
+        if (window.sessionStorage.getItem('rijeka.messenger.greeted') == null) window.sessionStorage.setItem('rijeka.messenger.greeted', greeted)
       } catch { /* a page without storage */ }
     }, ['sb-stack-auth-token', JSON.stringify(session), `${session.user?.id}|${session.user?.last_sign_in_at || ''}`])
 

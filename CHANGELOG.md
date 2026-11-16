@@ -13,8 +13,18 @@ were behind one bare star at the corner of the screen, which someone new did not
   page or a reload does not open it again, and the next sign-in does. Not on a phone, where an open messenger is
   the whole screen, and not while it stands in a window of its own.
 - **The button at the corner says CHAT** under its star, a little larger and a little brighter.
-- A journey signs in fresh, finds the messenger open, drags it, closes it, reloads and finds it closed and, opened
-  again, where it was left; another holds that a phone is not greeted. The other journeys run as a session
+- **The window last opened or pressed is in front.** The messenger and a trade window stood at one level and the
+  messenger always won, so a ticket opened under an open messenger had its right side covered and could not be
+  brought forward. A ticket that opens is now in front; pressing either brings it forward; the button at the
+  corner brings an open messenger out from under a ticket instead of closing it unseen.
+- **A shorter window to start with** (520px tall where there is room, was 640px), so a page's headings and first
+  rows stay in view under a messenger that opened by itself. A size the user has set is kept.
+- A messenger standing in a window of its own has met that sign-in: closing that window later does not open the
+  messenger in the main window unasked. The greeting waits half a second after the page is up, so such a window
+  has had time to say it is there.
+- Journeys: one takes the session's greeted mark away, finds the messenger open, drags it, closes it, reloads and
+  finds it closed and, opened again, where it was left; one opens a ticket under the open messenger and holds
+  which is in front after each press; one holds that a phone is not greeted. The other journeys run as a session
   already greeted.
 
 ---
@@ -28,11 +38,17 @@ changes.
 - **A release no longer breaks the next page of an app that was open.** Each page is a file named by its build,
   fetched when the page is first opened; a release replaces them. A tab opened before a release then failed on
   the first page it had not yet opened, with the browser's raw words ("Failed to fetch dynamically imported
-  module") in place of the whole screen, top bar included, until it was reloaded by hand. The app now knows the
-  case. With no trade window open it reloads by itself, once, and the page opens on the new build. With a trade
-  window open it does not reload, because that would close the window: it says the desk was updated while the
-  window was open and offers the reload. A page that fails for any reason is now caught under the top bar, which
-  stays, so another page is one press away.
+  module") in place of the whole screen, top bar included, until it was reloaded by hand. The browser says the
+  same words when a connection drops, so the app first asks the host which build it serves. Another build than
+  the tab's is a release: with no trade window open and no message being typed in the messenger the tab reloads
+  by itself, once, and the page opens on the new build; otherwise it does not reload, because that would throw
+  them away: it says the desk was updated while the window was open, says what a reload loses, and offers it.
+  The same build, or no answer, is not a release: the page says its file did not arrive, nothing reloads by
+  itself, and the operator's error log hears of it (a file missing from a deploy must not go unseen). A tab of a
+  trade window whose code is fetched when it is first opened (the rates ticket's XVA tab) now fails by itself:
+  the window and what is typed in it stay. A page of the three main layouts that fails for any reason is now
+  caught under the top bar, which stays, so another page is one press away (the launch home, the messenger's
+  own window and a ticket in its own window have no top bar and are caught as before).
 
 - **The door says what is live and what is next, once.** Its sentence listed six asset classes as though all
   were there, and called the product "open-source". The sentence now ends before the list ("an open derivatives
@@ -59,7 +75,8 @@ changes.
   wrong heading; every cell now stays in its column. In the inputs table the name of who approved an input was
   printed over the impact beside it; it is cut with an ellipsis and kept whole in the cell's title, as an
   input's own name now is. A quote is printed with its thousands separated (a spot of 108,250.0000).
-- Journeys hold each: a release under an open app with and without a trade window, the door's line and its one
+- Journeys hold each: a release under an open app with and without a trade window, with a message being typed,
+  and in a tab of a trade window; a file that did not arrive without a release; the door's line and its one
   screen on a laptop, the description and the structured data, a
   filter button for every status on a row, the pillar table's last column inside its panel at 1440px and every
   cell under its own heading at 1000px, and no cell printing over its neighbour.

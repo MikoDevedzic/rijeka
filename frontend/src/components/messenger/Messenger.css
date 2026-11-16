@@ -41,6 +41,8 @@
   box-shadow: 0 12px 40px rgba(0,0,0,0.6); overflow: hidden;
   font-family: var(--sans); color: var(--text);
 }
+/* a trade window was opened or pressed after the messenger: it is in front (both are at 1000, and the messenger is drawn later) */
+.ms-window.ms-behind { z-index: 999; }
 .ms-window.ms-expanded { inset: 56px 16px 16px 16px; }
 .ms-window.ms-phone { inset: 0; border-radius: 0; border: none; }
 .ms-resize { position: absolute; top: 0; left: 0; width: 14px; height: 14px; cursor: nwse-resize; z-index: 2; }

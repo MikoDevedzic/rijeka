@@ -6,6 +6,7 @@
 
 import { lazy, Suspense, useMemo } from 'react'
 import Loading from '../common/Loading'
+import ErrorBoundary from '../ErrorBoundary'
 import { getSessionSafe } from '../../lib/session'
 import IncrementalXva from './IncrementalXva'
 // The tab's code is fetched the first time the tab is opened, not with the shell.
@@ -41,6 +42,9 @@ export default function XvaPanel({
 
   return (
     <>
+    {/* the tab's code may fail to arrive (a release while the window was open, a dropped connection): the window and
+        what is typed in it must outlive that, so the tab fails by itself */}
+    <ErrorBoundary scope="tab">
     <Suspense fallback={<Loading />}>
     <XVATab
       // Trade context — null for new trades (XVATab tolerates this)
@@ -94,6 +98,7 @@ export default function XvaPanel({
       />}
     />
     </Suspense>
+    </ErrorBoundary>
     </>
   )
 }

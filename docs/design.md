@@ -138,7 +138,9 @@ which are live and which are next.
 **The messenger is met, not found.** It opens once after a sign-in, where it was last left, and never again until
 the next sign-in once it is closed; on a phone it is not opened for the user. The button at the corner carries its
 star and, under it, the word for what it opens (CHAT, 10px, in the text's high colour): a glyph alone is not a
-label.
+label. The messenger and a trade window are both windows on the desk: the one last opened or pressed is in front,
+and the button stays above both. A window that opens by itself starts small enough to leave the page's headings
+and first rows in view.
 
 ## Buttons, fields, rows
 
@@ -185,7 +187,7 @@ of light along it; nothing in the scene pulses outward or glows in a ring. The a
 than the rest, and keeps its plate; every other name stands without a plate and without its second line until its
 piece is in use or picked, because there are two dozen of them. How a change ships is green, and within it each
 reviewer has a colour of its own, taken from the tokens (never brass), so that nine figures in a row can be told
-apart; a reviewer's name is the smallest step of the scale (10px) and in that colour, because nine of them share
+apart; a reviewer's name is a small step of the scale (10px) and in that colour, because nine of them share
 a row, and the row has a name of its own over its middle, because a first name says nothing to someone who has
 not met its owner (set as a host's name is, a little closer, to fit the row). The tokens have nine families of
 hue besides brass and the checks' green, and the page has thirteen figures (the product lead, the project
