@@ -21,7 +21,7 @@ import uuid
 import time as _time
 from types import SimpleNamespace
 from datetime import date, timedelta
-from typing import List, Optional, Any
+from typing import Dict, List, Optional, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -149,6 +149,11 @@ class CurveInput(BaseModel):
     curve_id: str
     flat_rate: Optional[float] = None
     quotes: Optional[List[CurveQuote]] = None
+    # A scenario: every quote the curve is built from moved by `shift_flat_bp`, and the quote at a tenor by its own
+    # entry of `shift_bp` on top ({"5Y": 10}). They move the quotes sent, or the saved snapshot's when none are
+    # sent, before the bootstrap: no shift is the curve as it always was, quote for quote.
+    shift_flat_bp: Optional[float] = None
+    shift_bp: Optional[Dict[str, float]] = None
 
 
 class PriceRequest(BaseModel):
@@ -237,6 +242,27 @@ _BOOTSTRAP_CACHE: dict = {}
 _BOOTSTRAP_CACHE_MAX = 4096
 
 
+CURVE_SHIFT_BOUND_BP = 1000.0     # a scenario moves a quote by at most this much, either way
+CURVE_SHIFT_MAX_TENORS = 80       # and names at most this many tenors
+
+
+def _curve_shift(ci: CurveInput):
+    """The scenario on a curve as a function of a quote's tenor, in decimal rate (0.0001 a bp); None when there is
+    none. Raises ValueError on a shift that is not a finite number within the bound, which the routes answer as 422."""
+    flat, by = ci.shift_flat_bp or 0.0, ci.shift_bp or {}
+    if len(by) > CURVE_SHIFT_MAX_TENORS:
+        raise ValueError(f"a curve shift names at most {CURVE_SHIFT_MAX_TENORS} tenors")
+    for v in (flat, *by.values()):
+        if not isinstance(v, (int, float)) or v != v or abs(v) > CURVE_SHIFT_BOUND_BP:
+            raise ValueError(f"a curve shift is a number of basis points within ±{CURVE_SHIFT_BOUND_BP:.0f}")
+    if abs(flat) + max((abs(v) for v in by.values()), default=0.0) > CURVE_SHIFT_BOUND_BP:
+        raise ValueError(f"a curve shift is within ±{CURVE_SHIFT_BOUND_BP:.0f} basis points in all")
+    if not flat and not any(by.values()):
+        return None
+    own = {str(k).strip().upper(): float(v) for k, v in by.items()}
+    return lambda tenor: (flat + own.get(str(tenor or '').strip().upper(), 0.0)) / 10000.0
+
+
 def _build_curve(ci: CurveInput, valuation_date: date, db: Session, user_id: str) -> Curve:
     """
     Build a Curve. Priority:
@@ -249,6 +275,7 @@ def _build_curve(ci: CurveInput, valuation_date: date, db: Session, user_id: str
     curve_spot_lag = CURVE_SPOT_LAG.get(ci.curve_id, 2)
     curve_ccy      = CURVE_CCY.get(ci.curve_id, 'USD')
 
+    shift = _curve_shift(ci)
     valid_quotes = [q for q in (ci.quotes or []) if q.rate is not None]
     if len(valid_quotes) >= 2:
         dicts = []
@@ -258,7 +285,7 @@ def _build_curve(ci: CurveInput, valuation_date: date, db: Session, user_id: str
             dicts.append({
                 "tenor":      q.tenor,
                 "quote_type": qt,
-                "rate":       q.rate,
+                "rate":       q.rate + shift(q.tenor) if shift else q.rate,
                 "day_count":  dc,
                 "calendar":   curve_cal,
                 "currency":   curve_ccy,
@@ -301,7 +328,7 @@ def _build_curve(ci: CurveInput, valuation_date: date, db: Session, user_id: str
                 db_quotes.append({
                     "tenor":      q.get("tenor"),
                     "quote_type": qt,
-                    "rate":       float(q.get("rate", 0)) / 100,
+                    "rate":       float(q.get("rate", 0)) / 100 + (shift(q.get("tenor")) if shift else 0.0),
                     "day_count":  dc,
                     "calendar":   curve_cal,
                     "currency":   curve_ccy,
@@ -994,6 +1021,9 @@ class SwaptionRequest(BaseModel):
     # Optional: inline shocked curve quotes for scenario repricing
     # [{"tenor": "5Y", "quote_type": "OIS_SWAP", "rate": 0.041}]
     shocked_quotes: Optional[list] = None
+    # A scenario on the curve as it is saved: every quote by `curve_flat_bp`, a tenor's by its own on top
+    curve_flat_bp:  Optional[float] = None
+    curve_shift_bp: Optional[Dict[str, float]] = None
     # HW1F cross-check — if None skips cross-check
     hw1f_a:         Optional[float] = None
     hw1f_sigma_bp:  Optional[float] = None
@@ -1056,7 +1086,7 @@ def price_swaption_route(
 
     # Build discount curve — use shocked_quotes if provided (scenario repricing)
     base_quotes = [CurveQuote(**q) for q in req.shocked_quotes] if req.shocked_quotes else []
-    ci = CurveInput(curve_id=req.curve_id, quotes=base_quotes)
+    ci = CurveInput(curve_id=req.curve_id, quotes=base_quotes, shift_flat_bp=req.curve_flat_bp, shift_bp=req.curve_shift_bp)
     try:
         curve = _build_curve(ci, val_date, db, user["sub"])
     except Exception as exc:
@@ -1434,6 +1464,24 @@ class CapFloorRequest(BaseModel):
     curve_id:       str             = "USD_SOFR"
     freq_per_year:  int             = 4
     vol_override_bp: Optional[float] = None
+    # A scenario: the curve as it is saved with every quote moved by `curve_flat_bp` and a tenor's by its own on
+    # top, and the vol each leg is priced at moved by `vol_shift_bp`. The vol is read from the surface where the
+    # curve as saved puts the trade (a moved curve does not move it along the smile), or is the override. None of
+    # them set is the price as it always was.
+    curve_flat_bp:  Optional[float] = None
+    curve_shift_bp: Optional[Dict[str, float]] = None
+    vol_shift_bp:   Optional[float] = Field(default=None, ge=-1000.0, le=1000.0)
+
+
+def _held_atm_forward(req, val_date, db: Session, user_id: str, freq_per_year: int) -> Optional[float]:
+    """A scenario that moves the curve does not move the trade along the smile: its vol is read where the curve as
+    saved puts it (that curve's ATM forward), then moved by the scenario's vol shift. None when the curve is not
+    moved, and the pricer reads the surface at its own curve as it always has."""
+    if not (req.curve_flat_bp or any((req.curve_shift_bp or {}).values())):
+        return None
+    from pricing.cap_floor import compute_atm_forward
+    saved = _build_curve(CurveInput(curve_id=req.curve_id, quotes=[]), val_date, db, user_id)
+    return compute_atm_forward(saved, val_date, req.tenor_y, freq_per_year)
 
 
 def _load_cap_surface(db: Session, val_date: str, user_id: str) -> list[dict]:
@@ -1491,7 +1539,7 @@ def price_cap_route(
         raise HTTPException(status_code=422, detail="cap_rate required")
 
     val_date = req.valuation_date or date.today()
-    ci       = CurveInput(curve_id=req.curve_id, quotes=[])
+    ci       = CurveInput(curve_id=req.curve_id, quotes=[], shift_flat_bp=req.curve_flat_bp, shift_bp=req.curve_shift_bp)
     try:
         curve = _build_curve(ci, val_date, db, user["sub"])
     except Exception as exc:
@@ -1511,6 +1559,8 @@ def price_cap_route(
             fallback_vol_bp = req.fallback_vol_bp,
             freq_per_year   = req.freq_per_year,
             vol_override_bp = req.vol_override_bp,
+            vol_shift_bp    = req.vol_shift_bp or 0.0,
+            vol_atm_forward = _held_atm_forward(req, val_date, db, user["sub"], req.freq_per_year),
         )
     except Exception as exc:
         raise internal(500, "Pricing error", exc)
@@ -1550,7 +1600,7 @@ def price_floor_route(
         raise HTTPException(status_code=422, detail="floor_rate required")
 
     val_date = req.valuation_date or date.today()
-    ci       = CurveInput(curve_id=req.curve_id, quotes=[])
+    ci       = CurveInput(curve_id=req.curve_id, quotes=[], shift_flat_bp=req.curve_flat_bp, shift_bp=req.curve_shift_bp)
     try:
         curve = _build_curve(ci, val_date, db, user["sub"])
     except Exception as exc:
@@ -1570,6 +1620,8 @@ def price_floor_route(
             fallback_vol_bp = req.fallback_vol_bp,
             freq_per_year   = req.freq_per_year,
             vol_override_bp = req.vol_override_bp,
+            vol_shift_bp    = req.vol_shift_bp or 0.0,
+            vol_atm_forward = _held_atm_forward(req, val_date, db, user["sub"], req.freq_per_year),
         )
     except Exception as exc:
         raise internal(500, "Pricing error", exc)
@@ -1615,7 +1667,7 @@ def price_collar_route(
         raise HTTPException(status_code=422, detail="cap_rate must be above floor_rate")
 
     val_date = req.valuation_date or date.today()
-    ci       = CurveInput(curve_id=req.curve_id, quotes=[])
+    ci       = CurveInput(curve_id=req.curve_id, quotes=[], shift_flat_bp=req.curve_flat_bp, shift_bp=req.curve_shift_bp)
     try:
         curve = _build_curve(ci, val_date, db, user["sub"])
     except Exception as exc:
@@ -1634,6 +1686,8 @@ def price_collar_route(
             valuation_date  = val_date,
             surface_rows    = surface_rows,
             fallback_vol_bp = req.fallback_vol_bp,
+            vol_shift_bp    = req.vol_shift_bp or 0.0,
+            vol_atm_forward = _held_atm_forward(req, val_date, db, user["sub"], 4),      # the collar's legs are quarterly here, as price_collar has them
         )
     except Exception as exc:
         raise internal(500, "Pricing error", exc)
