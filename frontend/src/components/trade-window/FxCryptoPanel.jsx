@@ -154,9 +154,15 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   const maxDate = lastDate({ crypto, today: todayIso, dates, option })      // an option to its last vol tenor, a forward to ten years
   // A date set from a tenor before the pairs arrived (or for another pair) is the calendar's; once the API's dates are
   // here it moves to the API's date for that tenor, so the tenor select still reads 3M and the date is a business day.
+  // The same when the pair changes: a date that was the last pair's 3M becomes this pair's 3M. (It stayed the last
+  // pair's date: a new FX option opened on BTCUSD's three-month expiry, 12 February, read "CUSTOM · 2.9 months" and
+  // was not what choosing 3M gave, 16 February. A first-time visitor, 16 November 2026.) A date that is no tenor of
+  // either, one the user typed, is left alone.
+  const lastDates = useRef({ fwd: null, opt: null })
   useEffect(() => {
-    const snap = (date, set, d) => { const t = d && tenorOf(date, todayIso, null); if (t && d[t] && d[t] !== date) set(d[t]) }
-    snap(settlement, setSettlement, fwdDates); snap(expiry, setExpiry, optDates)
+    const snap = (date, set, d, was) => { const t = d && ((was && tenorOf(date, todayIso, was)) || tenorOf(date, todayIso, null)); if (t && d[t] && d[t] !== date) set(d[t]) }
+    snap(settlement, setSettlement, fwdDates, lastDates.current.fwd); snap(expiry, setExpiry, optDates, lastDates.current.opt)
+    lastDates.current = { fwd: fwdDates, opt: optDates }
   }, [cur])   // eslint-disable-line react-hooks/exhaustive-deps
   // the quote on screen is the last one that came back, for as long as the ticket is the product and pair it priced
   const ident = `${ac}|${inst}|${pair}`

@@ -195,3 +195,24 @@ test('on a small window nothing of the messenger stands on a ticket\'s buttons',
   await expect(app.locator('.ms-window')).toBeVisible()
   expectClean(problems)
 })
+
+// Third walk: a new FX option opened on the digital asset's three-month expiry and called it "CUSTOM · 2.9 months".
+test('a new ticket\'s date is the pair\'s own tenor date when the pair changes', async ({ app, problems }) => {
+  const pairs = app.waitForResponse(r => r.url().endsWith('/api/currency/pairs') && r.ok(), { timeout: 60_000 })
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  const by = Object.fromEntries((await (await pairs).json()).pairs.map(p => [p.pair, p]))
+  await win.getByRole('button', { name: 'FX', exact: true }).click()
+  await win.getByRole('button', { name: /^FX OPTION$/i }).click()
+  const tenor = win.getByTestId('fx-tenor')
+  await expect(tenor.locator('option:checked'), 'the option is a three-month one, by name').toHaveText('3M')
+  const eur = by.EURUSD?.tenor_dates?.option?.['3M']
+  if (eur?.expiry) await expect(win.locator('input[type=date]').nth(1), 'and its expiry is EURUSD\'s own').toHaveValue(eur.expiry)
+  // back to a digital asset: its own three months, again by name
+  await win.getByRole('button', { name: 'CRYPTO', exact: true }).click()
+  await win.getByRole('button', { name: /^CRYPTO OPTION$/i }).click()
+  await expect(win.getByTestId('fx-tenor').locator('option:checked')).toHaveText('3M')
+  expectClean(problems)
+})
