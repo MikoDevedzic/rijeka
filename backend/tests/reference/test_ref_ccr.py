@@ -250,14 +250,19 @@ def test_a_swaps_expected_exposure_matches_a_strip_of_quantlib_swaptions():
 
 
 def test_the_waterfalls_unilateral_cva_and_dva_match_a_strip_of_quantlib_swaptions():
-    """Measured 17 November 2026 at 40,000 paths: CVA −0.37 %, DVA +0.43 % of the QuantLib figure with the exposure
-    discounted on each path; −2.58 % and +2.75 % with the expected exposure at today's discount factor, which is
-    what the waterfall charged until 0.53.0 and what the second assertion keeps visible."""
+    """What the waterfall charged until 0.53.0, the expected exposure at today's discount factor, is kept visible
+    by the second assertion. The measurements over four seeds at 40,000 paths are in the methodology (the XVA
+    waterfall, "discounted on its own path"); one seed's figure carries about half a per cent of sampling error
+    (the model validator, 17 November 2026), which is why the row's tolerance is 1.5 %."""
     p = _paths()
     rows = cva_rows(p)
     assert len(rows) == 2
     assert_rows(rows)
     old = cva_rows(p, on_path=False)
     # a receiver is owed most where discounting is lightest: the product of the means understates what it is owed
-    # and overstates what it owes, each by more than the whole tolerance of the row above
-    assert old[0].extra["relative"] < -0.02 and old[1].extra["relative"] > 0.02, [(r.case, round(r.extra["relative"], 4)) for r in old]
+    # and overstates what it owes. Read as the DIFFERENCE between the two on the same paths, where the sampling
+    # error of the exposure cancels: about 2.2 % of CVA and 2.3 % of DVA at every seed tried, where either figure
+    # alone moves by half a per cent from seed to seed
+    d_cva = old[0].extra["relative"] - rows[0].extra["relative"]
+    d_dva = old[1].extra["relative"] - rows[1].extra["relative"]
+    assert d_cva < -0.015 and d_dva > 0.015, (round(d_cva, 4), round(d_dva, 4))

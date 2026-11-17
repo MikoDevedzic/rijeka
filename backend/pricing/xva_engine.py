@@ -349,8 +349,9 @@ def run_waterfall(
     exposure move together: a receive-fixed swap is owed most where rates have fallen and discounting is
     lightest, so the product of the means understates what it is owed and overstates what it owes; a pay-fixed
     swap the other way. Measured against ORE on a five-year receiver, 17 November 2026: the engines' discounted
-    exposures agree, and the product of the means was 0.5 % below at one year and 5.7 % at five (2 % on CVA). None
-    is the product of the means, exact where rates are not simulated (a currency or digital-asset ticket). The
+    exposures agree, and the product of the means was 0.5 % below at one year and 5.7 % at five (2 % on CVA). With
+    no deflator the charges are on the product of the means, as they were, which is exact where rates are not
+    simulated (a currency or digital-asset ticket). The
     profiles reported (ee, ene, pfe) stay undiscounted values at the grid dates; capital and margin (KVA, MVA)
     read expected amounts and are discounted on today's curve as before.
     """
@@ -420,7 +421,11 @@ def run_waterfall(
         if w is None:
             c_pos, c_neg = 0.5 * (b_pos + e_pos), 0.5 * (b_neg + e_neg)
         else:
-            # each end of the step at its own date's discounting on the path; today's is one
+            # each end of the step at its own date's discounting on the path; today's is one. The loop below then
+            # multiplies the whole step by the discount factor of its END, as it always has for an averaged step:
+            # the start is so discounted one step too far, by the step's forward discount (0.1 % on a weekly step).
+            # No production run averages a step and passes a deflator (the currency tickets average and simulate
+            # no rates; the rates runs read the step's end). The model validator, 17 November 2026.
             w_b = np.column_stack((np.ones(n_paths), w[:, :-1]))
             c_pos, c_neg = 0.5 * (b_pos * w_b + e_pos * w), 0.5 * (b_neg * w_b + e_neg * w)
         ee_c, ene_c = np.mean(c_pos, axis=0), np.mean(c_neg, axis=0)

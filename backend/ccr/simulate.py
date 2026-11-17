@@ -175,12 +175,19 @@ def account(paths: Paths, key: str) -> np.ndarray:
 
 def deflator(paths: Paths, key: str) -> np.ndarray:
     """On every path, the discount factor to each grid date after today over today's discount factor for that date:
-    1 / (A_k · P(0, t_k)), shape (paths, T). Its mean at every date is one (a bond's discounted price is a
+    1 / (A_k · P(0, t_k)), shape (paths, T). Its expectation at every date is one (a bond's discounted price is a
     martingale on the account), so an expected exposure weighted by it and multiplied by P(0, t_k) is the expected
-    exposure discounted on its own path, E[D(t_k) · V⁺(t_k)] (pricing.xva_engine.run_waterfall, `deflator`)."""
+    exposure discounted on its own path, E[D(t_k) · V⁺(t_k)] (pricing.xva_engine.run_waterfall, `deflator`).
+
+    It is returned with its sample mean set to one at every date (moment matching): the sample's own mean discount
+    factor differs from P(0, t_k) by sampling error, which grows with the date and would otherwise be carried into
+    every charge, also of an exposure that does not move with rates (the independent reviewer, 17 November 2026: a
+    constant exposure must be charged as it was, and an incremental charge is a difference of runs). What is left
+    is the co-movement of discounting and exposure, which is the point."""
     A = account(paths, key)
     p0 = np.array([max(float(paths.p0[key](float(x))), 1e-12) for x in paths.t[1:]])
-    return 1.0 / (A[:, 1:] * p0[None, :])
+    w = 1.0 / (A[:, 1:] * p0[None, :])
+    return w / w.mean(axis=0, keepdims=True)
 
 
 def growth(paths: Paths, key: str, a: float, b: float) -> np.ndarray:

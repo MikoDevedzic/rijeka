@@ -295,3 +295,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   date, on the curve the comparison uses: ORE's example set-up discounted on another curve and filled its overnight
   fixings 4 bp high, and the first "difference" found was that. And an expectation of a product is not the product of
   the expectations: where an adjustment is defined on a discounted amount, discount on the path.
+- A figure from a simulation is quoted as its range over several seeds, with the path count, never as one seed's
+  value; and a test of a simulated difference compares the two on the same paths, where the sampling error cancels,
+  not each against a threshold (0.53.0: "0.37 %" was one seed of four between −0.41 and +0.04, and the test that the
+  old figure was outside the tolerance passed only at the pinned seed).

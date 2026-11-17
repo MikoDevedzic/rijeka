@@ -17,14 +17,18 @@ outside engine and this one like for like.
   incremental charge, the capital report's cost profiles) each path's exposure carries its own discounting. ColVA
   reads the margin balances the same way. The answer of a rates run says which it used (`basis.exposure_discounting`).
 - **Two outside figures, the first for an adjustment.** Against a strip of QuantLib swaptions on a yearly grid, a
-  six-year receiver's unilateral CVA stands 0.37 % from the strip and its DVA 0.43 % (they stood 2.6 % below and
-  2.8 % above): two new rows of the reference suite, 436 in all, and a test that the old figure is outside the
-  tolerance. Against ORE (the Open Source Risk Engine, 1.8.17) on a five-year overnight swap with the same curve,
+  six-year receiver's unilateral CVA stands within 0.4 % of the strip and its DVA within 0.7 % over four seeds of
+  40,000 paths (one seed carries about half a per cent of sampling error); on the same paths the old calculation
+  stood 2.2 % lower on CVA and 2.3 % higher on DVA at every seed. Two new rows of the reference suite, 436 in all,
+  and a test of that difference. Against ORE (the Open Source Risk Engine, 1.8.17) on a five-year overnight swap with the same curve,
   dates, Hull-White parameters and survival curves, on a weekly grid: expected exposure within 1 % at every date
   read, unilateral CVA 0.24 % and DVA 0.17 % below ORE's. The ORE run was made by hand and is not part of the build.
-- **What moved**, on the booked five-year swap paying 3.75 % with no margin (500 paths): CVA −2,600.54 to −2,548.09,
-  FCA −1,682.70 to −1,648.76, DVA 2,507.85 to 2,542.69, FBA 776.24 to 787.02; KVA and MVA the same. Margined, a
-  cent on each.
+- **What moved**, on the booked five-year swap paying 3.75 % with no margin (500 paths): CVA −2,600.54 to −2,546.49,
+  FCA −1,682.70 to −1,647.73, DVA 2,507.85 to 2,541.38, FBA 776.24 to 786.62; KVA and MVA the same. Margined, a
+  cent on FCA.
+- **A constant exposure is charged as it was.** The weight is each path's discount factor over today's curve's with
+  its sample mean set to one at every date, so the sampling error of the paths' own mean discount factor is not
+  carried into a charge (the independent reviewer); what is left is the co-movement of discounting and exposure.
 - **The pinned book now holds the ticket's own run.** Its XVA cases sent no trade and were answered with the
   generic swap, so this change moved none of its figures; fourteen figures of the trade's own run are added.
 

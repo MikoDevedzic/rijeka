@@ -43,6 +43,21 @@ def test_a_deflator_of_ones_is_the_run_without_one(average, margined):
     assert b.discounted_on_path and not a.discounted_on_path
 
 
+def test_a_deflator_of_ones_is_the_run_without_one_under_wrong_way_risk():
+    """The per-path branches (a party's default tied to the market) read the same weighted exposures."""
+    paths = _values()
+    x = np.cumsum(np.random.default_rng(21).standard_normal(paths.shape) * 0.2 * math.sqrt(DT), axis=1)
+    ww = {"x": x, "beta_cp": 1.5, "beta_own": -0.8}
+    a = run_waterfall(paths, 0.0, P0, _params(), CSA.uncollateralised(), wrong_way=ww)
+    b = run_waterfall(paths, 0.0, P0, _params(), CSA.uncollateralised(), wrong_way=ww, deflator=np.ones_like(paths))
+    for f in FIELDS + ("cva_independent", "dva_independent"):
+        assert getattr(b, f) == pytest.approx(getattr(a, f), rel=1e-12, abs=1e-9), f
+    # and a weight that is not one moves them
+    w = np.exp(-2e-6 * paths)
+    c = run_waterfall(paths, 0.0, P0, _params(), CSA.uncollateralised(), wrong_way=ww, deflator=w / w.mean(axis=0, keepdims=True))
+    assert abs(c.cva) < abs(a.cva) and abs(c.dva) > abs(a.dva)
+
+
 def test_the_unilateral_charges_by_hand():
     """CVA = −LGD · Σ E[w_i · V⁺_i] · (default probability in step i) · P(0, t_i), and DVA with what we owe: written
     here from the paths, not through the engine's exposure arrays."""
@@ -88,15 +103,33 @@ def _hw_paths(n=20_000, months=60):
     return simulate(cal, {key: curve}, {}, {}, asof, months, n_paths=n, seed=17), key
 
 
-def test_the_deflator_is_the_accounts_and_averages_to_one():
+def test_the_deflator_is_the_accounts_with_its_sample_mean_set_to_one():
     p, key = _hw_paths()
     w = deflator(p, key)
     A = account(p, key)
     assert w.shape == (p.n_paths, len(p.t) - 1)
     for i in (1, 12, 36, 60):
-        assert w[0, i - 1] == pytest.approx(1.0 / (A[0, i] * p.p0[key](float(p.t[i]))), rel=1e-12)
-        se = float(w[:, i - 1].std()) / math.sqrt(p.n_paths)
-        assert abs(float(w[:, i - 1].mean()) - 1.0) < 4 * se + 1e-9, (i, float(w[:, i - 1].mean()), se)
+        raw = 1.0 / (A[:, i] * p.p0[key](float(p.t[i])))          # the path's discount factor over today's curve's
+        # before the moment matching its mean is one within the sampling error: the account is a numeraire
+        se = float(raw.std()) / math.sqrt(p.n_paths)
+        assert abs(float(raw.mean()) - 1.0) < 4 * se + 1e-9, (i, float(raw.mean()), se)
+        # and what is returned is that, divided by its own mean
+        assert np.allclose(w[:, i - 1], raw / raw.mean(), rtol=1e-12)
+        assert float(w[:, i - 1].mean()) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_an_exposure_that_does_not_move_with_rates_is_charged_as_it_was():
+    """The independent reviewer's case: a constant amount owed, on few paths and a long grid. With the weight's
+    sample mean at one the charge is the old one to the last digit, whatever the paths' own mean discount factor."""
+    p, key = _hw_paths(n=300, months=120)
+    months = len(p.t) - 1
+    dt = float(p.t[-1]) / months
+    p0 = [float(p.p0[key](float(t))) for t in p.t] + [float(p.p0[key](float(p.t[-1]) + dt))]
+    P = WaterfallParams(notional=1e7, maturity_y=months * dt, dt=dt, theta=0.035, lgd=0.6, own_lgd=0.6, cp_cds_bp=150.0, own_cds_bp=80.0, ftp_bp=120.0)
+    owed = np.full((p.n_paths, months), 250_000.0)
+    on = run_waterfall(owed, 250_000.0, p0, P, CSA.uncollateralised(), deflator=deflator(p, key))
+    off = run_waterfall(owed, 250_000.0, p0, P, CSA.uncollateralised())
+    assert on.cva == pytest.approx(off.cva, rel=1e-12) and on.fca == pytest.approx(off.fca, rel=1e-12)
 
 
 def test_a_receiver_is_owed_more_and_owes_less_on_the_path_and_a_payer_the_reverse():
