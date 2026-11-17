@@ -407,7 +407,7 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
     T = eng["T"]
     ws = wb.create_sheet("Waterfall")
     ws["A1"] = "THE WATERFALL"; ws["A1"].font = W.F_TITLE
-    ws["A2"] = "Per step: survival from the credit triangle, then CVA, DVA, FCA (the funding cost, on the whole funding spread) and FBA (the funding benefit, on the funding basis alone, since DVA already carries our own credit spread; FVA is the two together; both run only while the two parties are alive), the SA-CCR exposure at default and the capital it needs (KVA), the initial margin funded (MVA), the carry of the variation margin against cash (ColVA). Costs negative, benefits positive."; ws["A2"].font = W.F_SUB
+    ws["A2"] = "Per step: survival from the credit triangle, then CVA and DVA (a party's default in the step, counted while the other survives to the middle of it: first to default), FCA (the funding cost, on the whole funding spread) and FBA (the funding benefit, on the funding basis alone, since DVA already carries our own credit spread; FVA is the two together; both run only while the two parties are alive), the SA-CCR exposure at default and the capital it needs (KVA), the initial margin funded (MVA), the carry of the variation margin against cash (ColVA). Costs negative, benefits positive."; ws["A2"].font = W.F_SUB
     params = [("Counterparty CDS (bp)", 85.0), ("Own CDS (bp)", 42.0), ("LGD", 0.40), ("Own LGD", 0.40), ("Funding spread ftp (bp)", 55.0), ("Funding basis (bp) = max(funding spread − own CDS, 0): the benefit is charged on this", "=MAX(FTP-CDSown,0)"),
               ("Hurdle rate", 0.12), ("Capital model (SA_CCR / CEM / IMM)", "SA_CCR"), ("Counterparty risk weight", 1.0), ("Wrong-way multiplier", 1.0),
               ("SA-CCR α", ALPHA), ("Supervisory factor, rates", SF_IR), ("Capital ratio", CAP_R)]
@@ -432,8 +432,10 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
         ws.cell(row=r, column=7, value=(f"=1-F{r}" if j == 1 else f"=F{r - 1}-F{r}")).number_format = "0.000000"
         ws.cell(row=r, column=8, value=f"=Exposure!D{e}").number_format = "#,##0.00"
         ws.cell(row=r, column=9, value=f"=Exposure!E{e}").number_format = "#,##0.00"
-        ws.cell(row=r, column=10, value=f"=LGDcp*H{r}*E{r}*C{r}*WWR").number_format = "#,##0.00"
-        ws.cell(row=r, column=11, value=f"=LGDown*ABS(I{r})*G{r}*C{r}").number_format = "#,##0.00"
+        # first to default (0.50.0): a party's default in the step counts while the other survives to the middle of it
+        # (the other's survival at the step's start is Q + ΔQ, so the middle is Q + ΔQ/2)
+        ws.cell(row=r, column=10, value=f"=LGDcp*H{r}*E{r}*(F{r}+G{r}/2)*C{r}*WWR").number_format = "#,##0.00"
+        ws.cell(row=r, column=11, value=f"=LGDown*ABS(I{r})*G{r}*(D{r}+E{r}/2)*C{r}").number_format = "#,##0.00"
         # funding runs while both parties are alive: the chance both survive, at the middle of the step (Q at the
         # step's start is Q + ΔQ). The benefit is on the funding basis alone: DVA already carries our own credit spread.
         alive = f"(0.5*((D{r}+E{r})*(F{r}+G{r})+D{r}*F{r}))"
@@ -583,7 +585,7 @@ def xva_rates_workbook(mkt):
         ("C", "max(V_lag − TH_cp, 0) − max(−V_lag − TH_own, 0), zeroed under the MTA", f"Exposure!B{blocks_exp['C'][0]}", "", "#,##0"),
         ("EE, ENE, PFE", "mean(max(V−C−IM,0)), mean(min(V−C+IM,0)), 95th percentile of V−C", f"Exposure!D{rs + 1}", "step 1", "#,##0.00"),
         ("Q(t)", "exp(−s/LGD·t)", f"Waterfall!D{r0}", "the credit triangle", "0.000000"),
-        ("CVA", "−LGD·Σ EE·ΔQ·P(0,t)·WWR", f"Waterfall!B{rt}", "", "#,##0.00"), ("DVA", "+LGD_own·Σ |ENE|·ΔQ_own·P(0,t)", f"Waterfall!B{rt + 1}", "", "#,##0.00"),
+        ("CVA", "−LGD·Σ EE·ΔQ·Q_own(mid)·P(0,t)·WWR", f"Waterfall!B{rt}", "", "#,##0.00"), ("DVA", "+LGD_own·Σ |ENE|·ΔQ_own·Q_cp(mid)·P(0,t)", f"Waterfall!B{rt + 1}", "", "#,##0.00"),
         ("FCA, FBA (FVA is their sum)", "−Σ ftp·EE·S·Δ·P, +Σ max(ftp − s_own, 0)·|ENE|·S·Δ·P; S = both parties alive", f"Waterfall!B{rt + 2}", "", "#,##0.00"),
         ("EAD", "α·[RC + multiplier·add-on], add-on = SF·N·SD(m)·MF; a margined set capped at the same set unmargined (CRE52.2)", f"Waterfall!U{r0}", "SA-CCR, step 1", "#,##0.00"),
         ("KVA", "−hurdle·Σ 8%·RW·EAD·Δ·P", f"Waterfall!B{rt + 4}", "", "#,##0.00"), ("MVA", "−Σ IM(t)·max(ftp − pickup, 0)·Δ·P", f"Waterfall!B{rt + 5}", "", "#,##0.00"),

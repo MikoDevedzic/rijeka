@@ -47,8 +47,9 @@ def _hand(paths, v0, p0, P, average):
     q = lambda bp, lgd, k: math.exp(-(bp / 1e4 / lgd) * k * P.dt)
     cva = dva = fca = fba = 0.0
     for i in range(paths.shape[1]):
-        cva -= P.lgd * ee[i] * (q(P.cp_cds_bp, P.lgd, i) - q(P.cp_cds_bp, P.lgd, i + 1)) * p0[i + 1]
-        dva += P.own_lgd * abs(ene[i]) * (q(P.own_cds_bp, P.own_lgd, i) - q(P.own_cds_bp, P.own_lgd, i + 1)) * p0[i + 1]
+        # first to default (0.50.0): a party's default in the step, while the other survives to the middle of it
+        cva -= P.lgd * ee[i] * (q(P.cp_cds_bp, P.lgd, i) - q(P.cp_cds_bp, P.lgd, i + 1)) * 0.5 * (q(P.own_cds_bp, P.own_lgd, i) + q(P.own_cds_bp, P.own_lgd, i + 1)) * p0[i + 1]
+        dva += P.own_lgd * abs(ene[i]) * (q(P.own_cds_bp, P.own_lgd, i) - q(P.own_cds_bp, P.own_lgd, i + 1)) * 0.5 * (q(P.cp_cds_bp, P.lgd, i) + q(P.cp_cds_bp, P.lgd, i + 1)) * p0[i + 1]
         # funding while both are alive (the middle of the step); the benefit on the funding basis alone
         alive = 0.5 * (q(P.cp_cds_bp, P.lgd, i) * q(P.own_cds_bp, P.own_lgd, i) + q(P.cp_cds_bp, P.lgd, i + 1) * q(P.own_cds_bp, P.own_lgd, i + 1))
         fca -= P.ftp_bp / 1e4 * ee[i] * alive * P.dt * p0[i + 1]
@@ -89,8 +90,9 @@ def test_under_a_margin_agreement_todays_exposure_is_what_the_collateral_leaves(
     q = lambda k: math.exp(-(P.cp_cds_bp / 1e4 / P.lgd) * k * dt)
     ee = np.array(end.ee)
     mid = 0.5 * (np.concatenate(([0.0], ee[:-1])) + ee)
-    assert avg.cva == pytest.approx(-P.lgd * sum(mid[i] * (q(i) - q(i + 1)) * p0[i + 1] for i in range(T)), rel=1e-9)
-    assert abs(avg.cva) < abs(end.cva)
+    # the exposure rule is read on the charge without the first-to-default weight (the weight is tests/test_first_to_default.py)
+    assert avg.cva_unilateral == pytest.approx(-P.lgd * sum(mid[i] * (q(i) - q(i + 1)) * p0[i + 1] for i in range(T)), rel=1e-9)
+    assert abs(avg.cva) < abs(end.cva) and abs(avg.cva) < abs(avg.cva_unilateral)
 
 
 def test_a_step_does_not_start_with_what_was_paid_on_its_date():
@@ -104,10 +106,11 @@ def test_a_step_does_not_start_with_what_was_paid_on_its_date():
     wf = run_waterfall(paths, 100.0, p0, P, CSA.uncollateralised(), average_exposure=True, settled=settled)
     q = lambda k: math.exp(-(P.cp_cds_bp / 1e4 / P.lgd) * k * dt)
     mid = [100.0, 100.0, 0.5 * ((100.0 - 60.0) + 40.0), 40.0]              # the third step starts at 40, not at 100
-    assert wf.cva == pytest.approx(-P.lgd * sum(mid[i] * (q(i) - q(i + 1)) * p0[i + 1] for i in range(T)), rel=1e-12)
+    assert wf.cva_unilateral == pytest.approx(-P.lgd * sum(mid[i] * (q(i) - q(i + 1)) * p0[i + 1] for i in range(T)), rel=1e-12)
     qo = lambda k: math.exp(-(P.own_cds_bp / 1e4 / P.own_lgd) * k * dt)
     alive = lambda i: 0.5 * (q(i) * qo(i) + q(i + 1) * qo(i + 1))          # funding runs while both parties survive the step
     assert wf.fca == pytest.approx(-P.ftp_bp / 1e4 * sum(mid[i] * alive(i) * dt * p0[i + 1] for i in range(T)), rel=1e-12)
+    assert wf.cva == pytest.approx(-P.lgd * sum(mid[i] * (q(i) - q(i + 1)) * 0.5 * (qo(i) + qo(i + 1)) * p0[i + 1] for i in range(T)), rel=1e-12)
     assert wf.ee == [100.0, 100.0, 40.0, 40.0]                             # the profile shown is still the value at each date
     naive = run_waterfall(paths, 100.0, p0, P, CSA.uncollateralised(), average_exposure=True)
     assert abs(naive.fca) > abs(wf.fca), "without the settlement the third step would start at 100"

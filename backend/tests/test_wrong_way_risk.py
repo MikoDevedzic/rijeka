@@ -109,7 +109,9 @@ def test_the_monte_carlo_agrees_with_a_quadrature_of_the_same_definition(directi
     inp.regimes = False               # the quadrature is of a lognormal level on one vol: the definition, not the asset's regimes
     wf, meta = fx_xva.forward_xva(inp, CSA.uncollateralised(), n_paths=40000, cp_cds_bp=300.0, lgd=0.6, cp_hazard_if_halves=k)
     ref = _quadrature_cva(1.0 if direction == "BUY" else -1.0, 10.0, 100_000.0, 100_000.0, 0.04, 0.60, T, 2, 300.0, 0.6, hazard_beta(k))
-    assert wf.cva == pytest.approx(ref, rel=0.02), (wf.cva, ref)      # sampling error at 40,000 paths is about 0.8 %
+    # the quadrature is of the default alone, with no weight for our own default coming first: the unilateral figure
+    assert wf.cva_unilateral == pytest.approx(ref, rel=0.02), (wf.cva_unilateral, ref)      # sampling error at 40,000 paths is about 0.8 %
+    assert abs(wf.cva) < abs(wf.cva_unilateral) and wf.cva == pytest.approx(wf.cva_unilateral, rel=2e-3)   # our survival over two months at 42 bp
     if k == 1.0:
         assert meta["wwr"] is None and wf.cva_independent is None
     else:
@@ -144,18 +146,25 @@ def test_with_the_link_off_every_number_is_the_one_before_and_the_independent_fi
     assert m0["wwr"] is None and m1["wwr"] is None
     linked, _ = fx_xva.forward_xva(_fwd("SELL"), csa, n_paths=1500, cp_hazard_if_halves=3.0)
     assert linked.cva_independent == pytest.approx(base.cva, rel=1e-12), "what it would be with independence: the run without the link"
-    assert linked.dva == base.dva and linked.dva_independent is None, "our own default was left independent"
+    # our own default was left independent: its probability is the run's without the link. DVA itself moves a little,
+    # because it counts our default only while the counterparty survives, and that survival is now read on each path
+    assert linked.dva_unilateral == pytest.approx(base.dva_unilateral, rel=1e-12) and linked.dva_independent == pytest.approx(base.dva, rel=1e-12)
+    assert linked.dva != base.dva and linked.dva == pytest.approx(base.dva, rel=0.05)
     for f in ("fca", "fba", "kva", "mva", "colva"):
         assert getattr(linked, f) == getattr(base, f), "only the credit terms move"
 
 
-def test_our_own_default_can_be_linked_too_and_it_moves_dva_alone():
+def test_our_own_default_can_be_linked_too_and_it_moves_dva_and_cva_only_through_the_weight():
     csa = CSA.uncollateralised()
     base, _ = fx_xva.forward_xva(_fwd("BUY"), csa, n_paths=3000)
     own, meta = fx_xva.forward_xva(_fwd("BUY"), csa, n_paths=3000, own_hazard_if_halves=3.0)
     # we owe when the coin has fallen (a bought forward under water) and our own intensity is then higher: DVA is larger
     assert own.dva > own.dva_independent > 0 and own.dva_independent == pytest.approx(base.dva, rel=1e-12)
-    assert own.cva == base.cva and own.cva_independent is None and meta["wwr"]["own_hazard_if_halves"] == 3.0
+    assert meta["wwr"]["own_hazard_if_halves"] == 3.0
+    # the counterparty's default probability is untouched; CVA counts it while we survive, and we survive more often
+    # on the paths where we are owed (the coin has risen, our intensity is lower): a little larger, never by much
+    assert own.cva_unilateral == pytest.approx(base.cva_unilateral, rel=1e-12) and own.cva_independent == pytest.approx(base.cva, rel=1e-12)
+    assert abs(base.cva) < abs(own.cva) < abs(own.cva_unilateral) and own.cva == pytest.approx(base.cva, rel=0.01)
 
 
 def test_options_and_packages_take_the_link():

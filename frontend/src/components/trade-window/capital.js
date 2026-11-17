@@ -50,7 +50,7 @@ export const FORMULA = {
   k_cva: 'K_CVA = 0.65 × (1/1.4) × S_c × M × EAD × DF(M)  (MAR50.14–50.15), S_c by sector and grade (MAR50.16)',
   kva: 'KVA = −hurdle × Σ (K_CCR(t) + K_CVA(t)) Δt P(0,t) along the exposure path',
   mva: 'MVA = −Σ IM(t) × max(ftp − pickup, 0) Δt P(0,t); pickup the yield of the eligible collateral posted',
-  cva: 'CVA = −LGD × Σ EE(t) ΔPD(t) P(0,t) under the economic CSA (gross when close-out netting is unenforceable)',
+  cva: 'CVA = −LGD × Σ EE(t) ΔPD(t) Q_own(t) P(0,t) (the counterparty\'s default while we have not defaulted first) under the economic CSA (gross when close-out netting is unenforceable)',
   fca: 'FCA = −Σ ftp × EE(t) Δt P(0,t) under the economic CSA (the funding cost; FVA is FCA + FBA)',
   leverage: 'leverage exposure = 1.4 × (max(V − cash VM, 0) + AddOn): only cash variation margin reduces it (LEV30)',
   hqla_im: 'HQLA value of the IM posted: Level 1 at 0 %, Level 2A at 15 %, Level 2B at 50 %, none for unrecognised assets (LCR30)',

@@ -32,8 +32,10 @@ describe('the methodology in the app', () => {
     // (15) and move every later one up by three
     expect(tags(9)).toContain(12)                    // v1.14: the bridge in logs
     expect(tags(9)).toEqual(expect.arrayContaining([13, 14, 15]))
-    expect(tags(10)).toEqual([18, 19, 20, 21, 22, 23])
-    expect(tags(12)).toEqual([24, 25, 26, 27, 28, 29, 30])
+    // v1.31: the first-to-default display in §10 is (22) and moves every later one up by one (read off the PDF: §10 is
+    // (18) to (24), wrong-way risk now (23) and (24); §12 is (25) to (31))
+    expect(tags(10)).toEqual([18, 19, 20, 21, 22, 23, 24])
+    expect(tags(12)).toEqual([25, 26, 27, 28, 29, 30, 31])
     // prose with the maths taken out: no backslash command, no stray brace or dollar
     // the text with each formula taken out whole (a formula's own spans nest: counted, not guessed)
     const strip = (h) => {

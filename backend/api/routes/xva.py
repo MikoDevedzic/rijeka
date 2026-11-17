@@ -696,6 +696,7 @@ def simulate(
         # another currency is discounted and projected on its own curve and simulated on that USD volatility: said with
         # the figures, not left to be found.
         "vol_basis": _vol_basis(_run_curve_id(body)),
+        "unilateral": unilateral_block(wf),
         "params": {
             "a":        a,
             "sigma_bp": sigma_bp,
@@ -852,6 +853,14 @@ IM_NOTE = ("Initial margin is the amount the desk set, or this engine's own esti
            "SIMM is ISDA's licensed methodology, and a firm with a licence enters its own figure.")
 
 
+def unilateral_block(wf) -> dict:
+    """CVA and DVA as they are without the first-to-default weight (each party charged as if the other could not
+    default before it): what the engine reported until 0.50.0 and what a system that quotes unilateral CVA and DVA
+    reports. The run's own cva and dva carry the weight (pricing/xva_engine.run_waterfall)."""
+    return {"cva": round(float(wf.cva_unilateral), 2), "dva": round(float(wf.dva_unilateral), 2),
+            "note": "CVA and DVA count a party's default only while the other has not defaulted first; these are the two without that weight"}
+
+
 def wwr_block(m: Optional[dict]) -> Optional[dict]:
     """The wrong-way block of a currency XVA answer: the two inputs, CVA and DVA as they would be with default
     independent of the asset, the model in a sentence. None when the run had no link."""
@@ -950,6 +959,7 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
         "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_note": IM_NOTE,
                     "basis": meta["capital_basis"], "crypto_group": meta["crypto_group"]},
         "wwr": wwr_block(meta.get("wwr")),
+        "unilateral": unilateral_block(wf),
         "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "vol_mode", "step_vols_pct", "vol_regimes", "fees")},
     }
 
@@ -1085,6 +1095,7 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
         "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_note": IM_NOTE,
                     "basis": meta["capital_basis"], "crypto_group": meta["crypto_group"]},
         "wwr": wwr_block(meta.get("wwr")),
+        "unilateral": unilateral_block(wf),
         "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "style", "vol_mode", "vol_regimes", "fees")},
     }
 
@@ -1214,6 +1225,7 @@ def currency_package_xva(body: CurrencyPackageXvaRequest, db: Session = Depends(
         "capital": {"im_0": round(wf.im_0, 2), "ead_0": round(wf.ead_0, 2), "im_basis": meta["im_basis"], "im_note": IM_NOTE,
                     "basis": meta["capital_basis"], "crypto_group": meta["crypto_group"]},
         "wwr": wwr_block(meta.get("wwr")),
+        "unilateral": unilateral_block(wf),
         "params": {k: meta[k] for k in ("vol_pct", "vol_source", "im_basis", "capital_basis", "model", "vol_mode", "vol_regimes", "fees")},
     }
 

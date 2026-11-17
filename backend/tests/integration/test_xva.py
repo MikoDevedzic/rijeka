@@ -267,8 +267,12 @@ def test_wrong_way_risk_on_the_three_currency_routes(client, auth_a, ids, pairs)
     # sold the coin to a counterparty whose credit worsens as it falls: owed when it has fallen, the wrong way
     assert linked["xva"]["cva"] < plain["xva"]["cva"] < 0
     assert linked["wwr"]["cva_independent"] == plain["xva"]["cva"], "the figure with independence is the run without the link"
-    for k in ("fca", "fba", "kva", "mva", "colva", "dva"):
+    for k in ("fca", "fba", "kva", "mva", "colva"):
         assert linked["xva"][k] == plain["xva"][k], k
+    # DVA's own default probability is untouched; since 0.50.0 it counts only while the counterparty survives, and that
+    # survival is read on each path, so DVA moves a little with the counterparty's link
+    assert linked["unilateral"]["dva"] == plain["unilateral"]["dva"] and linked["wwr"]["dva_independent"] == plain["xva"]["dva"]
+    assert linked["xva"]["dva"] == pytest.approx(plain["xva"]["dva"], rel=0.02)
     assert linked["xva"]["xva_total"] == pytest.approx(sum(linked["xva"][k] for k in SEVEN), abs=0.05)
     # an option, and a package
     oq = client.post("/api/currency/option/price", json=B.option_price_request("BTCUSD", "EUROPEAN", btc["spot"], _settle(93), True, 10), headers=auth_a).json()
@@ -287,9 +291,16 @@ def test_wrong_way_risk_on_the_three_currency_routes(client, auth_a, ids, pairs)
     assert client.post("/api/xva/currency-package", json={"trades": [leg], "paths": 400, "cp_hazard_if_halves": 2.0, "wwr_multiplier": 1.2}, headers=auth_a).status_code == 422
     alone = client.post("/api/xva/currency", json={**sold, "wwr_multiplier": 1.5}, headers=auth_a)
     assert alone.status_code == 200 and alone.json()["xva"]["cva"] == pytest.approx(1.5 * plain["xva"]["cva"], abs=0.02), "the multiplier alone is as before"
-    # our own link moves DVA alone and the answer carries what it would be without
+    # our own link moves DVA and the answer carries what it would be without. CVA moves only through the weight (it
+    # counts the counterparty's default while we survive, and our survival is now read on each path): its
+    # independent figure is the plain run's, and without the weight it is the plain run's unilateral figure
     own = client.post("/api/xva/currency", json={**sold, "own_hazard_if_halves": 3.0}, headers=auth_a).json()
-    assert own["xva"]["cva"] == plain["xva"]["cva"] and own["wwr"]["dva_independent"] == plain["xva"]["dva"] and own["xva"]["dva"] != plain["xva"]["dva"]
+    assert own["wwr"]["dva_independent"] == plain["xva"]["dva"] and own["xva"]["dva"] != plain["xva"]["dva"]
+    assert own["wwr"]["cva_independent"] == plain["xva"]["cva"] and own["unilateral"]["cva"] == plain["unilateral"]["cva"]
+    assert own["xva"]["cva"] == pytest.approx(plain["xva"]["cva"], rel=0.02)
+    # first to default: every answer carries CVA and DVA without the weight, and the weighted ones are the smaller
+    for r_ in (plain, linked, own):
+        assert r_["unilateral"]["cva"] <= r_["xva"]["cva"] <= 0 <= r_["xva"]["dva"] <= r_["unilateral"]["dva"], r_["unilateral"]
 
 
 # ── incremental: the counterparty's netting set with and without the trade ──────────────────────
@@ -384,4 +395,7 @@ def test_a_swap_whose_curve_is_not_stored_is_refused_in_words_and_a_stored_one_s
     usd = client.post("/api/xva/simulate", json={**body, "curve_id": "USD_SOFR", "fba_ratio": 0.55}, headers=auth_a)       # an older browser's body: the ratio is read and ignored
     assert usd.status_code == 200, usd.text[:300]
     assert usd.json()["vol_basis"] == {"surface": "USD_SWVOL_ATM", "currency": "USD", "proxy": False, "note": None}
+    # first to default (0.50.0): the swap's answer carries CVA and DVA without the weight beside the weighted ones
+    u, x = usd.json()["unilateral"], usd.json()["xva"]
+    assert u["cva"] < x["cva"] < 0 < x["dva"] < u["dva"] and "defaulted first" in u["note"]
     assert usd.json()["xva"]["fca"] <= 0 <= usd.json()["xva"]["fba"]

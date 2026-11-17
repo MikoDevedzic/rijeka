@@ -105,7 +105,10 @@ def test_a_step_in_which_a_curves_survival_would_rise_defaults_nobody():
     for i in range(T):
         held.append(min(raw[i + 1], held[-1]))
     by_hand = -P.lgd * sum(ee[i] * (held[i] - held[i + 1]) * P0[i + 1] for i in range(T))
-    assert wf.cva == pytest.approx(by_hand, rel=1e-12) and wf.cva < 0
+    assert wf.cva_unilateral == pytest.approx(by_hand, rel=1e-12) and wf.cva < 0
+    qo = lambda k: math.exp(-(P.own_cds_bp / 1e4 / P.own_lgd) * k * DT)                # and while we survive (0.50.0)
+    ftd = -P.lgd * sum(ee[i] * (held[i] - held[i + 1]) * 0.5 * (qo(i) + qo(i + 1)) * P0[i + 1] for i in range(T))
+    assert wf.cva == pytest.approx(ftd, rel=1e-12)
     assert sum(held[i] - held[i + 1] for i in range(T)) == pytest.approx(1.0 - min(raw), rel=1e-12)
 
 

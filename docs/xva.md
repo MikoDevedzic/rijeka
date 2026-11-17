@@ -26,15 +26,19 @@ Presets: UNCOLLATERALISED (no VM, no IM); BILATERAL (daily VM, 10 business-day M
 
 Credit triangle: hazard = spread / LGD, survival Q(t) = exp(−s·t/LGD) with the counterparty's CDS spread s (flat or a term curve).
 
-    CVA = − LGD · Σ_i EE(t_i) · [Q(t_{i−1}) − Q(t_i)] · P(0,t_i) · WWR
+    CVA = − LGD · Σ_i EE(t_i) · [Q(t_{i−1}) − Q(t_i)] · ½[Q_own(t_{i−1}) + Q_own(t_i)] · P(0,t_i) · WWR
 
 WWR is a wrong-way-risk multiplier (1 by default). Reported negative: a cost.
+
+First to default (0.50.0): the counterparty's default costs us only if we have not defaulted before it, CVA = −LGD · E[1{τ_cp ≤ T, τ_cp < τ_own} · D(τ_cp) · V⁺(τ_cp)]. With the two defaults independent of each other the condition is our survival at the moment of the counterparty's default, read on the grid at the middle of the step. With constant intensities the exact probability of the counterparty defaulting first in a step is Q_cp·Q_own at its start × λ_cp/(λ_cp+λ_own) × (1 − e^(−(λ_cp+λ_own)Δ)); the midpoint rule is that to second order (`tests/test_first_to_default.py`). Under a wrong-way link (§8e) a linked party's survival is read on each path, in its own default probability and in the weight on the other's. Until 0.50.0 CVA and DVA carried no such weight (unilateral); those two figures are still in every answer under `unilateral`. Not done: no dependence between the two defaults beyond the market path; close-out at the risk-free value; the CVA capital charge is unilateral by rule.
 
 ## 4. DVA
 
 The mirror on our own survival, with our CDS spread and LGD:
 
-    DVA = + LGD_own · Σ_i |ENE(t_i)| · [Q_own(t_{i−1}) − Q_own(t_i)] · P(0,t_i)
+    DVA = + LGD_own · Σ_i |ENE(t_i)| · [Q_own(t_{i−1}) − Q_own(t_i)] · ½[Q(t_{i−1}) + Q(t_i)] · P(0,t_i)
+
+Our own default counts only while the counterparty has not defaulted first: the weight is the counterparty's survival at the middle of the step (first to default, §3).
 
 Reported positive: a benefit (the controversial one; shown, not netted away).
 
@@ -47,7 +51,7 @@ The cost of funding what is owed to us, at the whole funding spread, and the ben
     S(t_i) = ½ · [Q_cp(t_{i−1})·Q_own(t_{i−1}) + Q_cp(t_i)·Q_own(t_i)]        both parties alive, at the middle of the step
     FVA = FCA + FBA
 
-ftp(t_i) and s_own(t_i) are the spreads of the STEP ending at t_i. A curve quoted by tenor is a term spread (the credit triangle reads a CDS curve so: Q(t) = exp(−s(t)·t/LGD)), so a step's own spread is the forward, [s(t_i)·t_i − s(t_{i−1})·t_{i−1}] / Δt (`step_spread`, floored at zero; a flat spread is itself), for the funding curve in FCA, FBA and MVA and, through ΔQ, for the own-credit curve in DVA. The funding spread is that credit spread plus a basis. DVA already credits the desk with its own credit spread on what it owes, so the benefit is charged on the basis only: a benefit at the whole funding spread would count the credit part twice (Morini and Prampolini; Burgard and Kjaer). Until 0.49.0 the benefit was `fba_ratio` (0.55) of the funding spread, neither leg carried S, and the funding curve was read at each tenor as it was quoted. CVA and DVA carry no first-to-default weight, so DVA + FBA is a few per cent above the funding spread credited once under S (4.8 to 4.9 % on a five-year case with flat spreads of 42, 85 and 55 bp for the desk, the counterparty and funding). A curve is interpolated in a straight line between tenors, so the forward steps at each tenor (up to 5 bp on the default funding curve, 42 to 75 bp over ten years); with forwards flat between tenors FCA is 0.6 to 0.8 % larger at five years: stated, not mended, because the same interpolation is in CVA and DVA. Survival is held where it stood when a curve would have it rise. The API still accepts `fba_ratio` and ignores it.
+ftp(t_i) and s_own(t_i) are the spreads of the STEP ending at t_i. A curve quoted by tenor is a term spread (the credit triangle reads a CDS curve so: Q(t) = exp(−s(t)·t/LGD)), so a step's own spread is the forward, [s(t_i)·t_i − s(t_{i−1})·t_{i−1}] / Δt (`step_spread`, floored at zero; a flat spread is itself), for the funding curve in FCA, FBA and MVA and, through ΔQ, for the own-credit curve in DVA. The funding spread is that credit spread plus a basis. DVA already credits the desk with its own credit spread on what it owes, so the benefit is charged on the basis only: a benefit at the whole funding spread would count the credit part twice (Morini and Prampolini; Burgard and Kjaer). Until 0.49.0 the benefit was `fba_ratio` (0.55) of the funding spread, neither leg carried S, and the funding curve was read at each tenor as it was quoted. Since 0.50.0 DVA carries the counterparty's survival (first to default, §3), so the own-credit part of the benefit (in DVA) and the basis part (in FBA) are weighted alike and DVA + FBA is the funding spread credited once under S, to second order (1e-4 on a five-year case with flat spreads of 42, 85 and 55 bp for the desk, the counterparty and funding; before, DVA carried our survival alone and the two stood 4.8 to 4.9 % above it). A curve is interpolated in a straight line between tenors, so the forward steps at each tenor (up to 5 bp on the default funding curve, 42 to 75 bp over ten years); with forwards flat between tenors FCA is 0.6 to 0.8 % larger at five years: stated, not mended, because the same interpolation is in CVA and DVA. Survival is held where it stood when a curve would have it rise. The API still accepts `fba_ratio` and ignores it.
 
 ## 5b. The grid of a currency or digital-asset ticket, and the exposure a charge reads (§8d, 0.28.0)
 

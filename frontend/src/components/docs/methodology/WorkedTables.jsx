@@ -67,7 +67,7 @@ export function CvaLine() {
           {CVA_ROWS.map(([k, what]) => <InputRow key={k} id={`mr-cva-${k}`} what={what} text={text[k]} bad={bad(k)} onChange={x => set(k, x)} />)}
           <tr><td>Hazard rate, % a year</td><td className="f">h = s / LGD</td>{out('mr-cva-h', r ? r.h * 100 : NaN, 2)}</tr>
           <tr><td>Chance of default over {r ? `${r.months} ${r.months === 1 ? 'month' : 'months'}` : 'the life'}, %</td><td className="f">1 − e^(−h·T)</td>{out('mr-cva-pd', r ? r.pd * 100 : NaN, 2)}</tr>
-          <tr className="out"><td>CVA, USD</td><td className="f">LGD · Σ EE · ΔQ · D, monthly</td>{out('mr-cva-out', r?.cva, 0)}</tr>
+          <tr className="out"><td>CVA, USD</td><td className="f">LGD · Σ EE · ΔQ · D, monthly (unilateral)</td>{out('mr-cva-out', r?.cva, 0)}</tr>
         </tbody>
       </table></div>
       <div className="mr-wb-foot">A flat exposure is the simplification. The engine's exposure is a profile from the simulation in §9, different at every date and smaller under a CSA; the sum is the same sum.</div>

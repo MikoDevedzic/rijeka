@@ -160,6 +160,11 @@ class WaterfallResult:
     # the run had no link, so cva and dva ARE the independent figures
     cva_independent: Optional[float] = None
     dva_independent: Optional[float] = None
+    # first to default (0.50.0): cva and dva above charge a party's default only while the other has not defaulted
+    # first. These are the same sums without that weight (each party charged as if the other could not default):
+    # what the engine reported until 0.50.0, and what a system that quotes unilateral CVA and DVA reports.
+    cva_unilateral: float = 0.0
+    dva_unilateral: float = 0.0
     im_received_profile: Optional[List[float]] = None   # IM we call, per step (what stands between us and their default)
     im_basis: str = "none"          # where the margin came from: none | set by the desk | the engine's estimate
 
@@ -444,7 +449,8 @@ def run_waterfall(
     b_cp = float((wrong_way or {}).get("beta_cp") or 0.0)
     b_ow = float((wrong_way or {}).get("beta_own") or 0.0)
     dpd_cp = dpd_ow = None
-    cva_ind = dva_ind = 0.0
+    s_cp_path = s_ow_path = None          # survival on each path, (n_paths, T + 1), for a party whose default is linked
+    cva_ind = dva_ind = cva_uni = dva_uni = 0.0
     if wrong_way is not None and (b_cp != 0.0 or b_ow != 0.0):
         x_w = np.asarray(wrong_way["x"], dtype=float)
         if x_w.shape != paths.shape:
@@ -453,11 +459,11 @@ def run_waterfall(
         def _mkt(curve, flat, l):
             return [math.exp(-(interp_spread(curve, flat, (k + 1) * DT) / l) * (k + 1) * DT) if l > 0 else 0.0 for k in range(T)]
         if b_cp != 0.0:
-            s = path_survival(x_w, b_cp, _mkt(params.cp_cds_curve, params.cp_cds_bp, lgd), DT)
-            dpd_cp = s[:, :-1] - s[:, 1:]
+            s_cp_path = path_survival(x_w, b_cp, _mkt(params.cp_cds_curve, params.cp_cds_bp, lgd), DT)
+            dpd_cp = s_cp_path[:, :-1] - s_cp_path[:, 1:]
         if b_ow != 0.0:
-            s = path_survival(x_w, b_ow, _mkt(params.own_cds_curve, params.own_cds_bp, own_lgd), DT)
-            dpd_ow = s[:, :-1] - s[:, 1:]
+            s_ow_path = path_survival(x_w, b_ow, _mkt(params.own_cds_curve, params.own_cds_bp, own_lgd), DT)
+            dpd_ow = s_ow_path[:, :-1] - s_ow_path[:, 1:]
     qcp = qow = 1.0
     ead_0 = cap_0 = mf_0 = 0.0
 
@@ -503,10 +509,37 @@ def run_waterfall(
         # Every adjustment is accumulated with its own sign (a cost negative, a benefit positive) and reported as it
         # was accumulated: nothing is made positive or negative at the end, so a sign that came out wrong would show.
         # ee_c is what we are owed (>= 0), ene_c what we owe (<= 0).
-        cva_ind -= lgd     * ee_c[i]    * dq_cp * disc * wwr
-        dva_ind += own_lgd * (-ene_c[i]) * dq_ow * disc
-        cva -= (lgd * float(np.mean(c_pos[:, i] * dpd_cp[:, i])) * disc * wwr) if dpd_cp is not None else (lgd * ee_c[i] * dq_cp * disc * wwr)
-        dva += (own_lgd * float(np.mean(-c_neg[:, i] * dpd_ow[:, i])) * disc) if dpd_ow is not None else (own_lgd * (-ene_c[i]) * dq_ow * disc)
+        #
+        # First to default (0.50.0). The counterparty's default costs us only if we have not defaulted before it,
+        # and our own default is a gain to us only if the counterparty has not defaulted before us:
+        #     CVA = −LGD_cp  · E[ 1{τ_cp ≤ T, τ_cp < τ_own} · D(τ_cp)  · V⁺(τ_cp) ]
+        #     DVA = +LGD_own · E[ 1{τ_own ≤ T, τ_own < τ_cp} · D(τ_own) · V⁻(τ_own) ]
+        # With the two defaults independent of each other (given the market path), the condition is the other
+        # party's survival at the moment of default: each step's default probability is weighted by the other's
+        # survival at the middle of the step, the rule the funding legs' weight already uses. Where a party's default
+        # is linked to the market (path_survival) its survival is read on each path, in its own default probability
+        # and in the weight on the other's. (Brigo and Capponi, "Bilateral counterparty risk valuation with
+        # stochastic dynamical models", 2008; Gregory, "The xVA Challenge"; in Burgard and Kjaer the same
+        # weight comes from discounting at r + λ_own + λ_cp.) Until 0.50.0 neither carried the weight, so the
+        # own-credit part of the funding benefit, which is in DVA, was weighted by our survival alone while the
+        # basis part, in FBA, was weighted by both parties'.
+        mid_cp, mid_ow = 0.5 * (qcp + nqcp), 0.5 * (qow + nqow)
+        cva_ind -= lgd     * ee_c[i]    * dq_cp * mid_ow * disc * wwr
+        dva_ind += own_lgd * (-ene_c[i]) * dq_ow * mid_cp * disc
+        if s_cp_path is None and s_ow_path is None:
+            cva_uni -= lgd     * ee_c[i]    * dq_cp * disc * wwr
+            dva_uni += own_lgd * (-ene_c[i]) * dq_ow * disc
+            cva -= lgd     * ee_c[i]    * dq_cp * mid_ow * disc * wwr
+            dva += own_lgd * (-ene_c[i]) * dq_ow * mid_cp * disc
+        else:
+            d_cp = dpd_cp[:, i] if dpd_cp is not None else dq_cp                 # default in the step: per path, or the curve's
+            d_ow = dpd_ow[:, i] if dpd_ow is not None else dq_ow
+            m_cp = 0.5 * (s_cp_path[:, i] + s_cp_path[:, i + 1]) if s_cp_path is not None else mid_cp
+            m_ow = 0.5 * (s_ow_path[:, i] + s_ow_path[:, i + 1]) if s_ow_path is not None else mid_ow
+            cva_uni -= lgd     * float(np.mean(c_pos[:, i]  * d_cp)) * disc * wwr
+            dva_uni += own_lgd * float(np.mean(-c_neg[:, i] * d_ow)) * disc
+            cva -= lgd     * float(np.mean(c_pos[:, i]  * d_cp * m_ow)) * disc * wwr
+            dva += own_lgd * float(np.mean(-c_neg[:, i] * d_ow * m_cp)) * disc
         fca -= ftp_t   * ee_c[i]     * alive * DT * disc
         fba += basis_t * (-ene_c[i]) * alive * DT * disc
 
@@ -582,6 +615,9 @@ def run_waterfall(
         kva_ccr=float(kva_ccr), kva_cva=float(kva_cva), k_cva_0=k_cva_0, rwa_0=rwa_0, addon_0=addon_0, rc_0=rc_0,
         multiplier_0=mult_0, v_mean_0=float(v_mean[0]) if T else 0.0, coll_mean_0=float(coll_mean[0]) if T else 0.0,
         regulatory_margined=bool(reg.sa_ccr_margined),
-        cva_independent=(float(cva_ind) if dpd_cp is not None else None),
-        dva_independent=(float(dva_ind) if dpd_ow is not None else None),
+        # with a link on either party both charges move (a linked party's survival is also the weight on the other's
+        # default), so both independent figures are reported whenever there is a link at all
+        cva_independent=(float(cva_ind) if (s_cp_path is not None or s_ow_path is not None) else None),
+        dva_independent=(float(dva_ind) if (s_cp_path is not None or s_ow_path is not None) else None),
+        cva_unilateral=float(cva_uni), dva_unilateral=float(dva_uni),
     )

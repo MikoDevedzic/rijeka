@@ -72,8 +72,9 @@ def legacy_waterfall(paths, p0_grid, P: WaterfallParams, im_0):
         nqcp = math.exp(-(cp_s / P.lgd) * t)
         nqow = math.exp(-(ow_s / P.own_lgd) * t)
         alive = 0.5 * (qcp * qow + nqcp * nqow)                # 0.49.0: funding while both are alive
-        cva += P.lgd * ee[i] * (qcp - nqcp) * disc * P.wwr_multiplier
-        dva -= P.own_lgd * abs(ene[i]) * (qow - nqow) * disc
+        # 0.50.0, first to default: a party's default counts while the other survives to the middle of the step
+        cva += P.lgd * ee[i] * (qcp - nqcp) * 0.5 * (qow + nqow) * disc * P.wwr_multiplier
+        dva -= P.own_lgd * abs(ene[i]) * (qow - nqow) * 0.5 * (qcp + nqcp) * disc
         fca += ftp_t * ee[i] * alive * DT * disc
         fba -= basis_t * abs(ene[i]) * alive * DT * disc
         m_t = max(M0 - t + 0.5 * DT, 0.0)          # the remaining life at the middle of the step (0.27.0)
