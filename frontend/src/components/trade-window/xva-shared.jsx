@@ -171,7 +171,15 @@ export function SpreadCurvesGrid({ spreads, onChange, tip = noop, untip = noop }
   const asOpened = spreadsAreDefault(spreads)
   return (
     <>
-      <SectionHeader>SPREAD CURVES (bp)</SectionHeader>
+      {/* whose spreads these are, in words beside the heading: the figures rest on them. On the heading's own line, so
+          the block is no taller for it (a line under the grid put the assumptions below the fold of a 900px screen);
+          where the line is too narrow for both it goes under the heading */}
+      <SectionHeader style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', flexWrap:'wrap', columnGap:'12px' }}>
+        <span>SPREAD CURVES (bp)</span>
+        <span data-testid="xva-spreads-source" style={{ fontWeight:400, letterSpacing:'0.01em', color: asOpened ? 'var(--amber)' : 'var(--text-mute)' }}>
+          {asOpened ? 'Default spreads, not this counterparty\'s: type your own' : 'Spreads as typed here'}
+        </span>
+      </SectionHeader>
       <div style={{display:'grid',gridTemplateColumns:'56px repeat(6,1fr)',gap:'3px',marginBottom:'4px'}}>
         <div/>
         {TENORS_6.map(t=>(<div key={t} style={{fontSize:'0.75rem',color:'var(--text-mute)',textAlign:'center',fontFamily:'var(--mono)'}}>{t}</div>))}
@@ -179,10 +187,6 @@ export function SpreadCurvesGrid({ spreads, onChange, tip = noop, untip = noop }
       <SpreadRow label='CP CDS'  values={spreads.cp}  onChange={(t,v)=>onChange('cp',t,v)}  tipKey='cpCds'  tip={tip} untip={untip} />
       <SpreadRow label='OWN CDS' values={spreads.own} onChange={(t,v)=>onChange('own',t,v)} tipKey='ownCds' tip={tip} untip={untip} />
       <SpreadRow label='FTP bp'  values={spreads.ftp} onChange={(t,v)=>onChange('ftp',t,v)} tipKey='ftp'    tip={tip} untip={untip} />
-      {/* whose spreads these are, in words under the grid: the figures rest on them */}
-      <div data-testid="xva-spreads-source" style={{ marginTop:'4px', fontSize:'12px', lineHeight:1.5, color: asOpened ? 'var(--amber)' : 'var(--text-mute)' }}>
-        {asOpened ? 'Default spreads, not this counterparty\'s. Type your own in any cell.' : 'Spreads as typed here.'}
-      </div>
     </>
   )
 }
@@ -311,8 +315,10 @@ export function AssumptionsBlock({ lgd, setLgd, hurdle, setHurdle, imUsd, setImU
         ))}
         {/* worked out from the spread grid, not typed: what the funding benefit is charged on */}
         {funding && <>
-          <TipLabel tipKey='fundingBasis' tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>Funding basis bp, to 5Y</TipLabel>
-          {/* a figure worked out from the grid, not typed: no well, the fields' own face and size, on their right edge */}
+          <TipLabel tipKey='fundingBasis' tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>Basis bp, to 5Y</TipLabel>
+          {/* a figure worked out from the grid, not typed: no well, the fields' own face and size, on their right edge.
+              The label is short enough for one line of the narrowest ticket's column: two lines put the block below
+              the fold of a 900px screen (ticket-polish journey) */}
           <span data-testid="xva-funding-basis" title={`FTP ${funding.ftp} less OWN CDS ${funding.own}, at five years`}
             style={{ fontFamily:INP.fontFamily, fontSize:INP.fontSize, textAlign:'right', alignSelf:'center', color:'var(--text-hi)', paddingRight:'8px' }}>{funding.basis}</span>
         </>}

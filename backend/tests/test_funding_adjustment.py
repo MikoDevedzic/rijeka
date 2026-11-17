@@ -139,3 +139,34 @@ def test_on_sloped_curves_dva_and_the_benefit_together_credit_the_funding_spread
     # a flat curve given as a curve is the flat spread at every step
     flat = [{"t": 1.0, "spread_bp": 55.0}, {"t": 5.0, "spread_bp": 55.0}]
     assert all(step_spread(flat, 55.0, k * dt, (k + 1) * dt) == pytest.approx(55.0 / 1e4, rel=1e-12) for k in range(steps))
+
+
+
+def test_margin_is_funded_at_the_forward_spread_of_each_step():
+    """The model validator's second read, 17 November 2026: MVA took the forward reading of the funding curve with FCA
+    and FBA and had no test of its own. By hand, with the forward written from the tenors' spreads and not through
+    step_spread: the margin posted, at the step's funding spread less what the margin earns, floored at zero."""
+    from pricing.xva_engine import interp_spread
+    n, steps, dt, im = 500, 60, 1.0 / 12, 250_000.0
+    paths = np.cumsum(np.random.default_rng(5).standard_normal((n, steps)) * 60_000.0 * math.sqrt(dt), axis=1)
+    p0 = [math.exp(-0.035 * k * dt) for k in range(steps + 2)]
+
+    def forward(i):                                           # the spread of step i, from the term spreads at its two ends
+        t0, t1 = i * dt, (i + 1) * dt
+        return (interp_spread(SLOPED_FTP, 55.0, t1) * t1 - (interp_spread(SLOPED_FTP, 55.0, t0) * t0 if t0 > 0 else 0.0)) / dt
+
+    seen = []
+    for pickup in (0.0, 20.0, 60.0):
+        P = WaterfallParams(notional=1e7, maturity_y=steps * dt, dt=dt, theta=0.035, ftp_curve=SLOPED_FTP, im_amount=im)
+        wf = run_waterfall(paths, 0.0, p0, P, CSA.on_chain(im_yield_pickup_bp=pickup))
+        hand = -sum(im * max(forward(i) - pickup / 1e4, 0.0) * dt * p0[i + 1] for i in range(steps))
+        assert wf.mva == pytest.approx(hand, rel=1e-12) and wf.mva < 0
+        seen.append(wf.mva)
+    assert seen[0] < seen[1] < seen[2]                        # a margin that earns more costs less to fund
+    # the forward, not the tenor's spread: on a rising curve the margin costs more than the quoted spreads would say
+    quoted = -sum(im * interp_spread(SLOPED_FTP, 55.0, (i + 1) * dt) * dt * p0[i + 1] for i in range(steps))
+    assert seen[0] < quoted
+    # a flat spread is charged as it is
+    P = WaterfallParams(notional=1e7, maturity_y=steps * dt, dt=dt, theta=0.035, ftp_bp=55.0, im_amount=im)
+    flat = run_waterfall(paths, 0.0, p0, P, CSA.on_chain())
+    assert flat.mva == pytest.approx(-sum(im * 55.0 / 1e4 * dt * p0[i + 1] for i in range(steps)), rel=1e-12)

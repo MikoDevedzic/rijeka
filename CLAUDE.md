@@ -274,3 +274,8 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   inventory had a EUR swap's XVA on its own curve with dollar volatility, and the ticket's tab sent the dollar curve.
 - A statement a person must see is put where it is seen: a note set inside a heading's info mark is in the page and
   not on the screen, and a journey that reads the page's text passes on it.
+- Two figures netted in a formula are read by one convention: the funding benefit took the tenor's own spread from
+  a DVA that charges the step's forward spread, and the two together stood 10 to 18 % above the funding spread. When
+  a curve is read a new way, look at what the reading does between its tenors and beyond the last one.
+- A sentence that says what a run used is checked against every fallback of that run: the answer named the curve a
+  swap ran on while a missing curve was silently replaced by a flat rate.

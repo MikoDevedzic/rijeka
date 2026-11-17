@@ -18,8 +18,10 @@ methodology document carries its own version (v1.29). Commits on `main` are the 
 - **One reading of a spread curve.** A spread quoted for a tenor is a term spread: the credit triangle already read
   a CDS curve so, which makes DVA charge the forward spread of each step. The funding curve is now read the same
   way in FCA, FBA and MVA, so the two spreads in the basis are spreads of the same step and DVA and FBA together
-  credit the funding spread once. On a rising funding curve FCA and MVA are higher than before; a flat spread is
-  unchanged.
+  credit the funding spread once. On a rising funding curve FCA and MVA are higher than before: on the tab's
+  default curve (42 to 62 bp from one year to ten) the funding cost of a swap-like exposure is 12 to 14 % larger
+  at five and ten years than under each tenor's own spread. A flat spread is unchanged. MVA on a term curve is
+  checked by hand in the tests.
 - **Funding runs only while the trade is alive.** FCA and FBA are weighted, step by step, by the chance that
   neither party has defaulted.
 - **What moved.** On the pinned five-year swap with no margin (flat spreads): FCA −1,423 to −1,319, FBA 1,532 to
@@ -40,17 +42,19 @@ methodology document carries its own version (v1.29). Commits on `main` are the 
 - **No curve, no figures.** A run whose curve is not stored went on, on a flat rate, and answered as any other.
   It is refused and names the curve. A swap in a currency the demo builds no curve for (AUD, CAD) therefore has
   no XVA, where it used to show a dollar swap's.
-- **Default spreads are called defaults.** Under the spread grid the tab says whether its credit and funding
-  spreads are the defaults or typed, and that the defaults are not the counterparty's. The funding basis to five
+- **Default spreads are called defaults.** Beside the spread grid's heading the tab says whether its credit and
+  funding spreads are the defaults or typed, and that the defaults are not the counterparty's. The funding basis to five
   years is shown beside the assumptions; the engine charges the basis of each step, so a trade of another length
   is not charged that figure.
 
 Not done, and said: non-USD swaps are still simulated on dollar volatility; a counterparty has no credit record, so
 spreads are typed per run; CVA and DVA carry no first-to-default weight while the funding legs carry both parties'
-survival, so DVA and FBA together are a few per cent above the funding spread credited once (4.9 % on a five-year
-case); KVA and MVA are not weighted by survival; the replication workbooks carry flat spreads only. The API still
-accepts `fba_ratio` and ignores it. The first XVA P&L after this release compares today's levels with levels stored
-under the old rule: the change in FCA and FBA appears in that day's move as if the market had made it.
+survival, so DVA and FBA together are a few per cent above the funding spread credited once (4.8 to 4.9 % on a
+five-year case with flat spreads); a spread curve is interpolated in a straight line between tenors, so its forward
+steps at each tenor, and the funding cost is 0.6 to 0.8 % smaller at five years than with forwards held flat
+between tenors; KVA and MVA are not weighted by survival; the replication workbooks carry flat spreads only. The
+API still accepts `fba_ratio` and ignores it. The first XVA P&L after this release compares today's levels with
+levels stored under the old rule: the change in FCA and FBA appears in that day's move as if the market had made it.
 
 ## 0.48.0 · 17 November 2026
 

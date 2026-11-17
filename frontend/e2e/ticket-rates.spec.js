@@ -73,7 +73,7 @@ test('rates ticket: price, XVA with the saving on chain, collateral, book, confi
   const one = await simulateWithComparison(app, win, '/api/xva/simulate')
   // what the figures rest on is said: the spreads are the defaults until typed, the funding benefit is charged on the
   // funding basis the grid gives (FTP 55 less OWN CDS 48 at five years), and a dollar swap runs on dollar volatility
-  await expect(win.getByTestId('xva-spreads-source')).toHaveText("Default spreads, not this counterparty's. Type your own in any cell.")
+  await expect(win.getByTestId('xva-spreads-source')).toHaveText("Default spreads, not this counterparty's: type your own")
   await expectFullyInView(win.getByTestId('xva-spreads-source'), 'whose spreads the figures rest on')
   await expect(win.getByTestId('xva-funding-basis')).toHaveText('7')
   await expect(win.getByTestId('xva-vol-basis'), 'a USD swap is on its own volatility: nothing to say').toHaveCount(0)
