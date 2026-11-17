@@ -249,3 +249,5 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   known (that they are not the same figure).
 - A sentence in the changelog is checked against the diff by someone who did not write it: "Tab stays inside" was
   written of a ticket with no trap, and "no payment lag" of a model that passes the lag on.
+- A text that was cut is mended when a journey measures it whole (`scrollWidth` against `clientWidth`), not when
+  its words are put in another order: the IPV row's line was reordered, and the ellipsis took the new first part.

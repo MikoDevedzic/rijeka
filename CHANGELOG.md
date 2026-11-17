@@ -39,7 +39,7 @@ say enough about itself.
   cell shows the rate, with its source under it. The FX page has one name in the navigation, and a pair without
   quoted points says so where it said it was priced off them. The CHAT button goes under an open ticket: it stood
   on BOOK TRADE in a small window. Cut labels are whole: the strike's caption, how an implied forward was reached,
-  a certificate's sentence (broken inside a word), an IPV row (the part that asks for a decision comes first).
+  a certificate's sentence (broken inside a word), an IPV row (what is to be decided stands beside its state).
 
 Not done, and said: a strip from the last business day of a month does not follow the end-of-month rule (from
 29 January its third leg is 29 March, not 31 March); a swap in another currency is simulated on Hull-White

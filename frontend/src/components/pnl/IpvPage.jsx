@@ -27,10 +27,11 @@ async function api(path, opts = {}) {
   return j
 }
 
-// The inputs table's columns. INPUT is wide enough for the longest name and its kind in words, whole ("USD_SWVOL_ATM
-// swaption vol surface"): at 14rem every row's kind was cut ("funding lev…", "rate curve · 3…"), and what follows
-// it (the pillar count, what is beyond tolerance) is what gives way.
-const INPUT_COLS = '300px 5rem 12rem 11rem 13rem minmax(8rem, 1fr) 8rem'
+// The inputs table's columns. INPUT holds the name, its kind in words and its pillar count, whole ("USD_SWVOL_ATM
+// swaption vol surface · 24 pillars"): at 14rem every row's kind was cut ("funding lev…"), at a fixed 300px the
+// count was ("24 pill…"). It takes the larger share of what the fixed columns leave; STATE, which says what is
+// to be decided (and how many pillars are beyond tolerance), takes the rest.
+const INPUT_COLS = 'minmax(300px, 1.8fr) 5rem 12rem 11rem 13rem minmax(8rem, 1fr) 8rem'
 
 export default function IpvPage() {
   const navigate = useNavigate()
@@ -124,12 +125,17 @@ export default function IpvPage() {
             </div>
             {rows.map(r => (
               <div key={r.curve_id} className={`pnl-tr d1 trade${input && input.curve_id === r.curve_id ? ' on' : ''}`} style={{ gridTemplateColumns: INPUT_COLS }} onClick={() => setSel(r.curve_id)}>
-                <span className="pnl-tn" style={{ paddingLeft: 8 }} title={`${r.curve_id} · ${r.kindLabel} · ${r.pillars} pillar${r.pillars === 1 ? '' : 's'}`}>{r.curve_id}<small>{r.kindLabel}{r.review ? ` · ${r.review} beyond tolerance` : ''}{r.overridden ? ` · ${r.overridden} overridden` : ''} · {r.pillars} pillar{r.pillars === 1 ? '' : 's'}</small></span>
+                <span className="pnl-tn" style={{ paddingLeft: 8 }} title={`${r.curve_id} · ${r.kindLabel} · ${r.pillars} pillar${r.pillars === 1 ? '' : 's'}`}>{r.curve_id}<small>{r.kindLabel} · {r.pillars} pillar{r.pillars === 1 ? '' : 's'}</small></span>
                 <span className="pnl-tv">{r.trades}</span>
                 <span className="pnl-tv">{r.sens}</span>
                 <span className="pnl-tv dim" style={{ textAlign: 'left' }}>{r.desk}</span>
                 <span className="pnl-tv dim" style={{ textAlign: 'left' }}>{r.independent}</span>
-                <span className="pnl-tv" data-testid="ipv-state" title={r.decision ? `${r.state} · ${r.decision.by}` : undefined} style={{ textAlign: 'left', color: STATE_COLOR[r.state], minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.state}{r.decision ? <small className="pnl-note"> · {r.decision.by}</small> : null}</span>
+                {(() => {
+                  // what is to be decided stands with the state, where there is room for it: in the name's small line
+                  // it was the first thing an ellipsis took ("24 pill…" hid "1 beyond tolerance")
+                  const why = [r.review ? `${r.review} beyond tolerance` : '', r.overridden ? `${r.overridden} overridden` : '', r.decision ? r.decision.by : ''].filter(Boolean)
+                  return <span className="pnl-tv" data-testid="ipv-state" title={why.length ? [r.state, ...why].join(' · ') : undefined} style={{ textAlign: 'left', color: STATE_COLOR[r.state], minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.state}{why.length ? <small className="pnl-note"> · {why.join(' · ')}</small> : null}</span>
+                })()}
                 <span className="pnl-tv" style={{ color: r.impact < -0.5 ? 'var(--down)' : r.impact > 0.5 ? 'var(--up)' : 'var(--text-mute)' }}>{r.impact ? fmtSigned(r.impact) : '—'}</span>
               </div>
             ))}

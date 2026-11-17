@@ -125,6 +125,10 @@ test('the cards of the XVA reserves and IPV pages are set as cards, hold a far l
     const over = await app.locator('[data-testid="ipv-state"]').evaluateAll(els => els.filter(el => el.scrollWidth > el.clientWidth + 1 && (getComputedStyle(el).overflowX !== 'hidden' || !el.title)).length)
     expect(over, 'a state printed over the impact column').toBe(0)
     expect(await app.locator('[data-testid="ipv-state"]').count(), 'the inputs table has rows to measure').toBeGreaterThan(0)
+    // an input's name, kind and pillar count are whole at this width: the count was cut ("24 pill…"), and with it what
+    // was to be decided, which now stands beside the state
+    const cutNames = await app.locator('.pnl-tr.trade .pnl-tn').evaluateAll(els => els.filter(el => el.scrollWidth > el.clientWidth + 1).map(el => el.textContent))
+    expect(cutNames, 'an input\'s line cut by an ellipsis').toEqual([])
     // on a narrow page the pillar table scrolls inside its panel with every column still under its own head: the
     // stylesheet hides quiet cells at 1100px and below, which once left a row three cells short of its head
     await app.setViewportSize({ width: 1000, height: 900 })
