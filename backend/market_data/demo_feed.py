@@ -1,69 +1,46 @@
 """
-Demo market data from public sources — no terminal data anywhere.
+Demo market data: no terminal data and no publisher's rates anywhere.
 
-The hosted demo cannot show or redistribute Bloomberg data, so the template
-user's curves and vol surfaces are rebuilt daily from sources that publish
-freely, with every assumption written down here and stamped into `source`:
+The hosted demo cannot show or redistribute a vendor's data, and it holds no licence for any interest-rate
+benchmark, so the template user's curves and vol surfaces are made, with every assumption written down and
+stamped into `source`:
 
-  USD_SOFR     NY Fed SOFR fixing (overnight) + US Treasury daily par yield
-               curve, less an indicative SOFR-OIS / Treasury spread schedule
-  EUR_ESTR     ECB €STR fixing + ECB euro-area AAA government par yield curve,
-               plus an indicative swap-over-AAA spread schedule
-  GBP_SONIA    Bank of England SONIA fixing + gilt par yields (5Y, 10Y, 20Y),
-               less an indicative SONIA-OIS / gilt spread schedule
-  CHF_SARON    SNB SARON (monthly average), overnight pillar; flat beyond it until a
-               current public Swiss Confederation yield curve is found (the SNB's bond
-               cubes stopped in mid-2025)
-  JPY_TONAR     Bank of Japan TONA via the SNB's money-market cube (monthly, end of
-               month) + Japan MoF daily JGB yields, less an indicative TONA-OIS / JGB
-               spread schedule
+  USD_SOFR, EUR_ESTR, GBP_SONIA, CHF_SARON, JPY_TONAR
+               SYNTHETIC: one stated generator (market_data/synthetic_rates.py): a parametric curve per
+               currency with hand-set levels, moved each business day by three seeded factors. The curve ids
+               keep the names of the conventions they are bootstrapped with (day count, calendar, lag); no
+               fixing and no yield of any publisher is read. Since 0.55.0; until then the curves were built from
+               published overnight fixings and government yields.
   USD_SWVOL_ATM, swaption skew, cap vols
                SYNTHETIC: a smooth parametric normal-vol surface. Not market.
 
-Everything here is indicative. It exists so the demo prices on numbers of
-today's date with a documented provenance, not so anyone trades on it.
+Everything here is indicative. It exists so the demo prices on numbers of today's date with a documented
+provenance, not so anyone trades on it. A self-hosted desk connects its own market data.
 
-Pure functions only: the fetchers return plain data, the builders turn data
-into snapshot rows. Writing to the database lives in api/routes/demo_market_data.py.
+Pure functions only: the builders turn a date into snapshot rows. Writing to the database lives in
+api/routes/demo_market_data.py.
 """
 from __future__ import annotations
 
-import csv
-import io
 import logging
 import math
 import re
-from datetime import date, datetime, timedelta
+from datetime import date
 from typing import Callable, Optional
 
 import httpx
+
+from market_data import synthetic_rates
 
 log = logging.getLogger("rijeka.demo_feed")
 
 UA = {"User-Agent": "rijeka-demo-feed/1 (+https://rijeka.app)"}
 TIMEOUT = 25.0
 
-# ── Sources (public, no key) ────────────────────────────────────────────────────
+# ── What the demo prices on ───────────────────────────────────────────────────────
+RATE_CURVES = tuple(synthetic_rates.PARAMS)
 
-NYFED_SOFR_URL = "https://markets.newyorkfed.org/api/rates/secured/sofr/last/1.json"
-UST_XML_URL    = ("https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml"
-                  "?data=daily_treasury_yield_curve&field_tdr_date_value_month={yyyymm}")
-ECB_ESTR_URL   = "https://data-api.ecb.europa.eu/service/data/EST/B.EU000A2X2A25.WT?lastNObservations=1&format=csvdata"
-ECB_AAA_URL    = ("https://data-api.ecb.europa.eu/service/data/YC/B.U2.EUR.4F.G_N_A.SV_C_YM.{keys}"
-                  "?lastNObservations=1&format=csvdata")
-BOE_IADB_URL   = ("https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp"
-                  "?csv.x=yes&Datefrom={dfrom}&Dateto=now&SeriesCodes=IUDSOIA,IUDSNPY,IUDMNPY,IUDLNPY"
-                  "&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N")
-SNB_SARON_URL  = "https://data.snb.ch/api/cube/zimoma/data/csv/en?dimSel=D0(SARON)"
-SNB_TONA_URL   = "https://data.snb.ch/api/cube/zimoma/data/csv/en?dimSel=D0(TONA)"
-MOF_JGB_URL    = "https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/jgbcme.csv"
-
-SOURCES = [
-    {"curve": "USD_SOFR",      "provider": "NY Fed · US Treasury",      "kind": "public",    "url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"},
-    {"curve": "EUR_ESTR",      "provider": "ECB",                        "kind": "public",    "url": "https://data.ecb.europa.eu/"},
-    {"curve": "GBP_SONIA",     "provider": "Bank of England",            "kind": "public",    "url": "https://www.bankofengland.co.uk/boeapps/database/"},
-    {"curve": "CHF_SARON",     "provider": "SNB",                        "kind": "public",    "url": "https://data.snb.ch/"},
-    {"curve": "JPY_TONAR",      "provider": "SNB (TONA) · Japan MoF (JGB)", "kind": "public",    "url": "https://www.mof.go.jp/english/policy/jgbs/reference/interest_rate/"},
+SOURCES = [{"curve": c, "provider": "synthetic rates market (a stated generator)", "kind": "synthetic", "url": None} for c in RATE_CURVES] + [
     {"curve": "USD_SWVOL_ATM", "provider": "synthetic parametric surface", "kind": "synthetic", "url": None},
     {"curve": "USD_CAPVOL",    "provider": "synthetic parametric surface", "kind": "synthetic", "url": None},
 ]
@@ -80,16 +57,6 @@ SKEW_TENORS    = [1, 2, 5]
 SKEW_OFFSETS   = [-200, -100, -50, -25, 25, 50, 100, 200]
 CAP_TENORS     = [1.0, 2.0, 3.0, 5.0, 7.0, 10.0]
 CAP_SPREADS    = [-200, -150, -100, -50, 0, 50, 100, 150, 200]
-
-# ── Indicative spread schedules (bp over the government curve), in years ───────
-# Written as (years, bp) knots, linear in between, flat beyond. These are the
-# documented assumptions behind "indicative"; change them here, nowhere else.
-USD_OIS_MINUS_UST = [(1 / 12, -12), (0.25, -15), (1, -20), (2, -25), (5, -30), (10, -40), (20, -60), (30, -70)]
-EUR_OIS_MINUS_AAA = [(0.25, 10), (1, 15), (2, 20), (5, 25), (10, 30), (20, 35), (30, 35)]
-GBP_OIS_MINUS_GILT = [(1, -15), (5, -25), (10, -40), (20, -70), (30, -75)]
-JPY_OIS_MINUS_JGB  = [(1, -5), (2, -10), (5, -15), (10, -25), (20, -40), (30, -45)]
-CHF_FLAT_SPREAD    = [(0.0, 0.0)]                         # SARON flat: no current public CHF curve
-
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -124,214 +91,16 @@ def _get(url: str) -> str:
 
 # ── Fetchers: each returns (as_of_date, data) and raises on failure ────────────
 
-def fetch_sofr(text: Optional[str] = None) -> tuple[date, float]:
-    body = text if text is not None else _get(NYFED_SOFR_URL)
-    import json
-    rr = json.loads(body)["refRates"][0]
-    return date.fromisoformat(rr["effectiveDate"]), float(rr["percentRate"])
-
-
-_UST_FIELDS = {"BC_1MONTH": 1 / 12, "BC_2MONTH": 2 / 12, "BC_3MONTH": 0.25, "BC_4MONTH": 4 / 12, "BC_6MONTH": 0.5,
-               "BC_1YEAR": 1, "BC_2YEAR": 2, "BC_3YEAR": 3, "BC_5YEAR": 5, "BC_7YEAR": 7, "BC_10YEAR": 10,
-               "BC_20YEAR": 20, "BC_30YEAR": 30}
-
-
-def parse_ust_xml(xml: str) -> tuple[date, dict[float, float]]:
-    """Latest <entry> of the Treasury daily par yield curve feed → {years: yield %}."""
-    entries = re.findall(r"<m:properties>(.*?)</m:properties>", xml, re.S)
-    if not entries:
-        raise ValueError("no entries in Treasury feed")
-    best: Optional[tuple[date, dict[float, float]]] = None
-    for e in entries:
-        m = re.search(r"<d:NEW_DATE[^>]*>([0-9]{4}-[0-9]{2}-[0-9]{2})", e)
-        if not m:
-            continue
-        d = date.fromisoformat(m.group(1))
-        pts = {}
-        for field, yrs in _UST_FIELDS.items():
-            v = re.search(rf"<d:{field}[^>]*>([-0-9.]+)<", e)
-            if v:
-                pts[yrs] = float(v.group(1))
-        if len(pts) >= 8 and (best is None or d > best[0]):
-            best = (d, pts)
-    if best is None:
-        raise ValueError("no usable Treasury entry")
-    return best
-
-
-def fetch_ust_par(today: Optional[date] = None, text: Optional[str] = None) -> tuple[date, dict[float, float]]:
-    if text is not None:
-        return parse_ust_xml(text)
-    today = today or date.today()
-    months = [today.strftime("%Y%m"), (today.replace(day=1) - timedelta(days=1)).strftime("%Y%m")]
-    last_err: Optional[Exception] = None
-    for yyyymm in months:          # early in a month the current file can be empty
-        try:
-            return parse_ust_xml(_get(UST_XML_URL.format(yyyymm=yyyymm)))
-        except Exception as e:      # noqa: BLE001 — try the previous month
-            last_err = e
-    raise RuntimeError(f"Treasury feed: {last_err}")
-
-
-def _ecb_csv_last(body: str) -> list[tuple[str, date, float]]:
-    """ECB SDMX csvdata → [(series key, period, value)]."""
-    out = []
-    for row in csv.DictReader(io.StringIO(body)):
-        key = row.get("KEY") or row.get("SERIES_KEY") or ""
-        per, val = row.get("TIME_PERIOD"), row.get("OBS_VALUE")
-        if not per or val in (None, ""):
-            continue
-        out.append((key, date.fromisoformat(per[:10]), float(val)))
-    return out
-
-
-def fetch_estr(text: Optional[str] = None) -> tuple[date, float]:
-    rows = _ecb_csv_last(text if text is not None else _get(ECB_ESTR_URL))
-    if not rows:
-        raise ValueError("no €STR observation")
-    _, d, v = rows[-1]
-    return d, v
-
-
-_ECB_AAA_KEYS = ["PY_3M", "PY_6M", "PY_9M", "PY_1Y", "PY_2Y", "PY_3Y", "PY_4Y", "PY_5Y", "PY_6Y", "PY_7Y",
-                 "PY_8Y", "PY_9Y", "PY_10Y", "PY_12Y", "PY_15Y", "PY_20Y", "PY_25Y", "PY_30Y"]
-
-
-def fetch_ecb_aaa_par(text: Optional[str] = None) -> tuple[date, dict[float, float]]:
-    body = text if text is not None else _get(ECB_AAA_URL.format(keys="+".join(_ECB_AAA_KEYS)))
-    pts: dict[float, float] = {}
-    as_of: Optional[date] = None
-    for key, d, v in _ecb_csv_last(body):
-        m = re.search(r"PY_(\d+)([MY])$", key)
-        if not m:
-            continue
-        yrs = int(m.group(1)) / (12 if m.group(2) == "M" else 1)
-        pts[yrs] = v
-        as_of = max(as_of, d) if as_of else d
-    if len(pts) < 6 or as_of is None:
-        raise ValueError("ECB AAA curve: too few points")
-    return as_of, pts
-
-
-def fetch_boe(today: Optional[date] = None, text: Optional[str] = None) -> tuple[date, dict[str, float]]:
-    """SONIA fixing and gilt par yields (5Y, 10Y, 20Y) from the BoE database CSV."""
-    if text is None:
-        today = today or date.today()
-        dfrom = (today - timedelta(days=21)).strftime("%d/%b/%Y")
-        text = _get(BOE_IADB_URL.format(dfrom=dfrom))
-    rows = [r for r in csv.reader(io.StringIO(text)) if len(r) >= 5 and re.match(r"\d{2} \w{3} \d{4}", r[0])]
-    if not rows:
-        raise ValueError("no BoE rows")
-    last = rows[-1]
-    d = datetime.strptime(last[0], "%d %b %Y").date()
-    vals = [float(x) for x in last[1:5]]
-    return d, {"SONIA": vals[0], "5Y": vals[1], "10Y": vals[2], "20Y": vals[3]}
-
-
-def _snb_monthly(body: str, series: str) -> tuple[date, float]:
-    last = None
-    for r in csv.reader(io.StringIO(body), delimiter=";"):
-        if len(r) >= 3 and re.fullmatch(r"\d{4}-\d{2}", r[0]) and r[1] == series:
-            try:
-                last = (r[0], float(r[2]))
-            except ValueError:
-                continue
-    if last is None:
-        raise ValueError(f"no {series} observation")
-    y, m = (int(x) for x in last[0].split("-"))
-    return date(y, m, 1), last[1]
-
-
-def fetch_saron(text: Optional[str] = None) -> tuple[date, float]:
-    """SNB publishes the monthly average; the latest month is the overnight pillar."""
-    return _snb_monthly(text if text is not None else _get(SNB_SARON_URL), "SARON")
-
-
-def fetch_tona(text: Optional[str] = None) -> tuple[date, float]:
-    """TONA, end of month, from the SNB's money-market cube (the BoJ publishes it as HTML)."""
-    return _snb_monthly(text if text is not None else _get(SNB_TONA_URL), "TONA")
-
-
-_JGB_COLS = {"1Y": 1, "2Y": 2, "3Y": 3, "4Y": 4, "5Y": 5, "6Y": 6, "7Y": 7, "8Y": 8, "9Y": 9, "10Y": 10,
-             "15Y": 15, "20Y": 20, "25Y": 25, "30Y": 30, "40Y": 40}
-
-
-def fetch_jgb(text: Optional[str] = None) -> tuple[date, dict[float, float]]:
-    """Japan MoF daily JGB yields: the last dated row → {years: yield %}."""
-    if text is None:
-        r = httpx.get(MOF_JGB_URL, headers=UA, timeout=TIMEOUT, follow_redirects=True)
-        r.raise_for_status()
-        text = r.content.decode("cp932", errors="ignore")
-    header, last = None, None
-    for row in csv.reader(io.StringIO(text)):
-        if row and row[0].strip() == "Date":
-            header = [c.strip() for c in row]
-        elif row and re.fullmatch(r"\d{4}/\d{1,2}/\d{1,2}", row[0].strip()) and header:
-            last = row
-    if not header or not last:
-        raise ValueError("no JGB rows")
-    y, m, d = (int(x) for x in last[0].strip().split("/"))
-    pts = {}
-    for name, yrs in _JGB_COLS.items():
-        if name in header:
-            v = last[header.index(name)].strip()
-            if re.fullmatch(r"-?\d+(\.\d+)?", v):
-                pts[float(yrs)] = float(v)
-    if len(pts) < 6:
-        raise ValueError("JGB row too short")
-    return date(y, m, d), pts
-
-
-# ── Builders ───────────────────────────────────────────────────────────────────
-
 def _q(tenor: str, rate: float, quote_type: str) -> dict:
     return {"tenor": tenor, "quote_type": quote_type, "rate": round(rate, 4), "enabled": True}
 
 
-def build_ois_quotes(on_rate: float, govt: dict[float, float], spread: list[tuple[float, float]],
-                     tenors: list[str] = OIS_TENORS) -> list[dict]:
-    """OIS pillar rates = government par yield (interpolated in years) + spread schedule.
-
-    Below the first government point the rate blends from the overnight fixing.
-    """
-    knots = sorted(govt.items())
-    first_y, first_v = knots[0]
-    out = []
-    for t in tenors:
-        if t == "ON":
-            out.append(_q(t, on_rate, "OISDeposit"))
-            continue
-        y = tenor_years(t)
-        if y < first_y:
-            g_first = first_v + interp(spread, first_y) / 100
-            rate = on_rate + (g_first - on_rate) * (y / first_y)
-        else:
-            rate = interp(knots, y) + interp(spread, y) / 100
-        out.append(_q(t, rate, "OIS"))
-    return out
-
-
-def build_usd_sofr(sofr: float, ust: dict[float, float]) -> list[dict]:
-    return build_ois_quotes(sofr, ust, USD_OIS_MINUS_UST)
-
-
-def build_eur_estr(estr: float, aaa: dict[float, float]) -> list[dict]:
-    return build_ois_quotes(estr, aaa, EUR_OIS_MINUS_AAA)
-
-
-def build_gbp_sonia(boe: dict[str, float]) -> list[dict]:
-    gilts = {5.0: boe["5Y"], 10.0: boe["10Y"], 20.0: boe["20Y"]}
-    return build_ois_quotes(boe["SONIA"], gilts, GBP_OIS_MINUS_GILT)
-
-
-def build_chf_saron(saron: float) -> list[dict]:
-    """SARON at every pillar: the SNB's Confederation-bond cubes stopped in mid-2025 and no
-    other free source carries a CHF curve, so the term structure is flat and says so."""
-    return build_ois_quotes(saron, {1 / 12: saron, 30.0: saron}, CHF_FLAT_SPREAD)
-
-
-def build_jpy_tona(tona: float, jgb: dict[float, float]) -> list[dict]:
-    return build_ois_quotes(tona, jgb, JPY_OIS_MINUS_JGB)
+def build_rates_curve(curve_id: str, valuation_date: date, tenors: list[str] = OIS_TENORS) -> list[dict]:
+    """The synthetic curve's pillars on a date, in the shape the bootstrap and the curves page expect: the overnight
+    point as an OIS deposit, every other tenor as an OIS par rate (market_data/synthetic_rates.py)."""
+    years = [1.0 / 365.0 if t == "ON" else tenor_years(t) for t in tenors]
+    rates = synthetic_rates.curve_rates(curve_id, valuation_date, years)
+    return [_q(t, r, "OISDeposit" if t == "ON" else "OIS") for t, r in zip(tenors, rates)]
 
 
 # Synthetic normal-vol surface. Level falls with expiry (short-dated rate vol
@@ -422,52 +191,16 @@ def par_rate_lookup(quotes: list[dict]) -> Callable[[float], float]:
 # ── Orchestration (network) ────────────────────────────────────────────────────
 
 def collect(today: Optional[date] = None) -> dict:
-    """Fetch every source once. A source that fails is reported, not fatal."""
-    today = today or date.today()
-    out: dict = {"ok": {}, "failed": {}}
-
-    def step(name: str, fn: Callable[[], object]):
-        try:
-            out["ok"][name] = fn()
-        except Exception as e:      # noqa: BLE001 — one dead feed must not stop the others
-            log.warning("demo feed %s failed: %s", name, e)
-            out["failed"][name] = str(e)[:200]
-
-    step("sofr", fetch_sofr)
-    step("ust",  lambda: fetch_ust_par(today))
-    step("estr", fetch_estr)
-    step("aaa",  fetch_ecb_aaa_par)
-    step("boe",  lambda: fetch_boe(today))
-    step("saron", fetch_saron)
-    step("tona", fetch_tona)
-    step("jgb", fetch_jgb)
-    return out
+    """Nothing is fetched for rates since 0.55.0 (the curves are made, not read): kept so the callers' shape stands."""
+    return {"ok": {}, "failed": {}}
 
 
 def assemble(collected: dict, valuation_date: date) -> dict:
-    """Turn fetched data into snapshot rows; curves whose inputs failed are skipped."""
-    ok = collected["ok"]
+    """The snapshot rows of a date: the synthetic rates curves and the synthetic vol surfaces."""
     curves: dict[str, dict] = {}
 
-    def src(label: str, *as_of: date) -> str:
-        d = max(as_of).isoformat() if as_of else valuation_date.isoformat()
-        return f"DEMO · {label} · as of {d}"
-
-    if "sofr" in ok and "ust" in ok:
-        (d1, sofr), (d2, ust) = ok["sofr"], ok["ust"]
-        curves["USD_SOFR"] = {"quotes": build_usd_sofr(sofr, ust), "source": src("NY Fed SOFR + UST par, indicative spread", d1, d2)}
-    if "estr" in ok and "aaa" in ok:
-        (d1, estr), (d2, aaa) = ok["estr"], ok["aaa"]
-        curves["EUR_ESTR"] = {"quotes": build_eur_estr(estr, aaa), "source": src("ECB €STR + AAA par, indicative spread", d1, d2)}
-    if "boe" in ok:
-        d1, boe = ok["boe"]
-        curves["GBP_SONIA"] = {"quotes": build_gbp_sonia(boe), "source": src("BoE SONIA + gilt par, indicative spread", d1)}
-    if "saron" in ok:
-        d1, saron = ok["saron"]
-        curves["CHF_SARON"] = {"quotes": build_chf_saron(saron), "source": src(f"SNB SARON monthly avg {d1:%Y-%m}, flat: no public CHF curve")}
-    if "tona" in ok and "jgb" in ok:
-        (d1, tona), (d2, jgb) = ok["tona"], ok["jgb"]
-        curves["JPY_TONAR"] = {"quotes": build_jpy_tona(tona, jgb), "source": src(f"TONA {d1:%Y-%m} (SNB) + MoF JGB, indicative spread", d2)}
+    for curve_id in RATE_CURVES:
+        curves[curve_id] = {"quotes": build_rates_curve(curve_id, valuation_date), "source": synthetic_rates.SOURCE}
 
     synthetic = "DEMO · synthetic surface"
     curves["USD_SWVOL_ATM"] = {"quotes": build_swvol_atm(), "source": synthetic}
