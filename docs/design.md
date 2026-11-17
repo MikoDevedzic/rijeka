@@ -148,7 +148,8 @@ about. The window itself opens only when asked, where it was last left; a phone 
 corner carries its
 star and, under it, the word for what it opens (CHAT, 10px, in the text's high colour): a glyph alone is not a
 label. The messenger and a trade window are both windows on the desk: the one last opened or pressed is in front,
-the greeting card with the messenger, and the button stays above both. Nothing opens a window by itself: what
+the greeting card with the messenger. The button stays above the messenger and goes under an open trade window,
+whose own buttons (PRICE, BOOK TRADE) it stood on in a small window. Nothing opens a window by itself: what
 greets is small, is pictured over each page it greets on, and what lies under it there is named (on the home, a
 row of the risk column; on the blotter, the last rows' right-hand cells).
 
@@ -295,6 +296,9 @@ is no price. Not yet behind marks: the lines on the TRADE tab, the swap's tabs a
 One rule for the whole app, held by Dragan (`.claude/agents/dragan.md`) and by a check (`cd frontend && npm run design`,
 `src/design.test.js` in the unit run):
 
+- An amount on a rates ticket carries the sign of the ticket's currency (€, £, ¥, or the code where there is no
+  sign), on every tab: the ticket says which currency it is (`ticket-ccy.js`), no formatter writes a dollar sign of
+  its own. A currency ticket's figures are in dollars and say so.
 - A number, a date, a rate, a tenor or a code is mono with tabular digits; 12.5px where it is a value in a table or
   a field (`fig` in `index.css`; a field that holds a number or a date takes the face by its type or `inputMode`).
   A field is set like the figure beside it: the points typed on the forwards page and the outright computed from
@@ -350,6 +354,10 @@ named once at the left. Every row of money is set alike; a figure takes the colo
 ALL-IN is the one column that stands out and the saving on chain the one brass figure. Nothing scrolls inside
 the tab: the inputs column is as tall as its inputs, and the credit curves and the assumptions sit under the
 results they drive.
+
+The tab starts on the counterparty's own terms, read from its record (collateralised or not, threshold, minimum
+transfer, whether initial margin is exchanged), and says under the settlement choice that it did. A preset the
+user presses is the user's and is kept; the record is not read over it.
 
 ## The scenario tab
 

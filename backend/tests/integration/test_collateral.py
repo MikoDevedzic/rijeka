@@ -66,6 +66,10 @@ def test_schedule_drives_the_capital_run(client, auth_a, auth_b, ids):
     assert rg["regulatory_csa"]["mpor_days"] == 5.0 and rg["posted_instruments"] == {"UST_BILL": 0.6, "USDC": 0.4}
     assert rg["instrument_yields_bp"]["UST_BILL"] > 0 and rg["instrument_yields_bp"]["USDC"] == 0.0
     assert any(e["step"] == "initial margin" for e in j["explain"])
+    # the record's own CSA terms travel with the schedule: the XVA tab starts on them, not on a preset of its own
+    t = j["csa"]
+    assert t["collateralised"] is True and t["im_exchanged"] is True and t["threshold"] == 0.0 and t["mta"] == 500_000.0
+    assert t["type"] == "VM_IM" and isinstance(t["mpor_days"], int) and t["mpor_days"] > 0
     # the record's class fields follow the schedule
     rec = next(c for c in client.get("/api/counterparties/", headers=auth_a).json() if c["id"] == cp)
     assert rec["eligible_collateral"] == ["CASH", "GOVT", "STABLECOIN"] and rec["posted_composition"]["STABLECOIN"] == 0.4

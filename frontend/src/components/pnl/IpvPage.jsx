@@ -95,7 +95,9 @@ export default function IpvPage() {
             {scope.level !== 'GLOBAL' && <input value={scope.name} placeholder={scope.level === 'DESK' ? 'desk name' : 'book name'} onChange={e => setScope({ ...scope, name: e.target.value })} style={{ width: 110, marginLeft: 6 }} />}
           </label>
           {run?.date && <span className="pnl-note">{fmtD(run.date)}{run.flash_from_store ? ' · stored day' : ''}</span>}
-          {run && <span className={`pnl-chip ${signed ? 'ok' : c.pending ? 'amber' : 'ok'}`}>{signed ? 'OFFICIAL · SIGNED' : run.inputs?.length ? `IPV IN PROGRESS · ${c.settled}/${c.inputs}` : 'NO RUN'}</span>}
+          {/* a day is signed with every input settled. Where one has since come to need a decision (the day run again,
+              a new input), the chip says so: OFFICIAL · SIGNED stood in green over an input marked PENDING */}
+          {run && <span data-testid="ipv-standing" className={`pnl-chip ${signed && !c.pending ? 'ok' : c.pending ? 'amber' : 'ok'}`} title={signed && c.pending ? 'Signed with every input settled at the time. An input has come to need a decision since; the signature is of the day as it was signed.' : undefined}>{signed ? (c.pending ? `SIGNED · ${c.pending} INPUT${c.pending === 1 ? '' : 'S'} PENDING SINCE` : 'OFFICIAL · SIGNED') : run.inputs?.length ? `IPV IN PROGRESS · ${c.settled}/${c.inputs}` : 'NO RUN'}</span>}
           <button className="pnl-btn" onClick={start} disabled={busy || job?.running}>{job?.running ? `RUNNING… ${job.done}/${job.total} ${job.current || ''}` : run?.inputs?.length ? 'RERUN' : 'RUN IPV'}</button>
           <button className="pnl-btn ghost" onClick={() => navigate('/configurations/pnl/ipv-tolerances')}>TOLERANCES →</button>
         </div>
@@ -122,7 +124,7 @@ export default function IpvPage() {
             </div>
             {rows.map(r => (
               <div key={r.curve_id} className={`pnl-tr d1 trade${input && input.curve_id === r.curve_id ? ' on' : ''}`} style={{ gridTemplateColumns: INPUT_COLS }} onClick={() => setSel(r.curve_id)}>
-                <span className="pnl-tn" style={{ paddingLeft: 8 }} title={`${r.curve_id} · ${r.kindLabel} · ${r.pillars} pillar${r.pillars === 1 ? '' : 's'}`}>{r.curve_id}<small>{r.kindLabel} · {r.pillars} pillar{r.pillars === 1 ? '' : 's'}{r.review ? ` · ${r.review} beyond tolerance` : ''}{r.overridden ? ` · ${r.overridden} overridden` : ''}</small></span>
+                <span className="pnl-tn" style={{ paddingLeft: 8 }} title={`${r.curve_id} · ${r.kindLabel} · ${r.pillars} pillar${r.pillars === 1 ? '' : 's'}`}>{r.curve_id}<small>{r.kindLabel}{r.review ? ` · ${r.review} beyond tolerance` : ''}{r.overridden ? ` · ${r.overridden} overridden` : ''} · {r.pillars} pillar{r.pillars === 1 ? '' : 's'}</small></span>
                 <span className="pnl-tv">{r.trades}</span>
                 <span className="pnl-tv">{r.sens}</span>
                 <span className="pnl-tv dim" style={{ textAlign: 'left' }}>{r.desk}</span>

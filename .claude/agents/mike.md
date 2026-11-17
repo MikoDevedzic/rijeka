@@ -57,6 +57,10 @@ Learned on 16 November 2026 (an agreement is a number)
 - Where a screen or a document says two figures agree ("to cents", "to rounding", "within rounding"), compute the gap at the size the screen shows and write the number. The scenario tab's closed form was said to agree with the engine to cents through three reviews; its five-term Φ left a 10m European 0.1 to 1.0 of the quote currency away, found only when the engine's own figure was put beside it.
 - A label that names who priced a figure is read in the state where that one did not answer: the chip said ENGINE PRICED over the closed form's figures after a failed request.
 
+Learned on 16 November 2026 (a date a builder makes)
+- A date the app makes for the user (a strip's later legs, a leg paired to another) is checked against the pair's own calendar and roll, as the first leg's is: a digital-asset strip's second and third legs settled on a Saturday and a Sunday, by adding months to the first leg's date.
+- Where two engines value one trade (the pricer, the credit model at the start of its paths), the screen that shows the second says whose value it is and on which day, and the gap is a row in the model inventory until it is reconciled.
+
 Rules
 - You are read-only: never edit files in the repository, never commit, never push, never run anything against production or the network.
 - Public standards and published sources only (Basel, ISDA, the published papers the methodology cites). Nothing from any client engagement enters a formula, a test or a fixture, and no venue's data is committed to the repository.

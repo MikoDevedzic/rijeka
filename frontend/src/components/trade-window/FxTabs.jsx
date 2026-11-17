@@ -292,7 +292,11 @@ function DetailsBody({ quote, terms, crypto, booked = false }) {
         ['PARITY FORWARD', fmt(quote.implied_forward, dp), quote.basis_points != null ? `basis ${fmt(quote.basis_points, crypto ? 2 : 1)} vs quoted` : 'no quoted points'],
         [`${quote.quote_currency} CURVE`, quote.quote_curve || '—', `DF ${fmt(quote.df_quote, 6)}${fromToday} · zero ${fmt(quote.quote_rate * 100, 3)}%${quote.quote_curve_snapshot ? ' · ' + quote.quote_curve_snapshot : ''}`],
         // "funding" is the desk's spread on the XVA tab; the rate that carries a digital asset to its forward is its carry rate
-        [crypto ? `${quote.base_currency} CARRY RATE` : `${quote.base_currency} CURVE`, quote.base_discounting || '—', `DF ${fmt(quote.df_base, 6)}${fromToday} · ${crypto ? 'rate' : 'zero'} ${fmt(quote.base_rate * 100, 3)}%`],
+        // a cell named a rate shows the rate; where it came from (the stored value and its day) goes under it. It showed
+        // "snapshot <date>" in the figure's place
+        crypto
+          ? [`${quote.base_currency} CARRY RATE`, `${fmt(quote.base_rate * 100, 3)}%`, `${quote.base_discounting || 'no source'} · DF ${fmt(quote.df_base, 6)}${fromToday}`]
+          : [`${quote.base_currency} CURVE`, quote.base_discounting || '—', `DF ${fmt(quote.df_base, 6)}${fromToday} · zero ${fmt(quote.base_rate * 100, 3)}%`],
         // an FX spot settles on its spot date and the forward carries from there. The two discount factors above run from
         // today and say so: spot times their ratio is not the forward shown (1.6 pips apart on a 3M EURUSD)
         ['MODEL', crypto ? 'F = S·e^(−r_carry·T)/DF_quote' : 'F = S·DF_base/DF_quote, both from the spot date', crypto ? 'NPV = ±N·(F − K)·DF_quote' : 'NPV = ±N·(F − K)·DF_quote, from today'],

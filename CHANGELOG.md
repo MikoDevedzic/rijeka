@@ -3,6 +3,43 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.29). Commits on `main` are the detail.
 
+## 0.47.3 · 16 November 2026
+
+**What a third first-time visitor found.** A reader who had never seen the app walked the released 0.47.2 again.
+Everything the second walk found was gone; fifteen new things were not right, most of them a figure that did not
+say enough about itself.
+
+- **A swap's figures are in the swap's currency.** A EUR swap's PV, IR01, flows and XVA stood under a dollar sign
+  on every tab. The ticket now says which currency it is and every amount on it is written in that one.
+- **The XVA tab starts on the counterparty's own terms.** It opened on NO CSA for a counterparty whose record
+  holds margin terms. It reads the record (collateralised or not, threshold, minimum transfer, initial margin) and
+  says that it did; a preset the user presses is kept.
+- **A strip's legs settle on business days.** The later legs of a digital-asset strip were the first leg's date
+  plus months, a Saturday and a Sunday among them. Each leg's date is rolled on the pair's calendar as the first
+  one is, and a new ticket keeps its tenor when the pair is changed (an option's expiry read "CUSTOM · 2.9…").
+- **The ticket takes the keyboard.** Opening a ticket puts the focus in it, Tab stays inside, Escape closes a
+  booked trade's ticket (a new ticket is not thrown away by a key), and the focus returns to where it was.
+- **A signed day that has since moved says so.** The P&L page showed three figures for one day where trades were
+  booked after the sign-off, and nothing to say which was signed. It names the signed figure, the day as it now
+  reads and the difference. The IPV page no longer says OFFICIAL · SIGNED in green over an input marked pending.
+- **Counterparty Credit says whose value a trade stands at, and on which day.** The value there is the credit
+  model's own at the start of its paths, not the pricer's mark; the list is dated and says so. That the two are
+  not reconciled figure by figure is written as an open finding in the model inventory.
+- **The rate curves' Instruments tab says its zero and discount columns are an indication** (a flat-forward
+  reading of the quotes), not the curve the engine prices on.
+- **The home says what it counts**: "34 trades pending", an item the user confirms says CONFIRM, not WAIT, and an
+  age reads "18m ago".
+- **Smaller.** A search with no match no longer says the blotter is empty. A ticket that could not price says why
+  in its footer, in view. The cashflows tab names the day its curve was saved and the day it values. A carry-rate
+  cell shows the rate, with its source under it. The FX page has one name in the navigation, and a pair without
+  quoted points says so where it said it was priced off them. The CHAT button goes under an open ticket: it stood
+  on BOOK TRADE in a small window. Cut labels are whole: the strike's caption, how an implied forward was reached,
+  a certificate's sentence (broken inside a word), an IPV row (the part that asks for a decision comes first).
+
+Not done, and said: at 1280 by 720 the blotter still scrolls sideways to reach STATUS and UTI; a digital-asset
+forward is CRYPTO NDF on the blotter and CRYPTO FORWARD on the ticket; LIVE on the blotter is not explained where
+it is counted.
+
 ## 0.47.2 · 16 November 2026
 
 **The desk without a mouse, and for a reader who does not see the page.** A first read of five screens for this

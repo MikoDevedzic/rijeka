@@ -72,7 +72,7 @@ export default function Fixings({ fx, compact = false, loading = false, onOpen }
         <div className="fxg-h">SETTLEMENT FIXINGS <small>a non-deliverable forward is settled against one published price</small></div>
         <table className="fxg-t">
           {cols}
-          <thead><tr><th>FIXING</th><th>PAIR</th>{!compact && <th colSpan={2}>SOURCE</th>}<th className="r">NET THAT FIXES</th><th className="r">1% ON THE FIXING</th>{!compact && <th className="r">TRADES</th>}</tr></thead>
+          <thead><tr><th>FIXING</th><th>PAIR</th>{!compact && <th colSpan={2}>SOURCE</th>}<th className="r">NET THAT FIXES</th><th className="r" title="what a 1% move of the fixing is worth">{compact ? '1% MOVE' : '1% ON THE FIXING'}</th>{!compact && <th className="r">TRADES</th>}</tr></thead>
           <tbody>
             {settles.map(s => (
               <tr key={`${s.date}${s.pair}${s.source}`} className="first">

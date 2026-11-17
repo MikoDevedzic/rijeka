@@ -611,7 +611,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       {shown && quote?.forward_kind === 'IMPLIED' && quote?.forward_method && (() => {
         const beyond = quote.forward_mode === 'MARKET' && quote.market_points != null
         return (
-          <div data-testid="fx-forward-kind" data-kind={beyond ? 'beyond-quotes' : 'curves'} className={`tbw-fx-tag tbw-fx-tag-wrap${dim ? ' tbw-fx-dim' : ''}`}
+          <div data-testid="fx-forward-kind" data-kind={beyond ? 'beyond-quotes' : 'curves'} className={`tbw-fx-tag tbw-fx-tag-wrap tbw-fx-tag-free${dim ? ' tbw-fx-dim' : ''}`}
                style={{ color: beyond ? 'var(--amber)' : 'var(--text-mute)' }}>
             <span>implied{beyond ? ', not quoted' : ''}: {quote.forward_method}</span>
           </div>
@@ -878,7 +878,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
         {/* five cells on the six columns the rows above use, so the columns of the ticket line up */}
         <div className="tbw-fx-row tbw-fx-grid-6" data-fx-row="forward-terms">
           {forwardCell(!option)}
-          <Cell label={crypto ? 'FORWARD PRICE K' : 'FORWARD RATE K'} sub={perUnit}>
+          <Cell label={crypto ? 'PRICE K' : 'RATE K'} sub={perUnit}>
             {/* on its default K is the fair forward of the latest quote to the pair's decimals, the K that is booked: a blank K is struck there, and again when the market moves */}
             <DefaultedInput testId={option ? undefined : 'fx-strike'} value={strike} onChange={setStrike} fallback={quote?.forward_rate ?? quote?.forward} format={rate} tag="fair forward, rounded" dim={dim} />
           </Cell>

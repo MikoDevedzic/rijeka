@@ -93,7 +93,7 @@ function AttestationView({ attestation, onVerify, verifying, verifyResult, onDow
   const row = (k, v, color) => (
     <div className="cert-row" style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 10, fontSize: 12, lineHeight: 1.7 }}>
       <span className="tbw-mut" style={{ letterSpacing: '0.06em' }}>{k}</span>
-      <span style={{ fontFamily: MONO, color: color || 'var(--text-hi)', wordBreak: 'break-all' }}>{v}</span>
+      <span style={{ fontFamily: MONO, color: color || 'var(--text-hi)', overflowWrap: 'anywhere' }}>{v}</span>
     </div>
   )
   const vr = verifyResult

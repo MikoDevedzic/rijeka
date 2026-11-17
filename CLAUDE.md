@@ -240,4 +240,10 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   that one did not answer.
 - The security reviewer reads a change that touches a public route before it is released, not while it is: the
   read of 0.46.5's heavier public count came back with a finding minutes after the release had been pushed.
-
+- A screen that reads a counterparty starts on that counterparty's own terms, not on a preset of its own: the XVA
+  tab opened on NO CSA for a counterparty whose record holds margin terms, and its first figures were of a trade
+  that record does not describe.
+- A figure is written in its trade's currency by the one place that knows it (the ticket), not by each formatter:
+  a dollar sign written into a formatter is found on every screen that formatter serves.
+- A sentence about two figures ("they differ by a small part") is a claim: it is measured, or it says only what is
+  known (that they are not the same figure).

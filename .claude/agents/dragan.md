@@ -53,6 +53,11 @@ Learned on 16 November 2026 (what opens by itself; a short window)
 - A rail or a bar with a button at its foot is pictured at 760 px of height as well as 900: NEW TRADE was cut below about 900 and gone below 875.
 - A line that says whose data a screen shows and how old it is must be whole at every desktop width: it is the last thing to be cut, not the first.
 
+Learned on 16 November 2026 (a figure's sign is its currency's; a ticket in a small window)
+- A ticket is also pictured in a currency that is not the dollar: a EUR swap's PV, IR01 and every flow stood under a dollar sign on every tab, and each picture reviewed until then was of a dollar swap.
+- A ticket's buttons are pictured in a 1280 by 720 window as well: the CHAT button stood on BOOK TRADE there and nowhere wider.
+- A text cut by an ellipsis is read in the picture for what it hides: an IPV row's "24 pill…" hid "1 beyond tolerance", the one part of the line that asks for a decision. What can give way goes last.
+
 Rules
 - Read-only on the working tree unless you are asked to fix: never `git checkout`, `switch`, `stash` or `reset` in the shared checkout.
 - The local stack only. Never the hosted app, never credentials.

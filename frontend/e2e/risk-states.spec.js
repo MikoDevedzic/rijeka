@@ -199,3 +199,42 @@ test('a page with no limit set says so, and says WITHIN LIMITS only where one wa
   await expect(app.getByTestId('rk-standing')).toHaveText(/WITHIN LIMITS|\d+ (BREACH(ES)?|WARNINGS?)/, { timeout: 60_000 })
   expectClean(problems)
 })
+
+// Third walk (16 November 2026): a day signed at one figure and since moved showed three different figures and
+// nothing to say which was signed; and the credit page listed each trade's value with no date and no word that it
+// is the credit model's own value, which is not the pricer's mark.
+test('a signed day that has since moved says so, and the credit page says whose value a trade stands at', async ({ app, problems }) => {
+  await app.setViewportSize({ width: 1440, height: 900 })
+  let day = null
+  await patch(app, '**/api/pnl/report*', (r) => {
+    day = Number(r.totals?.dod)
+    r.tables = true
+    r.signoffs = [{ role: 'TRADER', by: 'USER A', signer_user_id: 'someone-else', at: '2026-11-16T09:00:00Z', usd_signed: day - 1250, comment: '' }]
+  })
+  await app.goto('/pnl')
+  const moved = app.getByTestId('pnl-signed-moved')
+  if (await shown(moved, 'the stack has no P&L day to sign')) {
+    await expect(moved).toContainText('The last signature is of a day')
+    await expect(moved).toContainText('it has moved by +1,250')
+    await expect(moved).toContainText('sign again to sign the day as it is now')
+    await moved.scrollIntoViewIfNeeded()
+    await app.screenshot({ path: 'e2e/.out/shots/pnl-signed-moved.png' })
+    // signed at the figure the day reads now: nothing is said
+    await app.unroute('**/api/pnl/report*')
+    await patch(app, '**/api/pnl/report*', (r) => { r.tables = true; r.signoffs = [{ role: 'TRADER', by: 'USER A', signer_user_id: 'someone-else', at: '2026-11-16T09:00:00Z', usd_signed: Number(r.totals?.dod), comment: '' }] })
+    await app.goto('/pnl')
+    await expect(app.locator('.pnl-sign')).toBeVisible({ timeout: 60_000 })
+    await expect(moved).toHaveCount(0)
+  }
+  await app.unroute('**/api/pnl/report*')
+
+  await app.goto('/risk/ccr')
+  const note = app.getByTestId('ccr-trades-note')
+  if (await shown(note, 'the stack has no netting set with trades')) {
+    await expect(note).toHaveText(/^the credit model's value on \w+ \d+, \d{4}$/)
+    await expect(app.getByText('MODEL VALUE · USD')).toBeVisible()
+    await note.scrollIntoViewIfNeeded()
+    await app.screenshot({ path: 'e2e/.out/shots/ccr-trades-note.png' })
+  }
+  expectClean(problems)
+})
