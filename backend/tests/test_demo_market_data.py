@@ -1,4 +1,5 @@
-"""Demo market data: public-source parsers, curve builders, synthetic vols, and the tick route."""
+"""Demo market data: synthetic rates curves, synthetic vols, and the tick route."""
+import math
 from datetime import date
 from unittest.mock import MagicMock, patch
 
@@ -6,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from market_data import demo_feed as f
+from market_data import synthetic_rates
 
 
 @pytest.fixture(autouse=True)
@@ -14,79 +16,40 @@ def _feeds_on(monkeypatch):
     monkeypatch.delenv("RIJEKA_DEMO_MARKET_DATA", raising=False)
     monkeypatch.delenv("RIJEKA_DERIBIT", raising=False)
 
-SOFR_JSON = '{ "refRates": [ { "effectiveDate": "2026-10-28", "type": "SOFR" ,"percentRate": 3.94 } ] }'
-UST_XML = """<feed><entry><m:properties><d:NEW_DATE m:type="Edm.DateTime">2026-10-27T00:00:00</d:NEW_DATE>
-<d:BC_1MONTH m:type="Edm.Double">4.05</d:BC_1MONTH><d:BC_2MONTH m:type="Edm.Double">4.10</d:BC_2MONTH>
-<d:BC_3MONTH m:type="Edm.Double">4.15</d:BC_3MONTH><d:BC_4MONTH m:type="Edm.Double">4.20</d:BC_4MONTH>
-<d:BC_6MONTH m:type="Edm.Double">4.30</d:BC_6MONTH><d:BC_1YEAR m:type="Edm.Double">4.40</d:BC_1YEAR>
-<d:BC_2YEAR m:type="Edm.Double">4.60</d:BC_2YEAR><d:BC_3YEAR m:type="Edm.Double">4.70</d:BC_3YEAR>
-<d:BC_5YEAR m:type="Edm.Double">4.80</d:BC_5YEAR><d:BC_7YEAR m:type="Edm.Double">4.90</d:BC_7YEAR>
-<d:BC_10YEAR m:type="Edm.Double">5.00</d:BC_10YEAR><d:BC_20YEAR m:type="Edm.Double">5.20</d:BC_20YEAR>
-<d:BC_30YEAR m:type="Edm.Double">5.30</d:BC_30YEAR></m:properties></entry>
-<entry><m:properties><d:NEW_DATE m:type="Edm.DateTime">2026-10-28T00:00:00</d:NEW_DATE>
-<d:BC_1MONTH m:type="Edm.Double">4.07</d:BC_1MONTH><d:BC_2MONTH m:type="Edm.Double">4.12</d:BC_2MONTH>
-<d:BC_3MONTH m:type="Edm.Double">4.18</d:BC_3MONTH><d:BC_4MONTH m:type="Edm.Double">4.22</d:BC_4MONTH>
-<d:BC_6MONTH m:type="Edm.Double">4.33</d:BC_6MONTH><d:BC_1YEAR m:type="Edm.Double">4.47</d:BC_1YEAR>
-<d:BC_2YEAR m:type="Edm.Double">4.67</d:BC_2YEAR><d:BC_3YEAR m:type="Edm.Double">4.75</d:BC_3YEAR>
-<d:BC_5YEAR m:type="Edm.Double">4.85</d:BC_5YEAR><d:BC_7YEAR m:type="Edm.Double">4.95</d:BC_7YEAR>
-<d:BC_10YEAR m:type="Edm.Double">5.05</d:BC_10YEAR><d:BC_20YEAR m:type="Edm.Double">5.30</d:BC_20YEAR>
-<d:BC_30YEAR m:type="Edm.Double">5.37</d:BC_30YEAR></m:properties></entry></feed>"""
-ESTR_CSV = "KEY,FREQ,TIME_PERIOD,OBS_VALUE\nEST.B.EU000A2X2A25.WT,B,2026-10-28,2.439\n"
-AAA_CSV = "KEY,TIME_PERIOD,OBS_VALUE\n" + "\n".join(
-    f"YC.B.U2.EUR.4F.G_N_A.SV_C_YM.PY_{k},2026-10-28,{v}"
-    for k, v in [("3M", 2.55), ("6M", 2.65), ("1Y", 2.9), ("2Y", 3.05), ("5Y", 3.15), ("10Y", 3.37), ("20Y", 3.55), ("30Y", 3.58)])
-BOE_CSV = "DATE,IUDSOIA,IUDSNPY,IUDMNPY,IUDLNPY\n26 Oct 2026,3.7328,4.9407,5.3048,5.5955\n27 Oct 2026,3.734,4.9444,5.3046,5.5902\n"
-SNB_CSV = '"Date";"D0";"Value"\n"2026-08";"SARON";"-0.060456"\n"2026-09";"SARON";"-0.067988"\n'
+
+# ── rates curves ───────────────────────────────────────────────────────────────
+
+def test_rates_curve_has_the_template_pillars_with_their_quote_types():
+    assert len(f.RATE_CURVES) == 5
+    for curve in f.RATE_CURVES:
+        qs = f.build_rates_curve(curve, date(2026, 11, 17))
+        assert [q["tenor"] for q in qs] == f.OIS_TENORS and len(qs) == 33
+        assert qs[0]["quote_type"] == "OISDeposit" and all(q["quote_type"] == "OIS" for q in qs[1:])
+        assert all(q["enabled"] is True for q in qs)
 
 
-# ── parsers ────────────────────────────────────────────────────────────────────
-
-def test_parsers_read_the_fixtures():
-    assert f.fetch_sofr(SOFR_JSON) == (date(2026, 10, 28), 3.94)
-    d, ust = f.fetch_ust_par(text=UST_XML)
-    assert d == date(2026, 10, 28) and ust[10] == 5.05 and ust[1 / 12] == 4.07     # latest entry wins
-    assert f.fetch_estr(ESTR_CSV) == (date(2026, 10, 28), 2.439)
-    d, aaa = f.fetch_ecb_aaa_par(AAA_CSV)
-    assert d == date(2026, 10, 28) and aaa[0.25] == 2.55 and aaa[30.0] == 3.58
-    d, boe = f.fetch_boe(text=BOE_CSV)
-    assert d == date(2026, 10, 27) and boe["SONIA"] == 3.734 and boe["20Y"] == 5.5902
-    assert f.fetch_saron(SNB_CSV) == (date(2026, 9, 1), -0.067988)
+def test_overnight_pillar_is_the_generators_overnight_rate_to_four_decimals():
+    d = date(2026, 11, 17)
+    for curve in f.RATE_CURVES:
+        assert f.build_rates_curve(curve, d)[0]["rate"] == round(synthetic_rates.overnight(curve, d), 4)
 
 
-def test_parsers_reject_empty_feeds():
-    with pytest.raises(ValueError):
-        f.parse_ust_xml("<feed></feed>")
-    with pytest.raises(ValueError):
-        f.fetch_boe(text="DATE,A\n")
-    with pytest.raises(ValueError):
-        f.fetch_saron('"Date";"D0";"Value"\n')
+def test_every_rate_is_finite():
+    for curve in f.RATE_CURVES:
+        assert all(math.isfinite(q["rate"]) for q in f.build_rates_curve(curve, date(2026, 11, 17)))
 
 
-# ── builders ───────────────────────────────────────────────────────────────────
-
-def test_usd_sofr_curve_has_the_template_pillars_and_sits_below_treasuries():
-    _, ust = f.fetch_ust_par(text=UST_XML)
-    qs = f.build_usd_sofr(3.94, ust)
-    assert [q["tenor"] for q in qs] == f.OIS_TENORS
-    assert qs[0] == {"tenor": "ON", "quote_type": "OISDeposit", "rate": 3.94, "enabled": True}
-    assert all(q["quote_type"] == "OIS" for q in qs[1:])
-    by = {q["tenor"]: q["rate"] for q in qs}
-    assert by["10Y"] == pytest.approx(5.05 - 0.40, abs=1e-6)        # spread schedule applied
-    assert by["30Y"] == pytest.approx(5.37 - 0.70, abs=1e-6)
-    assert by["50Y"] == by["30Y"]                                      # flat beyond the last government point
-    assert 3.94 <= by["1W"] <= by["1M"] <= 4.07                        # short end blends from the fixing
-    assert by["18M"] == pytest.approx((4.47 - 0.20 + 4.67 - 0.25) / 2, abs=0.02)
+def test_the_same_date_gives_the_same_quotes_and_two_business_days_differ():
+    for curve in f.RATE_CURVES:
+        assert f.build_rates_curve(curve, date(2026, 11, 17)) == f.build_rates_curve(curve, date(2026, 11, 17))
+        assert f.build_rates_curve(curve, date(2026, 11, 17)) != f.build_rates_curve(curve, date(2026, 11, 18))
 
 
-def test_eur_and_gbp_curves_apply_their_spreads():
-    _, aaa = f.fetch_ecb_aaa_par(AAA_CSV)
-    eur = {q["tenor"]: q["rate"] for q in f.build_eur_estr(2.439, aaa)}
-    assert eur["ON"] == 2.439 and eur["10Y"] == pytest.approx(3.37 + 0.30, abs=1e-6)
-    _, boe = f.fetch_boe(text=BOE_CSV)
-    gbp = {q["tenor"]: q["rate"] for q in f.build_gbp_sonia(boe)}
-    assert gbp["ON"] == 3.734 and gbp["10Y"] == pytest.approx(5.3046 - 0.40, abs=1e-6)
-    assert gbp["20Y"] == pytest.approx(5.5902 - 0.70, abs=1e-6)
-    assert gbp["1Y"] < gbp["5Y"]                                       # interpolates up to the first gilt point
+def test_a_saturday_carries_the_friday_before():
+    sat, fri = date(2026, 11, 14), date(2026, 11, 13)
+    assert sat.weekday() == 5 and fri.weekday() == 4
+    for curve in f.RATE_CURVES:
+        assert f.build_rates_curve(curve, sat) == f.build_rates_curve(curve, fri)
 
 
 def test_synthetic_vols_are_smooth_and_in_range():
@@ -107,19 +70,22 @@ def test_synthetic_vols_are_smooth_and_in_range():
     assert all(r["flat_vol_bp"] >= next(a["flat_vol_bp"] for a in atm_rows if a["cap_tenor_y"] == r["cap_tenor_y"]) for r in rows)
 
 
-def test_assemble_skips_curves_whose_feed_failed_and_stamps_sources():
-    collected = {"ok": {"sofr": (date(2026, 10, 28), 3.94), "ust": f.fetch_ust_par(text=UST_XML)[0:2] and f.fetch_ust_par(text=UST_XML)},
-                 "failed": {"estr": "timeout", "aaa": "timeout", "boe": "timeout", "saron": "timeout"}}
-    built = f.assemble(collected, date(2026, 10, 29))
+def test_assemble_builds_every_rates_curve_whatever_was_collected_and_keeps_the_vol_surfaces():
+    built = f.assemble({"ok": {}, "failed": {"x": "timeout"}}, date(2026, 10, 29))
     fx_vols = {f"{pair}_VOL" for pair in f.VOL_LEVELS}                     # synthetic FX option surfaces, always written
-    assert set(built["curves"]) == {"USD_SOFR", "USD_SWVOL_ATM"} | fx_vols
+    assert set(built["curves"]) == set(f.RATE_CURVES) | {"USD_SWVOL_ATM"} | fx_vols
+    for curve in f.RATE_CURVES:
+        assert len(built["curves"][curve]["quotes"]) == 33 and built["curves"][curve]["source"] == synthetic_rates.SOURCE
     assert built["curves"]["EURUSD_VOL"]["source"] == "DEMO · synthetic surface" and len(built["curves"]["EURUSD_VOL"]["quotes"]) == 24
-    assert built["curves"]["USD_SOFR"]["source"].startswith("DEMO · NY Fed SOFR") and "as of 2026-10-28" in built["curves"]["USD_SOFR"]["source"]
     assert built["curves"]["USD_SWVOL_ATM"]["source"] == "DEMO · synthetic surface"
-    assert built["failed"]["estr"] == "timeout" and len(built["caps"]) == 54
+    assert built["failed"] == {"x": "timeout"} and len(built["caps"]) == 54
     # cap strikes follow the demo par curve
     par = f.par_rate_lookup(built["curves"]["USD_SOFR"]["quotes"])
     assert next(r for r in built["caps"] if r["is_atm"] and r["cap_tenor_y"] == 5.0)["strike_pct"] == pytest.approx(par(5.0), abs=1e-6)
+
+
+def test_collect_fetches_nothing():
+    assert f.collect() == {"ok": {}, "failed": {}}
 
 
 def test_helpers():
@@ -145,14 +111,14 @@ def test_tick_dry_run_builds_without_writing(monkeypatch):
     monkeypatch.setenv("RIJEKA_CRON_SECRET", "s3cret")
     db = MagicMock()
     main.app.dependency_overrides[r.get_db] = lambda: db
-    collected = {"ok": {"sofr": (date(2026, 10, 28), 3.94), "ust": f.fetch_ust_par(text=UST_XML)}, "failed": {"boe": "down"}}
     with patch.object(r.demo, "_template_user_id", return_value="tmpl"), \
-         patch.object(r.demo_feed, "collect", return_value=collected):
+         patch.object(r.demo_feed, "collect", return_value={"ok": {}, "failed": {"boe": "down"}}):
         resp = TestClient(main.app).post("/api/market-data/demo/tick?dry_run=1", headers={"X-Rijeka-Cron": "s3cret"})
     main.app.dependency_overrides.clear()
     assert resp.status_code == 200, resp.text
     b = resp.json()
-    assert b["dry_run"] is True and b["curves"]["USD_SOFR"]["quotes"] == 33 and b["failed_sources"] == {"boe": "down"}
+    assert b["dry_run"] is True and b["failed_sources"] == {"boe": "down"}
+    assert all(b["curves"][c] == {"quotes": 33, "source": synthetic_rates.SOURCE} for c in f.RATE_CURVES)
     assert b["preview"]["USD_SOFR"][0]["tenor"] == "ON"
     # a dry run reads (the venue's surfaces it would keep) and writes nothing
     assert all(str(c.args[0]).lstrip().startswith("SELECT") for c in db.execute.call_args_list) and not db.commit.called
@@ -165,11 +131,9 @@ def test_tick_writes_template_rows_then_copies_to_demo_accounts(monkeypatch):
     db = MagicMock()
     db.execute.return_value.all.return_value = [("visitor-1",), ("visitor-2",)]
     main.app.dependency_overrides[r.get_db] = lambda: db
-    collected = {"ok": {"sofr": (date(2026, 10, 28), 3.94), "ust": f.fetch_ust_par(text=UST_XML)}, "failed": {}}
     venue = {"BTCUSD_VOL": {"quotes": [{"tenor": "1M", "quote_type": "ATM", "rate": 38.5, "enabled": True}],
                             "source": "DEMO · Deribit option marks · 2026-10-28 23:50 UTC · listed to 24SEP27, flat beyond"}}
     with patch.object(r.demo, "_template_user_id", return_value="tmpl"), \
-         patch.object(r.demo_feed, "collect", return_value=collected), \
          patch.object(r, "kept_marks", return_value=venue), \
          patch.object(r.demo, "_copy_market_data", return_value={"market_data_snapshots": 2}) as copy:
         resp = TestClient(main.app).post("/api/market-data/demo/tick", headers={"X-Rijeka-Cron": "s3cret"})
@@ -182,7 +146,7 @@ def test_tick_writes_template_rows_then_copies_to_demo_accounts(monkeypatch):
     assert b["skew_saved"] == 15 and b["sabr_fitted"] == 15 and b["caps_saved"] == 54 and b["copied_to"] == 2
     assert copy.call_count == 2 and copy.call_args_list[0].args[1:] == ("tmpl", "visitor-1")
     sqls = [str(c.args[0]) for c in db.execute.call_args_list]
-    assert sum("INSERT INTO market_data_snapshots" in s for s in sqls) == 2 + len(f.VOL_LEVELS)   # USD_SOFR + USD_SWVOL_ATM + the FX and digital-asset vol surfaces
+    assert sum("INSERT INTO market_data_snapshots" in s for s in sqls) == len(f.RATE_CURVES) + 1 + len(f.VOL_LEVELS)   # the rates curves + USD_SWVOL_ATM + the FX and digital-asset vol surfaces
     assert sum("INSERT INTO sabr_params" in s for s in sqls) == 15
     assert sum("INSERT INTO cap_vol_surface" in s for s in sqls) == 54
     assert db.commit.called
@@ -200,8 +164,14 @@ def test_sources_is_public_and_lists_assumptions():
     assert resp.status_code == 200
     b = resp.json()
     assert b["latest"]["USD_SOFR"]["valuation_date"] == "2026-10-29"
-    assert {s["curve"] for s in b["sources"]} >= {"USD_SOFR", "EUR_ESTR", "USD_SWVOL_ATM"}
-    assert b["assumptions"]["USD_OIS_MINUS_UST_bp"][-1] == [30, -70]
+    rates = {s["curve"]: s for s in b["sources"] if s["curve"] in f.RATE_CURVES}
+    assert set(rates) == set(f.RATE_CURVES) and len(rates) == 5
+    assert all(s["kind"] == "synthetic" and s["url"] is None for s in rates.values())
+    a = b["assumptions"]
+    assert {"rates", "parameters_set_on", "parameters_long_end_overnight_less_long_end_hump_tau", "daily_shock_bp",
+            "carried_to_next_day", "business_days_carried", "shared_share_of_variance"} <= set(a)
+    assert a["parameters_set_on"] == "2026-11-17"
+    assert set(a["parameters_long_end_overnight_less_long_end_hump_tau"]) == set(f.RATE_CURVES)
 
 
 def test_tick_explains_a_source_whitelist_that_predates_demo_data(monkeypatch):
@@ -214,44 +184,13 @@ def test_tick_explains_a_source_whitelist_that_predates_demo_data(monkeypatch):
         pass
     db.execute.side_effect = IntegrityError("INSERT …", {}, Orig('violates check constraint "market_data_snapshots_source_check"'))
     main.app.dependency_overrides[r.get_db] = lambda: db
-    collected = {"ok": {"sofr": (date(2026, 10, 28), 3.94), "ust": f.fetch_ust_par(text=UST_XML)}, "failed": {}}
-    with patch.object(r.demo, "_template_user_id", return_value="tmpl"), patch.object(r, "kept_marks", return_value={}), \
-         patch.object(r.demo_feed, "collect", return_value=collected):
+    with patch.object(r.demo, "_template_user_id", return_value="tmpl"), patch.object(r, "kept_marks", return_value={}):
         resp = TestClient(main.app).post("/api/market-data/demo/tick", headers={"X-Rijeka-Cron": "s3cret"})
     main.app.dependency_overrides.clear()
     assert resp.status_code == 409
     assert "2026-10-29_demo_market_data_source.sql" in resp.json()["detail"]
     assert db.rollback.called and not db.commit.called
 
-
-JGB_CSV = """Interest Rate (October 2026),,,,,,,,,,,,,,,(Unit : %)
-Date,1Y,2Y,3Y,4Y,5Y,6Y,7Y,8Y,9Y,10Y,15Y,20Y,25Y,30Y,40Y
-2026/10/27,1.66,1.90,2.00,2.15,2.27,2.35,2.46,2.60,2.72,2.85,3.37,3.67,3.96,3.93,3.96
-2026/10/28,1.674,1.915,2.015,2.166,2.281,2.365,2.473,2.614,2.739,2.867,3.385,3.685,3.973,3.941,3.974
-"  (If you cannot download the latest csv data, please clear the browser's cache and download again.)",,,,,,,,,,,,,,,
-"""
-TONA_CSV = '"Date";"D0";"Value"\n"2026-08";"TONA";"0.977"\n"2026-09";"TONA";"1.226"\n'
-
-
-def test_jpy_curve_from_tona_and_jgb_with_the_spread_applied():
-    d, jgb = f.fetch_jgb(JGB_CSV)
-    assert d == date(2026, 10, 28) and jgb[10.0] == 2.867 and jgb[40.0] == 3.974 and len(jgb) == 15
-    assert f.fetch_tona(TONA_CSV) == (date(2026, 9, 1), 1.226)
-    by = {q["tenor"]: q["rate"] for q in f.build_jpy_tona(1.226, jgb)}
-    assert by["ON"] == 1.226 and by["10Y"] == pytest.approx(2.867 - 0.25, abs=1e-6) and by["30Y"] == pytest.approx(3.941 - 0.45, abs=1e-6)
-    assert by["50Y"] == by["40Y"] and 1.226 <= by["1W"] <= by["1M"]
-
-
-def test_chf_is_a_flat_term_structure_at_the_fixing():
-    qs = f.build_chf_saron(-0.068)
-    assert [q["tenor"] for q in qs] == f.OIS_TENORS and all(q["rate"] == -0.068 for q in qs)
-
-
-def test_assemble_builds_jpy_when_both_feeds_answer():
-    d, jgb = f.fetch_jgb(JGB_CSV)
-    collected = {"ok": {"tona": (date(2026, 9, 1), 1.226), "jgb": (d, jgb)}, "failed": {}}
-    built = f.assemble(collected, date(2026, 10, 29))
-    assert "JPY_TONAR" in built["curves"] and "TONA 2026-09" in built["curves"]["JPY_TONAR"]["source"]
 
 
 # ── digital-asset marks (market_data/deribit.py) ───────────────────────────────
@@ -338,8 +277,7 @@ def test_switching_the_venue_off_removes_its_rows_at_the_daily_rebuild_and_the_p
     db.execute.return_value.all.return_value = []
     db.execute.return_value.rowcount = 7
     main.app.dependency_overrides[r.get_db] = lambda: db
-    collected = {"ok": {"sofr": (date(2026, 10, 28), 3.94), "ust": f.fetch_ust_par(text=UST_XML)}, "failed": {}}
-    with patch.object(r.demo, "_template_user_id", return_value="tmpl"), patch.object(r.demo_feed, "collect", return_value=collected):
+    with patch.object(r.demo, "_template_user_id", return_value="tmpl"):
         resp = TestClient(main.app).post("/api/market-data/demo/tick", headers={"X-Rijeka-Cron": "s3cret"})
         listed = TestClient(main.app).get("/api/market-data/demo/sources").json()["sources"]
     main.app.dependency_overrides.clear()
@@ -351,7 +289,7 @@ def test_switching_the_venue_off_removes_its_rows_at_the_daily_rebuild_and_the_p
     monkeypatch.setenv("RENDER", "true")
     db.reset_mock()
     main.app.dependency_overrides[r.get_db] = lambda: db
-    with patch.object(r.demo, "_template_user_id", return_value="tmpl"), patch.object(r.demo_feed, "collect", return_value=collected):
+    with patch.object(r.demo, "_template_user_id", return_value="tmpl"):
         assert TestClient(main.app).post("/api/market-data/demo/tick", headers={"X-Rijeka-Cron": "s3cret"}).status_code == 200
         assert TestClient(main.app).post("/api/market-data/demo/tick?dry_run=1", headers={"X-Rijeka-Cron": "s3cret"}).status_code == 200
     main.app.dependency_overrides.clear()

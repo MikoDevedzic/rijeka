@@ -42,7 +42,7 @@ from datetime import date
 from stack.apply import database_url, shown
 
 VALUATION_DATE = date(2026, 11, 2)
-SOURCE = f"DEMO · stack seed, fixed quotes · as of {VALUATION_DATE.isoformat()}"
+SOURCE = f"DEMO · stack seed, synthetic rates and fixed spots · as of {VALUATION_DATE.isoformat()}"
 
 USER_A = uuid.UUID("0000000a-0000-4000-8000-0000000000aa")
 USER_B = uuid.UUID("0000000b-0000-4000-8000-0000000000bb")
@@ -51,14 +51,10 @@ USERS = [(USER_A, "user_a@rijeka.test", "USER.A", "trader", "ADMIN"),
 FIRM_NAME = "STACK TEST FIRM"
 NS = uuid.UUID("6f1b2c3d-0000-4000-8000-0000000057ac")     # namespace for the seed's deterministic ids
 
-# ── the fixed quotes (percent), dated 2026-11-02 ───────────────────────────────────────────────
-SOFR = 3.88
-UST_PAR = {1 / 12: 3.95, 2 / 12: 3.93, 0.25: 3.90, 4 / 12: 3.88, 0.5: 3.82, 1: 3.70, 2: 3.62, 3: 3.65,
-           5: 3.78, 7: 3.95, 10: 4.12, 20: 4.65, 30: 4.72}
-ESTR = 2.41
-EUR_AAA_PAR = {0.25: 2.10, 0.5: 2.15, 0.75: 2.18, 1: 2.20, 2: 2.30, 3: 2.38, 4: 2.46, 5: 2.55, 6: 2.62, 7: 2.70,
-               8: 2.77, 9: 2.84, 10: 2.90, 12: 3.00, 15: 3.10, 20: 3.20, 25: 3.24, 30: 3.25}
-BOE = {"SONIA": 3.72, "5Y": 4.05, "10Y": 4.45, "20Y": 5.10}
+# ── the stack's market, dated 2026-11-02 ─────────────────────────────────────────────────────────
+# The rates curves are the synthetic market's on that date (market_data/synthetic_rates.py), as the hosted demo's
+# are since 0.55.0: no published fixing or yield. The spots and the funding rates are round numbers set by hand.
+RATE_CURVES = ("USD_SOFR", "EUR_ESTR", "GBP_SONIA")
 SPOTS = {"EURUSD": 1.0850, "GBPUSD": 1.2650, "USDJPY": 152.40, "BTCUSD": 108250.0, "ETHUSD": 3850.0, "SOLUSD": 182.0}
 FUNDING = {"BTC": 3.0, "ETH": 2.5, "SOL": 4.0}            # % p.a., continuous
 HW1F = {"a": 0.045, "sigma_bp": 78.0, "theta": 0.038, "basket_size": 16, "fit_rmse_bp": 3.1}
@@ -150,9 +146,7 @@ def seed_market_data(db, uid: uuid.UUID) -> dict:
     d = VALUATION_DATE
     counts: dict[str, int] = {}
     curves = {
-        "USD_SOFR": f.build_usd_sofr(SOFR, UST_PAR),
-        "EUR_ESTR": f.build_eur_estr(ESTR, EUR_AAA_PAR),
-        "GBP_SONIA": f.build_gbp_sonia(BOE),
+        **{c: f.build_rates_curve(c, d) for c in RATE_CURVES},
         "USD_SWVOL_ATM": f.build_swvol_atm(),
     }
     for pair in SPOTS:

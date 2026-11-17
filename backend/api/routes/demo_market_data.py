@@ -30,7 +30,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from db.session import get_db
-from market_data import demo_feed, deribit
+from market_data import demo_feed, deribit, synthetic_rates
 from settlement import store as fixing_store
 from . import demo
 from .news import _secret_ok
@@ -529,6 +529,10 @@ def sources(db: Session = Depends(get_db)):
         venue += [{"curve": f"{deribit.pair(a)}_FIXING", "provider": f"{deribit.delivery_source(a)}, daily at {deribit.DELIVERY_TIME} (public API, unauthenticated)",
                    "kind": "public", "url": deribit.DELIVERY_URL} for a in deribit.ASSETS]
     return {"enabled": enabled(), "sources": demo_feed.SOURCES + venue, "latest": latest,
-            "assumptions": {"USD_OIS_MINUS_UST_bp": demo_feed.USD_OIS_MINUS_UST,
-                            "EUR_OIS_MINUS_AAA_bp": demo_feed.EUR_OIS_MINUS_AAA,
-                            "GBP_OIS_MINUS_GILT_bp": demo_feed.GBP_OIS_MINUS_GILT}}
+            # the whole recipe of the synthetic rates market, so a reader can make the curves again
+            "assumptions": {"rates": "synthetic: a Nelson-Siegel par curve per currency with hand-set parameters, moved each business day "
+                                     "by level, slope and curvature factors drawn from a seeded hash; no publisher's fixing or yield is read",
+                            "parameters_set_on": synthetic_rates.SET_ON.isoformat(),
+                            "parameters_long_end_overnight_less_long_end_hump_tau": {c: list(v) for c, v in synthetic_rates.PARAMS.items()},
+                            "daily_shock_bp": synthetic_rates.SIGMA_BP, "carried_to_next_day": synthetic_rates.PHI,
+                            "business_days_carried": synthetic_rates.K, "shared_share_of_variance": synthetic_rates.GLOBAL_SHARE}}

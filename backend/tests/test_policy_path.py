@@ -92,7 +92,10 @@ def test_policy_path_route_without_a_snapshot_degrades():
 
 def test_flat_negative_curve_still_bootstraps():
     from market_data import demo_feed as f
-    r = pp.implied_path(f.build_chf_saron(-0.068), date(2026, 10, 29))
+    flat = [{"tenor": "ON", "quote_type": "OISDeposit", "rate": -0.068, "enabled": True}] + [
+        {"tenor": t, "quote_type": "OIS", "rate": -0.068, "enabled": True} for t in f.OIS_TENORS[1:]]
+    assert len(flat) == 33
+    r = pp.implied_path(flat, date(2026, 10, 29))
     assert r["term_structure"] is True and len(r["path"]) == 24
     assert all(-0.25 < p["rate"] < 0.1 for p in r["path"])
 

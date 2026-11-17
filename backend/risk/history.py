@@ -1,19 +1,21 @@
-"""Risk-factor history from public sources, stored as the template user's market snapshots.
+"""Risk-factor history, stored as the template user's market snapshots.
 
 The daily demo rebuild writes today's curves and spots to the template account; the
 backfill writes the same shapes for past dates, so one table holds the whole series and
 tomorrow's tick simply appends. Per curve, the risk factors are the quote tenors (par
 rates in percent); per pair, the spot; per vol surface, every quote (tenor and type). Changes are
 taken between consecutive stored dates: absolute basis points for rates (hundredths of a point for
-vols, the same convention), log returns for spots."""
+vols, the same convention), log returns for spots.
+
+Rates are the synthetic market's own history since 0.55.0 (market_data/synthetic_rates.py): the curve of every
+business day from the generator that makes today's, so a history and today's curve cannot disagree. Until then
+the rates history was built from published fixings and government yields; those rows are replaced when the
+backfill runs. Spots are read from public sources as before."""
 from __future__ import annotations
 
-import csv
-import io
 import json
 import logging
 import math
-import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -21,17 +23,16 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from market_data import demo_feed as feed
+from market_data import synthetic_rates
 
 log = logging.getLogger("rijeka.risk")
 
-NYFED_SOFR_RANGE = "https://markets.newyorkfed.org/api/rates/secured/sofr/search.json?startDate={a}&endDate={b}"
-ECB_ESTR_RANGE = "https://data-api.ecb.europa.eu/service/data/EST/B.EU000A2X2A25.WT?startPeriod={a}&endPeriod={b}&format=csvdata"
-ECB_AAA_RANGE = "https://data-api.ecb.europa.eu/service/data/YC/B.U2.EUR.4F.G_N_A.SV_C_YM.{keys}?startPeriod={a}&endPeriod={b}&format=csvdata"
 FX_RANGE = "https://api.frankfurter.dev/v1/{a}..{b}?base=USD&symbols=EUR,GBP,JPY,CHF,AUD,CAD"
 COINBASE_CANDLES = "https://api.exchange.coinbase.com/products/{asset}-USD/candles?granularity=86400&start={a}T00:00:00Z&end={b}T00:00:00Z"
 CRYPTO = ("BTC", "ETH", "SOL")
-RATE_CURVES = ("USD_SOFR", "EUR_ESTR", "GBP_SONIA")
-SOURCE = "DEMO · history backfill (public sources)"
+RATE_CURVES = feed.RATE_CURVES
+SOURCE = "DEMO · history backfill (public sources for spots)"
+RATES_SOURCE = synthetic_rates.SOURCE
 MARKET_LIKE = "DEMO · Deribit%"          # deribit.SOURCE_PREFIX: observed marks, not built history
 
 
@@ -53,63 +54,14 @@ def _get(url: str, attempts: int = 3) -> str:
 
 # ── fetchers over a date range ───────────────────────────────────────────────
 
-def ust_history(start: date, end: date) -> dict[date, dict[float, float]]:
-    """Every daily par curve in the Treasury monthly XML files covering [start, end]."""
-    out: dict[date, dict[float, float]] = {}
-    d = start.replace(day=1)
-    while d <= end:
-        try:
-            xml = _get(feed.UST_XML_URL.format(yyyymm=d.strftime("%Y%m")))
-            for e in re.findall(r"<m:properties>(.*?)</m:properties>", xml, re.S):
-                m = re.search(r"<d:NEW_DATE[^>]*>([0-9]{4}-[0-9]{2}-[0-9]{2})", e)
-                if not m:
-                    continue
-                dd = date.fromisoformat(m.group(1))
-                pts = {}
-                for field, yrs in feed._UST_FIELDS.items():
-                    v = re.search(rf"<d:{field}[^>]*>([-0-9.]+)<", e)
-                    if v:
-                        pts[yrs] = float(v.group(1))
-                if len(pts) >= 8 and start <= dd <= end:
-                    out[dd] = pts
-        except Exception as e:          # noqa: BLE001 — a missing month is a gap, not a failure
-            log.warning("UST %s: %s", d.strftime("%Y-%m"), e)
-        d = (d.replace(day=28) + timedelta(days=4)).replace(day=1)
-    return out
-
-
-def sofr_history(start: date, end: date) -> dict[date, float]:
-    body = _get(NYFED_SOFR_RANGE.format(a=start.isoformat(), b=end.isoformat()))
-    return {date.fromisoformat(r["effectiveDate"]): float(r["percentRate"]) for r in json.loads(body).get("refRates", [])}
-
-
-def estr_history(start: date, end: date) -> dict[date, float]:
-    rows = feed._ecb_csv_last(_get(ECB_ESTR_RANGE.format(a=start.isoformat(), b=end.isoformat())))
-    return {d: v for _, d, v in rows}
-
-
-def ecb_aaa_history(start: date, end: date) -> dict[date, dict[float, float]]:
-    rows = feed._ecb_csv_last(_get(ECB_AAA_RANGE.format(keys="+".join(feed._ECB_AAA_KEYS), a=start.isoformat(), b=end.isoformat())))
-    out: dict[date, dict[float, float]] = {}
-    for key, d, v in rows:
-        m = re.search(r"PY_(\d+)([MY])$", key)
-        if m:
-            out.setdefault(d, {})[int(m.group(1)) / (12 if m.group(2) == "M" else 1)] = v
-    return {d: pts for d, pts in out.items() if len(pts) >= 6}
-
-
-def boe_history(start: date, end: date) -> dict[date, dict[str, float]]:
-    text_ = _get(feed.BOE_IADB_URL.format(dfrom=start.strftime("%d/%b/%Y")), attempts=5)
-    out: dict[date, dict[str, float]] = {}
-    for r in csv.reader(io.StringIO(text_)):
-        if len(r) >= 5 and re.match(r"\d{2} \w{3} \d{4}", r[0]):
-            try:
-                d = datetime.strptime(r[0], "%d %b %Y").date()
-                vals = [float(x) for x in r[1:5]]
-            except ValueError:
-                continue
-            if start <= d <= end:
-                out[d] = {"SONIA": vals[0], "5Y": vals[1], "10Y": vals[2], "20Y": vals[3]}
+def rates_history(start: date, end: date, curves=RATE_CURVES) -> dict[str, dict[date, list[dict]]]:
+    """{curve_id: {date: quotes}} for every business day from start to end, from the synthetic generator: the same
+    pillars the daily rebuild writes (demo_feed.build_rates_curve), carried along the days in one pass."""
+    years = [1.0 / 365.0 if t == "ON" else feed.tenor_years(t) for t in feed.OIS_TENORS]
+    out: dict[str, dict[date, list[dict]]] = {}
+    for c in curves:
+        out[c] = {d: [feed._q(t, r, "OISDeposit" if t == "ON" else "OIS") for t, r in zip(feed.OIS_TENORS, row)]
+                  for d, row in synthetic_rates.history(c, years, start, end)}
     return out
 
 
@@ -149,26 +101,9 @@ def crypto_history(start: date, end: date) -> dict[date, dict[str, float]]:
 # ── build and store ──────────────────────────────────────────────────────────
 
 def build_days(start: date, end: date) -> dict[str, dict[date, list[dict]]]:
-    """{curve_id: {date: quotes}} for every history day we can build from the sources."""
-    out: dict[str, dict[date, list[dict]]] = {c: {} for c in RATE_CURVES}
-    ust, sofr = ust_history(start, end), sofr_history(start, end)
-    for d, par in ust.items():
-        s = sofr.get(d) or sofr.get(d - timedelta(days=1)) or sofr.get(d - timedelta(days=3))
-        if s is not None:
-            out["USD_SOFR"][d] = feed.build_usd_sofr(s, par)
-    try:
-        aaa, estr = ecb_aaa_history(start, end), estr_history(start, end)
-        for d, par in aaa.items():
-            e = estr.get(d) or estr.get(d - timedelta(days=1)) or estr.get(d - timedelta(days=3))
-            if e is not None:
-                out["EUR_ESTR"][d] = feed.build_eur_estr(e, par)
-    except Exception as e:              # noqa: BLE001
-        log.warning("ECB history: %s", e)
-    try:
-        for d, row in boe_history(start, end).items():
-            out["GBP_SONIA"][d] = feed.build_gbp_sonia(row)
-    except Exception as e:              # noqa: BLE001
-        log.warning("BoE history: %s", e)
+    """{curve_id: {date: quotes}} for every history day: the rates curves from the generator, the spots from the
+    public sources (a source that fails leaves a gap, not an error)."""
+    out: dict[str, dict[date, list[dict]]] = rates_history(start, end)
     spots: dict[date, dict[str, float]] = {}
     for src in (fx_history, crypto_history):
         try:
@@ -203,7 +138,11 @@ def backfill(db: Session, user_id, years: float = 2.0, end: Optional[date] = Non
     end = end or date.today()
     start = end - timedelta(days=int(365 * years))
     days = build_days(start, end)
-    written = store(db, user_id, days, overwrite=overwrite)
+    # a rates curve is the generator's on every date, so its rows are always rewritten (the same numbers on a second
+    # run; the rows built from published fixings before 0.55.0 are replaced); a spot's row is kept unless asked
+    rates = {c: v for c, v in days.items() if c in RATE_CURVES}
+    written = store(db, user_id, rates, overwrite=True, source=RATES_SOURCE)
+    written.update(store(db, user_id, {c: v for c, v in days.items() if c not in RATE_CURVES}, overwrite=overwrite))
     # the vol surfaces follow from the stored series (risk/vols.py); synthetic either way, so always rewritten
     from risk import vols
     vdays = vols.history_days(db, user_id, start, end)
@@ -256,16 +195,16 @@ def status(db: Session, user_id) -> dict[str, Any]:
     return {r.curve_id: {"observations": int(r.n), "from": r.a.isoformat(), "to": r.b.isoformat()} for r in rows}
 
 
-# ── fetch here, store there ──────────────────────────────────────────────────
-# Some public sites refuse a cloud provider's address (the Bank of England does), so the
-# history can be built on another machine (a GitHub runner, a desk) and posted to the API:
-#   python -m risk.history --curves GBP_SONIA --years 2 --post https://api --secret ...
+# ── fetch here, store there ───────────────────────────────────────────────────────
+# A public site can refuse a cloud provider's address, so the spots' history can be built on another machine (a
+# GitHub runner, a desk) and posted to the API. Rates need no fetching: the API makes them (rates_history).
+#   python -m risk.history --curves SPOTS --years 2 --post https://api --secret ...
 
 def main(argv: Optional[list[str]] = None) -> int:
     import argparse
     import httpx
-    ap = argparse.ArgumentParser(description="Build risk-factor history from public sources and post it to a Rijeka API.")
-    ap.add_argument("--curves", default="GBP_SONIA", help="comma-separated curve ids to build (rates: USD_SOFR, EUR_ESTR, GBP_SONIA; SPOTS for FX and crypto)")
+    ap = argparse.ArgumentParser(description="Build risk-factor history and post it to a Rijeka API.")
+    ap.add_argument("--curves", default="SPOTS", help="comma-separated: SPOTS for FX and crypto (fetched), or a rates curve id (made by the generator; the API makes these itself)")
     ap.add_argument("--years", type=float, default=2.0)
     ap.add_argument("--post", help="API base URL; without it the counts are printed only")
     ap.add_argument("--secret", help="cron secret for X-Rijeka-Cron")
@@ -274,16 +213,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     end = date.today(); start = end - timedelta(days=int(365 * a.years))
     want = {c.strip().upper() for c in a.curves.split(",") if c.strip()}
     days: dict[str, dict[date, list[dict]]] = {}
-    if "USD_SOFR" in want:
-        ust, sofr = ust_history(start, end), sofr_history(start, end)
-        days["USD_SOFR"] = {d: feed.build_usd_sofr(s_, par) for d, par in ust.items()
-                            if (s_ := sofr.get(d) or sofr.get(d - timedelta(days=1)) or sofr.get(d - timedelta(days=3))) is not None}
-    if "EUR_ESTR" in want:
-        aaa, estr = ecb_aaa_history(start, end), estr_history(start, end)
-        days["EUR_ESTR"] = {d: feed.build_eur_estr(e, par) for d, par in aaa.items()
-                            if (e := estr.get(d) or estr.get(d - timedelta(days=1)) or estr.get(d - timedelta(days=3))) is not None}
-    if "GBP_SONIA" in want:
-        days["GBP_SONIA"] = {d: feed.build_gbp_sonia(row) for d, row in boe_history(start, end).items()}
+    days.update(rates_history(start, end, [c for c in RATE_CURVES if c in want]))
     if "SPOTS" in want:
         for src in (fx_history, crypto_history):
             for d, pairs in src(start, end).items():
