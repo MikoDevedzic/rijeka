@@ -76,9 +76,9 @@ bill of health.
 
 | Product | Engine | Independent validation |
 |---|---|---|
-| IRS / OIS | `pricing/ir_swap.py` | v0.4.2 report, 38 tests vs Bloomberg; open for re-validation on the period-end discounting item |
-| European swaption | `pricing/swaption.py` | Bloomberg delta USD 3 on USD 10m 5Y; open |
-| Cap / floor | `pricing/cap_floor.py` | 0.1% at matched vol; open |
+| IRS / OIS | `pricing/ir_swap.py` | QuantLib on every commit (44 comparisons: NPV, DV01, par rates, a seasoned period); open for re-validation on the period-end discounting item |
+| European swaption | `pricing/swaption.py` | QuantLib on every commit (33 comparisons: price, vega, delta against a curve bump); open |
+| Cap / floor | `pricing/cap_floor.py` | QuantLib on every commit (15 comparisons: price, vega against a replica); open |
 | SABR surface | `pricing/sabr.py` | internal fit diagnostics only; **validator wanted** |
 | Bermudan (HW1F tree) | `pricing/bermudan_swaption.py` | gate vs Bachelier; **validator wanted** |
 | HW1F calibration | `pricing/calibration.py` | Jamshidian check 0.01%; **validator wanted** |
@@ -106,6 +106,6 @@ Specific asks get answers, so here are the specific asks. Write to
 - **TEACH** — a university or graduate programme that wants to use the desk
   in a course: write, and say what the course needs.
 - **DATA** — an openly licensed curve and vol set for teaching, so no classroom
-  depends on a Bloomberg seat.
+  depends on a terminal seat.
 
 Nothing here is an offer of employment or equity.

@@ -14,8 +14,8 @@ while IFS='|' read -r name mod st; do
   gh issue create --repo MikoDevedzic/rijeka --title "[validation] $name" --label validation --label "help wanted" \
      --body "$(printf "$BODY_TMPL" "$mod" "$st")"
 done <<'ROWS'
-IRS / OIS|pricing/ir_swap.py|v0.4.2 report (38 tests vs Bloomberg). Re-validation wanted on the period-end vs payment-date discounting item (methodology §3).
-European swaption|pricing/swaption.py|Bloomberg delta USD 3 on USD 10m 5Y at matched vol. Open for independent replication, including off-market strikes via SABR.
+IRS / OIS|pricing/ir_swap.py|QuantLib on every commit (44 comparisons). Re-validation wanted on the period-end vs payment-date discounting item (methodology §3).
+European swaption|pricing/swaption.py|QuantLib on every commit (33 comparisons). Open for independent replication, including off-market strikes via SABR.
 Cap / floor / collar|pricing/cap_floor.py, pricing/cap_vol_strip.py|0.1% at matched vol. Open for independent replication of the caplet strip and the collar.
 SABR surface (β=0 normal)|pricing/sabr.py|Internal fit diagnostics only. First independent validator wanted: refit the quoted smiles and compare parameters and RMSE.
 Bermudan swaption (HW1F trinomial tree)|pricing/bermudan_swaption.py|Gate vs Bachelier (0.5% ATM, 1% wings). First independent validator wanted: tree convergence, early-exercise boundary, comparison with another implementation.

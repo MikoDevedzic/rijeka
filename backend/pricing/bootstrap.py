@@ -2,7 +2,7 @@
 Rijeka Curve Bootstrap Engine - Sprint 4G
 NPV = $0.0000 for any CCY, any tenor (1W, 1M, 9M, 18M, 1Y, 5Y, 30Y, 50Y...).
 
-Proven correct for the exact Bloomberg USD SOFR curve structure (33 quotes).
+Checked on the USD SOFR curve's quote structure (33 quotes) against QuantLib (tests/reference/test_ref_curve.py).
 
 Key insight: df(spot) must be FROZEN as an explicit Curve pillar.
 Without this, the Curve's interpolation for df(spot) changes as pillars are

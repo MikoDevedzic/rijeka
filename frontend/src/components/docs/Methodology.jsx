@@ -280,7 +280,7 @@ export default function Methodology() {
               <p className="quiet">These pages and the PDF are made from the same LaTeX source, and the evidence beside each section from the model inventory; a test fails when either has moved on without the other.</p>
               {doc && <><h3>Version history</h3><ul>{doc.history.map((h, k) => <li key={k} dangerouslySetInnerHTML={html(h)} />)}</ul>
                 <h3>References</h3><ul>{doc.references.map((h, k) => <li key={k} dangerouslySetInnerHTML={html(h)} />)}</ul></>}
-              <p className="quiet">What is validated against what: <code>docs/VALIDATION.md</code>; the one-table view: <code>docs/model_inventory.md</code>; the April 2026 Bloomberg comparison is kept in <code>model_validation/</code>. Engine and standard: Apache-2.0. Platform: Business Source License 1.1.</p>
+              <p className="quiet">What is validated against what: <code>docs/VALIDATION.md</code>; the one-table view: <code>docs/model_inventory.md</code>. Engine and standard: Apache-2.0. Platform: Business Source License 1.1.</p>
             </div>
           )}
 

@@ -11,7 +11,7 @@ The gate exists because:
      underlying breaks this assumption.
   2. HW1F calibration against swaption grid alone does not fit cap vol.
   3. Jamshidian decomposition requires monotonicity check + MC fallback.
-  4. No Bloomberg fixtures exist for this instrument class.
+  4. No reference rows exist for this instrument class.
 
 Phase 2 lifts this gate after all four conditions are met.
 

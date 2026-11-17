@@ -1,7 +1,17 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.32). Commits on `main` are the detail.
+methodology document carries its own version (v1.33). Commits on `main` are the detail.
+
+## 0.51.1 · 17 November 2026
+
+**The documents name their evidence: the QuantLib reference suite.** No figure changes. The methodology is v1.33.
+
+- Every product is repriced in QuantLib on every commit (`backend/tests/reference`), and that suite is the
+  evidence the validation notes, the model inventory, the methodology and the README point to. The older
+  comparison report kept under `model_validation/` and the sentences that cited it are removed; the folder is
+  where an independent validator's report is filed.
+- Comments in the pricing code that named a convention by a vendor's screen name it as the market's convention.
 
 ## 0.51.0 · 17 November 2026
 

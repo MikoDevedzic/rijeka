@@ -2,7 +2,7 @@
 Sprint 12 / Sprint 13 Patch 2 — CAPPED_FLOATER / FLOORED_FLOATER pricer tests
 
 Pure unit tests for the embedded caplet / floorlet strip pricer and its
-integration with price_leg. No DB, no backend process, no Bloomberg fixture.
+integration with price_leg. No DB, no backend process, no outside fixture.
 
 Sprint 12 shipped the strip math and the integration via legacy column
 paths (Sprint 12 `cap_strike_schedule` / `floor_strike_schedule`
@@ -23,7 +23,7 @@ Covered:
   - Composition: collar as two entries on one leg
 
 Not covered (deferred):
-  - Bloomberg SWPM round-trip (Sprint 12 item 13)
+  - a round-trip against an outside pricer (Sprint 12 item 13)
   - Property-based invariants via Hypothesis (Sprint 12 item 11)
   - Vol surface skew interpolation (existing cap_floor tests cover this)
 """

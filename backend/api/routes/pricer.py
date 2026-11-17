@@ -431,7 +431,7 @@ def _check_ir_swaption_embedded_options_gate(instrument_type: Optional[str], leg
     Phase 2 lifts this gate after:
       1. Joint HW1F calibration to swaption + cap grids
       2. Monotonicity-checked Jamshidian with MC fallback
-      3. Bloomberg fixtures (≥3) passing within tolerance
+      3. QuantLib reference rows (≥3) passing within tolerance
       4. Methodology note published on rijeka.app
 
     The gate is intentionally located at the pricer boundary — NOT the
@@ -1016,7 +1016,7 @@ class SwaptionRequest(BaseModel):
     is_payer:       bool          = True       # True = payer swaption
     pay_freq_y:     float         = 1.0        # coupon frequency (1=annual, 0.5=semi)
     valuation_date: Optional[date] = None
-    # Underlying swap dates — carry T+2 spot lag from frontend, match Bloomberg
+    # Underlying swap dates — carry T+2 spot lag from frontend (the market's convention)
     effective_date: Optional[date] = None     # underlying swap start (post-expiry + T+2)
     maturity_date:  Optional[date] = None     # underlying swap end
     # Curve

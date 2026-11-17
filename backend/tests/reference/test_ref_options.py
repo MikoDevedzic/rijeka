@@ -131,8 +131,8 @@ def cap_rows() -> list[Row]:
         comp = _ql_compounded(h, sched, K, vol_bp / 1e4, call)
         rows.append(Row("Cap/floor", case, "NPV vs QuantLib compounded-SOFR caplet pricer", r.npv, comp, "% of premium", 3.0,
                         kind="convention", scale=100 / comp,
-                        cause="convention: Bachelier on the period forward with option time to mid-period (Rijeka, documented as "
-                              "Bloomberg's) vs QuantLib's model of the backward-looking accrual; caps +0.6 to +2.0%, the floor −2.5%"))
+                        cause="convention: Bachelier on the period forward with option time to mid-period (Rijeka, the market's "
+                              "convention) vs QuantLib's model of the backward-looking accrual; caps +0.6 to +2.0%, the floor −2.5%"))
     return rows
 
 

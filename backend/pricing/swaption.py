@@ -100,7 +100,7 @@ def _annuity_and_forward(
     Return (annuity_factor, forward_swap_rate, debug) from OIS curve.
 
     Uses swap_effective_date / swap_maturity_date when provided — these carry
-    the correct T+2 spot lag and business day adjustment, matching Bloomberg.
+    the correct T+2 spot lag and business day adjustment (the market's convention).
 
     Falls back to int(t × 365.25) arithmetic when dates are not provided
     (backward-compatible behaviour for ATM resolution without trade context).
@@ -123,7 +123,7 @@ def _annuity_and_forward(
         end_date   = vd + timedelta(days=int((expiry_y + tenor_y) * 365.25))
 
     # ── Build annual payment schedule backward from end_date ─────────────────
-    # Mirrors Bloomberg: coupons at start + 1Y, start + 2Y, ..., end
+    # The market's schedule: coupons at start + 1Y, start + 2Y, ..., end
     # Counted from end_date (end − k periods), so a month-end or 29 February anchor does not drift.
     # pay_freq_y is the period length in years (1.0 annual, 0.5 semi-annual, 0.25 quarterly).
     step_months = max(1, int(round(12 * pay_freq_y)))
@@ -151,7 +151,7 @@ def _annuity_and_forward(
     prev = start_date
     for pd in pay_dates:
         days = (pd - prev).days
-        delta = days / 360.0   # ACT/360 matching Bloomberg money mkt basis
+        delta = days / 360.0   # ACT/360, the money market basis
         df_i  = discount_curve.df(pd)
         annuity += delta * df_i
         coupon_dfs.append(df_i)

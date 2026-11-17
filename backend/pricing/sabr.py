@@ -36,7 +36,7 @@ from typing import Optional, Tuple, List, Dict
 
 log = logging.getLogger(__name__)
 
-# Standard OTM strike offsets in bp (matching Bloomberg VCUB columns)
+# Standard OTM strike offsets in bp (the usual columns of a swaption vol cube)
 STRIKE_OFFSETS_BP = [-200, -100, -50, -25, 0, 25, 50, 100, 200]
 
 

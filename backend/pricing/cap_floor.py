@@ -2,7 +2,7 @@
 # ============================================================
 # Cap / Floor / Collar pricer — Bachelier (Normal) model
 # ============================================================
-# Conventions (from Bloomberg DES USCNSQ):
+# Conventions (the market's, for a cap on compounded SOFR):
 #   Underlying  : SOFRRATE Index (in-arrears)
 #   Pay Freq    : Quarterly
 #   Day Count   : ACT/360
@@ -306,7 +306,7 @@ def price_cap(
         F   = fwd_rates[i]
         df  = dfs[i]
         tau = cp['tau']
-        T   = option_time(valuation_date, cp['start_date'], cp['end_date'])   # T_mid: midpoint of accrual period (matches Bloomberg)
+        T   = option_time(valuation_date, cp['start_date'], cp['end_date'])   # T_mid: midpoint of accrual period (the market's convention)
         pv  = notional * tau * df * bachelier_call(F, cap_rate, T, sigma)
         npv += pv
         caplets.append({
@@ -402,7 +402,7 @@ def price_floor(
     npv, caplets = 0.0, []
     for i, cp in enumerate(sched):
         F  = fwd_rates[i]; df = dfs[i]; tau = cp['tau']
-        T  = option_time(valuation_date, cp['start_date'], cp['end_date'])   # T_mid: midpoint (matches Bloomberg)
+        T  = option_time(valuation_date, cp['start_date'], cp['end_date'])   # T_mid: midpoint (the market's convention)
         pv = notional * tau * df * bachelier_put(F, floor_rate, T, sigma)
         npv += pv
         caplets.append({'period':cp['period'],
