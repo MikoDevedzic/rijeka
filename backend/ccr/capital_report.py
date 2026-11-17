@@ -82,7 +82,8 @@ def prepare_set(db, user: dict, cp, trades: list, asof: date, mkt, st: dict, tpl
     mtm = sum(float(x.get("mtm_usd") or 0.0) for x in P["today"])
     from ccr.valuation import flows_per_step
     return {"V": P["V_rn"], "t": P["p_rn"].t, "p0": P["p0"], "rows": rows, "gross": P["gross"], "mtm": mtm, "flows": flows_per_step(P["ns"], P["p_rn"], P["fx"]),
-            "n_paths": P["n_paths"], "months": P["months"], "ns": P["ns"], "today": P["today"], "empty": False, "csa": P["csa"]}
+            "n_paths": P["n_paths"], "months": P["months"], "ns": P["ns"], "today": P["today"], "empty": False, "csa": P["csa"],
+            "deflator": P.get("deflator")}
 
 
 def _cash_fraction(regime: COL.Regime) -> float:
@@ -123,7 +124,7 @@ def run_set(S: dict, regime: COL.Regime, ci: CAP.CapitalInputs, cp_cds_bp: float
     # payment is not a market move over the margin period
     paid = paid_by(S.get("flows")) if eco.collateralised else None
     wf = run_waterfall(V[:, 1:], float(V[:, 0].mean()), p0, params, eco, np.random.default_rng(seed), reg_csa=reg, capital=ci, saccr=S["rows"] or None,
-                       settled=None if paid is None else np.broadcast_to(-paid, V[:, 1:].shape))
+                       settled=None if paid is None else np.broadcast_to(-paid, V[:, 1:].shape), deflator=S.get("deflator"))
     V0 = float(S["mtm"])
     C0 = (regime.recognised_fraction("received") * max(V0 - eco.threshold_cp, 0.0)) if eco.collateralised else 0.0
     nica = wf.im_0 if reg.im_exchanged else 0.0

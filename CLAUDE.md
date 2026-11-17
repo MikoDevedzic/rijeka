@@ -291,3 +291,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   between coupon dates in the credit engine, a swaption's XVA that was a swap's, a capital add-on blind to the asset
   class). A request field the server's model does not declare is dropped without a word: read the answer for what
   was asked.
+- An outside engine's figure is a benchmark only after its own run with no volatility returns today's value at every
+  date, on the curve the comparison uses: ORE's example set-up discounted on another curve and filled its overnight
+  fixings 4 bp high, and the first "difference" found was that. And an expectation of a product is not the product of
+  the expectations: where an adjustment is defined on a discounted amount, discount on the path.

@@ -29,8 +29,10 @@ import QuantLib as ql
 
 from ccr import calibration as C
 from ccr.options import value_caplets, value_swaption
-from ccr.simulate import add_months, bond, simulate
+from ccr.simulate import add_months, bond, deflator, simulate
 from ccr.valuation import leg_schedule, value_swap
+from pricing.csa import CSA
+from pricing.xva_engine import WaterfallParams, run_waterfall
 from tests.reference.refmarket import VAL, Row, assert_rows, null_index, qd, replica_handle, rijeka_curve, set_eval
 
 KEY = "RATES:USD_SOFR"
@@ -179,9 +181,54 @@ def exposure_rows(p=None) -> list[Row]:
     return rows
 
 
+def cva_rows(p=None, on_path: bool = True) -> list[Row]:
+    """The waterfall's unilateral CVA and DVA against a strip of QuantLib swaptions (0.53.0; the first outside
+    figure for an adjustment). With the exposure read once a year, on the coupon dates, a receive-fixed swap's
+    unilateral CVA is LGD · Σ (receiver swaption expiring at t_k into the remaining swap) · (default probability in
+    year k), and its DVA the payer swaptions' with our own default: QuantLib's Jamshidian prices under the same
+    Hull-White (a, σ) and curve, the survival curve the waterfall's own (spread over LGD). The waterfall is run on
+    the engine's paths at those dates with each path's own discounting (ccr.simulate.deflator). `on_path` False
+    is the waterfall as it stood until 0.53.0, the expected exposure times today's discount factor."""
+    p = p or _paths()
+    set_eval(VAL)
+    h = replica_handle(rijeka_curve())
+    years_ = 6
+    mat = date(VAL.year + years_, VAL.month, VAL.day)
+    whole = ql.Schedule(qd(VAL), qd(mat), ql.Period(1, ql.Years), ql.NullCalendar(), ql.Unadjusted, ql.Unadjusted, ql.DateGeneration.Backward, False)
+    probe = ql.OvernightIndexedSwap(ql.Swap.Receiver, N, whole, 0.03, ql.Actual360(), null_index(h))
+    probe.setPricingEngine(ql.DiscountingSwapEngine(h))
+    K = probe.fairRate()
+    und, _legs = _underlying(VAL, years_, K, payer=False)
+    engine = ql.JamshidianSwaptionEngine(ql.HullWhite(h, A, SIGMA), h)
+    idx = [p.grid.index(date(VAL.year + k, VAL.month, VAL.day)) for k in range(1, years_)]
+    V = np.stack([value_swap(und, p, i, FX) for i in idx], axis=1)
+    w = deflator(p, KEY)[:, [i - 1 for i in idx]] if on_path else None
+    tt = [0.0] + [float(p.t[i]) for i in idx]
+    p0 = [float(p.p0[KEY](t)) for t in tt] + [float(p.p0[KEY](tt[-1] + 1.0))]
+    lgd, cp_bp, own_bp = 0.6, 120.0, 60.0
+    P = WaterfallParams(notional=N, maturity_y=float(years_), dt=1.0, theta=0.04, lgd=lgd, own_lgd=lgd, cp_cds_bp=cp_bp, own_cds_bp=own_bp)
+    wf = run_waterfall(V, 0.0, p0, P, CSA.uncollateralised(), deflator=w)
+    q = lambda bp, k: math.exp(-(bp / 1e4 / lgd) * k)
+    cva = dva = 0.0
+    for k in range(1, years_):
+        when = date(VAL.year + k, VAL.month, VAL.day)
+        sch = ql.Schedule(qd(when), qd(mat), ql.Period(1, ql.Years), ql.NullCalendar(), ql.Unadjusted, ql.Unadjusted, ql.DateGeneration.Backward, False)
+        px = {}
+        for kind in (ql.Swap.Receiver, ql.Swap.Payer):
+            sw = ql.Swaption(ql.OvernightIndexedSwap(kind, N, sch, K, ql.Actual360(), null_index(h)), ql.EuropeanExercise(qd(when)))
+            sw.setPricingEngine(engine)
+            px[kind] = sw.NPV()
+        cva -= lgd * px[ql.Swap.Receiver] * (q(cp_bp, k - 1) - q(cp_bp, k))
+        dva += lgd * px[ql.Swap.Payer] * (q(own_bp, k - 1) - q(own_bp, k))
+    how = "discounted on each path" if on_path else "the expected exposure at today's discount factor"
+    return [Row("XVA waterfall", f"6Y receive-fixed swap at par, unilateral {name}, {how}", "the waterfall on a yearly grid vs a strip of QuantLib Jamshidian swaptions",
+                mine, theirs, "% of the QuantLib figure", 1.5, scale=100.0 / abs(theirs), extra={"relative": mine / theirs - 1.0})
+            for name, mine, theirs in (("CVA", wf.cva_unilateral, cva), ("DVA", wf.dva_unilateral, dva))]
+
+
 def all_rows() -> list[Row]:
     p = _paths()
-    return martingale_rows(p) + swaption_rows(p) + caplet_rows(p) + exposure_rows(p)
+    return martingale_rows(p) + swaption_rows(p) + caplet_rows(p) + exposure_rows(p) + cva_rows(p)
 
 
 def test_paths_are_risk_neutral_martingales():
@@ -200,3 +247,17 @@ def test_a_swaps_expected_exposure_matches_a_strip_of_quantlib_swaptions():
     # and not only within the sampling error: within two per cent of the QuantLib price at every date and side
     # (measured 17 November 2026 at 40,000 paths: −0.6 to +1.3 %, the largest two standard errors out)
     assert max(abs(r.extra["relative"]) for r in rows) < 0.02, [(r.case, round(r.extra["relative"], 4)) for r in rows]
+
+
+def test_the_waterfalls_unilateral_cva_and_dva_match_a_strip_of_quantlib_swaptions():
+    """Measured 17 November 2026 at 40,000 paths: CVA −0.37 %, DVA +0.43 % of the QuantLib figure with the exposure
+    discounted on each path; −2.58 % and +2.75 % with the expected exposure at today's discount factor, which is
+    what the waterfall charged until 0.53.0 and what the second assertion keeps visible."""
+    p = _paths()
+    rows = cva_rows(p)
+    assert len(rows) == 2
+    assert_rows(rows)
+    old = cva_rows(p, on_path=False)
+    # a receiver is owed most where discounting is lightest: the product of the means understates what it is owed
+    # and overstates what it owes, each by more than the whole tolerance of the row above
+    assert old[0].extra["relative"] < -0.02 and old[1].extra["relative"] > 0.02, [(r.case, round(r.extra["relative"], 4)) for r in old]

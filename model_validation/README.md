@@ -3,7 +3,7 @@
 Where the evidence is.
 
 **Current evidence.** Every product is repriced in QuantLib on every commit: `backend/tests/reference/`
-(434 comparisons, each with a tolerance that fails the build when exceeded), summarised in the
+(436 comparisons, each with a tolerance that fails the build when exceeded), summarised in the
 methodology's Independent reference section. The validation charter, the per-product status and the
 open findings are in [`docs/VALIDATION.md`](../docs/VALIDATION.md); the one-table view is
 [`docs/model_inventory.md`](../docs/model_inventory.md).

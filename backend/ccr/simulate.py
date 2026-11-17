@@ -173,6 +173,16 @@ def account(paths: Paths, key: str) -> np.ndarray:
     return cache[key]
 
 
+def deflator(paths: Paths, key: str) -> np.ndarray:
+    """On every path, the discount factor to each grid date after today over today's discount factor for that date:
+    1 / (A_k · P(0, t_k)), shape (paths, T). Its mean at every date is one (a bond's discounted price is a
+    martingale on the account), so an expected exposure weighted by it and multiplied by P(0, t_k) is the expected
+    exposure discounted on its own path, E[D(t_k) · V⁺(t_k)] (pricing.xva_engine.run_waterfall, `deflator`)."""
+    A = account(paths, key)
+    p0 = np.array([max(float(paths.p0[key](float(x))), 1e-12) for x in paths.t[1:]])
+    return 1.0 / (A[:, 1:] * p0[None, :])
+
+
 def growth(paths: Paths, key: str, a: float, b: float) -> np.ndarray:
     """What one unit placed at time a has grown to by time b (years from as-of, a <= b), on every path: the interest a
     floating period accrues between the two, with the unit. Between grid dates it grows with the account; from a to

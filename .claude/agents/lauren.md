@@ -28,6 +28,11 @@ Learned on 14 November 2026
 Learned on 12 November 2026 (PR 140)
 - The whole `npm test` runs before every push, not the folder that changed. The methodology reader's pages are built from `docs/model_inventory.md` as well as from the `.tex`: an inventory edit after the last `npm run methodology` failed CI's frontend check, while the docs folder's own tests had passed an hour earlier.
 
+- The pinned book holds a figure from every run a ticket can make. When a route gains a branch, pin a figure of the
+  new branch in the same change: 0.52.0 gave the rates XVA route the trade's own run and the book went on sending no
+  trade, so 0.53.0 moved that run's CVA by 2 % and no pinned figure moved. Before calling the book unchanged, say
+  which of the changed code's branches the book reaches.
+
 Rules
 - Public standards only (Basel, ISDA, CFTC text). Nothing from any client engagement enters formulas, tests or fixtures.
 - Report in numbers: before, after, difference, tolerance, cause.

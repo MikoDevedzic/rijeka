@@ -79,6 +79,16 @@ def compute(client, auth, ids) -> dict:
         x = _ok(client.post("/api/xva/simulate", json={**base, "csa": csa}, headers=auth), f"xva {name}")["xva"]
         for k in ("cva", "dva", "fca", "fba", "kva", "mva", "colva", "xva_total"):
             out[f"xva.{name}.{k}"] = float(x[k])
+    # the trade itself on the paths (the rates ticket's run since 0.52.0; pinned since 0.53.0: the cases above send no
+    # trade and are answered with the generic swap, so the ticket's own run had no pinned figure)
+    for name in ("none", "bilateral"):
+        x = _ok(client.post("/api/xva/simulate", json={"paths": 500, "seed": 42, "npv": out["swap.npv"], "valuation_date": ASOF, "curve_id": "USD_SOFR",
+                                                       "trade": _swap_trade(ids), "csa": cases[name]}, headers=auth), f"xva of the trade, {name}")
+        assert x["basis"]["kind"] == "TRADE" and x["basis"]["exposure_discounting"] == "ON_PATH"
+        for k in ("cva", "dva", "fca", "fba", "kva", "mva", "xva_total"):
+            out[f"xva.trade.{name}.{k}"] = float(x["xva"][k])
+    from api.routes import _limits
+    _limits._buckets.clear()            # six XVA runs a minute per user: the book makes more than six (conftest clears it once per test)
     x = _ok(client.post("/api/xva/simulate", json={**base, "csa": cases["bilateral"], "collateral": {"posted": {"USDC": 1}, "received": {"USDC": 1}}},
                         headers=auth), "xva usdc")
     for k in ("mva", "colva", "xva_total"):

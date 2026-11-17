@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from ccr import calibration as C
 from ccr.exposure import csa_from_counterparty, cva as cva_of, exposures
-from ccr.simulate import simulate
+from ccr.simulate import deflator as deflator_of, simulate
 from ccr.valuation import NettingSet, flows_per_step, netted_paths
 from db.models import Counterparty, Trade
 from pnl.explain import LIVE
@@ -124,6 +124,9 @@ def netting_set_paths(db: Session, user: dict, cp, trades: list, asof: date, mkt
     gross = sum(abs(float(it["trade"].notional or 0)) * fx.get((it["trade"].notional_ccy or "USD").upper(), 1.0) for it in ns.items)
     out.update(empty=False, rn=rn, rw=rw, rate_keys=rate_keys, curves=curves, spots=spots, spot_rates=spot_rates, flat_base=flat_base, fx=fx,
                months=months, n_paths=n_paths, csa=csa, p_rn=p_rn, V_rn=V_rn, today=today, p0=p0, gross=gross,
+               # each path's own discounting on the curve p0 is read from, over that curve's (0.53.0): the charges
+               # are on the exposure discounted on its path
+               deflator=deflator_of(p_rn, usd_key),
                usd_key=usd_key, pairs=pairs, currencies=currencies)
     return out
 
@@ -149,7 +152,7 @@ def counterparty_report(db: Session, user: dict, cp, trades: list, asof: date, m
         p_rw, ex = p_rn, None
     cv = cva_of(V_rn, p_rn.t, p0, csa, gross, cp_cds_bp=float(st["cp_cds_bp"]), lgd=float(st["lgd"]),
                 flows=flows_per_step(ns, p_rn, fx) if csa.collateralised else None,
-                maturity_y=max((ns.max_maturity - asof).days / 365.25, 1 / 12))
+                maturity_y=max((ns.max_maturity - asof).days / 365.25, 1 / 12), deflator=P.get("deflator"))
     grid = [d.isoformat() for d in p_rw.grid[1:]]
     out = {**base, "empty": False, "asof": asof.isoformat(), "grid": grid, "t": [float(x) for x in p_rw.t[1:]], "n_paths": n_paths, "months": months,
            "csa_model": {"preset": csa.preset, "collateralised": csa.collateralised, "threshold_usd": csa.threshold_cp, "mta_usd": csa.mta, "mpor_days": csa.mpor_days, "im_exchanged": csa.im_exchanged},

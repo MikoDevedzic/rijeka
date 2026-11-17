@@ -30,6 +30,19 @@ Credit triangle: hazard = spread / LGD, survival Q(t) = exp(−s·t/LGD) with th
 
 WWR is a wrong-way-risk multiplier (1 by default). Reported negative: a cost.
 
+The exposure is discounted on its own path (0.53.0). EE(t_i) · P(0,t_i) above stands for E[D(t_i) · V⁺(t_i)], and
+|ENE(t_i)| · P(0,t_i) in §4 for E[D(t_i) · V⁻(t_i)]; FCA, FBA and ColVA read the same. Where rates are simulated
+(a rates ticket's trade, a counterparty's netting set) the engine computes it as P(0,t_i) · E[w_i · V⁺(t_i)], with
+w_i = D(t_i) / P(0,t_i) on each path (`ccr.simulate.deflator`: the account of the paths; its mean is one). Until
+0.53.0 it took P(0,t_i) · E[V⁺(t_i)], which leaves out that a swap's exposure and its discount factor move together:
+a receive-fixed swap is owed most where rates have fallen and discounting is lightest. On a five-year receiver that
+was 2 % of CVA too little and 2 % of DVA too much; a payer the other way. Checked against a strip of QuantLib
+swaptions (`tests/reference/test_ref_ccr.py`: CVA 0.37 %, DVA 0.43 % from the strip; 2.6 % and 2.8 % before) and
+against ORE on one swap run like for like (weekly grid, the same survival curves: CVA 0.24 % and DVA 0.17 % below
+ORE's). Not changed: a currency or digital-asset ticket (no rates on its paths), the generic swap a request without a
+trade is answered with, KVA and MVA (expected amounts on today's curve), and the profiles shown, which are
+undiscounted.
+
 First to default (0.50.0): the counterparty's default costs us only if we have not defaulted before it, CVA = −LGD · E[1{τ_cp ≤ T, τ_cp < τ_own} · D(τ_cp) · V⁺(τ_cp)]. With the two defaults independent of each other the condition is our survival at the moment of the counterparty's default, read on the grid at the middle of the step. With constant intensities the exact probability of the counterparty defaulting first in a step is Q_cp·Q_own at its start × λ_cp/(λ_cp+λ_own) × (1 − e^(−(λ_cp+λ_own)Δ)); the midpoint rule is that to second order (measured over five years monthly: 1e-7 at 250 and 120 bp, 2e-6 at 1,200 and 900 bp, 9e-5 with one party at 4,000 bp; `tests/test_first_to_default.py`; the model validator's own derivation, by the exact probability and by simulating the two default times, agrees to 1e-7 at 85 and 42 bp). Under a wrong-way link (§8e) a linked party's survival is read on each path, in its own default probability and in the weight on the other's; a tied party's `independent` figure is its charge with its own default on the curve and the other party as it is. Until 0.50.0 CVA and DVA carried no such weight (unilateral); those two figures are still in every answer under `unilateral`. Not done: no dependence between the two defaults beyond the market path, and no simultaneous default; close-out at the risk-free value; the weight is read at the default date, not at the close-out (a survivor that defaults inside the margin period is not counted); the CVA capital charge is unilateral by rule.
 
 ## 4. DVA
@@ -434,6 +447,8 @@ CDS: counterparty 85bp, own 42bp (flat, or a term curve); LGD 40 % both sides; f
 
 - One factor for rates (HW1F) and a flat vol for forwards: no smile in the exposure.
 - A digital asset's simulated level is backtested against five years of closes (§8e): the regimes are inside their bands, one vol is not; the vol in that test is realised, not the implied vol a ticket carries; the up side sits at the edge of its band on BTC and SOL; five years cannot certify a 1st percentile.
+- Interest inside a monthly step accrues at the rate known when the step begins: the spread of a swap's value just before a yearly coupon is about 1 % low on the monthly grid (measured against ORE, which errs by as much the other way; the two meet on a weekly grid). 0.1 % on CVA.
+- The generic swap (a rates request that carries no trade) and its workbook read the expected exposure at today's discount factor, not discounted on the path (0.53.0 changed the trade's own run and the counterparty runs).
 - CVA and DVA use the credit triangle with a flat LGD; no recovery uncertainty, no correlation between credit and market beyond the WWR multiplier.
 - Initial margin is the desk's amount or the engine's estimate at current volatility (above); ISDA SIMM is licensed and is not implemented.
 - KVA's SA-CCR add-on is by asset class since 4 November 2026 (`pricing/sa_ccr.py`: rates, FX, the cryptoasset class, options at their supervisory delta); the CVA-capital leg and the collateral regimes are described in `docs/capital.md`.

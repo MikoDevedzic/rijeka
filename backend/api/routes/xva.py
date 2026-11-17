@@ -534,7 +534,7 @@ def _trade_paths(trade, db: Session, user: dict, a: float, sigma: float, curve, 
     each floating period with its accrued interest, a swaption as an option until its expiry and the swap after),
     on the run's curve and the run's (a, σ). 422 when the engine cannot value the instrument on paths yet."""
     from ccr import calibration as C
-    from ccr.simulate import simulate as simulate_factors
+    from ccr.simulate import deflator as deflator_of, simulate as simulate_factors
     from ccr.valuation import NettingSet, flows_per_step, netted_paths, years
     from pnl.market import Market
     uid = user["sub"]
@@ -578,7 +578,9 @@ def _trade_paths(trade, db: Session, user: dict, a: float, sigma: float, curve, 
     return {"paths": V[:, 1:], "v0": float(V[:, 0].mean()), "flows": fl, "T": T, "dt": dt, "p0_grid": p0_grid,
             "notional": abs(float(trade.notional or 0.0)), "maturity_y": max(years(val_date, it["maturity"]), dt), "currency": ccy,
             "kind": it["kind"], "instrument": str(trade.instrument_type or "").upper(), "options": ns.options,
-            "grid": [d.isoformat() for d in p.grid[1:]]}
+            "grid": [d.isoformat() for d in p.grid[1:]],
+            # each path's discounting over the curve's, per grid date: the charges read the exposure discounted on its path
+            "deflator": deflator_of(p, key)}
 
 
 @router.post("/simulate")
@@ -655,6 +657,7 @@ def simulate(
 
     own = _own_trade(body, db, user)
     paid = None
+    path_deflator = None
     maturity_y = body.maturity_y
     curve_source = "bootstrapped" if (body.curves and body.curves[0].quotes) else "db-snapshot"
     if own is not None:
@@ -665,6 +668,7 @@ def simulate(
         tp = _trade_paths(own, db, user, a, sigma, mkt_curve, val_date, n_paths, int(body.seed))
         paths, T, DT, p0_grid, N, maturity_y = tp["paths"], tp["T"], tp["dt"], tp["p0_grid"], tp["notional"], tp["maturity_y"]
         paid = -np.cumsum(tp["flows"], axis=1)[:, 1:]          # the waterfall's `settled`: the payments' jumps, sign turned
+        path_deflator = tp["deflator"]
         anchor_v0 = tp["v0"]
         # the pricer's value and the paths' own value at the start are two engines' figures for one trade: both are
         # reported, and the paths are not moved to meet the pricer (the exposure is the paths' own)
@@ -734,6 +738,9 @@ def simulate(
         # a margined run draws the value a margin period back with the trade's coupons taken out: a coupon is not a
         # market move over the margin period (ccr/exposure.paid_by, 0.51.0)
         settled=paid if (paid is not None and csa.collateralised) else None,
+        # the charges on the exposure discounted on its own path (0.53.0); the generic swap below has no account
+        # on its paths and stays on today's curve, and its answer says so
+        deflator=path_deflator,
     )
     ee, ene, pfe = wf.ee, wf.ene, wf.pfe
     cva, dva, fca, fba_v, kva, mva, colva = wf.cva, wf.dva, wf.fca, wf.fba, wf.kva, wf.mva, wf.colva
@@ -793,7 +800,7 @@ def simulate(
         # the figures, not left to be found.
         "vol_basis": _vol_basis(_run_curve_id(body)),
         # What the paths valued: the trade itself, or the generic swap of a request that did not carry it.
-        "basis": basis,
+        "basis": {**basis, "exposure_discounting": "ON_PATH" if wf.discounted_on_path else "TODAYS_CURVE"},
         "unilateral": unilateral_block(wf),
         "params": {
             "a":        a,

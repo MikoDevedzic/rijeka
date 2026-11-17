@@ -1,7 +1,41 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.34). Commits on `main` are the detail.
+methodology document carries its own version (v1.35). Commits on `main` are the detail.
+
+## 0.53.0 · 17 November 2026
+
+**The exposure is discounted on its own path.** The methodology is v1.35. Found by running one swap through an
+outside engine and this one like for like.
+
+- **What was wrong.** CVA, DVA, FCA and FBA are each an expectation of a discounted amount, E[D(t) · V±(t)]. The
+  waterfall took the expected exposure and multiplied it by today's discount factor, P(0,t) · E[V±(t)]. The two are
+  the same only where discounting and exposure are independent, and on a rates trade they are not: a receive-fixed
+  swap is owed most on the paths where rates have fallen, which are the paths discounted least. On a five-year
+  receiver CVA was 2 % too small and DVA 2 % too large; a payer the other way; more on a longer trade.
+- **What it does now.** Where rates are simulated (a rates ticket's trade, a counterparty's netting set, the
+  incremental charge, the capital report's cost profiles) each path's exposure carries its own discounting. ColVA
+  reads the margin balances the same way. The answer of a rates run says which it used (`basis.exposure_discounting`).
+- **Two outside figures, the first for an adjustment.** Against a strip of QuantLib swaptions on a yearly grid, a
+  six-year receiver's unilateral CVA stands 0.37 % from the strip and its DVA 0.43 % (they stood 2.6 % below and
+  2.8 % above): two new rows of the reference suite, 436 in all, and a test that the old figure is outside the
+  tolerance. Against ORE (the Open Source Risk Engine, 1.8.17) on a five-year overnight swap with the same curve,
+  dates, Hull-White parameters and survival curves, on a weekly grid: expected exposure within 1 % at every date
+  read, unilateral CVA 0.24 % and DVA 0.17 % below ORE's. The ORE run was made by hand and is not part of the build.
+- **What moved**, on the booked five-year swap paying 3.75 % with no margin (500 paths): CVA −2,600.54 to −2,548.09,
+  FCA −1,682.70 to −1,648.76, DVA 2,507.85 to 2,542.69, FBA 776.24 to 787.02; KVA and MVA the same. Margined, a
+  cent on each.
+- **The pinned book now holds the ticket's own run.** Its XVA cases sent no trade and were answered with the
+  generic swap, so this change moved none of its figures; fourteen figures of the trade's own run are added.
+
+Not done, and said: a currency or digital-asset ticket simulates no rates and is unchanged; a request that carries
+no trade is still answered with the generic swap, at today's discount factor, and the `xva_rates` workbook rebuilds
+that; KVA and MVA are expected amounts on today's curve; the exposure chart is undiscounted, so CVA cannot be read
+off it by a discount factor; a netting set in several currencies is discounted on the account of the curve its values
+are reported on. Also found by the same comparison and not mended: interest inside a monthly step accrues at the rate
+known when the step begins, so the spread of a swap's value just before a yearly coupon is about 1 % low (0.1 % on
+CVA). Not yet run against ORE: margined exposure, FCA and FBA, a swaption, the currency products. The first XVA P&L
+and counterparty report after this release carry the change as if the market had moved.
 
 ## 0.52.0 · 17 November 2026
 

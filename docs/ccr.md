@@ -35,6 +35,8 @@ From the counterparty record: NO_CSA → uncollateralised; VM or VM_IM → daily
 
 EE(t) the mean of E⁺; PFE_q(t) its q-quantile over paths at 95, 97.5 and 99 %; EPE the time average of EE over the first year; the peak PFE 95 and its date; the largest PFE 95 inside each tenor bucket; current exposure max(V₀ − C₀, 0). The XVA reserves come from the risk-neutral paths through the XVA waterfall with the counterparty's default spread (85bp and 40 % LGD until the record carries its own) and are reported on the P&L page.
 
+The charges read from these paths (CVA, DVA, FCA, FBA, ColVA: `ccr/exposure.cva`) take the exposure discounted on its own path since 0.53.0, E[D(t)·V±(t)] with D the paths' account (`ccr.simulate.deflator`), not the expected exposure at today's discount factor; `docs/xva.md` §3 has the reason and the two outside figures. EE and PFE above stay undiscounted.
+
 ## Limits
 
 Credit limits are to counterparty credit what VaR limits are to market risk. The risk manager sets them on `PFE_PEAK:<counterparty>`, `PFE:<counterparty>:<bucket>`, `EPE:<counterparty>` and `CE:<counterparty>` (and, for a CVA desk, `CVA:<counterparty>` on the reserve) with the same utilisation and breach rules as the market risk limits; breaches reach the home inbox after the daily run.
