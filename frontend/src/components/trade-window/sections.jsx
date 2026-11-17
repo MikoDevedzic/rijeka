@@ -411,7 +411,7 @@ export function TradeFooter({
         </div>
         {/* it closes the window and changes nothing: on a trade already booked it says so, CANCEL TRADE on the CONFIRM tab being another thing */}
         <button className="tbw-btn tbw-btn-cancel" data-testid="tbw-close" onClick={onCancel}>{booked ? 'CLOSE' : 'CANCEL'}</button>
-        <button className="tbw-btn tbw-btn-price" data-action="price" aria-keyshortcuts={ariaKey('price')} title="Price: F4" disabled={pricing} onClick={onPrice}>
+        <button className="tbw-btn tbw-btn-price" data-action="price" aria-keyshortcuts={ariaKey('price')} title="Price: F4" disabled={pricing || booking} onClick={onPrice}>
           {pricing ? '⏳ PRICING…' : '▶ PRICE'}{!pricing && <Keycap id="price" />}
         </button>
         <button

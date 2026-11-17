@@ -84,8 +84,13 @@ no valuation block (it never had).
 A new ticket opens on a digital-asset forward; the asset classes read CRYPTO, FX, RATES.
 
 **A booked ticket's terms are locked**, in the window it was booked in as in one opened from the blotter: TRADE's
-fields, lists and chips, the fees, and the schedules on DETAILS. The title says TERMS LOCKED and NEW TRADE starts
-another from the same terms. What sets a run and not the trade (the XVA tab's margin terms, a scenario) stays open.
+fields, lists and chips, the fees, and the schedules on DETAILS. The title says LOCKED and NEW TRADE starts
+another from the same terms. What sets a run and not the trade (the XVA tab's margin terms, a scenario) stays open. A control that is off reads as
+off: a coloured button and a locked schedule's buttons at 45%, a locked field at 85%.
+
+**The launch home's trades** are the trader's home's table (the same classes and sizes), the width of the steps above
+it; under 640px its notional and maturity columns are dropped. The launch home's small labels are 11px, as the
+table's are.
 
 **A ticket can leave the page.** OWN WINDOW on its tab bar, and the green light of its title bar, open it in a
 browser window of its own (`/ticket`), which the ticket fills: it can sit on another screen while the blotter stays

@@ -278,7 +278,7 @@ test('the term sheet says AS BOOKED for the quote that was booked; its terms are
   // the booked ticket's terms take no typing: what is on screen stays the trade
   await tab('TRADE')
   await expect(win.getByTestId('fx-notional'), 'a booked ticket is not typed over').toBeDisabled()
-  await expect(win.locator('.tbw-title')).toContainText('TERMS LOCKED')
+  await expect(win.locator('.tbw-title')).toContainText('LOCKED')
   expect(await win.getByTestId('tbw-terms').locator('input:enabled, select:enabled, button:enabled').count(), 'no field, list or chip of a booked ticket can be changed').toBe(0)
   await tab('DETAILS')
   await expect(done, 'still the sheet of the trade').toBeVisible()
@@ -296,15 +296,16 @@ test('the term sheet says AS BOOKED for the quote that was booked; its terms are
   expectClean(problems)
 })
 
-// Vera, 2026-11-09 (second pass): the quote that is marked as booked is the one that was sent. A price that lands
-// while the booking is still out is on screen when the answer comes back, and it is not the trade.
-test('a price that lands while the booking is out is not headed AS BOOKED: the sheet names the quote that was sent', async ({ app, problems }) => {
+// Vera, 2026-11-09 (second pass): the quote that is marked as booked is the one that was sent. Since 17 November 2026
+// the ticket locks when BOOK is pressed: while the booking is out nothing can be typed and nothing priced, so no other
+// price can be on screen when the answer comes back.
+test('while the booking is out the ticket takes no typing and no pricing: the trade and the sheet are the quote that was sent', async ({ app, problems }) => {
   const win = await open(app, 'FX', /^FX FORWARD$/i)
   await counterparty(app, win)
   await settled(win)
   const tab = name => win.getByRole('button', { name, exact: true }).click()
   const sent = []
-  // the booking is held for two and a half seconds: long enough for a changed notional to be priced and shown
+  // the booking is held for two and a half seconds: long enough to try the ticket while it is out
   await app.route(/\/api\/trades\/$/, async route => {
     if (route.request().method() !== 'POST') return route.continue()
     sent.push(route.request().postDataJSON())
@@ -317,20 +318,18 @@ test('a price that lands while the booking is out is not headed AS BOOKED: the s
   await win.getByRole('button', { name: /BOOK TRADE/ }).click()
   await expect.poll(() => sent.length, { message: 'the booking is out' }).toBe(1)
 
-  // while it is out: another notional, priced and on screen before the booking answers
-  const repriced = app.waitForResponse(r => /\/api\/currency\/forward\/price$/.test(r.url()) && r.ok())
-  await notional.fill('7000000')
-  await repriced
-  await settled(win)
+  // while it is out: the terms and PRICE are off
+  await expect(notional, 'nothing is typed while the booking is out').toBeDisabled()
+  await expect(win.locator('[data-action="price"]'), 'nothing is priced while the booking is out').toBeDisabled()
   const res = await booking
   expect(res.status(), 'the trade books').toBeLessThan(300)
   const trade = await res.json()
-  expect(Number(trade.notional), 'the trade is the one that was sent, not the one typed afterwards').toBe(plain(first))
-  expect(plain(first)).not.toBe(7000000)
+  expect(Number(trade.notional), 'the trade is the one that was sent').toBe(plain(first))
+  await expect(notional, 'and the ticket stays locked once it is booked').toBeDisabled()
 
   await tab('DETAILS')
-  await expect(win.getByText('TERM SHEET · AS IT WILL BE BOOKED', { exact: true }), 'what is on screen is a proposal: it is not the trade that was booked').toBeVisible()
-  await expect(win.getByText('TERM SHEET · AS BOOKED', { exact: true })).toHaveCount(0)
+  await expect(win.getByText('TERM SHEET · AS BOOKED', { exact: true }), 'what is on screen is the trade that was booked').toBeVisible()
+  await expect(win.getByText('TERM SHEET · AS IT WILL BE BOOKED', { exact: true })).toHaveCount(0)
   await app.unrouteAll({ behavior: 'ignoreErrors' })
   expectClean(problems)
 })

@@ -161,7 +161,7 @@ test('rates ticket: price, XVA with the saving on chain, collateral, book, confi
   // a booked trade is a record: the ticket it was booked in takes no more typing, on TRADE or on DETAILS, and says so
   const terms = win.getByTestId('tbw-terms')
   await expect(terms, 'the terms lock when the trade is booked').toHaveJSProperty('disabled', true)
-  await expect(win.locator('.tbw-title')).toContainText('TERMS LOCKED')
+  await expect(win.locator('.tbw-title')).toContainText('LOCKED')
   await app.screenshot({ path: 'e2e/.out/shots/ticket-booked-locked.png' })
   expect(await terms.locator('input:enabled, select:enabled, button:enabled').count(), 'no field, list or chip of a booked ticket can be changed').toBe(0)
   await win.getByRole('button', { name: 'DETAILS', exact: true }).click()

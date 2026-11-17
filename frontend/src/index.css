@@ -787,6 +787,9 @@ button, input, select, textarea { font-family: inherit; }
 /* a button whose colour says something keeps it, and gains the foot and the lift */
 .rj-press:not(.cert *) { box-shadow: var(--btn-shadow); }
 .rj-press:not(.cert *):hover:not(:disabled) { filter: brightness(1.22); }
+/* a coloured button that cannot be pressed, and a locked schedule's own buttons and cells, read as off */
+.rj-press:not(.cert *):disabled, .ldt-locked button:disabled { opacity: 0.45; cursor: default; }
+.ldt-locked input:disabled { opacity: 0.85; cursor: default; }
 /* the brass ones: the action of the view, on the same foot */
 :root :is(.btn.primary, .tbw-btn-book, .bl-new-trade-btn, .doc-btn.primary):not(.cert *) { box-shadow: var(--btn-shadow-brass); }
 /* pressed: every button goes down onto its foot. A button that cannot be pressed is flat: no face, no foot. */

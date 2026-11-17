@@ -346,7 +346,7 @@ export default function LegDetailsTab({
   }
 
   return (
-    <div className='tbw-no-drag' style={S.root}>
+    <div className={locked ? 'tbw-no-drag ldt-locked' : 'tbw-no-drag'} style={S.root}>
       <div style={S.banner}>
         <span style={S.structLbl}>DERIVED STRUCTURE</span>
         <span style={S.structVal}>{structLabel}</span>

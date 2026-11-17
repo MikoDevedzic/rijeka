@@ -1253,7 +1253,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             : viewMode
               ? (bookedTrade.trade_ref || bookedTrade.id) + ' · ' + status
               : bookedTrade
-                ? '✓ BOOKED · ' + (bookedTrade.trade_ref || bookedTrade.id) + ' · TERMS LOCKED'
+                ? '✓ BOOKED · ' + (bookedTrade.trade_ref || bookedTrade.id) + ' · LOCKED'
                 : bookErr
                   ? 'ERROR: ' + bookErr
                   : 'NEW TRADE'}
