@@ -96,7 +96,7 @@ export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], 
                 {riskOn && !rep && risk.err && <p className="th-tight">The risk report could not be read ({why429(risk.err)}).</p>}
                 {!riskOn && pnlOn && <p className="th-tight">Limits and risk by tenor are part of Market risk, which is {off('MARKET_RISK')} for this desk.</p>}
                 {/* neither the statement nor the risk picture: the band they stand in is not drawn empty, and this says where they are */}
-                {!riskOn && !pnlOn && <p className="th-tight" data-testid="th-held">{'P&L, limits and risk by tenor are part of P&L and Market risk, which are '}{off('MARKET_RISK')} for this desk. <button className="dh-link" onClick={() => navigate('/configurations/modules')}>MODULES →</button></p>}
+                {!riskOn && !pnlOn && <p className="th-tight" data-testid="th-held">{'P&L, limits and risk by tenor are part of P&L and Market risk, which are '}{off('MARKET_RISK')} for this desk. <button className="dh-link" style={{ marginLeft: 4 }} onClick={() => navigate('/configurations/modules')}>MODULES →</button></p>}
               </>}
           {path}
         </div>

@@ -31,8 +31,10 @@ def _swap():
 
 def test_a_swaps_coupon_and_spread_are_set_on_their_own_legs_in_the_forms_units():
     t, legs = _swap()
+    for leg in legs:
+        leg.embedded_options, leg.terms = [], {}          # as a booked swap's legs are: empty, not absent
     offered = {x["key"]: x for x in A.amendable(t, legs)}
-    assert set(offered) == {"notional", "fixed_rate", "spread"}
+    assert set(offered) == {"notional", "fixed_rate", "spread"} and not any(x["why_not"] for x in offered.values())
     assert offered["fixed_rate"]["now"] == "3.480003" and offered["fixed_rate"]["unit"] == "%" and offered["spread"]["now"] == "0" and offered["spread"]["unit"] == "bp"
     changes, s = A.changes_for(t, legs, {"fixed_rate": "3.55", "spread": 12.5}, TODAY, reason="rate agreed again\nafter the fixing")
     assert "trade" not in changes
@@ -125,8 +127,17 @@ def test_what_cannot_be_amended_is_listed_with_its_reason_and_refused_in_the_sam
     assert [(x["key"], bool(x["why_not"])) for x in A.amendable(touch, [])] == [("notional", True)], "a touch has no strike, and its size is a payout"
     with pytest.raises(ValueError, match="has no strike to amend"):
         A.changes_for(touch, [], {"strike": 1}, TODAY)
-    cap = _trade(instrument_type="IR_CAP")
-    assert [x["key"] for x in A.amendable(cap, [_leg("FLOAT", spread=Decimal("0"))])] == ["notional"], "a cap's strike is not amended here yet"
+    for product in A.SIZED_ON_THE_NOTIONAL:
+        offered = A.amendable(_trade(instrument_type=product), [_leg("FLOAT", spread=Decimal("0"))])
+        assert [(x["key"], bool(x["why_not"])) for x in offered] == [("notional", True)], f"nothing of a {product} is amended here yet"
+        with pytest.raises(ValueError, match="sized on the notional"):
+            A.changes_for(_trade(instrument_type=product), [_leg("FLOAT")], {"notional": "20000000"}, TODAY)
+    for held, why in (({"embedded_options": [{"type": "CAP", "strike": 0.05}]}, "embedded option"), ({"terms": {"custom_cashflows": [{"date": "2027-01-01", "amount": 5}]}}, "entered by hand")):
+        t, legs = _swap()
+        for k, v in held.items():
+            setattr(legs[1], k, v)
+        assert why in {x["key"]: x for x in A.amendable(t, legs)}["notional"]["why_not"]
+        assert A.changes_for(t, legs, {"fixed_rate": "3.6"}, TODAY)[1]["terms"][0]["key"] == "fixed_rate", "its coupon is still its own"
     for request, why in (({}, "at least one term"), ({"maturity_date": "2030-01-01"}, "not a term an amendment can set"), ({"fixed_rate": "abc"}, "is a number"),
                          ({"fixed_rate": "250"}, "between -100 and 100"), ({"spread": "1e9"}, "basis points"), ({"notional": "1e40"}, "is a number")):
         with pytest.raises(ValueError, match=why):
@@ -134,6 +145,34 @@ def test_what_cannot_be_amended_is_listed_with_its_reason_and_refused_in_the_sam
     with pytest.raises(ValueError, match="above zero"):
         A.changes_for(_trade(asset_class="CRYPTO", instrument_type="CRYPTO_FORWARD", terms={"notional_amount": "10", "forward_price": "5"}, notional=Decimal("10")),
                       [], {"forward_price": "0"}, TODAY)
+    # figures no trade has are refused in words, never an arithmetic error: a notional the column cannot hold, a trade
+    # with a notional of zero, a product past what a decimal holds
+    with pytest.raises(ValueError, match="million million million"):
+        A.changes_for(*_swap(), {"notional": "1e18"}, TODAY)
+    zero, zlegs = _swap()
+    zero.notional = Decimal("0")
+    with pytest.raises(ValueError, match="no notional to raise"):
+        A.changes_for(zero, zlegs, {"notional": "5"}, TODAY)
+    tiny, tlegs = _swap()
+    tiny.notional = Decimal("0.000001")
+    with pytest.raises(ValueError, match="past what a trade can carry|outside what a trade can carry"):
+        A.changes_for(tiny, tlegs, {"notional": "9e17"}, TODAY)
+    big = _trade(asset_class="FX", instrument_type="FX_FORWARD", notional=Decimal("9e17"), terms={"base_notional": "900000000000000000", "quote_notional": "1", "forward_rate": "1.1"})
+    with pytest.raises(ValueError, match="outside what a trade can carry"):
+        A.changes_for(big, [], {"forward_rate": "9e11"}, TODAY)
+
+
+def test_an_options_premium_is_shown_and_stays_as_booked():
+    opt = _trade(asset_class="FX", instrument_type="FX_OPTION", structure="EUROPEAN", notional_ccy="EUR",
+                 terms={"base_notional": "10000000", "quote_notional": "11000000", "strike": "1.10", "quote_currency": "USD", "premium_amount": "125000", "premium_currency": "USD"})
+    offered = {x["key"]: x for x in A.amendable(opt, [])}
+    assert list(offered) == ["notional", "strike", "premium"]
+    assert offered["premium"]["now"] == "125000" and offered["premium"]["unit"] == "USD" and "stays as booked" in offered["premium"]["why_not"]
+    assert "premium stays as booked" in offered["strike"]["note"] and "The premium stays as booked" in offered["notional"]["note"]
+    with pytest.raises(ValueError, match="stays as booked: amending its premium is not built yet"):
+        A.changes_for(opt, [], {"premium": "130000"}, TODAY)
+    changes, _ = A.changes_for(opt, [], {"strike": "1.12"}, TODAY)
+    assert changes["trade"]["terms"]["premium_amount"] == "125000"
     gone, legs2 = _swap()
     gone.status = "TERMINATED"
     with pytest.raises(ValueError, match="only a pending or confirmed trade"):

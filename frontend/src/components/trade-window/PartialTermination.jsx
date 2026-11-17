@@ -5,6 +5,7 @@
 // their rules are in partial-termination.js.
 import { useState } from 'react'
 import { canPartiallyTerminate, partialProblem, partialBody, partialDone, fmtNotional } from './partial-termination'
+import Figures from './Figures'
 
 const todayIso = () => new Date().toISOString().slice(0, 10)
 
@@ -15,7 +16,7 @@ export default function PartialTermination({ trade, pkg = null, terminated = fal
   const [feeAmount, setFeeAmount] = useState('')
   const [feeDate, setFeeDate] = useState(todayIso())
   if (!canPartiallyTerminate(trade, { pkg, terminated }) || !onSubmit) {
-    return done ? <div className="tbw-mut" data-testid="partial-done" style={{ marginTop: 12, maxWidth: 520 }}>{partialDone(done)}</div> : null
+    return done ? <div className="tbw-mut" data-testid="partial-done" style={{ marginTop: 12, maxWidth: 520 }}><Figures text={partialDone(done)} /></div> : null
   }
   const form = { current: trade.notional, remaining, feeDirection, feeAmount, feeDate, today: todayIso() }
   const problem = partialProblem(form)
@@ -27,7 +28,7 @@ export default function PartialTermination({ trade, pkg = null, terminated = fal
   return (
     <div data-testid="partial-termination" style={{ marginTop: 12, maxWidth: 520 }}>
       {/* what the reduction that reopened this ticket did: above the control, where it is read first */}
-      {done && <div className="tbw-mut" data-testid="partial-done" style={{ marginBottom: 8, color: 'var(--text)' }}>{partialDone(done)}</div>}
+      {done && <div className="tbw-mut" data-testid="partial-done" style={{ marginBottom: 8, color: 'var(--text)' }}><Figures text={partialDone(done)} /></div>}
       {!open ? (
         <button className="tbw-btn" data-testid="partial-open" onClick={() => setOpen(true)}>◆ PARTIALLY TERMINATE</button>
       ) : (

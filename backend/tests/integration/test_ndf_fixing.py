@@ -48,6 +48,11 @@ def test_an_ndf_fixed_two_days_before_it_settles_is_worth_the_deliverable_forwar
     from pricing.calendars import ccy_to_calendar, joint, next_business_day
     spot = pairs["EURUSD"]["spot"]
     settle = next_business_day(date.today() + timedelta(days=92), joint(ccy_to_calendar("EUR"), ccy_to_calendar("USD")))     # a ticket settles on a business day
+    # the premise of this test is a settlement date that IS the spot date of its fixing date. After a holiday in one
+    # centre it is not (17 November 2026: 17 February 2027 follows Presidents' Day, the fixing's spot date is the
+    # 16th, and the fixed rate is the forward to the 16th, not the deliverable forward to the 17th): step past such a day
+    while spot_date(ndf_fixing_date(settle, "EUR", "USD"), False, "EUR", "USD") != settle:
+        settle = next_business_day(settle + timedelta(days=1), joint(ccy_to_calendar("EUR"), ccy_to_calendar("USD")))
     K = round(spot * 0.98, 4)
     q = lambda **over: _quote(client, auth_a, settlement_date=settle.isoformat(), forward_rate=K, **over)
     base_paid = q(settlement_currency="EUR")

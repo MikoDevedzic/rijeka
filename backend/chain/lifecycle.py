@@ -19,7 +19,7 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import desc
+from sqlalchemy import desc, or_
 from sqlalchemy.orm import Session
 
 from db.models import TradeEvent
@@ -32,16 +32,14 @@ def latest_attested_event(db: Session, trade_id: UUID) -> Optional[TradeEvent]:
     """The most recent event holding the current signed record. An AMENDED event that carries no attestation is a
     change made on the booking alone (a pending trade put right, or a trade whose record is on no chain: chain/
     amendment.py): it signs nothing and supersedes nothing, so the record before it is still the signed one."""
-    rows = (db.query(TradeEvent)
+    # such an event is written with no confirmation hash (api/routes/chain.py amend_terms); every AMENDED event that
+    # supersedes a record carries the new record's hash
+    return (db.query(TradeEvent)
               .filter(TradeEvent.trade_id == trade_id,
-                      TradeEvent.event_type.in_(ATTESTED_EVENT_TYPES))
+                      TradeEvent.event_type.in_(ATTESTED_EVENT_TYPES),
+                      or_(TradeEvent.event_type != "AMENDED", TradeEvent.confirmation_hash.isnot(None)))
               .order_by(desc(TradeEvent.event_seq))
-              .all())
-    for ev in rows:
-        if ev.event_type == "AMENDED" and not (ev.payload or {}).get("attestation"):
-            continue
-        return ev
-    return None
+              .first())
 
 
 def current_attestation(db: Session, trade_id: UUID) -> Optional[dict]:

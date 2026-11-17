@@ -39,8 +39,10 @@ booked trade from the app, and a new workspace's home never moved on from its fi
   chain, rates, the week ahead, news). Where P&L and Market risk are both off, the band they stand in is left out
   and one line says where they are.
 
-Not done, and said: an amendment of dates, of a schedule, of a cap's or a floor's strike, of a swaption, or of one
-leg of a package; the form lists a term it cannot change with the reason. An assignment (novation) is still an
+Not done, and said: an amendment of dates, of a schedule, of any term of a swaption, a cap, a floor or a collar
+(their options and premium are sized on the notional), of the notional of a leg with an embedded option or
+cashflows entered by hand, or of one leg of a package; the form lists a term it cannot change with the reason. An
+option's premium is shown in the form and stays as booked when its strike or notional is amended. An assignment (novation) is still an
 event's name and nothing more: as the standards define it, it closes the trade and opens a new one with a third
 party's signature, which is not built. Nothing moves a trade to LIVE or MATURED. An amendment carries no fee of its
 own. Where a record is signed and on no chain, an amendment changes the booking and the old signed record is the

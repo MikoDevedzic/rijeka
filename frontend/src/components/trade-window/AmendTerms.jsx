@@ -5,6 +5,7 @@
 // works out everything that changes (backend/chain/amendment.py); the helpers and their rules are in amend-terms.js.
 import { useState } from 'react'
 import { canAmend, amendProblem, amendBody, amendDone, amendWords, fmtTerm } from './amend-terms'
+import Figures from './Figures'
 
 export default function AmendTerms({ trade, pkg = null, terminated = false, busy = false, error = '', done = null, onLoad, onSubmit }) {
   const [open, setOpen] = useState(false)
@@ -14,7 +15,7 @@ export default function AmendTerms({ trade, pkg = null, terminated = false, busy
   const [reason, setReason] = useState('')
   const said = amendDone(done)
   if (!canAmend(trade, { pkg, terminated }) || !onSubmit || !onLoad) {
-    return said ? <div className="tbw-mut" data-testid="amend-done" style={{ marginTop: 12, maxWidth: 620 }}>{said}</div> : null
+    return said ? <div className="tbw-mut" data-testid="amend-done" style={{ marginTop: 12, maxWidth: 520 }}><Figures text={said} /></div> : null
   }
   const words = amendWords(can?.kind || (trade.status === 'PENDING' ? 'CORRECTION' : 'AMENDMENT'))
   const show = async () => {
@@ -30,9 +31,9 @@ export default function AmendTerms({ trade, pkg = null, terminated = false, busy
     if (ok) setOpen(false)
   }
   return (
-    <div data-testid="amend-terms" style={{ marginTop: 12, maxWidth: 620 }}>
+    <div data-testid="amend-terms" style={{ marginTop: 12, maxWidth: 520 }}>
       {/* what the amendment that reopened this ticket did: above the control, where it is read first */}
-      {said && <div className="tbw-mut" data-testid="amend-done" style={{ marginBottom: 8, color: 'var(--text)' }}>{said}</div>}
+      {said && <div className="tbw-mut" data-testid="amend-done" style={{ marginBottom: 8, color: 'var(--text)' }}><Figures text={said} /></div>}
       {!open ? (
         <button className="tbw-btn" data-testid="amend-open" onClick={show}>{words.open}</button>
       ) : (

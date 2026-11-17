@@ -262,3 +262,11 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   amendment that signs nothing would have hidden the signed record behind it.
 - Before a screen is designed for a request, the request is read against what is already built: asked for the
   trader's home, a new home was drawn where the one that exists was meant.
+- A change of a size is checked against everything sized on it: an increase of a notional was offered on a cap, whose
+  options and premium would not have moved, and an option's strike was amended with nothing said of its premium.
+- A bound checked in Python is the column's bound: a notional that passed the check and would not fit `numeric(24,6)`
+  was a server error where a refusal in words was meant.
+- A lifecycle action is run on a chain before it is reviewed: the first amendment journeys ran only where no record
+  is anchored, and the branch that signs and supersedes had no test.
+- A test that takes its dates from today states its premise in the dates it picks: the NDF fixing test assumed a
+  settlement date that is the spot date of its fixing date, and failed the day that date fell after a holiday.

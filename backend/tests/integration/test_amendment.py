@@ -134,6 +134,14 @@ def test_a_terminal_trade_a_package_leg_and_a_cap_are_refused_or_offered_only_wh
     assert gone.status_code == 422 and "only a pending or confirmed trade" in gone.text
     can = client.get(f"/api/chain/amendable/{j['trade']['id']}", headers=auth_a).json()
     assert can["terms"] == [] and "only a pending or confirmed trade" in can["why_not"]
-    if "IR_CAP" in booked:
-        keys = [t["key"] for t in client.get(f"/api/chain/amendable/{booked['IR_CAP']['id']}", headers=auth_a).json()["terms"]]
-        assert "fixed_rate" not in keys and "strike" not in keys, "a cap's strike is not amended here yet"
+    for product in ("IR_CAP", "IR_FLOOR", "IR_COLLAR", "IR_SWAPTION"):
+        if product in booked:
+            offered = client.get(f"/api/chain/amendable/{booked[product]['id']}", headers=auth_a).json()["terms"]
+            assert [(t["key"], bool(t["why_not"])) for t in offered] == [("notional", True)], f"nothing of a {product} is amended here yet"
+            r = _amend(client, auth_a, booked[product]["id"], {"notional": "999000000"})
+            assert r.status_code == 422 and "sized on the notional" in r.text, r.text[:300]
+    # a figure the booking's column cannot hold is refused in words, and nothing is written
+    j2 = _book(client, auth_a, B.swap(ids["a"], f"IT-AM-BIG-{_tag()}"))
+    huge = _amend(client, auth_a, j2["trade"]["id"], {"notional": "5e18"})
+    assert huge.status_code == 422, huge.text[:300]
+    assert [e["event_type"] for e in client.get(f"/api/trade-events/{j2['trade']['id']}", headers=auth_a).json()] == ["BOOKED"]

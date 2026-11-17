@@ -87,7 +87,8 @@ A new ticket opens on a digital-asset forward; the asset classes read CRYPTO, FX
 fields, lists and chips, the fees, and the schedules on DETAILS. The title says LOCKED and NEW TRADE starts
 another from the same terms. A term of a booked trade is changed on the CONFIRM tab (AMEND on a confirmed trade,
 CORRECT THE BOOKING on a pending one): a form like PARTIALLY TERMINATE's, each term with its value now under the
-field for the new one, and the ticket opened again on the trade as it then stands, saying what was done. What sets a run and not the trade (the XVA tab's margin terms, a scenario) stays open. A control that is off reads as
+field for the new one, and the ticket opened again on the trade as it then stands, saying what was done. Both forms
+are 520px wide, and the figures in the line that says what was done are set as figures. What sets a run and not the trade (the XVA tab's margin terms, a scenario) stays open. A control that is off reads as
 off: a coloured button and a locked schedule's buttons at 45%, a locked field at 85%.
 
 **The launch home is a workspace's first screen**: once a trade of its own is confirmed, or the card is skipped,

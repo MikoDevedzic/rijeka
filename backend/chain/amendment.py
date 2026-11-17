@@ -22,8 +22,11 @@ Nothing here touches a database or a chain. api/routes/chain.py applies the resu
 signatures when the trade's record is anchored, and straight onto the booking when it is not.
 
 Not handled, and refused in words: dates and schedules, a leg with a schedule of its own, an option whose size is a
-payout, a swaption, a cap or a floor, a trade with more than one fixed leg or more than one floating leg, and a leg
-of a package (the route refuses that one: the registry holds the package's hash).
+payout, any term of a swaption, a cap, a floor or a collar (their options and their premium are sized on the
+notional), the notional of a leg that carries an embedded option or cashflows entered by hand, a trade with more
+than one fixed leg or more than one floating leg, an option's premium (it is listed, so the form shows that it stays
+as booked when the strike or the notional moves), and a leg of a package (the route refuses that one: the registry
+holds the package's hash).
 """
 from __future__ import annotations
 
@@ -40,10 +43,14 @@ REASON_MAX = 200
 RATE_MAX_PCT = Decimal("100")                     # no coupon is outside +/-100 %
 SPREAD_MAX_BP = Decimal("10000")                  # nor a spread outside +/-10,000 bp
 PRICE_MAX = Decimal("1e12")                       # nor a rate, price or strike above this
+NOTIONAL_MAX = Decimal(10) ** 18                  # trades.notional and trade_legs.notional are Numeric(24, 6): below this
+SIZED_ON_THE_NOTIONAL = ("IR_SWAPTION", "IR_CAP", "IR_FLOOR", "IR_COLLAR")
 
 _NOTIONAL_IN_TERMS = ("notional_amount", "base_notional")
 LABELS = {"notional": "NOTIONAL", "fixed_rate": "FIXED RATE", "spread": "SPREAD", "forward_rate": "FORWARD RATE",
-          "forward_price": "FORWARD PRICE", "strike": "STRIKE"}
+          "forward_price": "FORWARD PRICE", "strike": "STRIKE", "premium": "PREMIUM"}
+PREMIUM_STAYS = "the premium stays as booked"
+OPTIONS = ("FX_OPTION", "CRYPTO_OPTION")
 UNITS = {"fixed_rate": "%", "spread": "bp"}
 
 
@@ -84,10 +91,17 @@ def amendable(trade, legs: list) -> list[dict]:
         why = None
         if payout:
             why = "this option's size is a payout, not a notional"
+        elif _itype(trade) in SIZED_ON_THE_NOTIONAL:
+            why = "this product's options and its premium are sized on the notional"
         elif any(_has(getattr(leg, "notional_schedule", None)) for leg in legs):
             why = "a leg of this trade has a notional schedule of its own"
+        elif any(_has(getattr(leg, "embedded_options", None)) for leg in legs):
+            why = "a leg of this trade carries an embedded option sized on the notional"
+        elif any(_has((getattr(leg, "terms", None) or {}).get("custom_cashflows")) for leg in legs):
+            why = "a leg of this trade carries cashflows entered by hand"
+        note = "upward only: an increase. To reduce it, partially terminate."
         out.append({"key": "notional", "label": LABELS["notional"], "now": plain(_dec(trade.notional)), "unit": trade.notional_ccy or "", "why_not": why,
-                    "note": "upward only: an increase. To reduce it, partially terminate."})
+                    "note": note + (f" {PREMIUM_STAYS.capitalize()}." if _itype(trade) in OPTIONS else "")})
     if _itype(trade) == "IR_SWAP":
         fixed, floating = _legs_of(legs, "FIXED"), _legs_of(legs, "FLOAT")
         if fixed:
@@ -113,7 +127,12 @@ def amendable(trade, legs: list) -> list[dict]:
         key, where = tk
         terms = dict(trade.terms or {})
         unit = str(terms.get("quote_currency") or terms.get("price_currency") or terms.get("strike_currency") or "")
-        out.append({"key": key, "label": LABELS[key], "now": plain(_dec(terms[where])), "unit": unit, "why_not": None})
+        out.append({"key": key, "label": LABELS[key], "now": plain(_dec(terms[where])), "unit": unit, "why_not": None,
+                    "note": f"{PREMIUM_STAYS}." if _itype(trade) in OPTIONS else None})
+    if _itype(trade) in OPTIONS and (trade.terms or {}).get("premium_amount") not in (None, ""):
+        # listed so the form shows it beside the strike and the notional: what was paid for the option is not moved by them
+        out.append({"key": "premium", "label": LABELS["premium"], "now": plain(_dec(trade.terms["premium_amount"])),
+                    "unit": str(trade.terms.get("premium_currency") or ""), "why_not": "the premium is not amended here: it stays as booked"})
     return out
 
 
@@ -158,6 +177,13 @@ def changes_for(trade, legs: list, request: dict, today: date, reason=None) -> t
             raise ValueError(f"{trade.trade_ref} has no {LABELS[key].lower()} to amend")
         if offered[key]["why_not"]:
             raise ValueError(f"{offered[key]['why_not']}: amending its {LABELS[key].lower()} is not built yet")
+    try:
+        return _changes(trade, legs, request, today, reason, offered)
+    except ArithmeticError:       # a figure no trade has: a division by a notional of zero, a product past what a decimal holds
+        raise ValueError("these figures are outside what a trade can carry") from None
+
+
+def _changes(trade, legs: list, request: dict, today: date, reason, offered: dict) -> tuple[dict, dict]:
 
     terms = deepcopy(dict(trade.terms or {}))
     trade_changes: dict = {}
@@ -169,6 +195,10 @@ def changes_for(trade, legs: list, request: dict, today: date, reason=None) -> t
 
     if "notional" in request:
         old, new = _dec(trade.notional), _number(request["notional"], "notional").quantize(SIX_DECIMALS)
+        if old <= 0:
+            raise ValueError(f"{trade.trade_ref} has no notional to raise")
+        if new >= NOTIONAL_MAX:
+            raise ValueError("the notional is below a million million million")
         if new < old:
             raise ValueError(f"an amendment raises the notional from the trade's {plain(old)}: to reduce it, partially terminate")
         if new > old:
@@ -181,7 +211,10 @@ def changes_for(trade, legs: list, request: dict, today: date, reason=None) -> t
                 terms["quote_notional"] = _like(terms["quote_notional"], (_dec(terms["quote_notional"]) * new / old).quantize(CENTS))
             for leg in legs:
                 if leg.notional is not None:
-                    leg_changes.setdefault(str(leg.id), {})["notional"] = plain((_dec(leg.notional) * new / old).quantize(SIX_DECIMALS))
+                    scaled = (_dec(leg.notional) * new / old).quantize(SIX_DECIMALS)
+                    if scaled >= NOTIONAL_MAX:
+                        raise ValueError("a leg's notional would be past what a trade can carry")
+                    leg_changes.setdefault(str(leg.id), {})["notional"] = plain(scaled)
             trade_changes["notional"] = plain(new)
             said("notional", old, new, trade.notional_ccy or "")
 

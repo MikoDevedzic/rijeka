@@ -1227,10 +1227,16 @@ def amendable_terms(trade_id: str, db: Session = Depends(get_db), user: dict = D
     elif is_terminated(att):
         why = f"{trade.trade_ref} is terminated on-chain; nothing further can change."
     legs = db.query(TradeLeg).filter(TradeLeg.trade_id == trade.id).all()
+    terms: list = []
+    if why is None:
+        try:
+            terms = A.amendable(trade, legs)
+        except (ValueError, ArithmeticError):       # a stored figure that is not a number: said, not a 500
+            why = f"{trade.trade_ref}'s booking holds a figure that cannot be read as a number; it cannot be amended here."
     return {"trade_id": str(trade.id), "trade_ref": trade.trade_ref, "status": trade.status,
             "kind": "CORRECTION" if str(trade.status or "").upper() == "PENDING" else "AMENDMENT",
             "anchored": bool(att and (att.get("anchor") or {}).get("anchored")),
-            "terms": [] if why else A.amendable(trade, legs), "why_not": why}
+            "terms": terms, "why_not": why}
 
 
 @router.post("/amend-terms-request/{trade_id}")

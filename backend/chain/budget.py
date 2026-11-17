@@ -84,7 +84,9 @@ def table_present(db) -> bool:
 def _events_count(db, user_id, since: datetime) -> int:
     """Stored anchoring events for the user: the floor for the per-user count when attempts are not persisted."""
     try:
+        # an AMENDED event with no confirmation hash changed the booking alone (chain/amendment.py): nothing was sent for it
         return int(db.execute(text("SELECT count(*) FROM trade_events WHERE user_id = :u AND event_type IN ('CONFIRMED','AMENDED','TERMINATED') "
+                                   "AND NOT (event_type = 'AMENDED' AND confirmation_hash IS NULL) "
                                    "AND created_at > :s"), {"u": str(user_id), "s": since}).scalar() or 0)
     except Exception:                        # noqa: BLE001
         try:

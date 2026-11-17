@@ -32,10 +32,13 @@ export function fmtTerm(v) {
   return Number.isFinite(x) ? x.toLocaleString('en-US', { maximumFractionDigits: 8 }) : '—'
 }
 
-// The terms typed that differ from what the trade has: [{ key, value }]. `offered` is the API's list
+// The figure as it was typed, without its grouping commas: what is sent, so no digit is lost to a float on the way.
+const asTyped = (v) => String(v ?? '').replace(/,/g, '').trim()
+
+// The terms typed that differ from what the trade has: [{ key, value, text }]. `offered` is the API's list
 // ([{ key, label, now, unit, why_not }]), `typed` is { key: text }.
 export function amendChanged(offered, typed) {
-  return (offered || []).filter(t => !t.why_not).map(t => ({ key: t.key, value: num(typed?.[t.key]), now: Number(t.now) }))
+  return (offered || []).filter(t => !t.why_not).map(t => ({ key: t.key, value: num(typed?.[t.key]), text: asTyped(typed?.[t.key]), now: Number(t.now) }))
     .filter(t => t.value !== null && !Number.isNaN(t.value) && t.value !== t.now)
 }
 
@@ -54,7 +57,7 @@ export function amendProblem(offered, typed) {
 
 export function amendBody(offered, typed, reason) {
   const terms = {}
-  for (const t of amendChanged(offered, typed)) terms[t.key] = String(t.value)
+  for (const t of amendChanged(offered, typed)) terms[t.key] = t.text
   const why = String(reason || '').trim()
   return why ? { terms, reason: why } : { terms }
 }

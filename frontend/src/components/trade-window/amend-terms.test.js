@@ -26,6 +26,8 @@ describe('amend-terms', () => {
     expect(amendChanged(offered, typed).map(t => t.key)).toEqual(['notional'])
     expect(amendBody(offered, typed, '  agreed by phone ')).toEqual({ terms: { notional: '12500000' }, reason: 'agreed by phone' })
     expect(amendBody(offered, { fixed_rate: '3.55' }, '')).toEqual({ terms: { fixed_rate: '3.55' } })
+    // sent as typed: a float would have dropped the last digits
+    expect(amendBody(offered, { notional: ' 1,234,567,890.123456789 ' }, '').terms.notional).toBe('1234567890.123456789')
   })
   it('says what is wrong before anything is sent', () => {
     expect(amendProblem(offered, {})).toBe('type the new value of at least one term')
