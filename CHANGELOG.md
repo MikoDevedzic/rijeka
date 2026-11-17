@@ -3,6 +3,20 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.37). Commits on `main` are the detail.
 
+## 0.54.2 · 17 November 2026
+
+**The two migrations of 0.54.1 are approved.** No code changes.
+
+- A counterparty's margin basis defaults to MODEL in the database, and the records that held the column's old
+  default are set to MODEL (`2026-11-17_im_model_default.sql`). Every screen already showed them so.
+- The version column on legal entities that nothing read is dropped (`2026-11-17_legal_entity_margin_version.sql`,
+  approved as destructive, after 0.54.1 was read back from production: an older API named the column).
+- Both are applied by the runner when this release's API starts; `GET /api/ops/health` reports them under `schema`
+  and counts them under `migrations`.
+
+Still to do: the constants that read a record's old default, and the seed's legacy record, go in a later release
+now that no record holds it.
+
 ## 0.54.1 · 17 November 2026
 
 **Nothing is named for a methodology the firm holds no licence for.** No figure changes. The methodology is v1.37.
