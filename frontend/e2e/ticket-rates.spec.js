@@ -168,6 +168,7 @@ test('rates ticket: price, XVA with the saving on chain, collateral, book, confi
   await expect(win.getByRole('button', { name: 'EXPORT XLS' }).first(), 'a booked schedule can still be taken out').toBeEnabled()
   expect(await win.locator('input[aria-label^="Coupon %"]:enabled, input[aria-label^="Fixed leg notional"]:enabled').count(), 'a booked schedule is read, not edited').toBe(0)
   await expect(win.getByRole('button', { name: 'PASTE' }).first()).toBeDisabled()
+  await expect(win.getByRole('button', { name: 'REFRESH' }).first(), 'REFRESH would rebuild the rows from the terms, over the booked schedule').toBeDisabled()
   await win.getByRole('button', { name: '◆ CONFIRM' }).click()
   await expect(win).toContainText('PENDING')
   const confirmed = app.waitForResponse(r => r.url().includes('/api/chain/confirm/'), { timeout: 60_000 })

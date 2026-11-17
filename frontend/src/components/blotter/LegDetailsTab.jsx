@@ -195,7 +195,7 @@ function deriveSchedules(fixedRows, floatRows) {
 }
 
 export default function LegDetailsTab({
-  locked = false,          // a booked trade: every cell and every button that changes a schedule is off; REFRESH and EXPORT stay
+  locked = false,          // a booked trade: every cell, button and drop that changes a schedule is off (REFRESH too: it rebuilds the rows from the terms); EXPORT stays
   struct, dir, floatDir, ccy, index,
   effDate, matDate, valDate,
   notionalRef, rateRef, spreadRef, parRate,
@@ -313,7 +313,7 @@ export default function LegDetailsTab({
       if (float.length) setFloatRows(float.map(r=>({ period_start:r['ACCRUAL START']||'', period_end:r['ACCRUAL END']||'', payment_date:r['PAY DATE']||'', notional:plain(r['NOTIONAL']||''), spread_bps:plain(r['SPREAD BP']||'0'), orig_notional:plain(r['NOTIONAL']||''), orig_spread_bps:plain(r['SPREAD BP']||'0') })))
     } catch(e) { alert('Import failed: '+e.message) }
   }
-  const handleDrop = async (e, isFloat) => { e.preventDefault(); isFloat?setDropFloat(false):setDropFixed(false); const file=e.dataTransfer.files[0]; if(file)await handleFileImport(file) }
+  const handleDrop = async (e, isFloat) => { e.preventDefault(); isFloat?setDropFloat(false):setDropFixed(false); if (locked) return; const file=e.dataTransfer.files[0]; if(file)await handleFileImport(file) }   // a booked schedule takes no file, dropped or chosen
 
   const forceReload = () => { prevKey.current=''; loadSchedule() }
 
@@ -372,13 +372,13 @@ export default function LegDetailsTab({
           <div style={S.secTitle}>PERIOD SCHEDULE</div>
           <div style={S.secHint}>Edit COUPON % for step-up or NOTIONAL for amortizing. Amber = overridden. Hit PRICE to reprice.</div>
           <div style={S.toolbar}>
-            <button className="rj-btn" style={S.toolBtn()} onClick={forceReload}>REFRESH</button>
+            <button className="rj-btn" style={S.toolBtn()} disabled={locked} onClick={forceReload}>REFRESH</button>
             <button className="rj-btn" style={S.toolBtn()} disabled={locked} onClick={handlePasteFixed}>PASTE</button>
             <button className="rj-press" style={S.toolBtn(C.blue)} onClick={handleExport}>EXPORT XLS</button>
             <input ref={fileInputRef} type='file' accept='.xlsx' style={{display:'none'}} onChange={e=>{handleFileImport(e.target.files[0]);e.target.value=''}} />
             <button className="rj-press" style={S.toolBtn(C.blue)} disabled={locked} onClick={()=>{fileTarget.current='fixed';fileInputRef.current?.click()}}>IMPORT XLS</button>
           </div>
-          <div onDragOver={e=>{e.preventDefault();setDropFixed(true)}} onDragLeave={()=>setDropFixed(false)} onDrop={e=>handleDrop(e,false)}>
+          <div onDragOver={e=>{e.preventDefault();if(!locked)setDropFixed(true)}} onDragLeave={()=>setDropFixed(false)} onDrop={e=>handleDrop(e,false)}>
             {dropFixed ? <div style={S.dropZone(true)}>DROP EXCEL FILE TO IMPORT FIXED LEG SCHEDULE</div> : (
               <>
                 {loading && <div style={S.loading}>Loading schedule...</div>}
@@ -457,12 +457,12 @@ export default function LegDetailsTab({
             </div>
           )}
           <div style={S.toolbar}>
-            <button className="rj-btn" style={S.toolBtn()} onClick={forceReload}>REFRESH</button>
+            <button className="rj-btn" style={S.toolBtn()} disabled={locked} onClick={forceReload}>REFRESH</button>
             <button className="rj-btn" style={S.toolBtn()} disabled={locked} onClick={handlePasteFloat}>PASTE</button>
             <button className="rj-press" style={S.toolBtn(C.blue)} onClick={handleExport}>EXPORT XLS</button>
             <button className="rj-press" style={S.toolBtn(C.blue)} disabled={locked} onClick={()=>{fileTarget.current='float';fileInputRef.current?.click()}}>IMPORT XLS</button>
           </div>
-          <div onDragOver={e=>{e.preventDefault();setDropFloat(true)}} onDragLeave={()=>setDropFloat(false)} onDrop={e=>handleDrop(e,true)}>
+          <div onDragOver={e=>{e.preventDefault();if(!locked)setDropFloat(true)}} onDragLeave={()=>setDropFloat(false)} onDrop={e=>handleDrop(e,true)}>
             {dropFloat ? <div style={S.dropZone(true)}>DROP EXCEL FILE TO IMPORT FLOAT LEG SCHEDULE</div> : (
               <>
                 {loading && <div style={S.loading}>Loading schedule...</div>}

@@ -11,14 +11,14 @@ methodology document carries its own version (v1.29). Commits on `main` are the 
 - **A booked ticket's terms are locked.** A ticket opened from the blotter took no typing; the window a trade had
   just been booked in still did, after the booking and after the confirmation, and what was typed went nowhere:
   the trade in the blotter stayed as booked while the ticket under its name showed something else. The window now
-  locks when the trade is booked: every field, list and chip on TRADE, its fees, and the schedules on DETAILS
-  (REFRESH and EXPORT XLS stay). The title says TERMS LOCKED, and NEW TRADE starts another ticket from the same
+  locks when BOOK is pressed: every field, list and chip on TRADE, its fees, and the schedules on DETAILS, typed,
+  pasted, imported, dropped or rebuilt by REFRESH (EXPORT XLS stays). The title says TERMS LOCKED, and NEW TRADE starts another ticket from the same
   terms. The XVA tab's margin terms and the scenario tab are settings of a run, not terms of the trade, and stay
   open. The schedules on DETAILS are locked on a ticket opened from the blotter as well, where they were not.
 - **The launch home ticks what is done and lists the trades.** A workspace on the launch view kept the same four
   steps for good: "Price it" and "See the XVA charge" could never be ticked, and none of the trades its owner had
-  booked and confirmed were on the page. "Price it" is ticked once a trade is booked (a trade is booked from a
-  price and no other way); the XVA step once the XVA tab has been opened on a ticket in this browser; and under
+  booked and confirmed were on the page. "Price it" is ticked once the workspace has a trade (the ticket books
+  only from a price); the XVA step once the XVA tab has been opened on a ticket in this browser; and under
   the three counts stand the latest five trades, set as the trader's home sets them, each row opening its trade.
   On a phone the list keeps the trade, what it is and its status.
 

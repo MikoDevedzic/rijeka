@@ -506,11 +506,12 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   // Sprint 10 Patch 6 — booking state. In view mode the stored trade is the
   // booked trade: the footer and the CONFIRM tab start in the booked state.
   const [bookedTrade, setBookedTrade] = useState(initialTrade || null)
+  const [booking,     setBooking]     = useState(false)
   // A booked trade is a record: nothing typed on its ticket changes it, so nothing on its ticket can be typed. That holds
   // for the window it was booked in as for one opened from the blotter (17 November 2026: a ticket stayed open to
   // typing after it was booked and confirmed, and what was typed went nowhere). NEW TRADE starts another from these terms.
-  const locked = viewMode || !!bookedTrade
-  const [booking,     setBooking]     = useState(false)
+  // It locks when BOOK is pressed, not when the answer comes: what is typed while the booking is out is not the trade.
+  const locked = viewMode || !!bookedTrade || booking
   const [bookErr,     setBookErr]     = useState('')
   const [popBlocked,  setPopBlocked]  = useState(false)      // the browser refused the ticket's own window
 

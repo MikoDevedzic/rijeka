@@ -204,7 +204,7 @@ function DeskHome({ demo, navigate }) {
         <h1 className="lh-h">Book one trade and follow it through</h1>
         <div className="dh-path">
           <Step n="1" done={trades.length > 0} text="Book a trade" onClick={() => navigate('/blotter')} />
-          {/* a trade is booked from a price and no other way, so a booked trade is a priced one; that the XVA tab was
+          {/* the ticket books only from a price, so a workspace with a trade has priced one; that the XVA tab was
               opened is this browser's own memory (lib/seen.js), marked by the ticket */}
           <Step n="2" done={trades.length > 0} text="Price it" onClick={() => navigate('/blotter')} />
           <Step n="3" done={hasSeen('xva', uid)} text="See the XVA charge and what settling on chain saves" onClick={() => navigate('/blotter')} />
