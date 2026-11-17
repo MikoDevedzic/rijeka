@@ -1514,4 +1514,5 @@ def incremental_xva(body: IncrementalXvaRequest, db: Session = Depends(get_db), 
             "csa": r1.get("csa_model"), "measure": "RISK_NEUTRAL", "n_paths": r1.get("n_paths"), "months": r1.get("months"),
             "other_trades": len(without), "legs": len(with_trades) - len(without) if mode == "INCREMENTAL" else 1, "without": {k: round(v, 2) for k, v in w0.items()}, "with": {k: round(v, 2) for k, v in w1.items()},
             "incremental": inc, "ee": align_ee(r0, r1), "cp_cds_bp": float(st.get("cp_cds_bp") or 85.0), "lgd": float(st.get("lgd") or 0.4),
-            "notes": notes, "seconds": round(_time.time() - t0, 1)}
+            "notes": notes + [f"capital: {n}" for n in (r1.get("capital_notes") or [])], "capital_basis": r1.get("capital_basis"),
+            "seconds": round(_time.time() - t0, 1)}

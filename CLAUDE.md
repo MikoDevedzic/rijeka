@@ -303,3 +303,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   outside figure, before it is switched for all: each step's average mends a short forward in a set (10 % of CVA)
   and hurts a swap on a monthly grid (2 %, against ORE). And putting an old branch under a new caller is a test of
   the old callers: the margined package's phantom amount owed was found the hour the rates runs took its branch.
+- A figure that has a closed form is computed from it, not simulated; and a number carried over from another
+  measurement is not a measurement of this: 0.54.0's first documents said a weekly averaged reading was "0.04 %"
+  off (one simulation; the closed form says 0.2 %) and a two-year forward "about 1 %" high (a ticket-against-set
+  figure; the closed form says 2.9 %). The model validator's own script found both.

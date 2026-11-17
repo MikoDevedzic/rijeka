@@ -413,6 +413,8 @@ def run_waterfall(
         # (Emmy, 12 Nov 2026: half the paid leg would have been charged for one more step).
         if settled is not None and T > 1:
             paid_in = settled[:, 1:] - settled[:, :-1]              # what leaves the set on the step's date
+            # (a payment on the FIRST date is not taken out of today's exposure below: the first step starts from
+            # today's value as it stands; the model validator, 17 November 2026, as it always was)
             if v_lag is not None:
                 # under a margin agreement the collateral goes with the payment: a payment is not a move, so it is
                 # not left standing as collateral (or as a shortfall) for the step. Until 0.54.0 the payment was

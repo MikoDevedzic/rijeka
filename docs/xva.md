@@ -97,14 +97,20 @@ package that has settled is not charged for one more step.
 The charge was overstated, not understated. The profiles on the chart (EE, ENE, PFE) are still the values at the
 grid dates. KVA's replacement cost, MVA's margin and ColVA are read at each step's end. A swap's waterfall and
 the credit page's netting-set engine keep monthly steps and the step's end, so the incremental charge on a ticket
-(`CHARGE THIS TRADE`) and the ticket's stand-alone figure are on different grids. Measured 17 November 2026: a
-six-month forward that settles on a monthly date is charged 10.4 % more CVA at the monthly step's end than on a fine
-grid (the ticket's weekly average 0.04 % less), a two-year forward about 1 % more; on the stack's market the set's
-CVA of a six-month EURUSD forward is 8 % above the ticket's. The averaged reading is not the mend for a swap on a
+(`CHARGE THIS TRADE`) and the ticket's stand-alone figure are on different grids. In closed form (a driftless
+lognormal asset at 8 % volatility, flat hazard, no discounting, against 20,000 steps), a forward that settles on a
+monthly date is charged at the monthly step's end 10.6 % more CVA at six months, 2.9 % at two years and 1.2 % at
+five; on the ticket's weekly average 0.2 % and 0.03 % less; on a monthly average 2.0 % and 0.3 % less. On the
+stack's market, where the two runs also read volatility differently, the set's CVA of a six-month EURUSD forward
+stood 8 % above the ticket's and of a two-year forward 1 %. The averaged reading is not the mend for a swap on a
 monthly grid (against ORE: −2.0 % on a five-year swap's CVA, where the step's end is −0.3 %): a coupon would leave
 up to a month before it is paid. Carrying each payment to its own date inside the step is the mend; not built.
 The set's KVA is on each trade's own asset class since 0.54.0 (it took the interest-rate add-on on the gross
-notional: −78 against some −1,400 on that forward's ticket; now −1,388 against −1,409).
+notional: −78 against some −1,400 on that forward's ticket; now −1,388 against −1,409; by hand from CRE52 a
+six-month forward of 11.6 million dollars is −1,465.16, the engine's figure to nine digits). Other sets change too:
+a swaption alone −8,014 where it was −13,214 (its supervisory delta), a swap and its mirror nothing where they
+were −14,511 (they offset in one hedging set); a swap alone and two swaps the same way are unchanged. The answer
+carries what the mapping assumed (`capital_notes`) and which charge it used (`capital_basis`).
 Still grid-dependent on a margined ticket: KVA about 4 % below daily steps at six months, MVA 1 % above. The
 replication workbooks run monthly steps (`grid_per_year` on the input) with the averaged charge in their cells;
 that the grids agree is tested on the engine (`tests/test_exposure_grid.py`). The independent quadrature of

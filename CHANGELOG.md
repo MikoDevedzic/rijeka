@@ -12,8 +12,14 @@ methodology document carries its own version (v1.36). Commits on `main` are the 
   notional, whatever the set held. A six-month EURUSD forward of 10 million was charged a KVA of −78 in the set
   where its ticket says some −1,400; a forward on ten bitcoin, nothing where its ticket says some −1,100. The set now
   carries its SA-CCR rows, the ones the capital report charges on: −1,388 against the ticket's −1,409, and −1,030
-  against −1,109 (one day's market, 4,000 paths on the ticket). A swap
-  alone in a set is unchanged to the cent.
+  against −1,109 (one day's market, 4,000 paths on the ticket). By hand from the Basel text a six-month forward of
+  11.6 million dollars is −1,465.16, and the engine gives that to nine digits (the model validator; now a test).
+- **Every set's capital charge can change, not only a forward's.** A swap alone, and two swaps the same way: the
+  same to the cent. A swaption alone: −8,014 where it was −13,214, because it enters at its supervisory delta. A
+  swap and its mirror: nothing where they were charged −14,511 on their gross notional, because they offset in one
+  hedging set. What the mapping had to assume (a cryptoasset run as Group 2a where its ticket's default is Group
+  2b, a stand-in rate, a trade it could not map) is in the answer of the counterparty report and of the incremental
+  charge; a set whose rows cannot be built is charged as before and says so (the independent reviewer).
 - **Under a margin agreement a payment takes its collateral with it.** Where the charges are read on a step's
   average (a currency or digital-asset ticket, a package), a leg that settled was taken out of the value at the
   step's start and not out of the collateral: the whole payment stood as owed for half a step. On a margined
@@ -22,9 +28,10 @@ methodology document carries its own version (v1.36). Commits on `main` are the 
   unchanged.
 - **Why a forward's ticket and its set differ, measured.** The ticket steps weekly and reads the exposure averaged
   across each step; the set steps monthly and reads each step's end, so a trade stands in the set until the first
-  monthly date after it has gone. A six-month forward that settles on a monthly date is charged 10.4 % more CVA that
-  way than on a fine grid (the ticket's reading: 0.04 % less), a two-year forward about 1 % more. On the stack's
-  market the set's CVA of a six-month EURUSD forward is 8 % above the ticket's. This is said, not mended: the
+  monthly date after it has gone. In closed form, a forward that settles on a monthly date is charged that way
+  10.6 % more CVA at six months, 2.9 % at two years and 1.2 % at five than on a fine grid; the ticket's reading is
+  0.2 % and 0.03 % less. On the stack's market the set's CVA of a six-month EURUSD forward stood 8 % above the
+  ticket's. This is said, not mended: the
   averaged reading on a monthly grid understates a five-year swap's CVA by 2 % against ORE (a coupon would leave
   up to a month before it is paid), where the step's end is 0.3 % off.
 

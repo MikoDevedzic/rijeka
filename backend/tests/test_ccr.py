@@ -3,6 +3,7 @@ from datetime import date, timedelta
 import math
 
 import numpy as np
+import pytest
 
 from ccr import calibration as C
 from ccr.exposure import csa_from_counterparty, exposures
@@ -325,3 +326,26 @@ def test_the_credit_engines_capital_charge_reads_the_sets_own_rows():
     assert rows["kva_usd"] < 0 and abs(rows["kva_usd"]) > 5 * abs(bare["kva_usd"]), (rows["kva_usd"], bare["kva_usd"])
     for k in ("cva_usd", "dva_usd", "fca_usd", "fba_usd"):                  # the rows are capital's: nothing else moves
         assert rows[k] == bare[k], k
+
+
+def test_a_currency_forwards_capital_charge_in_a_set_by_hand_from_the_basel_text():
+    """The model validator's check, 17 November 2026, written out: a six-month EURUSD forward of 11.6 million USD
+    alone in a set with no margin. CRE52: the foreign-exchange supervisory factor is 4 %, the unmargined maturity
+    factor sqrt(min(M, 1 year)) with the remaining life M read at the middle of each step, alpha 1.4; the set's
+    mean value is zero on these paths, so the replacement cost is nothing and the multiplier one. Capital is 8 % of
+    the risk-weighted exposure (weight 1), charged at the hurdle of 12 % over each monthly step and discounted:
+    −1,465.16, by hand and from the engine."""
+    from ccr.exposure import cva
+    from pricing.csa import CSA
+    from pricing.sa_ccr import SaccrTrade
+    N, T, dt, r = 11_600_000.0, 6, 1.0 / 12, 0.035
+    z = np.random.default_rng(12).standard_normal((2000, T))
+    V = np.cumsum(np.concatenate([z, -z]) * 200_000.0, axis=1)               # antithetic: the mean value is zero at every date
+    V = np.column_stack((np.zeros(len(V)), V))
+    t = np.arange(T + 1) * dt
+    p0 = [math.exp(-r * x) for x in t] + [math.exp(-r * (t[-1] + dt))]
+    got = cva(V, t, p0, CSA.uncollateralised(), N, maturity_y=0.5,
+              saccr=[SaccrTrade(asset_class="FX", hedging_set="EURUSD", notional=N, start_y=0.0, end_y=0.5, maturity_y=0.5, delta=1.0)])["kva_usd"]
+    hand = -sum(0.12 * 1.0 * 0.08 * (1.4 * 0.04 * N * math.sqrt(0.5 - (i + 0.5) * dt)) * dt * p0[i + 1] for i in range(T))
+    assert hand == pytest.approx(-1465.16, abs=0.01)
+    assert got == pytest.approx(hand, rel=1e-9)

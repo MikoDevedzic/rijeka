@@ -153,7 +153,13 @@ def counterparty_report(db: Session, user: dict, cp, trades: list, asof: date, m
     # KVA on each trade's own asset class (the rows the capital report charges on): without them every set took
     # the interest-rate add-on on its gross notional
     from ccr.saccr_map import rows_of_paths
-    saccr_rows, saccr_notes = rows_of_paths(P, mkt, asof)
+    try:
+        saccr_rows, saccr_notes = rows_of_paths(P, mkt, asof)
+    except Exception as e:      # noqa: BLE001  a set that could be valued is still reported: the old charge, and a word
+        log.warning("SA-CCR rows of the set could not be built: %s", type(e).__name__)
+        saccr_rows, saccr_notes = [], ["the set's SA-CCR rows could not be built: its capital charge is the interest-rate add-on on the gross notional"]
+    if not saccr_rows and not saccr_notes:
+        saccr_notes = ["no trade of the set maps to an SA-CCR row: its capital charge is the interest-rate add-on on the gross notional"]
     cv = cva_of(V_rn, p_rn.t, p0, csa, gross, cp_cds_bp=float(st["cp_cds_bp"]), lgd=float(st["lgd"]),
                 flows=flows_per_step(ns, p_rn, fx) if csa.collateralised else None,
                 maturity_y=max((ns.max_maturity - asof).days / 365.25, 1 / 12), deflator=P.get("deflator"), saccr=saccr_rows)
@@ -162,6 +168,10 @@ def counterparty_report(db: Session, user: dict, cp, trades: list, asof: date, m
            "csa_model": {"preset": csa.preset, "collateralised": csa.collateralised, "threshold_usd": csa.threshold_cp, "mta_usd": csa.mta, "mpor_days": csa.mpor_days, "im_exchanged": csa.im_exchanged},
            "trades_today": today, "gross_notional_usd": gross,
            "xva": {k: v for k, v in cv.items() if k not in ("ee_rn", "pfe95_rn")}, "ee_rn": cv["ee_rn"], "pfe95_rn": cv["pfe95_rn"],
+           # what the mapping to SA-CCR rows said (a cryptoasset run in a class its ticket does not default to, a
+           # stand-in rate, a trade it could not map): the capital report shows these, and so does this one
+           "capital_basis": "SA-CCR on the set's own rows, each trade in its asset class and hedging set" if saccr_rows else "the interest-rate add-on on the gross notional",
+           "capital_notes": list(saccr_notes),
            "calibration": {"risk_neutral": rn.as_dict()}, "measures": {"xva": "RISK_NEUTRAL"}, "seconds": round(time.time() - t0, 1)}
     if ex is not None:
         out.update(exposure={k: v for k, v in ex.items() if k not in ("mean_collateral",)}, mean_collateral=ex["mean_collateral"])

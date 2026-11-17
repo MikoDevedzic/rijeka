@@ -113,7 +113,8 @@ def cva(V_rn: np.ndarray, t: np.ndarray, p0: list[float], csa: CSA, notional_usd
     KVA's add-on is then each trade's own asset class along the grid, as the capital report's is. Without it the
     waterfall takes the single-factor interest-rate add-on on the set's gross notional, whatever the set holds: a
     currency forward's KVA came out a seventeenth of its ticket's and a digital-asset forward's zero (found
-    reconciling the XVA runs, 17 November 2026)."""
+    reconciling the XVA runs, 17 November 2026). The hurdle and the counterparty's risk weight are the waterfall's
+    defaults here (12 %, 1.0), not the firm's settings nor a ticket's."""
     n_paths, T1 = V_rn.shape
     dt = float(t[-1]) / (T1 - 1) if T1 > 1 else 1 / 12
     v0 = float(V_rn[:, 0].mean())

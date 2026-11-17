@@ -55,8 +55,10 @@ def test_a_swap_on_the_ticket_and_alone_in_a_netting_set_is_one_calculation(clie
         assert tk["basis"]["kind"] == "TRADE" and tk["basis"]["valued_as"] == "SWAP" and tk["steps"] == net["months"]
         for k in FOUR:
             assert tk["xva"][k] == pytest.approx(net["incremental"][k], rel=2e-3, abs=1.0), (name, k, tk["xva"][k], net["incremental"][k])
-        # capital: the same add-on on the same remaining life
-        assert tk["xva"]["kva"] == pytest.approx(net["incremental"]["kva"], rel=5e-3), name
+        # capital: the same add-on on the same remaining life. The set charges it on its SA-CCR rows since 0.54.0 and
+        # a swap alone is the case where that is the ticket's single-factor add-on: equal to the cent when measured
+        assert tk["xva"]["kva"] == pytest.approx(net["incremental"]["kva"], rel=1e-4), name
+        assert net["capital_basis"].startswith("SA-CCR on the set's own rows")
         # and the expected exposure, date by date
         ee_net = net["ee"]["with"]
         assert len(ee_net) == len(tk["ee"]) and max(abs(a - b) for a, b in zip(tk["ee"], ee_net)) < 0.002 * max(ee_net) + 1.0, name
