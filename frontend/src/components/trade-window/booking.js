@@ -751,6 +751,13 @@ export function amendRequest(tradeId, changes) { return _authedJson('/api/chain/
 export function amendOnChain(tradeId, changes, sig = {}) {
   return _authedJson('/api/chain/amend/' + tradeId, 'POST', { changes, ...sig }, { 'Idempotency-Key': crypto.randomUUID() })
 }
+/** What an amendment of this trade can set: { kind, anchored, terms: [{ key, label, now, unit, why_not }], why_not }. */
+export function amendable(tradeId) { return _authedJson('/api/chain/amendable/' + tradeId, 'GET') }
+/** Set named terms of a booked trade ({ terms: { key: value }, reason }). The API works out what changes; an anchored
+ *  trade's record is superseded on-chain with both signatures, a pending one is corrected on the booking. */
+export function amendTerms(tradeId, body, sig = {}) {
+  return _authedJson('/api/chain/amend-terms/' + tradeId, 'POST', { ...body, ...sig }, { 'Idempotency-Key': crypto.randomUUID() })
+}
 /** A partial termination: the trade stays on the notional that remains, with the unwind fee among its fees. The
  *  API works out what changes; an anchored trade's record is superseded on-chain with both signatures. */
 export function partialTerminate(tradeId, body, sig = {}) {

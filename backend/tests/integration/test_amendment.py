@@ -49,6 +49,8 @@ def test_a_pending_swap_is_corrected_and_a_confirmed_one_amended_with_the_price_
     out = r.json()
     assert out["trade"]["status"] == "PENDING"
     assert float(next(leg for leg in out["legs"] if leg["leg_type"] == "FIXED")["fixed_rate"]) == pytest.approx(new_pct / 100)
+    if (j["trade"].get("terms") or {}).get("fixed_rate") is not None:
+        assert out["trade"]["terms"]["fixed_rate"] == pytest.approx(new_pct / 100), "the copy the ticket reads moves with the leg"
     assert out["amendment"]["kind"] == "CORRECTION" and out["amendment"]["anchored"] is False and out["amendment"]["reason"] == "coupon mistyped"
     ev = client.get(f"/api/trade-events/{tid}", headers=auth_a).json()
     assert [e["event_type"] for e in ev] == ["AMENDED", "BOOKED"]

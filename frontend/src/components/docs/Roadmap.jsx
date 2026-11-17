@@ -7,7 +7,7 @@ const PHASES = [
     ['DONE', 'OIS bootstrap, IRS / OIS / basis pricing, cashflows, IR01'],
     ['DONE', 'European swaptions and caps/floors (Bachelier), SABR β=0 surface, Bermudans (HW1F trinomial)'],
     ['DONE', 'XVA Monte Carlo on HW1F calibrated to the surface; CSA presets with margin period of risk; initial margin as an amount the desk sets or the engine\'s own estimate (ISDA SIMM is licensed and is not implemented)'],
-    ['DONE', 'On-chain bilateral confirmation: canonical record v2 → EIP-712 → registry on Sepolia; amend and terminate; public verifier'],
+    ['DONE', 'On-chain bilateral confirmation: canonical record v2 → EIP-712 → registry on Sepolia; amend (notional up, rate, spread, price or strike), partially terminate and terminate from the ticket; public verifier'],
     ['DONE', 'Messenger: firms, rooms, trade cards, wallet countersigning; Telegram mirror; Market News room'],
     ['DONE', 'Hosted demo: sandbox workspace on sign-in, demo counterparty, Excel methodology replications'],
     ['DONE', 'Open-box replications: every workbook with a cover and verdict, the ticket rebuilt in cells with links into the maths, a derivation ledger, a scenario chart and a Checks sheet; SHOW MATH on the ticket annotates each number with its formula'],

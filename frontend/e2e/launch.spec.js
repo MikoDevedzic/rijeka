@@ -17,6 +17,17 @@ async function onLaunch(app, { canEdit = true, alsoOn = [] } = {}) {
   })
 }
 
+// The trades the app reads, as a workspace at a given point of its first day has them: none (a first visit), or only
+// those not yet confirmed. The stack's user has confirmed trades of earlier journeys, and a launch workspace with a
+// confirmed trade has the trader's home, not the start card.
+async function tradesAre(app, keep) {
+  await app.route(/\/api\/trades\/$/, async route => {
+    if (route.request().method() !== 'GET') return route.fallback()
+    const res = await route.fetch()
+    await route.fulfill({ response: res, json: (await res.json()).filter(keep) })
+  })
+}
+
 async function openTicket(app) {
   await app.goto('/blotter')
   await app.getByText('+ NEW TRADE').first().click()
@@ -30,6 +41,7 @@ async function openTicket(app) {
 
 test('launch workspace: the home is four next steps and the navigation is the narrow set', async ({ app, problems }) => {
   await onLaunch(app)
+  await tradesAre(app, () => false)                                   // a first visit: nothing booked yet
   await app.goto('/command-center')
   const home = app.getByTestId('launch-home')
   await expect(home).toBeVisible()
@@ -68,6 +80,7 @@ test('launch workspace: the home is four next steps and the navigation is the na
 // none of the trades its owner had booked and confirmed.
 test('launch workspace: the home ticks the steps that are done and lists the trades, and a row opens its trade', async ({ app, problems }) => {
   await onLaunch(app)
+  await tradesAre(app, t => t.status === 'PENDING')                   // booked, nothing confirmed yet: still the first screen
   const win = await openTicket(app)
   await win.getByRole('button', { name: '▶ PRICE' }).click()
   await expect(win.getByRole('button', { name: /BOOK TRADE/ })).toBeEnabled({ timeout: 60_000 })
@@ -103,8 +116,41 @@ test('launch workspace: the home ticks the steps that are done and lists the tra
   expectClean(problems)
 })
 
+// 17 November 2026: the start card is a workspace's first screen, not its home for good.
+test('launch workspace: once a trade is confirmed, or the card is skipped, the home is the trader\'s, with what the workspace has', async ({ app, problems }) => {
+  await onLaunch(app)
+  // the stack's user has confirmed trades: the home is the trader's, and says what is switched off instead of drawing it
+  await app.goto('/command-center')
+  const desk = app.getByTestId('trader-home')
+  await expect(desk).toBeVisible({ timeout: 60_000 })
+  await expect(app.getByTestId('launch-home')).toHaveCount(0)
+  await expect(desk).toContainText('YOUR TRADES')
+  await expect(app.getByTestId('th-held')).toContainText('P&L, limits and risk by tenor are part of P&L and Market risk, which are switched off for this desk')
+  for (const gone of ['WHERE YOUR RISK SITS', 'YOUR RISK BY FACTOR']) await expect(desk.getByText(gone, { exact: true }), 'a band of switched-off panels is not drawn').toHaveCount(0)
+  await expect(desk.getByRole('tab', { name: 'NEWS' })).toBeVisible()
+  await expect(desk.getByRole('tab', { name: 'RATES' })).toBeVisible()
+  await expectNoHorizontalOverflow(desk, 'the trader\'s home on a launch workspace')
+  await app.waitForTimeout(600)
+  await app.screenshot({ path: 'e2e/.out/shots/launch-trader-home.png', fullPage: true })
+  // a first visit that skips the card gets the same home, with the first steps on it; and the card does not come back
+  await app.unrouteAll({ behavior: 'ignoreErrors' })
+  await onLaunch(app)
+  await tradesAre(app, () => false)
+  await app.goto('/command-center')
+  await expect(app.getByTestId('launch-home')).toBeVisible()
+  await app.getByTestId('launch-skip').click()
+  await expect(app.getByTestId('trader-home')).toBeVisible()
+  await expect(app.getByTestId('trader-home')).toContainText('START HERE')
+  await app.reload()
+  await expect(app.getByTestId('trader-home')).toBeVisible({ timeout: 60_000 })
+  await expect(app.getByTestId('launch-home')).toHaveCount(0)
+  await app.unrouteAll({ behavior: 'ignoreErrors' })
+  expectClean(problems)
+})
+
 test('launch workspace: one module switched on keeps the simple home; a member who cannot switch is told who can', async ({ app, problems }) => {
   await onLaunch(app, { canEdit: false, alsoOn: ['PNL'] })
+  await tradesAre(app, () => false)
   await app.goto('/command-center')
   await expect(app.getByTestId('launch-home')).toBeVisible()                    // still the launch home, not the dashboard
   await expect(app.getByRole('button', { name: 'P&L', exact: true }).first()).toBeVisible()      // and the page it switched on is in the bar
@@ -256,6 +302,7 @@ test('demo: everything outside the launch set is on request; the home does not p
     Object.assign(body, { on_request: OFF, contact: 'miko@rijeka.app', can_edit: true, view: 'launch', source: 'firm', preset: 'LAUNCH' })
     await route.fulfill({ response: res, json: body })
   })
+  await tradesAre(app, () => false)
   await app.goto('/command-center')
   await expect(app.getByTestId('launch-home')).toBeVisible()
   await expect(app.getByTestId('launch-more')).toHaveText('P&L, risk and more are on request')

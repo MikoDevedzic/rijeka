@@ -46,7 +46,7 @@ import XvaPanel      from './xva-panel'
 import RatesScenario from './RatesScenario'
 // Sprint 12 item 3: CONFIRM tab panel + lifecycle client
 import { ConfirmPanel } from './ConfirmPanel'
-import { executeBooking, buildBookingBody, confirmTrade, cancelTrade, confirmTradeOnChain, bookPackage, confirmPackageOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, partialTerminate, recordKnock, INDEX_CURVE } from './booking'
+import { executeBooking, buildBookingBody, confirmTrade, cancelTrade, confirmTradeOnChain, bookPackage, confirmPackageOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, partialTerminate, amendTerms, amendable, recordKnock, INDEX_CURVE } from './booking'
 import { TENOR_Y, EXPIRY_Y } from './product-defaults'
 // Sprint 13 follow-up — lifecycle cache refresh
 import { useTradesStore, shortUti } from '../../store/useTradesStore'
@@ -1023,7 +1023,9 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   // true when it is done, so the form can close; the ticket, the blotter and the attestation then read the booking.
   const [partialBusy, setPartialBusy] = useState(false)
   const [partialErr, setPartialErr] = useState('')
-  const [partialDone] = useState(initialNotice)      // what the reduction that reopened this ticket did
+  const [notice] = useState(initialNotice)           // what the change that reopened this ticket did: a reduction's figures, or an amendment's terms
+  const partialDone = notice && notice.from_notional != null ? notice : null
+  const amendDone = notice && Array.isArray(notice.terms) ? notice : null
   const handlePartial = useCallback(async (body) => {
     if (!bookedTrade?.id || partialBusy) return false
     setPartialBusy(true); setPartialErr('')
@@ -1043,6 +1045,28 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       setPartialBusy(false)
     }
   }, [bookedTrade, partialBusy, onClose])
+
+  // AMEND: named terms of the booked trade are set (ConfirmPanel → AmendTerms). The ticket's fields and figures are
+  // the trade's as it was, so it is opened again on the trade as it now stands, as after a partial termination.
+  const [amendBusy, setAmendBusy] = useState(false)
+  const [amendErr, setAmendErr] = useState('')
+  const handleAmend = useCallback(async (body) => {
+    if (!bookedTrade?.id || amendBusy) return false
+    setAmendBusy(true); setAmendErr('')
+    try {
+      const r = await amendTerms(bookedTrade.id, body)
+      await useTradesStore.getState().fetchTrades()
+      useTabStore.getState().refreshTrade(r.trade.id, r.trade)
+      useBookingStore.getState().open(r.trade, { tab: '◆ CONFIRM', notice: r.amendment || null })
+      onClose?.()
+      return true
+    } catch (e) {
+      setAmendErr(e.message || String(e))
+      return false
+    } finally {
+      setAmendBusy(false)
+    }
+  }, [bookedTrade, amendBusy, onClose])
 
   // BARRIER: the desk's record that an option's level traded (ConfirmPanel → KnockRecord). The trade is then valued
   // for what it has become, so the ticket is opened again on it, as after a partial termination.
@@ -1302,7 +1326,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         {/* View mode: the whole ticket is read-only — a disabled fieldset
             disables every input, select and chip inside it at once. */}
         <fieldset className="tbw-fieldset" disabled={locked} data-testid="tbw-terms"
-          title={bookedTrade && !viewMode ? 'Booked: the terms are locked. NEW TRADE starts another from these terms.' : undefined}>
+          title={bookedTrade ? `Booked: the terms are locked. ${bookedTrade.status === 'PENDING' ? 'CORRECT THE BOOKING' : 'AMEND'} on the CONFIRM tab changes a term${viewMode ? '' : '; NEW TRADE starts another from these terms'}.` : undefined}>
         <InstrumentSelector
           assetClasses={[...new Set([...ASSET_ORDER, ...listAssetClasses()])]}
           activeAssetClass={assetClass}
@@ -1486,6 +1510,11 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             partialBusy={partialBusy}
             partialErr={partialErr}
             partialDone={partialDone}
+            onAmend={handleAmend}
+            onAmendable={amendable}
+            amendBusy={amendBusy}
+            amendErr={amendErr}
+            amendDone={amendDone}
             onKnock={handleKnock}
             knockBusy={knockBusy}
             knockErr={knockErr}

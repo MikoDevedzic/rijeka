@@ -30,6 +30,7 @@ import CertMark from '../brand/CertMark'
 import PaperConfirmation from './PaperConfirmation'
 import { getProofPack } from './booking'
 import PartialTermination from './PartialTermination'
+import AmendTerms from './AmendTerms'
 import KnockRecord from './KnockRecord'
 import ConfirmMark from '../brand/ConfirmMark'
 import { seedOf } from '../brand/mark'
@@ -243,6 +244,11 @@ function ConfirmBody({
   partialBusy = false,
   partialErr = '',
   partialDone = null,
+  onAmend = null,         // (body) => Promise<boolean>: set named terms of the trade (AmendTerms.jsx)
+  onAmendable = null,     // (tradeId) => Promise: what an amendment of it can set
+  amendBusy = false,
+  amendErr = '',
+  amendDone = null,
   onKnock = null,         // (body) => Promise<boolean>: record a barrier touched, never touched, or neither (KnockRecord.jsx)
   knockBusy = false,
   knockErr = '',
@@ -347,6 +353,10 @@ function ConfirmBody({
           {status === 'CONFIRMED' && (
             <PartialTermination trade={bookedTrade} pkg={pkg || (attestation?.attestation?.package ? {} : null)} terminated={!!attestation?.attestation?.terminated}
               anchored={!!attestation?.attestation?.anchor?.anchored} busy={partialBusy} error={partialErr} done={partialDone} onSubmit={onPartial} />
+          )}
+          {status === 'CONFIRMED' && (
+            <AmendTerms trade={bookedTrade} pkg={pkg || (attestation?.attestation?.package ? {} : null)} terminated={!!attestation?.attestation?.terminated}
+              busy={amendBusy} error={amendErr} done={amendDone} onLoad={onAmendable} onSubmit={onAmend} />
           )}
           {status === 'CONFIRMED' && <KnockRecord trade={bookedTrade} busy={knockBusy} error={knockErr} onSubmit={onKnock} />}
         </div>
@@ -456,6 +466,9 @@ function ConfirmBody({
 
         {!anchoring && !confirming && (
           <PartialTermination trade={bookedTrade} pkg={pkg} busy={partialBusy} error={partialErr} done={partialDone} onSubmit={onPartial} />
+        )}
+        {!anchoring && !confirming && (
+          <AmendTerms trade={bookedTrade} pkg={pkg} busy={amendBusy} error={amendErr} done={amendDone} onLoad={onAmendable} onSubmit={onAmend} />
         )}
         {!anchoring && !confirming && <KnockRecord trade={bookedTrade} busy={knockBusy} error={knockErr} onSubmit={onKnock} />}
 

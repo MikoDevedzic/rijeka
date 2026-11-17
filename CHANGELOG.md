@@ -3,29 +3,48 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.29). Commits on `main` are the detail.
 
-## 0.47.4 · 17 November 2026
+## 0.48.0 · 17 November 2026
 
-**A booked trade is a record, and the home of a new workspace shows its trades.** Two things seen on the released
-0.47.3 by using it.
+**A booked trade is a record: locked on its ticket, and changed by an amendment.** Seen on the released 0.47.3 by
+using it: a ticket stayed open to typing after its trade was booked and confirmed, there was no way to change a
+booked trade from the app, and a new workspace's home never moved on from its first screen.
 
 - **A booked ticket's terms are locked.** A ticket opened from the blotter took no typing; the window a trade had
   just been booked in still did, after the booking and after the confirmation, and what was typed went nowhere:
   the trade in the blotter stayed as booked while the ticket under its name showed something else. The window now
   locks when BOOK is pressed: every field, list and chip on TRADE, its fees, and the schedules on DETAILS, typed,
-  pasted, imported, dropped or rebuilt by REFRESH (EXPORT XLS stays). The title says LOCKED, and NEW TRADE starts another ticket from the same
-  terms. The XVA tab's margin terms and the scenario tab are settings of a run, not terms of the trade, and stay
-  open. The schedules on DETAILS are locked on a ticket opened from the blotter as well, where they were not.
-- **The launch home ticks what is done and lists the trades.** A workspace on the launch view kept the same four
-  steps for good: "Price it" and "See the XVA charge" could never be ticked, and none of the trades its owner had
-  booked and confirmed were on the page. "Price it" is ticked once the workspace has a trade (the ticket books
-  only from a price); the XVA step once the XVA tab has been opened on a ticket in this browser; and under
-  the three counts stand the latest five trades, set as the trader's home sets them, each row opening its trade.
-  On a phone the list keeps the trade, what it is and its status.
+  pasted, imported, dropped or rebuilt by REFRESH (EXPORT XLS stays). The title says LOCKED, and NEW TRADE starts
+  another ticket from the same terms. The XVA tab's margin terms and the scenario tab are settings of a run, not
+  terms of the trade, and stay open. The schedules on DETAILS are locked on a ticket opened from the blotter as
+  well, where they were not. PRICE waits while a booking is out.
+- **AMEND, on the CONFIRM tab.** The API could amend a trade and no screen called it. A booked trade now has a form
+  that lists the terms it can change, each with its value now: the notional (upward: an increase; a decrease is a
+  partial termination, as before), a swap's fixed rate and spread, a forward's rate or price, an option's strike.
+  The API works out what changes from the booking, never from the request (`backend/chain/amendment.py`,
+  `POST /api/chain/amend-terms/{id}`): every leg moves with the notional, the cash a currency trade states moves
+  with its rate, and a booking that is out of step with itself is refused. The ticket is opened again on the trade
+  as it now stands, repriced, and says what was done. The trade keeps its reference and its UTI.
+- **An amendment and a correction are two things**, as the public standards have them (ISDA's Common Domain Model,
+  the CFTC's swap reporting specification). A confirmed trade is amended: where its record is on a chain both
+  parties sign and the record is superseded, as for a partial termination. A pending trade is corrected: the other
+  side has agreed nothing yet, so the booking is put right and no signature is claimed. The event says which
+  (`amendment.kind`), and whether anything was signed (`amendment.anchored`).
+- **A change that signs nothing does not hide the record that was signed.** The signed record shown for a trade is
+  the latest event that carries one; an amendment made on the booking alone carries none and is passed over.
+- **The start card is a first screen, not a home.** A workspace on the launch view kept the same four steps for
+  good: two of them could never be ticked, and none of its trades were on the page. The steps now tick ("Price it"
+  once the workspace has a trade, since the ticket books only from a price; the XVA step once the XVA tab has been
+  opened in this browser) and the latest five trades stand under the counts. Once a trade is confirmed, or the
+  card is skipped, the home is the trader's: where the desk stands, what needs it, its trades, and the tabs (on
+  chain, rates, the week ahead, news). Where P&L and Market risk are both off, the band they stand in is left out
+  and one line says where they are.
 
-Not done, and said: a booked trade cannot be changed from the app. The API amends a trade with both signatures
-and a superseding record on chain (`/api/chain/amend`), and no screen calls it; an assignment (novation) is an
-event's name and nothing more; nothing moves a trade to LIVE or MATURED. The home of a launch workspace is still
-the start card, not the trader's home.
+Not done, and said: an amendment of dates, of a schedule, of a cap's or a floor's strike, of a swaption, or of one
+leg of a package; the form lists a term it cannot change with the reason. An assignment (novation) is still an
+event's name and nothing more: as the standards define it, it closes the trade and opens a new one with a third
+party's signature, which is not built. Nothing moves a trade to LIVE or MATURED. An amendment carries no fee of its
+own. Where a record is signed and on no chain, an amendment changes the booking and the old signed record is the
+one still shown; VERIFY says the booking has moved on from it.
 
 ## 0.47.3 · 16 November 2026
 

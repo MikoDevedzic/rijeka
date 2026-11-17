@@ -23,7 +23,7 @@ import { chainStatus, useNetwork } from '../lib/chain-status'
 import { networkOf } from '../lib/network'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
-import { hasSeen } from '../lib/seen'
+import { hasSeen, markSeen } from '../lib/seen'
 import './CommandCenter.css'
 
 export default function CommandCenter() {
@@ -158,6 +158,7 @@ function DeskHome({ demo, navigate }) {
   const [d, setD] = useState({ loading: true })
   const [steps, setSteps] = useState({})            // key -> { ok, detail }
   const [sheet, setSheet] = useState(null)           // the brief's fact sheet: book risk on today's curve
+  const [skipped, setSkipped] = useState(false)      // the start card was skipped in this visit (lib/seen.js keeps it for the next)
   const [booting, setBooting] = useState(() => {
     if (reducedMotion()) return false
     try { return sessionStorage.getItem(BOOT_KEY) !== uid } catch { return true }
@@ -196,8 +197,13 @@ function DeskHome({ demo, navigate }) {
 
   if (!firmKnown && !askedAfter && !waited) return <div className="dh" role="main" />
 
-  // The launch home: the next step and nothing else. The four steps stand where the desk has START HERE.
-  if (launch) return (
+  // The launch home: the next step and nothing else. The four steps stand where the desk has START HERE. It is a
+  // workspace's first screen, not its home for good (17 November 2026): once a trade of its own is confirmed, or the
+  // card is skipped, the home is the trader's, with the modules the workspace has. Until the trades have been read
+  // nothing is drawn, so a desk that has begun never sees the card flash by.
+  if (launch && d.loading) return <div className="dh" role="main" />
+  const begun = confirmed > 0 || skipped || hasSeen('start', uid)
+  if (launch && !begun) return (
     <div className="dh" data-testid="launch-home" role="main">
       <div className="lh">
         <span className="dh-path-k">START HERE</span>
@@ -239,6 +245,7 @@ function DeskHome({ demo, navigate }) {
             {trades.length > 5 && <div className="th-note">the latest 5 of {trades.length}; all of them are in the blotter</div>}
           </div>
         )}
+        <button className="lh-skip" data-testid="launch-skip" onClick={() => { markSeen('start', uid); setSkipped(true) }}>Skip to the desk</button>
         {onRequest.includes('PNL') || onRequest.includes('MARKET_RISK')
           ? <Link className="lh-more" data-testid="launch-more" to="/configurations/modules">{'P&L, risk and more are on request'}</Link>
           : canEdit

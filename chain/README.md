@@ -145,6 +145,7 @@ trade (`backend/chain/lifecycle.py`). Economics then change only through:
 | | Request (stateless, our half) | Apply (needs both signatures) |
 |---|---|---|
 | Amend | `POST /api/chain/amend-request/{id}` `{changes}` | `POST /api/chain/amend/{id}` `{changes, address?, signature?}` |
+| Amend named terms (the ticket's AMEND) | `POST /api/chain/amend-terms-request/{id}` `{terms, reason?}` | `POST /api/chain/amend-terms/{id}` `{terms, reason?, address?, signature?}` |
 | Terminate | `GET /api/chain/terminate-request/{id}` | `POST /api/chain/terminate/{id}` `{address?, signature?}` |
 
 `changes` is the AMENDED event contract (`{"trade": {...}, "legs": [{"id": ..., ...}]}`),

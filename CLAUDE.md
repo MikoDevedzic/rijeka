@@ -255,3 +255,10 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   same ticket in the window it was booked in was not, and DETAILS was locked in neither.
 - A step shown as to be done has something that can mark it done: two of the launch home's four steps were written
   `done={false}`.
+- A term the booking keeps in two places is changed in both, or the change is refused: a swap's coupon is on its
+  leg and, as the ticket reads it back, in the trade's `terms`; a journey that opened the amended trade found the
+  old coupon on screen.
+- A reader of "the latest event of these kinds" is checked when a new writer of one of those kinds appears: an
+  amendment that signs nothing would have hidden the signed record behind it.
+- Before a screen is designed for a request, the request is read against what is already built: asked for the
+  trader's home, a new home was drawn where the one that exists was meant.

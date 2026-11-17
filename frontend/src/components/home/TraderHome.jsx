@@ -94,7 +94,9 @@ export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], 
                 {riskOn && rep && risk.behind === 'running' && <p className="th-tight th-behind" data-testid="th-behind">Measuring the book again: this is the report as it was stored.</p>}
                 {riskOn && rep && BEHIND[risk.behind] && <p className="th-tight th-behind warn" data-testid="th-behind">{BEHIND[risk.behind]}, and could not be run again just now ({why429(risk.liveErr)}). The Risk page runs it.</p>}
                 {riskOn && !rep && risk.err && <p className="th-tight">The risk report could not be read ({why429(risk.err)}).</p>}
-                {!riskOn && <p className="th-tight">Limits and risk by tenor are part of Market risk, which is {off('MARKET_RISK')} for this desk.</p>}
+                {!riskOn && pnlOn && <p className="th-tight">Limits and risk by tenor are part of Market risk, which is {off('MARKET_RISK')} for this desk.</p>}
+                {/* neither the statement nor the risk picture: the band they stand in is not drawn empty, and this says where they are */}
+                {!riskOn && !pnlOn && <p className="th-tight" data-testid="th-held">{'P&L, limits and risk by tenor are part of P&L and Market risk, which are '}{off('MARKET_RISK')} for this desk. <button className="dh-link" onClick={() => navigate('/configurations/modules')}>MODULES →</button></p>}
               </>}
           {path}
         </div>
@@ -119,11 +121,13 @@ export default function TraderHome({ d, demo, modules, canEdit, onRequest = [], 
         </div>
       </section>
 
+      {(pnlOn || riskOn) && (
       <section className="th-hero">
         <Statement on={pnlOn} off={off('PNL')} st={pnl} rep={riskOn ? rep : null} trades={trades} pending={pending} confirmed={confirmed} navigate={navigate} />
         <Streams on={riskOn} off={off('MARKET_RISK')} st={risk} list={list} fl={fl} any={trades.length > 0} />
         <Factors on={riskOn} rep={rep} list={list} marks={marks} fl={fl} any={trades.length > 0} navigate={navigate} />
       </section>
+      )}
 
       <section className="th-two">
         <div className="th-panel" data-testid="th-trades">

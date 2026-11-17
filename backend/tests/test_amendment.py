@@ -59,6 +59,18 @@ def test_an_increase_moves_every_leg_in_proportion_and_a_decrease_is_sent_to_a_p
         A.changes_for(t, legs, {"notional": "10000000", "fixed_rate": "3.480003"}, TODAY)
 
 
+def test_the_copy_of_a_swaps_coupon_and_spread_in_the_trades_terms_moves_with_the_leg():
+    t, legs = _swap()
+    t.terms = {"fixed_rate": 0.03480003, "spread": 0, "float_index": "SOFR", "fees": []}
+    changes, _ = A.changes_for(t, legs, {"fixed_rate": "3.55", "spread": "12.5"}, TODAY)
+    assert changes["trade"] == {"terms": {"fixed_rate": 0.0355, "spread": 0.00125, "float_index": "SOFR", "fees": []}}, "a number stays a number, and nothing else moves"
+    A.apply(t, legs, changes)
+    assert t.terms["fixed_rate"] == 0.0355 and legs[0].fixed_rate == Decimal("0.0355")
+    t.terms = {**t.terms, "fixed_rate": 0.04}
+    with pytest.raises(ValueError, match="out of step"):
+        A.changes_for(t, legs, {"fixed_rate": "3.6"}, TODAY)
+
+
 def test_a_pending_trades_change_is_a_correction():
     t, legs = _swap()
     t.status = "PENDING"

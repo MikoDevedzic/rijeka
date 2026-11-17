@@ -144,6 +144,20 @@ instance with no chain) is reduced on the booking alone, and the event is PARTIA
 package, an option sized by a payout, a leg with a notional schedule, a confirmation still being anchored. No
 table, setting or scheduled job; the fee is not part of the signed record (no fee is).
 
+An amendment of named terms (`POST /api/chain/amend-terms/{id}`, since 0.48.0) is what the ticket's AMEND sends:
+`{terms: {name: value}, reason?}`. `chain/amendment.py` works out the `changes` from the booking as a partial
+termination's are (the notional upward on the trade, every leg and the record's own notional; a swap's fixed rate
+and spread on their legs and on the copy the ticket keeps in `terms`; a forward's rate or price and an option's
+strike in `terms`, with the cash a currency trade states). `GET /api/chain/amendable/{id}` lists the terms a trade
+has, each with its value now, and those it cannot change yet with the reason; `/amend-terms-request/{id}` gives a
+counterparty the digest. An anchored record is superseded on the registry, both parties signing, and the event is
+AMENDED with the new attestation and an `amendment` block (`kind`, `terms` from and to, `reason`, `anchored`). A
+trade with no anchored record is changed on the booking alone: the event is AMENDED with no attestation, `kind`
+CORRECTION for a pending trade and AMENDMENT for a confirmed one, and `chain/lifecycle.py` passes over such an
+event when it looks for the current signed record. `/amend/{id}` stays as the counterparty protocol's own route,
+taking a `changes` contract. Refused: a leg of a package, a confirmation still being anchored, a term with a
+schedule of its own, a decrease (a partial termination). No table, setting or scheduled job.
+
 **A barrier's touch.** `POST /api/currency/knock/{id}` records on a digital-asset barrier or touch option that
 its level traded (the day, the level seen), that it never did (once expired), or takes the record off
 (`settlement/knock.py`). It is written to the trade's `terms` (`knocked`, `knock_date`, `knock_level`,

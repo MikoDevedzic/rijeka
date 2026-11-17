@@ -12,8 +12,8 @@ every place together and refuses a booking that is out of step with itself.
 
 Terms a request may set, each only where the trade has exactly one of it:
   notional       upward only; every leg in proportion, and the notional the record carries in `terms`
-  fixed_rate     the fixed leg's coupon, in percent
-  spread         the floating leg's spread, in basis points
+  fixed_rate     the fixed leg's coupon, in percent (and the copy of it the ticket keeps in the trade's `terms`)
+  spread         the floating leg's spread, in basis points (and its copy in `terms`)
   forward_rate   a currency forward's contract rate (the cash it states moves with it)
   forward_price  a digital-asset forward's contract price
   strike         an option's strike (a currency option's stated cash moves with it)
@@ -132,6 +132,16 @@ def _number(v, what: str) -> Decimal:
         raise ValueError(f"the {what} is a number") from None
 
 
+def _copy_in_terms(terms: dict, key: str, old: Decimal, new: Decimal) -> None:
+    """A swap's ticket keeps a copy of its coupon and its spread in the trade's `terms`, and reads the copy first when
+    the trade is opened again. The copy moves with the leg; one that does not say what the leg says is refused."""
+    if terms.get(key) in (None, ""):
+        return
+    if _dec(terms[key]).quantize(EIGHT_DECIMALS) != old.quantize(EIGHT_DECIMALS):
+        raise ValueError(f"the trade's own {key} ({terms[key]}) is not its leg's ({plain(old)}): the booking is out of step with itself")
+    terms[key] = _like(terms[key], new)
+
+
 def changes_for(trade, legs: list, request: dict, today: date, reason=None) -> tuple[dict, dict]:
     """(changes, summary) for setting the terms in `request` ({key: new value}) on `trade`, or ValueError saying why
     not. `changes` has the shape every amendment's has ({"trade": {...}, "legs": [{"id", ...}]}), so the event that
@@ -183,6 +193,7 @@ def changes_for(trade, legs: list, request: dict, today: date, reason=None) -> t
         old, new = _dec(leg.fixed_rate), (pct / 100).quantize(EIGHT_DECIMALS)
         if new != old:
             leg_changes.setdefault(str(leg.id), {})["fixed_rate"] = plain(new)
+            _copy_in_terms(terms, "fixed_rate", old, new)
             said("fixed_rate", (old * 100).normalize(), (new * 100).normalize(), "%")
 
     if "spread" in request:
@@ -193,6 +204,7 @@ def changes_for(trade, legs: list, request: dict, today: date, reason=None) -> t
         old, new = _dec(leg.spread or 0), (bp / 10000).quantize(EIGHT_DECIMALS)
         if new != old:
             leg_changes.setdefault(str(leg.id), {})["spread"] = plain(new)
+            _copy_in_terms(terms, "spread", old, new)
             said("spread", (old * 10000).normalize(), (new * 10000).normalize(), "bp")
 
     tk = _term_key(trade)
