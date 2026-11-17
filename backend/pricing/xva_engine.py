@@ -84,6 +84,21 @@ def interp_spread(curve: Optional[list], flat_bp: float, t: float) -> float:
     return flat_bp / 10000.0
 
 
+def step_spread(curve: Optional[list], flat_bp: float, t0: float, t1: float) -> float:
+    """The spread that applies over the step (t0, t1] of a curve quoted by tenor, as a decimal.
+
+    A spread quoted for a tenor covers the whole of (0, t): it is a term spread, as the credit triangle reads a CDS
+    curve (survival to t is exp(-s(t)/LGD * t)). The rate that applies over one step is then the forward between its
+    two dates, [s(t1)*t1 - s(t0)*t0] / (t1 - t0). The funding curve is read the same way as the credit curve, so the
+    two can be compared step by step. A flat spread is itself; a step whose forward would be negative (a steeply
+    inverted curve) is charged nothing."""
+    if not curve:
+        return flat_bp / 10000.0
+    s1 = interp_spread(curve, flat_bp, t1)
+    s0 = interp_spread(curve, flat_bp, t0) if t0 > 0 else s1
+    return max((s1 * t1 - s0 * t0) / (t1 - t0), 0.0) if t1 > t0 else s1
+
+
 @dataclass
 class WaterfallParams:
     notional:        float
@@ -451,7 +466,8 @@ def run_waterfall(
         disc = p0_grid[i + 1]
         cp_s = interp_spread(params.cp_cds_curve,  params.cp_cds_bp,  t)
         ow_s = interp_spread(params.own_cds_curve, params.own_cds_bp, t)
-        ftp_t = interp_spread(params.ftp_curve, params.ftp_bp, t) if params.ftp_curve else ftp_flat
+        # the funding spread over this step: the forward of a curve quoted by tenor (step_spread), a flat spread as it is
+        ftp_t = step_spread(params.ftp_curve, params.ftp_bp, t - DT, t) if params.ftp_curve else ftp_flat
         # The funding benefit and DVA are not two benefits. On what we owe, DVA already credits us with our own credit
         # spread (own LGD x default probability is that spread over the step). The funding spread is that credit spread
         # plus a basis (what our funding costs beyond our credit: liquidity), so a benefit at the whole funding spread
@@ -460,14 +476,20 @@ def run_waterfall(
         # A Unified Framework for Counterparty and Liquidity Charges"; Burgard and Kjaer, "In the Balance" and "Funding
         # Strategies, Funding Costs", Risk. Until 0.49.0 the benefit was a fixed 55 % of the funding spread, whatever
         # the desk's own spread was.) The cost is not netted: on what we are owed the credit is the counterparty's (CVA).
-        basis_t = max(ftp_t - ow_s, 0.0)
 
-        # Credit triangle: hazard = spread / LGD
-        nqcp = math.exp(-(cp_s / lgd)     * t) if lgd     > 0 else 0.0
-        nqow = math.exp(-(ow_s / own_lgd) * t) if own_lgd > 0 else 0.0
-        # A step in which a curve's survival would rise defaults nobody (as path_survival has it): a negative default
-        # probability is not netted against the other steps.
-        dq_cp, dq_ow = max(qcp - nqcp, 0.0), max(qow - nqow, 0.0)
+        # Credit triangle: hazard = spread / LGD. Survival never rises: where a curve would have it rise (a steeply
+        # inverted curve) it is held where it stood, as path_survival holds it, so that step defaults nobody and the
+        # default probabilities of all the steps sum to one less the lowest survival, never more.
+        nqcp = min(math.exp(-(cp_s / lgd)     * t) if lgd     > 0 else 0.0, qcp)
+        nqow = min(math.exp(-(ow_s / own_lgd) * t) if own_lgd > 0 else 0.0, qow)
+        dq_cp, dq_ow = qcp - nqcp, qow - nqow
+        # Our own credit spread over this step, as DVA charges it: own LGD x the step's hazard, which on a curve
+        # quoted by tenor is the forward spread and on a flat one the spread itself. The basis is the funding spread
+        # of the same step less that, so what DVA credits and what FBA credits add to the funding spread, step by step.
+        # (a flat spread is taken as it is: read back through a logarithm it would differ in the last digits, and a
+        # desk that funds exactly at its credit spread would show a benefit of a millionth of a cent)
+        own_t = own_lgd * (-math.log(nqow / qow)) / DT if (params.own_cds_curve and qow > 0 and nqow > 0) else ow_s
+        basis_t = max(ftp_t - own_t, 0.0)
         # Funding is paid and earned only while the trade is alive: neither party has defaulted. The step is weighted
         # by the chance both survive it, read at its middle, on the curves as the market has them (default independent
         # of the market here, also when CVA and DVA carry wrong-way risk).

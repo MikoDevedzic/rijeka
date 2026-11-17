@@ -90,15 +90,52 @@ def test_every_adjustment_carries_the_sign_it_was_accumulated_with():
 
 
 def test_a_step_in_which_a_curves_survival_would_rise_defaults_nobody():
-    """A steeply inverted spread curve implies survival that rises between two dates. The step is charged nothing; the
-    negative default probability is not netted against the other steps, and the total keeps its sign."""
+    """A steeply inverted spread curve implies survival that rises between two dates. Survival is held where it stood
+    (as the wrong-way branch's path_survival holds it): the step is charged nothing, the next step starts from the
+    held level, and the default probabilities of all the steps sum to one less the lowest survival."""
     paths = np.abs(_paths()) + 1.0
     inverted = [{"t": 0.25, "spread_bp": 900.0}, {"t": 0.5, "spread_bp": 100.0}, {"t": 1.0, "spread_bp": 100.0}]
     P = WaterfallParams(notional=1e7, maturity_y=T * DT, dt=DT, theta=0.035, cp_cds_curve=inverted)
     wf = run_waterfall(paths, 0.0, P0, P, CSA.uncollateralised())
     from pricing.xva_engine import interp_spread
     ee = paths.mean(axis=0)
-    q = [1.0] + [math.exp(-(interp_spread(inverted, 85.0, (i + 1) * DT) / P.lgd) * (i + 1) * DT) for i in range(T)]
-    assert any(q[i + 1] > q[i] for i in range(T)), "the curve does imply a rising survival somewhere"
-    by_hand = -P.lgd * sum(ee[i] * max(q[i] - q[i + 1], 0.0) * P0[i + 1] for i in range(T))
+    raw = [1.0] + [math.exp(-(interp_spread(inverted, 85.0, (i + 1) * DT) / P.lgd) * (i + 1) * DT) for i in range(T)]
+    assert any(raw[i + 1] > raw[i] for i in range(T)), "the curve does imply a rising survival somewhere"
+    held = [1.0]
+    for i in range(T):
+        held.append(min(raw[i + 1], held[-1]))
+    by_hand = -P.lgd * sum(ee[i] * (held[i] - held[i + 1]) * P0[i + 1] for i in range(T))
     assert wf.cva == pytest.approx(by_hand, rel=1e-12) and wf.cva < 0
+    assert sum(held[i] - held[i + 1] for i in range(T)) == pytest.approx(1.0 - min(raw), rel=1e-12)
+
+
+SLOPED_OWN = [{"t": 1.0, "spread_bp": 38.0}, {"t": 2.0, "spread_bp": 41.0}, {"t": 3.0, "spread_bp": 44.0}, {"t": 5.0, "spread_bp": 48.0}]
+SLOPED_FTP = [{"t": 1.0, "spread_bp": 42.0}, {"t": 2.0, "spread_bp": 46.0}, {"t": 3.0, "spread_bp": 50.0}, {"t": 5.0, "spread_bp": 55.0}]
+
+
+def test_on_sloped_curves_dva_and_the_benefit_together_credit_the_funding_spread_once():
+    """The model validator, 17 November 2026: with the own-credit curve read as a term spread DVA charges the FORWARD
+    spread of each step, and a basis taken from the spot spread left DVA plus the benefit 10 to 18 % above the funding
+    spread on the default curves. Both curves are now read the same way (step_spread): step by step, what DVA credits
+    and what FBA credits add to the funding spread of that step."""
+    from pricing.xva_engine import step_spread
+    n, steps, dt = 20_000, 60, 1.0 / 12
+    rng = np.random.default_rng(3)
+    paths = -np.abs(np.cumsum(rng.standard_normal((n, steps)) * 80_000.0 * math.sqrt(dt), axis=1)) - 1.0     # we owe, on every path
+    p0 = [math.exp(-0.035 * k * dt) for k in range(steps + 2)]
+    P = WaterfallParams(notional=1e7, maturity_y=steps * dt, dt=dt, theta=0.035, cp_cds_bp=1e-9,
+                        own_cds_curve=SLOPED_OWN, ftp_curve=SLOPED_FTP)
+    wf = run_waterfall(paths, 0.0, p0, P, CSA.uncollateralised())
+    ene = -paths.mean(axis=0)
+    # by hand: the funding spread of each step on what we owe, while we are alive (the counterparty cannot default here)
+    from pricing.xva_engine import interp_spread
+    q = [1.0] + [math.exp(-(interp_spread(SLOPED_OWN, 42.0, (i + 1) * dt) / P.own_lgd) * (i + 1) * dt) for i in range(steps)]
+    once = sum(step_spread(SLOPED_FTP, 55.0, i * dt, (i + 1) * dt) * ene[i] * 0.5 * (q[i] + q[i + 1]) * dt * p0[i + 1] for i in range(steps))
+    assert wf.fba > 0 and wf.dva > 0
+    assert wf.dva + wf.fba == pytest.approx(once, rel=2e-3), "the two together are the funding spread, credited once"
+    # the step's own spread is the forward of the term curve: above the spot spread where the curve rises
+    assert step_spread(SLOPED_OWN, 42.0, 2.0, 3.0) == pytest.approx((44.0 * 3 - 41.0 * 2) / 1e4, rel=1e-12)
+    assert step_spread(None, 55.0, 2.0, 3.0) == 55.0 / 1e4 and step_spread(SLOPED_FTP, 55.0, 0.0, 1.0) == pytest.approx(42.0 / 1e4)
+    # a flat curve given as a curve is the flat spread at every step
+    flat = [{"t": 1.0, "spread_bp": 55.0}, {"t": 5.0, "spread_bp": 55.0}]
+    assert all(step_spread(flat, 55.0, k * dt, (k + 1) * dt) == pytest.approx(55.0 / 1e4, rel=1e-12) for k in range(steps))

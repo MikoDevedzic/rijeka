@@ -91,6 +91,10 @@ field for the new one, and the ticket opened again on the trade as it then stand
 are 520px wide, and the figures in the line that says what was done are set as figures. What sets a run and not the trade (the XVA tab's margin terms, a scenario) stays open. A control that is off reads as
 off: a coloured button and a locked schedule's buttons at 45%, a locked field at 85%.
 
+**What a run rests on is said in words on its tab**, in amber where it is a default or a stand-in: whose spreads
+(the defaults, or typed), which volatility (a swap in another currency on the dollar surface). A figure worked out
+from inputs sits among them with no well, in the fields' own face and size, on their right edge.
+
 **The launch home is a workspace's first screen**: once a trade of its own is confirmed, or the card is skipped,
 the home is the trader's. Where P&L and Market risk are both off the trader's home leaves out the band they stand
 in, and one line under where the desk stands says where they are.

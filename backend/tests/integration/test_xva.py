@@ -372,3 +372,16 @@ def test_currency_xva_with_collateral(client, auth_a):
     js = js.json()
     assert js["xva"]["colva"] < 0 and js["xva"]["cva"] == pytest.approx(j0["xva"]["cva"], abs=0.05)
     assert js["xva"]["annuity"] and js["xva"]["annuity"] > 0 and js["csa"]["vm_recv_carry_bp"] == 0.0
+
+
+def test_a_swap_whose_curve_is_not_stored_is_refused_in_words_and_a_stored_one_says_which_volatility_it_ran_on(client, auth_a):
+    """17 November 2026: a run with no curve went on, on a flat rate, and answered 200. A currency with no stored
+    curve is now refused; a stored one answers with the surface its volatility came from."""
+    body = {"notional": 10_000_000, "fixed_rate": 0.035, "maturity_y": 5, "direction": "PAY", "paths": 200, "valuation_date": "2026-11-02"}
+    gone = client.post("/api/xva/simulate", json={**body, "curve_id": "AUD_AONIA"}, headers=auth_a)
+    assert gone.status_code == 422, gone.text[:300]
+    assert "No curve is stored for AUD_AONIA" in gone.text and "cannot be simulated" in gone.text
+    usd = client.post("/api/xva/simulate", json={**body, "curve_id": "USD_SOFR", "fba_ratio": 0.55}, headers=auth_a)       # an older browser's body: the ratio is read and ignored
+    assert usd.status_code == 200, usd.text[:300]
+    assert usd.json()["vol_basis"] == {"surface": "USD_SWVOL_ATM", "currency": "USD", "proxy": False, "note": None}
+    assert usd.json()["xva"]["fca"] <= 0 <= usd.json()["xva"]["fba"]

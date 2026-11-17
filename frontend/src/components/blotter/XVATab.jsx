@@ -620,7 +620,7 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
           {view !== 'simple' && (
             <div style={XVA_BAND} data-testid="xva-assumptions">
               <div><SpreadCurvesGrid spreads={spreads} onChange={setSpread} tip={tip} untip={untip} /></div>
-              <div><AssumptionsBlock lgd={lgd} setLgd={setLgd} funding={fundingBasis(spreads)} hurdle={hurdle} setHurdle={setHurdle} imUsd={imUsd} setImUsd={setImUsd} capModel={capModel} setCapModel={setCapModel} tip={tip} untip={untip} imCcy={ticketCcy} /></div>
+              <div><AssumptionsBlock lgd={lgd} setLgd={setLgd} funding={fundingBasis(spreads)} hurdle={hurdle} setHurdle={setHurdle} imUsd={imUsd} setImUsd={setImUsd} capModel={capModel} setCapModel={setCapModel} tip={tip} untip={untip} imCcy={ccySign(ticketCcy).trim()} /></div>
             </div>
           )}
       </div>

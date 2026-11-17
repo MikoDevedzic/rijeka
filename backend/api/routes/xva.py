@@ -76,6 +76,14 @@ CALIB_STALE_WARN_DAYS  = 5
 CALIB_STALE_ALERT_DAYS = 14
 
 
+def _run_curve_id(body) -> str:
+    """The curve a rates run is built on: the one handed in with its quotes, else the one named."""
+    curves = getattr(body, "curves", None)
+    if curves and getattr(curves[0], "curve_id", None):
+        return str(curves[0].curve_id)
+    return str(getattr(body, "curve_id", None) or "USD_SOFR")
+
+
 def _vol_basis(curve_id: Optional[str]) -> dict:
     """Which swaption surface a rates run's volatility came from, and whether that is the trade's own currency."""
     ccy = str(curve_id or "USD_SOFR").split("_")[0].upper() or "USD"
@@ -548,6 +556,13 @@ def simulate(
         mkt_curve = _build_curve(ci, val_date, db, user["sub"])
     except Exception as _curve_err:
         curve_note = str(_curve_err)
+    if mkt_curve is None:
+        # No curve, no exposure. Until 0.49.0 the run went on, on a flat rate (the long-run level of the dollar
+        # calibration), and answered 200: a swap in a currency with no stored curve got figures that looked like any
+        # other run's, and nothing on the tab said what they were built on.
+        raise HTTPException(status_code=422, detail=(
+            f"No curve is stored for {_run_curve_id(body)}, so this swap's exposure cannot be simulated. "
+            "Load or save that curve under Configurations, Market data, then run again."))
 
     def _p0(t: float) -> float:
         """Market discount factor to year-fraction t (ACT/365F, as Curve uses)."""
@@ -564,12 +579,6 @@ def simulate(
             f0_grid.append(-math.log(b_df / a_df) / DT
                            if (a_df > 0 and b_df > 0) else theta)
         curve_source = "bootstrapped" if (body.curves and body.curves[0].quotes) else "db-snapshot"
-    else:
-        # No curve available — fall back to the previous flat-theta behaviour
-        # rather than failing the request, but say so in the response.
-        p0_grid = [math.exp(-theta * k * DT) for k in range(T + 2)]
-        f0_grid = [theta] * (T + 1)
-        curve_source = "flat-theta-fallback"
 
     # ── Monte Carlo (pricing/hw1f_mc.py: the exact-fit Hull-White step and the bond reconstitution) ──
     sim = simulate_swap_paths(a, sigma, p0_grid, f0_grid, T, DT, N, K, n_paths, direction="RECEIVE", rng=rng)
@@ -686,7 +695,7 @@ def simulate(
         # The Hull-White parameters are calibrated to USD swaptions (USD_SWVOL_ATM, the one surface stored). A swap in
         # another currency is discounted and projected on its own curve and simulated on that USD volatility: said with
         # the figures, not left to be found.
-        "vol_basis": _vol_basis(body.curve_id),
+        "vol_basis": _vol_basis(_run_curve_id(body)),
         "params": {
             "a":        a,
             "sigma_bp": sigma_bp,

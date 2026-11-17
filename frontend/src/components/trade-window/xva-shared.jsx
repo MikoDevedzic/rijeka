@@ -311,9 +311,10 @@ export function AssumptionsBlock({ lgd, setLgd, hurdle, setHurdle, imUsd, setImU
         ))}
         {/* worked out from the spread grid, not typed: what the funding benefit is charged on */}
         {funding && <>
-          <TipLabel tipKey='fundingBasis' tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>Funding basis bp</TipLabel>
+          <TipLabel tipKey='fundingBasis' tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>Funding basis bp, to 5Y</TipLabel>
+          {/* a figure worked out from the grid, not typed: no well, the fields' own face and size, on their right edge */}
           <span data-testid="xva-funding-basis" title={`FTP ${funding.ftp} less OWN CDS ${funding.own}, at five years`}
-            style={{ fontFamily:'var(--mono)', fontSize:'12.5px', textAlign:'right', alignSelf:'center', color:'var(--text)' }}>{funding.basis}</span>
+            style={{ fontFamily:INP.fontFamily, fontSize:INP.fontSize, textAlign:'right', alignSelf:'center', color:'var(--text-hi)', paddingRight:'8px' }}>{funding.basis}</span>
         </>}
         <TipLabel tipKey='capModel' tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>Capital model</TipLabel>
         <select aria-label='Capital model' value={capModel} onChange={e=>setCapModel(e.target.value)} style={{...INP,cursor:'pointer'}}>
