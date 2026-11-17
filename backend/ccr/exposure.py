@@ -42,7 +42,8 @@ def csa_from_counterparty(cp) -> CSA:
 
 
 def exposures(V: np.ndarray, t: np.ndarray, csa: CSA, seed: int = 11, flows: Optional[np.ndarray] = None) -> dict[str, Any]:
-    """flows[i]: net trade flow paid in (t_{i−1}, t_i], as the jump it makes in V. The lagged value
+    """flows[i], or flows[path, i]: net trade flow paid in (t_{i−1}, t_i], as the jump it makes in V (one number per
+    step, or one per path and step: a floating coupon is the path's own). The lagged value
     is the bridge between grid points, which smears that jump; the margin call either saw the
     payment (before the window) or settles with it (inside the window), so the lagged value is
     restored by the part of the jump the bridge left out: frac · J_i, frac the MPoR as a fraction
@@ -57,7 +58,8 @@ def exposures(V: np.ndarray, t: np.ndarray, csa: CSA, seed: int = 11, flows: Opt
         v_lag = lagged_values(future, v0, dt, csa.mpor_years, rng)
         if flows is not None:
             frac = min(csa.mpor_years / dt, 1.0)
-            v_lag = v_lag + frac * np.asarray(flows)[1:][None, :]
+            fl = np.asarray(flows)
+            v_lag = v_lag + frac * (fl[:, 1:] if fl.ndim == 2 else fl[1:][None, :])
         coll = collateral_held(v_lag, csa)
     else:
         coll = np.zeros_like(future)

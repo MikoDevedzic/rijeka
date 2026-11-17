@@ -11,13 +11,14 @@ from __future__ import annotations
 
 import logging
 from datetime import date, timedelta
+from functools import partial
 from decimal import Decimal
 
 import numpy as np
 
 from ccr import options as O
 from ccr.calibration import CURVE_OF
-from ccr.simulate import Paths, accrued, bond
+from ccr.simulate import Paths, bond, growth
 from pnl.valuation import _currency_terms
 
 log = logging.getLogger("rijeka.ccr")
@@ -172,6 +173,12 @@ class NettingSet:
         return int(min(max(m, 1), 480))
 
 
+def _bond_once(seen: dict, paths: Paths, key: str, i: int, T: float) -> np.ndarray:
+    if T not in seen:
+        seen[T] = bond(paths, key, i, T)
+    return seen[T]
+
+
 def value_swap(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float]) -> np.ndarray:
     asof = paths.grid[0]; t_i = float(paths.t[i])
     key = f"RATES:{CURVE_OF.get(item['ccy'], item['ccy'] + '_OIS')}"
@@ -187,18 +194,30 @@ def value_swap(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float]) ->
             c = float(lg.get("fixed_rate") or 0.0)
             pv = sum(N * c * tau * bond(paths, key, i, years(asof, pay)) for (_, _, pay, tau) in future)
         else:
-            # The floating coupons still to come, together: N·(P(t, start) − P(t, end)) while the first of them has
-            # not begun. Once it has, the period's interest so far is owed as well: one unit placed at its start has
-            # grown to `accrued` by now, so the leg is N·(accrued − P(t, end)). (Until 0.51.0 a running period was
-            # valued as if it reset today, N·(1 − P): the interest accrued since its start was left out, and a swap
-            # whose two legs pay on the same dates showed the fixed coupon building up with nothing against it,
-            # up to a whole coupon before each payment. Found reconciling the XVA runs, 17 November 2026.)
-            ps0 = future[0][0]
-            p_start = bond(paths, key, i, years(asof, ps0)) if years(asof, ps0) > t_i else accrued(paths, key, i, years(asof, ps0))
-            p_end = bond(paths, key, i, years(asof, future[-1][2]))
+            # The floating coupons not yet paid (0.51.0), each on its own dates. A period [s, e] paid at p pays
+            # N·(growth of one unit over [s, e] − 1):
+            #   ended, waiting for its payment date   its amount is known on the path: N·(G(s, e) − 1)·P(t, p)
+            #   running                               N·(G(s, t) / P(t, e) − 1)·P(t, p)
+            #   not begun                             N·(P(t, s) / P(t, e) − 1)·P(t, p)
+            # With p = e the last two are N·(G(s, t) − P(t, e)) and N·(P(t, s) − P(t, e)): the old telescoped form.
+            # Until 0.51.0 the whole leg was N·(P(t, start) − P(t, last PAYMENT date)) with the start read as today
+            # once the period had begun: the interest accrued since its start was left out, so a swap whose two
+            # legs pay on the same dates showed the fixed coupon building up with nothing against it, a whole
+            # coupon before each payment (found reconciling the XVA runs, 17 November 2026); and the last payment
+            # date in place of the last period end overvalued a leg with a two-day lag by N·(1 − e^(−r·lag)), 2,300
+            # on 10M (the model validator and the independent reviewer, the same day).
             lev = 1.0 if lg.get("leverage") is None else float(lg.get("leverage"))
-            pv = lev * N * (p_start - p_end)
             spread = float(lg.get("spread") or 0.0)
+            pv = np.zeros(paths.n_paths)
+            seen: dict[float, np.ndarray] = {}                # one period's end is the next one's start: priced once
+            P = partial(_bond_once, seen, paths, key, i)
+            for (ps, pe, pay, _tau) in future:
+                ts, te, tp = years(asof, ps), years(asof, pe), years(asof, pay)
+                if te <= t_i + 1e-9:
+                    pv = pv + lev * N * (growth(paths, key, ts, te) - 1.0) * P(tp)
+                    continue
+                grown = growth(paths, key, ts, t_i) if ts <= t_i + 1e-9 else P(ts)
+                pv = pv + lev * N * ((grown - P(te)) if tp == te else (grown / P(te) - 1.0) * P(tp))
             if spread:
                 pv = pv + sum(N * spread * tau * bond(paths, key, i, years(asof, pay)) for (_, _, pay, tau) in future)
         v = v + sign * pv
@@ -225,41 +244,37 @@ def value_forward(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float],
 
 
 def flows_per_step(ns: NettingSet, paths: Paths, fx_to_usd: dict[str, float]) -> np.ndarray:
-    """Net trade flow we pay in (t_{i−1}, t_i], per grid step, as the jump it makes in our value
-    (paying a coupon raises V, receiving one lowers it). Fixed coupons, float spreads and, since
-    0.51.0, the floating coupon itself: a running period carries its accrued interest in V, so V
-    jumps when the coupon is paid. The floating amount differs path by path; this array is one
-    number per step, so it takes the coupon today's curve implies, N·(P(0,start)/P(0,end) − 1).
-    The exposure step uses it so a payment between grid points is margined, not smeared into the
-    margin period of risk by the bridge."""
+    """Net trade flow we pay in (t_{i−1}, t_i] on each path, shape (paths, T+1), as the jump it makes in our value
+    (paying a coupon raises V, receiving one lowers it). Fixed coupons, float spreads and, since 0.51.0, the
+    floating coupon itself: a period carries its accrued interest in V until it is paid, so V jumps at the payment.
+    The floating amount is the path's own, N·(growth over the period − 1), as value_swap has it. (One number per
+    step from today's curve nets to almost nothing against the fixed coupon and left the margined exposure about
+    5 % high on average and 25 to 45 % at payment dates: the model validator, 17 November 2026.) The exposure step
+    uses it so a payment between grid points is margined, not smeared into the margin period of risk by the bridge."""
     asof = paths.grid[0]
-    out = np.zeros(len(paths.grid))
+    out = np.zeros((paths.n_paths, len(paths.grid)))
     for it in ns.items:
         if it["kind"] != "SWAP":
             continue
         k = fx_to_usd.get(it["ccy"], 1.0)
+        key = f"RATES:{CURVE_OF.get(it['ccy'], it['ccy'] + '_OIS')}"
         for lg, sched in it["legs"]:
             pay_sign = 1.0 if str(lg.get("direction", "")).upper().startswith("PAY") else -1.0
             N = float(lg.get("notional") or 0.0)
-            for (_ps, _pe, pay, tau) in sched:
+            fixed = str(lg.get("leg_type", "")).upper() == "FIXED"
+            lev = 1.0 if lg.get("leverage") is None else float(lg.get("leverage"))
+            for (ps, pe, pay, tau) in sched:
                 tp = years(asof, pay)
                 if tp <= 0:
                     continue
-                if str(lg.get("leg_type", "")).upper() == "FIXED":
+                step = next((i for i in range(1, len(paths.t)) if float(paths.t[i - 1]) < tp <= float(paths.t[i]) + 1e-9), None)
+                if step is None:
+                    continue
+                if fixed:
                     amt = N * float(lg.get("fixed_rate") or 0.0) * tau
                 else:
-                    key = f"RATES:{CURVE_OF.get(it['ccy'], it['ccy'] + '_OIS')}"
-                    p0 = paths.p0[key]
-                    lev = 1.0 if lg.get("leverage") is None else float(lg.get("leverage"))
-                    grown = p0(max(years(asof, _ps), 0.0)) / max(p0(max(years(asof, _pe), 0.0)), 1e-12)
-                    if years(asof, _ps) < 0.0:                       # began before today: its past part at today's rate, as value_swap has it
-                        grown = grown / max(p0(-years(asof, _ps)), 1e-12)
-                    amt = lev * N * (grown - 1.0) + N * float(lg.get("spread") or 0.0) * tau
-                    if amt == 0.0:
-                        continue
-                for i in range(1, len(paths.t)):
-                    if float(paths.t[i - 1]) < tp <= float(paths.t[i]) + 1e-9:
-                        out[i] += pay_sign * amt * k
+                    amt = lev * N * (growth(paths, key, years(asof, ps), years(asof, pe)) - 1.0) + N * float(lg.get("spread") or 0.0) * tau
+                out[:, step] += pay_sign * amt * k
     return out
 
 

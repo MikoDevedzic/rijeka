@@ -81,7 +81,10 @@ def test_collateral_cuts_the_exposure():
     ns = SimpleNamespace(items=[_swap_item("PAY")])
     csa = csa_from_counterparty(SimpleNamespace(csa_type="VM", csa_threshold_m=0, csa_mta_k=0))
     fl = flows_per_step(ns, p, {"USD": 1.0})
-    assert fl.max() > 1e6 and (fl > 0).sum() == 5                            # five annual fixed coupons we pay, each a jump in V inside one step
+    # per path and step (0.51.0). Five yearly fixed coupons we pay, each a jump in V inside one step, less the floating
+    # quarter received in the same step; and fifteen steps in which only a floating quarter is received
+    mean = fl.mean(axis=0)
+    assert fl.shape == (p.n_paths, len(p.grid)) and mean.max() > 1e6 and (mean > 0).sum() == 5 and (mean < 0).sum() == 15
     vm = exposures(V, p.t, csa, flows=fl)
     assert vm["peak_pfe95_usd"] < 0.5 * open_["peak_pfe95_usd"]           # a 10-day MPoR on a monthly grid leaves the half-month move, not the coupon
 
@@ -108,54 +111,84 @@ def test_stored_numbers_are_plain_floats():
     assert _num(np.float64(1.5)) == 1.5 and type(_num(np.float64(1.5))) is float and _num(None) is None
 
 
-def _par_swap(float_freq: str, fixed_direction: str, rate: float, notional: float = 10e6):
+def _par_swap(float_freq: str, fixed_direction: str, rate: float, notional: float = 10e6, start=None, lag: int = 0, leverage=None, spread: float = 0.0):
     from ccr.valuation import leg_schedule
-    eff, mat = ASOF, ASOF.replace(year=ASOF.year + 5)
-    common = {"notional": notional, "day_count": "ACT/360", "effective_date": str(eff), "maturity_date": str(mat), "currency": "USD"}
+    eff = start or ASOF
+    mat = eff.replace(year=eff.year + 5)
+    common = {"notional": notional, "day_count": "ACT/360", "effective_date": str(eff), "maturity_date": str(mat), "currency": "USD", "payment_lag": lag}
     legs = [{**common, "leg_type": "FIXED", "direction": fixed_direction, "fixed_rate": rate, "payment_frequency": "ANNUAL"},
-            {**common, "leg_type": "FLOAT", "direction": "PAY" if fixed_direction == "RECEIVE" else "RECEIVE", "payment_frequency": float_freq}]
+            {**common, "leg_type": "FLOAT", "direction": "PAY" if fixed_direction == "RECEIVE" else "RECEIVE", "payment_frequency": float_freq,
+             "leverage": leverage, "spread": spread}]
     return {"kind": "SWAP", "ccy": "USD", "legs": [(lg, leg_schedule(lg, ASOF)) for lg in legs], "maturity": mat, "trade": SimpleNamespace(trade_ref="T")}
+
+
+def _left_today(it, t_i, p0):
+    """Today's value of the coupons not yet paid at t_i, from today's curve alone and coupon by coupon: a fixed coupon
+    N·c·τ·P(0, pay); a floating one N·(lev·(P(0, start)/P(0, end) − 1) + spread·τ)·P(0, pay). A period that began
+    before today grew its past part at today's rate for that length, as the engine is told to assume."""
+    from ccr.valuation import years
+    tot = 0.0
+    for lg, sched in it["legs"]:
+        sgn = -1.0 if lg["direction"] == "PAY" else 1.0
+        N = lg["notional"]
+        for (s_, e_, pay, tau) in sched:
+            if years(ASOF, pay) <= t_i + 1e-9:
+                continue
+            if lg["leg_type"] == "FIXED":
+                tot += sgn * N * lg["fixed_rate"] * tau * p0(years(ASOF, pay))
+            else:
+                ts, te = years(ASOF, s_), years(ASOF, e_)
+                grown = (1.0 / p0(-ts) if ts < 0 else p0(ts)) / p0(te)
+                lev = 1.0 if lg.get("leverage") is None else lg["leverage"]
+                tot += sgn * N * (lev * (grown - 1.0) + (lg.get("spread") or 0.0) * tau) * p0(years(ASOF, pay))
+    return tot
 
 
 def test_a_swap_between_coupon_dates_carries_the_floating_interest_accrued_so_far():
     """Found reconciling the XVA runs, 17 November 2026. A running floating period was valued as if it reset today,
     N·(1 − P(t, end)): the interest accrued since the period began was left out. With both legs paying yearly a
     receive-fixed par swap, worth nothing on average, showed the fixed coupon building up with nothing against it:
-    +34,628 after a month and +375,222 after eleven on 10M at 4 %, back to nothing after each payment. That was
-    the expected exposure of every swap in the counterparty report, the incremental charge and the XVA P&L.
+    +34,628 after a month and +375,222 after eleven on 10M at the par rate of a flat 4 % curve (4.0253 %), back to
+    nothing after each payment. That was the expected exposure of every swap in the counterparty report, the
+    incremental charge and the XVA P&L.
 
-    The check is the martingale one, and it does not use the engine's own formula: the value on the path at a grid
-    date, discounted by the path's cash account, averages to today's value of the coupons still to come at that
-    date, read off today's curve (the fixed coupons not yet paid, less the floating leg from the start of its
-    running period, since E[D(t)·accrued(t)] = P(0, start))."""
+    The check is the martingale one, and it does not use the engine's formula: the value on the path at a grid date,
+    discounted along the path, averages to today's value of the coupons not yet paid at that date, read off today's
+    curve coupon by coupon (_left_today). The discounting is done twice: by the engine's cash account, and by the
+    trapezoid of the short rate that the reference suite uses, which shares nothing with the engine's accrual. Cases:
+    three floating frequencies, both directions, a leg that pays two days after each period ends (the ticket's own
+    swap; the old code overvalued it by 2,300 on 10M at every date), a swap that started ten days ago and one that
+    starts in ten days (off the grid), leverage and a spread on the floating leg."""
+    from datetime import timedelta
     from ccr.simulate import account
-    from ccr.valuation import years
-    p = simulate(_calib("RISK_NEUTRAL", "forward"), _curves(), {"SPOT:EURUSD": 1.10}, {"SPOT:EURUSD": (0.04, 0.02)}, ASOF, 60, n_paths=20000, seed=1)
-    key, N = "RATES:USD_SOFR", 10e6
-    D = 1.0 / account(p, key)
+    p = simulate(_calib("RISK_NEUTRAL", "forward"), _curves(), {"SPOT:EURUSD": 1.10}, {"SPOT:EURUSD": (0.04, 0.02)}, ASOF, 61, n_paths=20000, seed=1)
+    key = "RATES:USD_SOFR"
     p0 = p.p0[key]
+    D = 1.0 / account(p, key)
+    r = p.r[key]
+    D2 = np.exp(-np.concatenate([np.zeros((r.shape[0], 1)), np.cumsum(0.5 * (r[:, 1:] + r[:, :-1]) * np.diff(p.t)[None, :], axis=1)], axis=1))
     se36 = D[:, 36].std() / np.sqrt(D.shape[0])
     assert np.allclose(D[:, 0], 1.0) and abs(D[:, 36].mean() - p0(float(p.t[36]))) < 4.0 * se36, "the account discounts back to the curve, within sampling"
-    for freq in ("ANNUAL", "QUARTERLY", "SEMI_ANNUAL"):
-        for direction in ("RECEIVE", "PAY"):
-            it = _par_swap(freq, direction, 0.0402)
-            sgn = 1.0 if direction == "RECEIVE" else -1.0
-            fixed, flt = it["legs"][0][1], it["legs"][1][1]
-            worst = 0.0
-            for i in range(len(p.grid)):
-                t_i = float(p.t[i])
-                x = D[:, i] * value_swap(it, p, i, {"USD": 1.0})
-                fx_left = sum(N * 0.0402 * tau * p0(years(ASOF, pay)) for (_s, _e, pay, tau) in fixed if years(ASOF, pay) > t_i + 1e-9)
-                left = [(s, e, pay) for (s, e, pay, _tau) in flt if years(ASOF, pay) > t_i + 1e-9]
-                fl_left = N * (p0(max(years(ASOF, left[0][0]), 0.0)) - p0(years(ASOF, left[-1][2]))) if left else 0.0
-                want = sgn * (fx_left - fl_left)
+    cases = [dict(float_freq=f, fixed_direction=d, rate=0.0402) for f in ("ANNUAL", "QUARTERLY", "SEMI_ANNUAL") for d in ("RECEIVE", "PAY")]
+    cases += [dict(float_freq="ANNUAL", fixed_direction="RECEIVE", rate=0.0402, lag=2),
+              dict(float_freq="QUARTERLY", fixed_direction="PAY", rate=0.0402, lag=2),
+              dict(float_freq="ANNUAL", fixed_direction="RECEIVE", rate=0.0402, start=ASOF - timedelta(days=10)),
+              dict(float_freq="QUARTERLY", fixed_direction="RECEIVE", rate=0.0402, start=ASOF + timedelta(days=10)),
+              dict(float_freq="QUARTERLY", fixed_direction="RECEIVE", rate=0.0402, leverage=1.5, spread=0.002)]
+    for kw in cases:
+        it = _par_swap(**kw)
+        zs = []
+        for i in range(len(p.grid)):
+            v = value_swap(it, p, i, {"USD": 1.0})
+            want = _left_today(it, float(p.t[i]), p0)
+            for disc, slack in ((D, 60.0), (D2, 400.0)):          # the trapezoid's own discretisation is a few hundred on 10M
+                x = disc[:, i] * v
                 se = x.std() / np.sqrt(len(x))
-                worst = max(worst, abs(x.mean() - want) / max(se, 1.0))
-                assert abs(x.mean() - want) < 4.0 * se + 150.0, (freq, direction, i, x.mean(), want, se)
-            assert worst < 5.0
+                assert abs(x.mean() - want) < 4.0 * se + slack, (kw, i, x.mean(), want, se)
+            zs.append((D[:, i] * v).mean() - want)
+        assert abs(float(np.mean(zs))) < 1_500.0, (kw, "no bias across the dates", float(np.mean(zs)))
     # and what it was: eleven months in, with both legs yearly, the old value stood a whole floating year's interest out
-    it = _par_swap("ANNUAL", "RECEIVE", 0.0402)
-    v11 = value_swap(it, p, 11, {"USD": 1.0}).mean()
+    v11 = value_swap(_par_swap("ANNUAL", "RECEIVE", 0.0402), p, 11, {"USD": 1.0}).mean()
     assert abs(v11) < 5_000.0, "about nothing on average; it read +375,222"
     # a leg that pays more often than the other does leave a real saw-tooth: three quarters of floating interest
     # have been paid and the year's fixed coupon has not
@@ -163,17 +196,53 @@ def test_a_swap_between_coupon_dates_carries_the_floating_interest_accrued_so_fa
     assert 250_000.0 < q11 < 350_000.0
 
 
-def test_the_floating_coupon_is_a_cash_flow_of_its_step():
-    """A running period carries its accrued interest in the value, so the value jumps when the coupon is paid: the
-    exposure step must see that payment as it sees a fixed coupon (flows_per_step)."""
-    from ccr.valuation import NettingSet, flows_per_step
-    p = simulate(_calib("RISK_NEUTRAL", "forward"), _curves(), {"SPOT:EURUSD": 1.10}, {"SPOT:EURUSD": (0.04, 0.02)}, ASOF, 60, n_paths=500, seed=1)
-    ns = NettingSet.__new__(NettingSet)
-    ns.items = [_par_swap("ANNUAL", "RECEIVE", 0.0402)]
-    fl = flows_per_step(ns, p, {"USD": 1.0})
-    # both legs pay on the same dates: we receive the fixed coupon and pay the floating one, and at par the two net to little
-    paid = [i for i in range(len(fl)) if fl[i] != 0.0]
-    assert len(paid) == 5 and all(abs(fl[i]) < 0.1 * 10e6 * 0.0402 for i in paid)
-    ns.items = [_par_swap("QUARTERLY", "RECEIVE", 0.0402)]
-    fq = flows_per_step(ns, p, {"USD": 1.0})
-    assert sum(1 for x in fq if x != 0.0) == 20 and max(fq) > 0.9 * 10e6 * 0.0402 / 4      # a floating quarter paid: V rises
+def test_the_accrued_interest_is_the_paths_own_and_not_the_curves():
+    """The model validator, 17 November 2026: a martingale check sees a mean; an accrual read off today's curve would
+    pass it, and PFE comes from the spread across paths. Against the short rate integrated along each path (a
+    trapezoid, which shares nothing with the engine's bonds): the growth of a unit over a year agrees path by path,
+    and is spread across paths as the rate is."""
+    from ccr.simulate import growth
+    p = simulate(_calib("RISK_NEUTRAL", "forward"), _curves(), {"SPOT:EURUSD": 1.10}, {"SPOT:EURUSD": (0.04, 0.02)}, ASOF, 60, n_paths=5000, seed=2)
+    key = "RATES:USD_SOFR"
+    r = p.r[key]
+    integ = np.concatenate([np.zeros((r.shape[0], 1)), np.cumsum(0.5 * (r[:, 1:] + r[:, :-1]) * np.diff(p.t)[None, :], axis=1)], axis=1)
+    for (i0, i1) in ((0, 12), (24, 36), (47, 59)):
+        g = growth(p, key, float(p.t[i0]), float(p.t[i1]))
+        own = np.exp(integ[:, i1] - integ[:, i0])
+        assert np.corrcoef(g, own)[0, 1] > 0.999
+        assert np.abs(g / own - 1.0).max() < 2e-3, "path by path, within the trapezoid's discretisation"
+        if i0:
+            assert g.std() > 0.004, "a year's interest three years out is not known today"
+    # the pieces join: a span cut at a date off the grid is the product of its two parts
+    a, m, b = float(p.t[3]) + 0.02, float(p.t[7]) + 0.05, float(p.t[11])
+    assert np.allclose(growth(p, key, a, b), growth(p, key, a, float(p.t[7])) * growth(p, key, float(p.t[7]), b), rtol=1e-12)
+    assert np.allclose(growth(p, key, m, m), 1.0) and (growth(p, key, a, m) > 1.0).mean() > 0.99
+    # before today there is no path: the past part grows at today's rate for that length, the same on every path
+    past = growth(p, key, -0.5, 0.0)
+    assert np.allclose(past, 1.0 / p.p0[key](0.5)) and np.allclose(growth(p, key, -0.5, float(p.t[6])), past * growth(p, key, 0.0, float(p.t[6])))
+
+
+def test_the_floating_coupon_is_a_cash_flow_of_its_step_on_each_path():
+    """A period carries its accrued interest in the value until it is paid, so the value jumps at the payment: the
+    exposure step must see that payment as it sees a fixed coupon, and as the path has it (flows_per_step)."""
+    from ccr.simulate import growth
+    from ccr.valuation import flows_per_step, years
+    p = simulate(_calib("RISK_NEUTRAL", "forward"), _curves(), {"SPOT:EURUSD": 1.10}, {"SPOT:EURUSD": (0.04, 0.02)}, ASOF, 60, n_paths=2000, seed=1)
+    key, N = "RATES:USD_SOFR", 10e6
+    it = _par_swap("ANNUAL", "RECEIVE", 0.0402)
+    fl = flows_per_step(SimpleNamespace(items=[it]), p, {"USD": 1.0})
+    assert fl.shape == (p.n_paths, len(p.grid))
+    steps = [i for i in range(fl.shape[1]) if np.any(fl[:, i] != 0.0)]
+    assert len(steps) == 5
+    # we receive the fixed coupon (V falls: −) and pay the floating one (V rises: +): on each path the net is the
+    # floating year's interest on that path less the fixed coupon
+    (s1, e1, pay1, tau1) = it["legs"][1][1][1]
+    i1 = steps[1]
+    own = N * (growth(p, key, years(ASOF, s1), years(ASOF, e1)) - 1.0) - N * 0.0402 * it["legs"][0][1][1][3]
+    assert np.allclose(fl[:, i1], own, rtol=1e-12, atol=1e-6)
+    assert abs(fl[:, i1].mean()) < 0.1 * N * 0.0402 and fl[:, i1].std() > 20_000.0, "nets to little on average, and is not the same on every path"
+    # the direction: a swap that receives the floating leg has the mirror
+    mirror = flows_per_step(SimpleNamespace(items=[_par_swap("ANNUAL", "PAY", 0.0402)]), p, {"USD": 1.0})
+    assert np.allclose(mirror, -fl)
+    fq = flows_per_step(SimpleNamespace(items=[_par_swap("QUARTERLY", "RECEIVE", 0.0402)]), p, {"USD": 1.0})
+    assert sum(1 for i in range(fq.shape[1]) if np.any(fq[:, i] != 0.0)) == 20 and fq.mean(axis=0).max() > 0.9 * N * 0.0402 / 4      # a floating quarter paid: V rises

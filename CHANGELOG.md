@@ -13,29 +13,42 @@ trade of each product through every XVA run and laying the answers side by side.
   period began. The fixed leg carried its whole coming coupon. A swap whose two legs pay on the same dates (the
   dollar OIS swap the ticket books) therefore showed the fixed coupon building up with nothing against it: a
   receive-fixed par swap, worth nothing on average, stood at +34,628 a month into the year and +375,222 eleven
-  months in on ten million at 4 %, and fell back at each payment.
+  months in on ten million at the par rate of a flat 4 % curve, and fell back at each payment. The leg also ran
+  to its last payment date where it should run to its last period end, which overvalued a leg that pays two days
+  after each period by about 2,300 on ten million (the model validator and the independent reviewer).
 - **Where it reached.** Every swap in the counterparty report (expected exposure, PFE, EPE, CVA, and the limits
-  read against them), the incremental charge on a ticket, the capital stock of a swap, and the XVA P&L, which
-  reads the report. The ticket's own XVA run and every price were not affected.
-- **What it does now.** A running period carries its accrued interest: one unit placed at the period's start,
-  grown along the path at each grid step's own bond. The floating coupon is a cash flow of its step, as a fixed
-  one is.
-- **What moved.** A five-year par swap alone in a netting set, no margin: receive fixed, CVA −7,398 to −3,394 and
-  DVA 568 to 1,902; pay fixed, CVA −1,149 to −3,849 and DVA 3,655 to 1,677. The ticket's run says −2,576 and
-  1,599, and −3,236 and 1,273: the two engines were three to five times apart and are now 20 to 30 % apart, which
-  is the ticket's generic swap against the trade's own schedule (next in this work). The pinned swap's capital
-  stock under margin is 7 to 10 % higher (`GOLDEN_CHANGES.md`).
+  read against them), the incremental charge shown beneath a ticket's XVA, the capital stock of a swap, and the
+  XVA P&L, which reads the report. A ticket's stand-alone XVA figures and every price were not affected.
+- **What it does now.** Each floating period is valued on its own dates: before it begins, while it runs (with
+  the interest accrued so far: one unit from the period's start, grown along the path at each grid step's own
+  bond), and between its end and its payment. The floating coupon is a cash flow of its step, as a fixed one is,
+  and in the margin step it is the path's own amount.
+- **What moved.** A five-year par swap alone in a netting set, no margin: receive fixed, CVA −7,398 to −3,424
+  and DVA 568 to 1,877; pay fixed, CVA −1,149 to −3,799 and DVA 3,655 to 1,692. The
+  ticket's run says −2,576 and 1,599, and −3,236 and 1,273: the two engines were three to five times apart and
+  are now 20 to 30 % apart. What is left is the ticket's run, which values a swap whose two legs settle every
+  month and not the trade's schedule: near its end a swap that pays yearly still has a year's net coupon at
+  stake, and the ticket shows almost none (next in this work). The pinned swap's capital stock under margin is
+  higher (`GOLDEN_CHANGES.md`). A swap already running: its value at the start of the paths now carries the
+  floating interest accrued to date, about −200,000 on ten million for a yearly leg half a year in, where it
+  carried the fixed leg's accrual alone.
 - **Checked** by a martingale identity that does not use the engine's formula: the value at each grid date,
-  discounted by the path's cash account, averages to today's value of the coupons still to come, read off today's
-  curve, for yearly, half-yearly and quarterly floating legs, both directions, at every grid date. The reference
-  suite's martingale rows were of bonds alone, which is how this passed them.
+  discounted along the path, averages to today's value of the coupons not yet paid, read off today's curve coupon
+  by coupon. Discounted two ways (the engine's cash account; the trapezoid of the short rate), for yearly,
+  half-yearly and quarterly floating legs, both directions, a two-day payment lag, a start ten days back and ten
+  days ahead, leverage and a spread, at every grid date; and the accrual compared path by path with the
+  integrated short rate, since a mean cannot see the spread across paths. The model validator derived it again
+  with an account of the validator's own: the old value stood 53 to 1,800 standard errors from today's curve
+  between coupon dates, the new within 1.6. The reference suite's martingale rows were of bonds alone, which is
+  how this passed them.
 
 Not done, and said: a period that began before the valuation date accrues its past part at today's rate, not from
-its fixings; in the margin step the floating coupon is the one today's curve implies, one number per step. The
-first counterparty report after this release differs from the stored ones by this correction: the XVA P&L of that
-day carries it as if the market had moved, and a limit's utilisation steps. The other findings of the comparison
-are open: a swaption's XVA on the ticket is a swap's; the netting-set run's KVA takes no asset class; the ticket
-simulates a generic swap, not the trade's schedule.
+its fixings; no library reference stands beside the martingale check for a swap between coupon dates. The first
+counterparty report after this release differs from the stored ones by this correction: the XVA P&L of that day
+carries it as if the market had moved, a limit's utilisation steps, and the value of a swap already running shown
+on the report changes by its accrued floating interest. The other findings of the comparison are open: a
+swaption's XVA on the ticket is a swap's; the netting-set run's KVA takes no asset class; the ticket simulates a
+swap of its own, not the trade's schedule.
 
 ## 0.50.0 · 17 November 2026
 

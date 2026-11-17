@@ -173,18 +173,35 @@ def account(paths: Paths, key: str) -> np.ndarray:
     return cache[key]
 
 
-def accrued(paths: Paths, key: str, i: int, t_start: float) -> np.ndarray:
-    """What one unit placed at t_start (years from as-of) has grown to by grid date i, on every path: the interest a
-    floating period that began at t_start has accrued so far, plus the unit. From t_start to the next grid date it
-    grows at the forward seen on the grid date before it, then with the account. A period that began before the
-    as-of date has no path behind it: its past part grows at today's rate for that length (the fixings themselves
-    are not read here)."""
+def growth(paths: Paths, key: str, a: float, b: float) -> np.ndarray:
+    """What one unit placed at time a has grown to by time b (years from as-of, a <= b), on every path: the interest a
+    floating period accrues between the two, with the unit. Between grid dates it grows with the account; from a to
+    the next grid date, and from the last grid date before b to b, at the forward seen on the grid date before (so
+    the discounted growth is a martingale, and the part inside a step is known at its start: the variance of the
+    rate inside one step is not in it). A span before the as-of date has no path behind it: it grows at today's
+    rate for a span of that length (the fixings themselves are not read here)."""
+    n = paths.n_paths
+    if b <= a + 1e-12:
+        return np.ones(n)
+    pre = 1.0
+    if a < 0.0:
+        if b <= 0.0:
+            return np.full(n, 1.0 / max(paths.p0[key](b - a), 1e-12))
+        pre, a = 1.0 / max(paths.p0[key](-a), 1e-12), 0.0
     t = paths.t
+    last = len(t) - 1
+    ja = min(int(np.searchsorted(t, a + 1e-12, side="right") - 1), last)      # the last grid date at or before a
+    jb = min(int(np.searchsorted(t, b + 1e-12, side="right") - 1), last)
+    if ja == jb:
+        return pre * bond(paths, key, ja, a) / bond(paths, key, ja, b)
     A = account(paths, key)
-    if t_start <= 0.0:
-        return A[:, i] / max(paths.p0[key](-t_start), 1e-12)
-    j = int(np.searchsorted(t, t_start + 1e-12, side="right") - 1)        # the last grid date at or before the start
-    if j >= i:
-        return np.ones(paths.n_paths)
-    first = bond(paths, key, j, t_start) / bond(paths, key, j, float(t[j + 1])) if t_start > float(t[j]) + 1e-12 else A[:, j + 1] / A[:, j]
-    return first * A[:, i] / A[:, j + 1]
+    out = bond(paths, key, ja, a) / bond(paths, key, ja, float(t[ja + 1])) * A[:, jb] / A[:, ja + 1]
+    if b > float(t[jb]) + 1e-12:
+        out = out / bond(paths, key, jb, b)
+    return pre * out
+
+
+def accrued(paths: Paths, key: str, i: int, t_start: float) -> np.ndarray:
+    """growth() from t_start to grid date i: what a floating period that began at t_start has accrued by then, with
+    the unit."""
+    return growth(paths, key, t_start, float(paths.t[i]))
