@@ -21,7 +21,7 @@ SABR surface (β=0 normal)|pricing/sabr.py|Internal fit diagnostics only. First 
 Bermudan swaption (HW1F trinomial tree)|pricing/bermudan_swaption.py|Gate vs Bachelier (0.5% ATM, 1% wings). First independent validator wanted: tree convergence, early-exercise boundary, comparison with another implementation.
 HW1F calibration for exposure|pricing/calibration.py|Jamshidian check 0.01%. First independent validator wanted: calibrated (a, σ) against another library on the 5Y column.
 XVA under a CSA|pricing/xva_engine.py, pricing/csa.py|Parity with the legacy loop at 1e-12; Brownian-bridge MPoR lag. First independent validator wanted: EE/ENE profiles and the waterfall terms against an independent Monte Carlo.
-SIMM IM and SA-CCR|pricing/xva_engine.py|Trace workbook on rijeka.app. First independent validator wanted: IM against an ISDA SIMM reference implementation; SA-CCR EAD against the BCBS worked examples.
+Initial margin estimate and SA-CCR|pricing/xva_engine.py|Trace workbook on rijeka.app. First independent validator wanted: the margin estimate against a percentile calculation of their own; SA-CCR EAD against the BCBS worked examples.
 Crypto NDF / NDO|methodology/replicate.py, chain/canonical.py|Formulas only (parity forward, Black-76). First independent validator wanted before the engine implementation.
 Registry contract and verifier|chain/src/TradeConfirmationRegistry.sol, chain/verify/index.html|16 Foundry tests, Sourcify-verified. External review wanted before mainnet: signature malleability, replay across chains/registries, amend/terminate state machine.
 ROWS

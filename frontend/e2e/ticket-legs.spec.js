@@ -388,7 +388,7 @@ test('wrong-way risk: a sold forward to a counterparty whose credit worsens as t
   expectClean(problems)
 })
 
-test('margin and capital on a digital-asset ticket: no SIMM anywhere; a typed dollar amount or the estimate; the Basel group moves KVA alone', async ({ app, problems }) => {
+test('margin and capital on a digital-asset ticket: no licensed methodology named anywhere; a typed dollar amount or the estimate; the Basel group moves KVA alone', async ({ app, problems }) => {
   await app.goto('/blotter')
   await app.getByText('+ NEW TRADE').first().click()
   const win = app.locator('.tbw-window')
@@ -399,7 +399,7 @@ test('margin and capital on a digital-asset ticket: no SIMM anywhere; a typed do
   const toggle = win.getByRole('button', { name: /MODEL INPUTS/ })
   await expect(toggle).toBeVisible()
   if (!/HIDE/.test(await toggle.innerText())) await toggle.click()
-  // nothing on the tab is called SIMM except the note that says it is not computed
+  // nothing on the tab is named for a licensed methodology
   await expect(win.getByLabel('Initial margin exchanged')).toBeVisible()
   await expect(win.getByText(/SIMM IM/)).toHaveCount(0)
 
@@ -413,7 +413,7 @@ test('margin and capital on a digital-asset ticket: no SIMM anywhere; a typed do
   expect(est.capital.im_0).toBeGreaterThan(0)
   expect(est.capital.crypto_group).toBe('2a')
   await expect(win.getByTestId('xva-im-basis')).toContainText("the engine's estimate")
-  await expect(win.getByTestId('xva-im-basis')).toContainText('not ISDA SIMM')
+  await expect(win.getByTestId('xva-im-basis')).toContainText('not an industry margin model')
   await expect(win.getByTestId('xva-capital-basis')).toContainText('SCO60.98')
 
   // a dollar amount typed: that amount, held for the life; MVA is its funding cost

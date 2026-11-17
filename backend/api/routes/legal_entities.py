@@ -39,7 +39,6 @@ class LegalEntityCreate(BaseModel):
     home_currency: str
     jurisdiction: Optional[str] = None
     regulatory_regime: Optional[List[str]] = None
-    simm_version: Optional[str] = "2.6"
     im_threshold_m: Optional[float] = None
     ois_curve_id: Optional[str] = None
     is_own_entity: bool = False
@@ -66,7 +65,6 @@ def serialize(e: LegalEntity) -> dict:
         "home_currency": e.home_currency,
         "jurisdiction": e.jurisdiction,
         "regulatory_regime": e.regulatory_regime,
-        "simm_version": e.simm_version,
         "im_threshold_m": float(e.im_threshold_m) if e.im_threshold_m else None,
         "ois_curve_id": e.ois_curve_id,
         "is_own_entity": e.is_own_entity,

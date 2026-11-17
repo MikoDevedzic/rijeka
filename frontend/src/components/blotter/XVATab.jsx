@@ -202,7 +202,7 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
   const [hurdle, setHurdle] = useState(HIDDEN_INPUT_DEFAULTS.hurdle)
   const [capModel, setCapModel] = useState(HIDDEN_INPUT_DEFAULTS.capModel)
   const [wwr, setWwr] = useState(HIDDEN_INPUT_DEFAULTS.wwr)
-  // Initial margin in dollars. Blank = the engine's own estimate from the paths (not ISDA SIMM, which is licensed
+  // Initial margin in dollars. Blank = the engine's own estimate from the paths (not an industry margin model
   // and is not computed here).
   const [imUsd, setImUsd] = useState(HIDDEN_INPUT_DEFAULTS.imUsd)
   // Settlement / CSA. Default keeps the legacy numbers: no VM, IM posted.

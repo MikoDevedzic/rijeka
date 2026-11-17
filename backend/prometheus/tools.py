@@ -230,7 +230,7 @@ TOOL_DEFS: list[dict] = [
             "file:line matches. Use to locate a function, formula or concept before reading it."
         ),
         "input_schema": _schema({
-            "pattern": {"type": "string", "description": "Python regex, e.g. 'def simm|mpor'."},
+            "pattern": {"type": "string", "description": "Python regex, e.g. 'def model_im|mpor'."},
             "path": {"type": "string", "description": "Optional repo-relative directory or file to limit the search."},
         }, ["pattern"]),
     },

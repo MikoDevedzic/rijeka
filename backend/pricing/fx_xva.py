@@ -10,7 +10,7 @@ for a swap. σ is the pair's surface, or a desk input, or the default below
 for a pair with none, and the run says which.
 
 Initial margin is an amount the desk sets, or the engine's own estimate from
-these paths (xva_engine.model_im). It is not ISDA SIMM, which is licensed.
+these paths (xva_engine.model_im). It is not an industry margin model.
 
 Capital: the add-on is SA-CCR's for the asset class of the pair (saccr_rows):
 foreign exchange (CRE52), a Group 2a cryptoasset (SCO60.98) or a Group 2b

@@ -1,7 +1,29 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.36). Commits on `main` are the detail.
+methodology document carries its own version (v1.37). Commits on `main` are the detail.
+
+## 0.54.1 · 17 November 2026
+
+**Nothing is named for a methodology the firm holds no licence for.** No figure changes. The methodology is v1.37.
+
+- **The licensed margin methodology is named once, in the methodology document,** in the sentence that says it is
+  not computed. Everywhere else (the screens' notes and tooltips, the API's answers, the workbooks, the README, the
+  roadmap, the licence file's list of what the engine holds, this changelog's past entries) the initial margin is
+  what it is: the amount the desk sets, or the engine's own estimate, which is not an industry margin model. One
+  tooltip still described a margin derived from that methodology's risk weights, which the engine stopped doing on
+  10 November: corrected.
+- **The old request field is gone.** The XVA routes read the desk's margin as `im_usd`; the older name in millions
+  is no longer read. A page loaded before 10 November that still sends it is answered with the engine's estimate.
+- **Two record fields, by migration, on the owner's word.** A counterparty's margin basis still defaults in the
+  database to the old name, and legal entities carry a version column nothing reads. The code no longer writes or
+  reads either (a record holding the old default is shown as MODEL, as since 0.30.3). Two migrations are written
+  and not applied: the default and the stored values become MODEL, and the column is dropped. `GET /api/ops/health`
+  reports both under `schema`.
+
+Not done, and said: the design paper in `docs/` discusses that methodology and is left as it is; the name stands
+in the repository's history; three places still hold the old default as a constant, to read records made before
+the migration, and go when it has run.
 
 ## 0.54.0 · 17 November 2026
 
@@ -786,7 +808,7 @@ changes.
   which are next. The page's description for search and link previews says it in a sentence: rates, FX and
   digital assets are live; credit, equities and commodities are next.
 - **What a search engine reads about the app.** The structured data in the page's head described the product
-  with a licensed margin methodology it does not compute (ISDA SIMM), with caps and floors and nothing of FX,
+  with a licensed margin methodology it does not compute, with caps and floors and nothing of FX,
   digital assets or confirmation, and under an older company name. It now describes the product as the README
   does and names no licensed methodology; a journey reads it.
 - **"Open", not "open-source", of the product.** The installed app's description, the footers of two Excel
@@ -2016,9 +2038,9 @@ word ("do them all in order and deploy"). Every screen a new user meets was pict
   now priced to the fixing date it is booked with. Separately, the package's XVA run carried every leg to its
   settlement date (a day or two of carry more, about 20 a leg here) and so started from a value the ticket did
   not show; it now starts from the ticket's. Journeys and an integration test hold both.
-- **No screen names ISDA SIMM as the margin's basis.** The counterparty record's old default read "SIMM" in the table
+- **No screen names a licensed methodology as the margin's basis.** The counterparty record's old default read as that methodology's name in the table
   and the form; it is now MODEL (the engine's estimate or the desk's amount), records made before read the same
-  way, and the legal entity's SIMM VERSION field and column are off the screen. The database's own column defaults
+  way, and the legal entity's margin-model version field and column are off the screen. The database's own column defaults
   are unchanged (a migration, on the owner's word).
 - **The home page's policy path fits its box.** The drawing was 150px tall in a box of 126: its dates sat on the
   caption below, the rate labels were cut by 2px at the left, and the Fed's dots, the path's first figure and the
@@ -2470,7 +2492,7 @@ asked for by the owner.
   margin): rewritten as above. The validator's own simulation, sharing no code with the engine: a forward's margin within 1.1 %
   date by date and a European call's within 1.6 % at 80 % vol, through margin periods shorter and longer than a
   step; the old bridge 16 to 21 % low on the call. A cold read found the XVA tab's margin-period note still
-  describing the old method and naming SIMM: corrected.
+  describing the old method and naming a licensed methodology: corrected.
 
 ## 0.22.1 · 11 November 2026
 
@@ -2718,9 +2740,9 @@ Redeployed (rijeka.app is deployed on its own, not with the app).
   among the package's legs and re-derives the package's hash. The live page had share links the repository's
   source lacked (`#p=`, `#hash=`); the two were merged, not overwritten, and `chain/verify/index.html` is now the
   same file as the live page.
-- **No SIMM on the public site.** The SIMM estimator page and its sample workbook are taken down (404), and every
+- **No licensed margin methodology on the public site.** The margin estimator page and its sample workbook are taken down (404), and every
   mention is gone or reworded: the XVA simulator's margin input is "initial margin" from your own margin model.
-  One sentence says why: ISDA SIMM is ISDA's licensed methodology and is not included.
+  One sentence says why: the methodology is ISDA's, it is licensed, and it is not included.
 - **Also carried by the deploy**, because a deploy replaces the whole site: the methodology PDF (v1.0 was still
   live; now v1.12), the privacy notice v1.1 of 2 November (the app already showed it), and the home page's headline
   naming options.
@@ -2801,7 +2823,7 @@ Redeployed (rijeka.app is deployed on its own, not with the app).
 - **One correction of substance.** The known limitations of §16 still described initial margin as a delta margin per
   risk class with a cryptoasset weight, the method 0.18.0 removed; they now say what §9 says (the desk's amount or
   the engine's estimate; a digital asset's group the engine's default unless the desk sets it). The same leftover is
-  gone from `docs/xva.md` (an amortising margin, a comparison with a SIMM-weighted figure) and `docs/capital.md`
+  gone from `docs/xva.md` (an amortising margin, a comparison with a risk-weighted figure) and `docs/capital.md`
   (a margin weight for digital assets); found by the validator.
 - Checked: the build reports no line past the margin; every word of the old and new PDFs compared (the differences are
   the ones above and how a PDF reader orders a table).
@@ -2879,10 +2901,10 @@ first leg alone on these three.
 
 ## 0.18.0 · 10 November 2026
 
-**No SIMM. Initial margin is your amount or the engine's estimate; KVA of a currency or digital-asset ticket
+**No licensed margin methodology. Initial margin is your amount or the engine's estimate; KVA of a currency or digital-asset ticket
 follows the Basel classes.**
 
-- **Rijeka does not compute ISDA SIMM, and no longer says it does.** SIMM is ISDA's licensed methodology. Its
+- **Rijeka does not compute ISDA's licensed margin methodology, and no longer says it does.** Its
   risk-weight table is out of the code, and nothing on a screen, in an answer of the API or in the methodology
   is named for it, except the sentence that says it is not computed and that a firm with a licence enters its own
   figure.
@@ -2898,14 +2920,14 @@ follows the Basel classes.**
   changes it. Before this the engine applied the interest-rate factor to everything, which made a digital asset's
   KVA a rounding. The legs of a package now net in the add-on inside one hedging set.
 - **Numbers that moved, each explained in `GOLDEN_CHANGES.md`:** on the pinned 5-year swap the estimate is about
-  half the SIMM-weighted margin (it is at current volatility, not a stressed one), so MVA is smaller and, with
+  half the risk-weighted margin (it is at current volatility, not a stressed one), so MVA is smaller and, with
   less margin held, margined CVA, FVA and KVA are larger; a margined EURUSD forward's KVA is about a hundred
   times larger (the FX class). Nothing uncollateralised moved, except KVA on currency and digital-asset tickets.
 - **The Excel replications rebuild the new margin and add-on in cells:** 87 checks in the rates book and 51 in
   each of the currency and digital-asset books pass under every CSA preset, evaluated cell by cell.
 - **The methodology is v1.10:** the initial margin section, the add-on by asset class, wrong-way risk and the
-  package run are written down; the SIMM reference is gone.
-- **The request field is `im_usd`** on the four XVA routes; `simm_im_m` (millions), the old name of the same
+  package run are written down; the reference to the licensed methodology is gone.
+- **The request field is `im_usd`** on the four XVA routes; an older name in millions for the same
   input, is still read so a page loaded before the release keeps working. `crypto_group` (2a, 2b) is new.
 - **Limits, in `docs/xva.md` and the model inventory:** the estimate is not a regulatory margin model (current
   volatility, one confidence, a cross-section of the paths); against an exact simulation it is within about 1 % at
@@ -3720,13 +3742,13 @@ What a desk head sees on the ticket: the findings of a first-time-user pass, and
   recognised collateral, eligible IM at its yield), then to the forward-looking states (the cleared-floor margin
   period of risk, a tokenised sovereign claim as IM, Level 1 liquidity); each step's difference is its channel's
   attribution and the steps add up to the columns exactly; per counterparty and for the book, every capital
-  metric, the change against the baseline and the quote in bp; the invariants (SIMM IM, market-risk capital) stated
+  metric, the change against the baseline and the quote in bp; the invariants (initial margin, market-risk capital) stated
   on the page. The counterparty record gains margin frequency and dispute state
   (`docs/migrations/2026-11-04_counterparty_margin_terms.sql`); the credit report's MPoR follows them.
 
 ## 0.7.0 · 3 November 2026
 
-- Capital on the ticket (CAPITAL tab, `POST /api/capital/trade`): the trade's SIMM IM, SA-CCR EAD, RWA, CCR and
+- Capital on the ticket (CAPITAL tab, `POST /api/capital/trade`): the trade's initial margin, SA-CCR EAD, RWA, CCR and
   CVA capital, KVA, MVA, CVA, FVA, leverage exposure and the HQLA value of the margin posted under every collateral
   regime and counterparty type, as the counterparty's netting set with the trade, without it (common random
   numbers) and the trade alone; a derivation drawer per cell with the formula, the regime's two CSAs, the inputs
@@ -3813,5 +3835,5 @@ What a desk head sees on the ticket: the findings of a first-time-user pass, and
 ## Before 27 October 2026
 
 Rates desk: OIS bootstrap, IRS / OIS / basis, European swaptions and SABR, caps and floors,
-Bermudans, XVA under CSA, SIMM, on-chain confirmation on Sepolia, the messenger, the hosted demo.
+Bermudans, XVA under CSA, a margin estimate, on-chain confirmation on Sepolia, the messenger, the hosted demo.
 Released under MIT until 27 October 2026 (tags up to `v0.5.4`), under Apache-2.0 / BSL 1.1 since.

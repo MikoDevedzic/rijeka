@@ -108,15 +108,15 @@ def seed_people(db, minimal: bool) -> dict:
             ON CONFLICT (lei) DO UPDATE SET firm_id = EXCLUDED.firm_id"""), {"lei": own_lei, "f": firm_id})
         own_id, bank_id, cp_id = did("own", uid), did("bank", uid), did("cp", uid)
         db.execute(text("""
-            INSERT INTO legal_entities (id, lei, name, short_name, home_currency, jurisdiction, regulatory_regime, simm_version,
+            INSERT INTO legal_entities (id, lei, name, short_name, home_currency, jurisdiction, regulatory_regime,
                                         im_threshold_m, ois_curve_id, is_own_entity, is_active, created_by, user_id)
-            VALUES (:id, :lei, :name, :short, 'USD', 'US', ARRAY['UMR'], '2.6', 50, 'USD_SOFR', true, true, :u, :u)
+            VALUES (:id, :lei, :name, :short, 'USD', 'US', ARRAY['UMR'], 50, 'USD_SOFR', true, true, :u, :u)
             ON CONFLICT (user_id, lei) DO UPDATE SET name = EXCLUDED.name, is_active = true"""),
             {"id": own_id, "lei": own_lei, "name": f"{trader} STACK", "short": trader[:12], "u": uid})
         db.execute(text("""
-            INSERT INTO legal_entities (id, lei, name, short_name, home_currency, jurisdiction, regulatory_regime, simm_version,
+            INSERT INTO legal_entities (id, lei, name, short_name, home_currency, jurisdiction, regulatory_regime,
                                         im_threshold_m, ois_curve_id, is_own_entity, is_active, created_by, user_id)
-            VALUES (:id, :lei, :name, 'RJK DEMO BANK', 'USD', 'CH', ARRAY['UMR'], '2.6', 50, 'USD_SOFR', false, true, :u, :u)
+            VALUES (:id, :lei, :name, 'RJK DEMO BANK', 'USD', 'CH', ARRAY['UMR'], 50, 'USD_SOFR', false, true, :u, :u)
             ON CONFLICT (user_id, lei) DO UPDATE SET name = EXCLUDED.name, is_active = true"""),
             {"id": bank_id, "lei": DEMO_BANK_LEI, "name": DEMO_BANK_NAME, "u": uid})
         own_id = db.execute(text("SELECT id FROM legal_entities WHERE user_id = :u AND lei = :l"), {"u": uid, "l": own_lei}).scalar()
@@ -124,7 +124,7 @@ def seed_people(db, minimal: bool) -> dict:
         db.execute(text("""
             INSERT INTO counterparties (id, legal_entity_id, name, isda_agreement, csa_type, csa_currency, csa_threshold_m, csa_mta_k,
                                         discount_curve_id, im_model, is_active, created_by, user_id)
-            VALUES (:id, :le, :name, 'ISDA 2002 (demo)', 'VM_IM', 'USD', 0, 500, 'USD_SOFR', 'SIMM', true, :u, :u)
+            VALUES (:id, :le, :name, 'ISDA 2002 (demo)', 'VM_IM', 'USD', 0, 500, 'USD_SOFR', 'MODEL', true, :u, :u)
             ON CONFLICT (id) DO UPDATE SET legal_entity_id = EXCLUDED.legal_entity_id, is_active = true"""),
             {"id": cp_id, "le": bank_id, "name": DEMO_BANK_NAME, "u": uid})
         if not minimal:

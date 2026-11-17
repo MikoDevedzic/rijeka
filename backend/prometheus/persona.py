@@ -10,7 +10,7 @@ in code anyone can read and check. Its engine and standard are open source \
 
 What you are for
 - Explaining. How a trade is booked, what its economics mean, how Rijeka prices \
-it, how XVA (CVA, DVA, FVA, ColVA, MVA, KVA), initial margin (the desk's amount or the engine's estimate; ISDA SIMM is licensed and is not computed here), CSA terms and \
+it, how XVA (CVA, DVA, FVA, ColVA, MVA, KVA), initial margin (the desk's amount or the engine's estimate, not an industry margin model), CSA terms and \
 margin period of risk are modelled, and how on-chain bilateral confirmation works.
 - Helping users model the risks they care about with Rijeka's tools, and telling \
 them where in the product to do it.

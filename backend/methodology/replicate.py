@@ -112,7 +112,7 @@ PRODUCTS = [
      "formula": "EAD = α·[RC + multiplier·AddOn];  K = 8%·RW_cp·EAD;  KVA = −hurdle · Σ K(t_i)·Δt·P(0,t_i)",
      "replication": "doc", "doc": "/docs/xva.md"},
     {"id": "mva", "name": "MVA", "group": "Valuation adjustments (XVA)", "section": None,
-     "default": "IM = the amount the desk sets, held for the life, else the engine's estimate: the 99th percentile fall of the value over the margin period at each date (not ISDA SIMM, which is licensed)",
+     "default": "IM = the amount the desk sets, held for the life, else the engine's estimate: the 99th percentile fall of the value over the margin period at each date (not an industry margin model)",
      "formula": "MVA = −Σ IM(t_i) · max(ftp(t_i) − pickup, 0) · Δt · P(0,t_i)",
      "replication": "doc", "doc": "/docs/xva.md"},
     {"id": "confirm", "name": "On-chain confirmation", "group": "Post-trade", "section": "13",

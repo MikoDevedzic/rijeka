@@ -76,8 +76,7 @@ One firm, `STACK TEST FIRM` (kind `DEALER`, so `demo._template_user_id` finds it
 members; `firm_leis` carries each user's own LEI. Per user, the demo-bank pattern from
 `api/routes/demo.py`: an own legal entity (`<TRADER> STACK`, LEI `DEMO` + 16 hex of the user id, as
 `demo_lei_for` makes it, so the dev signing seed covers it), `RIJEKA DEMO BANK AG` as a legal entity
-(LEI `DEMO0000RIJEKABANK01`) and as a counterparty (ISDA 2002, VM+IM CSA, threshold 0, MTA 500k,
-SIMM). User A also gets a desk `RATES` and a book `G10 RATES` in `org_nodes`.
+(LEI `DEMO0000RIJEKABANK01`) and as a counterparty (ISDA 2002, VM+IM CSA, threshold 0, MTA 500k). User A also gets a desk `RATES` and a book `G10 RATES` in `org_nodes`.
 
 Market data for user A, valuation date **2026-11-02**, built by the demo feed's own builders from
 fixed quotes written in `seed.py` (the feed's fetchers go to the internet; the builders are pure):

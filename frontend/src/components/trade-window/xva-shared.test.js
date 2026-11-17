@@ -77,11 +77,11 @@ describe('spread curves', () => {
     expect(imUsdValue('1,250,000.50')).toBe(1250000.5)
     expect(imUsdValue('.5m')).toBe(500000)
   })
-  it('nothing the tabs say about margin claims SIMM: the note says it is licensed and not computed', () => {
+  it('nothing the tabs say about margin claims a licensed methodology: the note says the estimate is not an industry margin model', () => {
     expect(RATES_MVA_NOTE).toBe(IM_NOTE)
     expect(FX_MVA_NOTE).toBe(IM_NOTE)
-    expect(IM_NOTE).toMatch(/does not compute ISDA SIMM/)
-    expect(IM_NOTE).toMatch(/licensed/)
+    expect(IM_NOTE).toMatch(/not an industry margin model/)
+    expect(IM_NOTE).not.toMatch(/SIMM/)
     expect(CRYPTO_GROUPS.map(([k]) => k)).toEqual(['', '2a', '2b'])
   })
 })

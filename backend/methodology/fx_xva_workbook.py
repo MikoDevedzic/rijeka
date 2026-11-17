@@ -353,7 +353,7 @@ def _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0):
             ("IM exchanged (1/0)", '=IF(Preset="UNCOLLATERALISED",0,1)', "0"), ("IM yield pickup (bp)", 0.0, "0.0"),
             ("δ = MPoR/250 (years)", f"=B9/{BUSINESS_DAYS_PER_YEAR}", "0.0000"), ("Steps back = δ/Δ (< 1 here)", "=B12/Dt", "0.0000"), ("w = 1 − δ/Δ", "=1-B13", "0.0000"),
             ("V(0) (Model sheet)", "=V0", "#,##0.00"),
-            ("IM confidence, one-tailed, each way (the engine's own estimate from these paths; not ISDA SIMM, which is licensed)", IM_CONFIDENCE / 100.0, "0.00"),
+            ("IM confidence, one-tailed, each way (the engine's own estimate from these paths; not an industry margin model)", IM_CONFIDENCE / 100.0, "0.00"),
             ("IM₀ we call: the margin at the first date", "=K24", "#,##0.00"),
             ("IM₀ we post: the margin at the first date (the profile MVA funds)", "=N24", "#,##0.00"),
             ("VM carry, posted (bp over OIS: what the margin we post earns above cash)", 0.0, "0.0"), ("VM carry, received (bp over OIS: what the margin we hold earns above the rebate)", 0.0, "0.0")]
@@ -608,7 +608,7 @@ def _xva_forward_workbook(mkt, case: dict):
         "the Convergence sheet shows the Monte Carlo error and the Checks read LIVE instead of PASS. Switch Excel to manual calculation before going LIVE.",
         "CSA: a preset (UNCOLLATERALISED, BILATERAL with a 10-day margin period, ON_CHAIN with a 5-day one) or your own thresholds and MTA; the Engine sheet holds the engine's run under each preset. "
         "Initial margin is the engine's own estimate from these paths: at each date the 99th percentile rise (what we call) and fall (what we post) of V over the margin period, about its mean. "
-        "It is not ISDA SIMM, which is ISDA's licensed methodology and is not computed here; a desk with its own figure types it on the ticket.",
+        "It is not an industry margin model; a desk with its own figure types it on the ticket.",
         f"The capital add-on is {case['sf_basis']}: the supervisory factor on the notional in the quote currency at spot.",
         case["rate_note"],
     ], mkt, summary=[("Model", f"lognormal forward{' on the clock of its vol regimes' if eng.get('regimes') else ''}, σ = {eng['sigma']:.4%} from {fi['vol_source']}"), ("Paths", f"{N_PATHS} on {T} monthly steps (Δ = {eng['dt']:.5f}y)")])
@@ -626,7 +626,7 @@ def _xva_forward_workbook(mkt, case: dict):
     W.ticket(wb, "XVA (the ticket's XVA tab)", [("CVA", f"Waterfall!B{rt}", "#,##0.00", "cost"), ("DVA", f"Waterfall!B{rt + 1}", "#,##0.00", "benefit"), ("FCA", f"Waterfall!B{rt + 2}", "#,##0.00", ""),
                                                ("FBA", f"Waterfall!B{rt + 3}", "#,##0.00", ""), ("KVA", f"Waterfall!B{rt + 4}", "#,##0.00", ""), ("MVA", f"Waterfall!B{rt + 5}", "#,##0.00", ""), ("ColVA", f"Waterfall!B{rt + 6}", "#,##0.00", "carry of the VM held, against cash at OIS"),
                                                ("XVA TOTAL", f"Waterfall!B{rt + 7}", "#,##0.00", "all-in = NPV + XVA on the ticket"),
-                                               ("EAD₀ / CAPITAL₀", f"Waterfall!B{rt + 8}", "#,##0.00", "SA-CCR at t = 0; capital on the next row"), ("IM₀", f"Waterfall!B{rt + 10}", "#,##0.00", "the margin we post at the first date: the engine's estimate, not ISDA SIMM"),
+                                               ("EAD₀ / CAPITAL₀", f"Waterfall!B{rt + 8}", "#,##0.00", "SA-CCR at t = 0; capital on the next row"), ("IM₀", f"Waterfall!B{rt + 10}", "#,##0.00", "the margin we post at the first date: the engine's estimate, not an industry margin model"),
                                                ("PEAK EE", f"Waterfall!B{rt + 11}", "#,##0.00", ""), ("PEAK PFE 95%", f"Waterfall!B{rt + 12}", "#,##0.00", "")])
     W.ticket(wb, "THE FORWARD AND THE CSA", [("PAIR", "Model!B4", "@", ""), ("NOTIONAL", "Model!B6", "#,##0.####", base), ("DIRECTION", "Model!B7", '"BUY";"SELL";"FLAT"', f"+1 = buy {base}"),
                                              ("SETTLEMENT", "Model!B8", "yyyy-mm-dd", f"T = {inp.t_years:.4f}y"), ("FAIR FORWARD", "Model!B13", case["spot_fmt"], f"{quote} per {base}, from parity"),
@@ -647,7 +647,7 @@ def _xva_forward_workbook(mkt, case: dict):
         ("F(t−δ)", "exp(ln F_lo + Ω·(ln F_hi − ln F_lo) + N·σ·√(Ω(1−Ω)·Δ·U)), Ω the share of the step's variance before the date" if eng.get("clock_rows") else "exp(ln F_lo + w·(ln F_hi − ln F_lo) + N·σ·√(w(1−w)·Δ))", f"Exposure!B{blocks_exp['DV'][0]}", "the forward a margin period earlier: ln F is a Brownian bridge between two grid dates", case["spot_fmt"]),
         ("V(t−δ)", "side·N·(F(t−δ) − K)·DF_q(t−δ, T)", f"Exposure!B{blocks_exp['LAG'][0]}", "the trade valued on that level", "#,##0"),
         ("C", "max(V_lag − TH_cp, 0) − max(−V_lag − TH_own, 0), zeroed under the MTA", f"Exposure!B{blocks_exp['C'][0]}", "", "#,##0"),
-        ("IM₀", "99th percentile fall of V over the margin period, about its mean", "Exposure!B18", "the first date; not ISDA SIMM", "#,##0.00"),
+        ("IM₀", "99th percentile fall of V over the margin period, about its mean", "Exposure!B18", "the first date; not an industry margin model", "#,##0.00"),
         ("EE, ENE, PFE", "mean(max(V−C−IM,0)), mean(min(V−C+IM,0)), 95th percentile of V−C", f"Exposure!D{rs + 1}", "step 1", "#,##0.00"),
         ("Q(t)", "exp(−s/LGD·t)", f"Waterfall!D{r0}", "the credit triangle", "0.000000"),
         ("CVA", "−LGD·Σ EE·ΔQ·Q_own(mid)·P(0,t)·WWR", f"Waterfall!B{rt}", "", "#,##0.00"), ("DVA", "+LGD_own·Σ |ENE|·ΔQ_own·Q_cp(mid)·P(0,t)", f"Waterfall!B{rt + 1}", "", "#,##0.00"),

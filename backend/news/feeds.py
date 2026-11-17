@@ -40,7 +40,7 @@ TAG_RULES: list[tuple[str, re.Pattern]] = [
     ("RATES",      re.compile(r"\b(fomc|fed funds|rate (decision|cut|hike|path)|interest rates?|treasur(y|ies)|yields?|sofr|€str|estr|sonia|euribor|bund|gilt|curve|inflation|cpi|pce|payrolls|jobs report|central bank|ecb|boe|bank of england|federal reserve|powell|lagarde|bailey|qt|quantitative)\b", re.I)),
     ("CREDIT",     re.compile(r"\b(credit|spreads?|default|downgrade|upgrade|high[- ]yield|investment[- ]grade|cds|bond sale|issuance)\b", re.I)),
     ("FX",         re.compile(r"\b(dollar|euro|yen|sterling|pound|swiss franc|fx|currenc(y|ies)|exchange rate)\b", re.I)),
-    ("REGULATION", re.compile(r"\b(margin|umr|simm|basel|clearing|ccp|emir|dodd[- ]frank|mifid|capital requirement|regulat(or|ion|ory)|sec |cftc|esma|isda|reporting)\b", re.I)),
+    ("REGULATION", re.compile(r"\b(margin|umr|basel|clearing|ccp|emir|dodd[- ]frank|mifid|capital requirement|regulat(or|ion|ory)|sec |cftc|esma|isda|reporting)\b", re.I)),
     ("CRYPTO",     re.compile(r"\b(bitcoin|ether(eum)?|crypto|stablecoin|digital asset|token)\b", re.I)),
     ("DERIVATIVES",re.compile(r"\b(swaps?|swaptions?|options?|futures|derivatives?|hedg(e|ing)|volatility|xva|cva)\b", re.I)),
 ]

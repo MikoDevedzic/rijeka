@@ -51,7 +51,6 @@ class LegalEntity(Base):
     home_currency      = Column(String, nullable=True)
     jurisdiction       = Column(String, nullable=True)
     regulatory_regime  = Column(ARRAY(String), nullable=True)
-    simm_version       = Column(String, nullable=True)
     im_threshold_m     = Column(Numeric(18, 4), nullable=True)
     ois_curve_id       = Column(String, nullable=True)
     is_own_entity      = Column(Boolean, default=False)

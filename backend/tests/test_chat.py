@@ -33,11 +33,11 @@ def test_transcript_labels_speakers_and_alternates():
         _m("USER", "morning", "Miko", "RIJEKA CAPITAL"),
         _m("USER", "@prometheus what is MPoR?"),
         _m("PROMETHEUS", "10bd bilateral, 5bd on-chain.", "Prometheus", "Rijeka"),
-        _m("USER", "@prometheus and SIMM?"),
+        _m("USER", "@prometheus and margin?"),
     ])
     assert [t["role"] for t in turns] == ["user", "assistant", "user"]
     assert turns[0]["content"] == "[Miko · RIJEKA CAPITAL]: morning\n\n[Ana · CONFLUENCE BANK AG]: @prometheus what is MPoR?"
-    assert turns[-1]["content"].endswith("@prometheus and SIMM?")
+    assert turns[-1]["content"].endswith("@prometheus and margin?")
 
 
 def test_transcript_starts_and_ends_on_user():

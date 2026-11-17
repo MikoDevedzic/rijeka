@@ -155,7 +155,7 @@ def test_a_strip_with_an_option_runs_as_one_set_and_nets(client, auth_a, ids, pa
     assert j["pair"] == "BTCUSD" and [x["leg"] for x in j["legs"]] == [1, 2, 3, 4]
     assert j["xva"]["npv"] == pytest.approx(sum(x["npv"] for x in j["legs"]), abs=0.05)
     assert "4 legs" in j["params"]["model"] and j["capital"]["im_basis"] == "none"
-    assert j["capital"]["crypto_group"] == "2a" and "SCO60.98" in j["capital"]["basis"] and "does not compute ISDA SIMM" in j["capital"]["im_note"]
+    assert j["capital"]["crypto_group"] == "2a" and "SCO60.98" in j["capital"]["basis"] and "not an industry margin model" in j["capital"]["im_note"]
     # the set's peak expected exposure is at most the sum of the legs' peaks
     assert max(j["ee_gross"]) <= sum(x["ee_gross_peak"] for x in j["legs"]) + 1.0
     again = client.post("/api/xva/currency-package", json={"trades": legs, "paths": 400}, headers=auth_a).json()
@@ -182,29 +182,29 @@ def test_a_package_run_is_bounded_by_what_one_run_may_cost(client, auth_a, ids, 
     assert ok.status_code == 200, ok.text[:300]
 
 
-# ── initial margin and capital: no SIMM; the desk's amount or the engine's estimate; the Basel class of the pair ──
+# ── initial margin and capital: no licensed methodology; the desk's amount or the engine's estimate; the Basel class of the pair ──
 
-def test_margin_is_the_desks_amount_or_the_engines_estimate_and_nothing_is_called_simm(client, auth_a, ids, pairs):
+def test_margin_is_the_desks_amount_or_the_engines_estimate_and_nothing_is_named_for_a_licensed_methodology(client, auth_a, ids, pairs):
     q = _fwd_quote(client, auth_a, "BTCUSD", 10, 182)
     body = {"pair": "BTCUSD", "base_notional": 10, "settlement_date": q["settlement_date"], "forward_rate": q["forward"], "direction": "BUY", "paths": 1000,
             "csa": {"preset": "ON_CHAIN", "im_exchanged": True}}
     est = client.post("/api/xva/currency", json=body, headers=auth_a).json()
-    assert "engine's estimate" in est["capital"]["im_basis"] and "not ISDA SIMM" in est["capital"]["im_basis"] and est["capital"]["im_0"] > 0
-    assert "licensed" in est["capital"]["im_note"] and est["xva"]["mva"] < 0
+    assert "engine's estimate" in est["capital"]["im_basis"] and "not an industry margin model" in est["capital"]["im_basis"] and est["capital"]["im_0"] > 0
+    assert "not an industry margin model" in est["capital"]["im_note"] and est["xva"]["mva"] < 0
     assert max(est["im_profile"]) > 0
     typed = client.post("/api/xva/currency", json={**body, "im_usd": 250_000}, headers=auth_a).json()
     assert typed["capital"]["im_0"] == 250_000.0 and set(typed["im_profile"]) == {250_000.0} and "desk" in typed["capital"]["im_basis"]
     # MVA of an amount held for the life is that amount funded at the spread: more margin, more cost, in proportion
     double = client.post("/api/xva/currency", json={**body, "im_usd": 500_000}, headers=auth_a).json()
     assert double["xva"]["mva"] == pytest.approx(2 * typed["xva"]["mva"], abs=0.016)      # each is rounded to a cent: twice one rounded figure and the other can differ by a cent and a half
-    # the old name of the input (in millions) is still read, so a page loaded before the release keeps working
+    # the old name of the input (in millions) is no longer read: a request carrying only it is answered with the engine's estimate
     old = client.post("/api/xva/currency", json={**body, "simm_im_m": 0.25}, headers=auth_a).json()
-    assert old["xva"]["mva"] == typed["xva"]["mva"]
+    assert "engine's estimate" in old["capital"]["im_basis"]
     assert client.post("/api/xva/currency", json={**body, "im_usd": -1}, headers=auth_a).status_code == 422
     # no margin exchanged: none charged whatever is typed
     none = client.post("/api/xva/currency", json={**body, "csa": None, "im_usd": 250_000}, headers=auth_a).json()
     assert none["xva"]["mva"] == 0 and none["capital"]["im_basis"] == "none"
-    # no field of an answer is named for SIMM, and the only words about it say it is not computed
+    # no field of an answer is named for a licensed methodology, and the words about margin say the estimate is not an industry model
     def keys(o):
         if isinstance(o, dict):
             for k, v in o.items():
@@ -222,7 +222,7 @@ def test_margin_is_the_desks_amount_or_the_engines_estimate_and_nothing_is_calle
             yield o
     for j in (est, typed):
         assert not [k for k in keys(j) if "simm" in k.lower()]
-        assert all("not ISDA SIMM" in w or "does not compute ISDA SIMM" in w for w in words(j) if "simm" in w.lower())
+        assert not [w for w in words(j) if "simm" in w.lower()]
 
 
 def test_the_rates_route_takes_the_same_margin_inputs_and_names_no_weight(client, auth_a):
@@ -230,7 +230,7 @@ def test_the_rates_route_takes_the_same_margin_inputs_and_names_no_weight(client
                     headers=auth_a)
     assert r.status_code == 200, r.text[:300]
     cap = r.json()["capital"]
-    assert "simm_rw" not in cap and "engine's estimate" in cap["im_basis"] and cap["im_0"] > 0 and "licensed" in cap["im_note"]
+    assert "simm_rw" not in cap and "engine's estimate" in cap["im_basis"] and cap["im_0"] > 0 and "not an industry margin model" in cap["im_note"]
     r2 = client.post("/api/xva/simulate", json={"notional": 10_000_000, "maturity_y": 5, "fixed_rate": 0.0375, "paths": 500, "npv": 0.0, "im_usd": 300_000,
                                                  "csa": {"preset": "BILATERAL", "im_exchanged": True}}, headers=auth_a)
     assert r2.json()["capital"]["im_0"] == 300_000.0

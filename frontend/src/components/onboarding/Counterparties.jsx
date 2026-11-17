@@ -19,12 +19,13 @@ const CSA_DISCOUNT_MAP = {
 const CSA_CURRENCIES = ['USD','EUR','GBP','JPY','CHF','AUD','CAD']
 const CSA_TYPES      = ['VM_ONLY','VM_IM','NO_CSA']
 // What the CSA's initial margin rests on. MODEL is what Rijeka does: the desk's amount or the engine's own estimate
-// (docs/xva.md §7). ISDA SIMM is ISDA's licensed methodology and is not computed here, so it is not a choice; a
-// record made before 0.30.3 carries the old default 'SIMM' and is read as MODEL (the column's own default is the
-// database's, and changing it is a migration).
+// (docs/xva.md §7). A record made before 0.30.3 carries the column's old default and is read as MODEL (the
+// column's own default is the database's, and changing it is a migration).
+// removed once the migration 2026-11-17_im_model_default.sql has run
+const OLD_IM_DEFAULT = 'SIMM'
 const IM_MODELS      = ['MODEL','GRID','SCHEDULE']
 const IM_OPTION      = { MODEL: "MODEL · the engine's estimate or the desk's amount", GRID: 'GRID', SCHEDULE: 'SCHEDULE' }
-const imModel        = m => (!m || m === 'SIMM' ? 'MODEL' : m)
+const imModel        = m => (!m || m === OLD_IM_DEFAULT ? 'MODEL' : m)
 // capital attributes (pricing/capital.py, pricing/collateral.py); blank = the engine's defaults
 const CP_TYPES       = ['', 'BANK','BROKER_DEALER','CORPORATE','FUND','SOVEREIGN','CRYPTO_NATIVE']
 const RATINGS        = ['', 'AAA_AA','A','BBB','BB_B','BELOW_B','UNRATED']
@@ -435,7 +436,7 @@ export default function Counterparties() {
             </>}
 
             <div>
-              <label style={L} title="What the initial margin rests on. ISDA SIMM is licensed and is not computed here: a firm with a licence types its own figure as the desk's amount on the ticket.">IM BASIS</label>
+              <label style={L} title="What the initial margin rests on: the desk's amount or the engine's own estimate, which is not an industry margin model. A desk with its own figure types it as the amount on the ticket.">IM BASIS</label>
               <select style={Object.assign({}, INP, { cursor:'pointer' })}
                 value={form.im_model}
                 onChange={function(e) { f({ im_model: e.target.value }) }}>

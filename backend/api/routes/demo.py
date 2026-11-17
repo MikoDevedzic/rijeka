@@ -8,7 +8,7 @@ each visitor, idempotently:
 
   * an own legal entity with a DEMO-prefixed LEI (20 chars, like a real LEI,
     never a real one), and a one-person firm so the messenger works;
-  * RIJEKA DEMO BANK AG as a counterparty (VM+IM CSA, SIMM) — an entity whose
+  * RIJEKA DEMO BANK AG as a counterparty (VM+IM CSA) — an entity whose
     signing key this Rijeka holds, so the visitor can take a trade all the
     way to the Sepolia registry alone. The attestation says bilateral:false
     and key_source "dev"; the UI says "demo, not bilateral";
@@ -200,7 +200,7 @@ def provision(db: Session = Depends(get_db), user: dict = Depends(verify_token))
     own = db.query(LegalEntity).filter(LegalEntity.user_id == uid, LegalEntity.lei == my_lei).first()
     if own is None:
         own = LegalEntity(id=uuid.uuid4(), lei=my_lei, name=f"{trader} DEMO", short_name=trader[:12],
-                          home_currency="USD", jurisdiction="US", regulatory_regime=["UMR"], simm_version="2.6",
+                          home_currency="USD", jurisdiction="US", regulatory_regime=["UMR"],
                           im_threshold_m=50, ois_curve_id="USD_SOFR", is_own_entity=True, is_active=True,
                           created_by=uid, user_id=uid)
         db.add(own); created["own_entity"] = True
@@ -209,7 +209,7 @@ def provision(db: Session = Depends(get_db), user: dict = Depends(verify_token))
     bank = db.query(LegalEntity).filter(LegalEntity.user_id == uid, LegalEntity.lei == DEMO_BANK_LEI).first()
     if bank is None:
         bank = LegalEntity(id=uuid.uuid4(), lei=DEMO_BANK_LEI, name=DEMO_BANK_NAME, short_name="RJK DEMO BANK",
-                           home_currency="USD", jurisdiction="CH", regulatory_regime=["UMR"], simm_version="2.6",
+                           home_currency="USD", jurisdiction="CH", regulatory_regime=["UMR"],
                            im_threshold_m=50, ois_curve_id="USD_SOFR", is_own_entity=False, is_active=True,
                            created_by=uid, user_id=uid)
         db.add(bank); created["demo_bank_entity"] = True

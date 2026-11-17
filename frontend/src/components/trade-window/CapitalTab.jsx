@@ -194,7 +194,7 @@ export default function CapitalTab({ counterpartyId, counterpartyName, buildTrad
         </div>
       </div>
       <VaFooter>
-        Regulatory stock at today, as magnitudes in {ccy}; the lifetime cost of this stock (KVA, MVA) and the credit and funding adjustments are on the XVA tab. Every formula names its paragraph: Basel CRE20, CRE22, CRE52, MAR50, SCO60, LCR30; ISDA SIMM; CFTC §23.156. {hasRecordType ? 'The counterparty record sets the first type.' : ''}
+        Regulatory stock at today, as magnitudes in {ccy}; the lifetime cost of this stock (KVA, MVA) and the credit and funding adjustments are on the XVA tab. Every formula names its paragraph: Basel CRE20, CRE22, CRE52, MAR50, SCO60, LCR30; CFTC §23.156. {hasRecordType ? 'The counterparty record sets the first type.' : ''}
       </VaFooter>
     </div>
   )

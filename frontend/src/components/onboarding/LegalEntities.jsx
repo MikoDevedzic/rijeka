@@ -15,9 +15,7 @@ const CURRENCIES = [
 
 const EMPTY = {
   lei:'', name:'', short_name:'', home_currency:'USD',
-  // simm_version: a column from before 10 November 2026, when Rijeka stopped naming ISDA SIMM (it is licensed and not
-  // computed). The column is NOT NULL, so the value still travels; no screen shows or asks for it.
-  jurisdiction:'US', regulatory_regime:'', simm_version:'v2.6',
+  jurisdiction:'US', regulatory_regime:'',
   im_threshold_m:'', ois_curve_id:'', is_own_entity:false
 }
 
@@ -123,7 +121,6 @@ export default function LegalEntities() {
             return s.trim().toUpperCase()
           }).filter(Boolean)
         : [],
-      simm_version:      form.simm_version || 'v2.6',
       im_threshold_m:    form.im_threshold_m ? parseFloat(form.im_threshold_m) : null,
       ois_curve_id:      form.ois_curve_id   || null,
       is_own_entity:     form.is_own_entity,

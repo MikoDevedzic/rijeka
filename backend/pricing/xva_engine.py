@@ -42,12 +42,11 @@ from pricing.csa import CSA
 
 
 # ── Initial margin ───────────────────────────────────────────────────────────
-# Rijeka does not compute ISDA SIMM: SIMM is ISDA's licensed methodology and its risk weights are not in this
-# code. Initial margin is either an amount the desk sets (a firm with a SIMM licence enters its own figure) or
+# Initial margin is either an amount the desk sets (a desk with its own figure enters it) or
 # the engine's own estimate from its simulated paths, at the confidence the margin rules for non-centrally
 # cleared derivatives name (BCBS-IOSCO, "Margin requirements for non-centrally cleared derivatives": a
 # one-tailed 99 per cent interval over the margin horizon). The estimate is this engine's model, not a
-# regulatory or an ISDA figure.
+# regulatory or an industry figure.
 IM_CONFIDENCE = 99.0
 
 
@@ -387,7 +386,7 @@ def run_waterfall(
         lag = v_lag if v_lag is not None else lag_of(np.random.default_rng(seed=44)) - (0.0 if settled is None else settled)
         im_recv, im_post = model_im(paths, lag)
         im_basis = (f"the engine's estimate: the {IM_CONFIDENCE:g}th percentile move of the value over the margin period "
-                    f"({csa.mpor_days:g} business days), each way; not ISDA SIMM")
+                    f"({csa.mpor_days:g} business days), each way; not an industry margin model")
     im_0 = float(im_post[0]) if T else 0.0
     im_profile = [float(x) for x in im_post]
 

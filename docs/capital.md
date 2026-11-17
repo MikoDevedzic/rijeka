@@ -115,7 +115,7 @@ the HQLA value and the quote line. The record's own regime is its collateral sch
 regulatory stock only (IM, EAD, RWA, K CCR, K CVA, leverage exposure, HQLA of IM); the lifetime prices of that
 stock (KVA, MVA) and the credit and funding adjustments are valuation adjustments and belong on the XVA tab,
 where they move in the collateral plan's C2. IM is the engine's own estimate, the 99th percentile move of the set's value over the regime's margin period
-(`pricing/xva_engine.model_im`; Rijeka does not compute ISDA SIMM, which is licensed);
+(`pricing/xva_engine.model_im`; not an industry margin model);
 nothing is posted where the collateral is not eligible IM. `GET /api/capital/collateral` is the catalogue
 with the tables and sources.
 

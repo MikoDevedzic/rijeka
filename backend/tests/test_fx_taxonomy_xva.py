@@ -64,7 +64,7 @@ def test_crypto_margin_is_the_engines_estimate_and_collateral_reduces_cva():
                                  df_quote_t=0.99, quote_zero=0.04, direction="SELL", vol_pct=55.0, spot01=-8_100)
     open_, _ = fx_xva.forward_xva(inp, CSA.uncollateralised(), n_paths=2000)
     coll, meta = fx_xva.forward_xva(inp, CSA.on_chain(im_exchanged=True), n_paths=2000)
-    assert "engine's estimate" in meta["im_basis"] and "not ISDA SIMM" in meta["im_basis"]
+    assert "engine's estimate" in meta["im_basis"] and "not an industry margin model" in meta["im_basis"]
     assert meta["crypto_group"] == "2a" and "SCO60.98" in meta["capital_basis"]
     # the estimate is of the order of a 99 % move of 10 BTC over five business days at a vol of 55 %
     rough = 10 * 82_000 * 0.55 * (5 / 250) ** 0.5 * 2.326

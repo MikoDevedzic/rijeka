@@ -60,7 +60,7 @@ def test_products_list_covers_crypto_and_post_trade():
         assert p["replication"] in ("xlsx", "doc", "xlsx-static", "verifier")
         if p["replication"] == "xlsx":
             assert p["id"] in rep.BUILDERS
-    # Rijeka does not compute ISDA SIMM (it is licensed): there is no SIMM replication to list
+    # no licensed margin methodology is computed: there is no such replication to list
     assert "simm" not in ids
 
 
@@ -300,7 +300,7 @@ def test_xva_fx_workbooks_carry_the_engine_draws_and_a_live_mode():
         for label, attr in (("CVA", "cva"), ("DVA", "dva"), ("FCA", "fca"), ("FBA", "fba"), ("KVA", "kva"), ("MVA", "mva"), ("XVA total", "xva_total"), ("IM₀", "im_0"), ("EAD over the first step", "ead_0")):
             assert got[label] == pytest.approx(getattr(wf, attr))
         # the margin is the engine's estimate (the first date's 99th percentile fall), and the workbook rebuilds it in cells
-        assert total == pytest.approx(wf.xva_total) and wf.im_0 == wf.im_profile[0] > 0 and "not ISDA SIMM" in wf.im_basis
+        assert total == pytest.approx(wf.xva_total) and wf.im_0 == wf.im_profile[0] > 0 and "not an industry margin model" in wf.im_basis
         assert "PERCENTILE(" in wb["Exposure"]["K24"].value and "IMq" in wb["Exposure"]["N24"].value and wb["Exposure"]["B16"].value == 0.99
         formulas = [c.value for ws in wb.worksheets for row in ws.iter_rows() for c in row if isinstance(c.value, str) and c.value.startswith("=")]
         assert any("NORMSDIST(" in f or "NORMSINV(" in f for f in formulas) and not any("NORM.S.DIST" in f or "_xlfn" in f for f in formulas)

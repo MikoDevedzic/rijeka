@@ -53,9 +53,8 @@ for (const [url, expected, where] of PAGES) {
     // for a reader who does not see the page: it says which page it is, once, and marks its main content, once
     expect(await app.locator('h1').count(), `${url} has one first heading`).toBe(1)
     expect(await app.locator('main, [role=main]').count(), `${url} has one main`).toBe(1)
-    // ISDA SIMM is licensed and not computed here: a record's page does not name it as the margin's basis (the
-    // local stack's counterparty carries the old default on purpose, and is read as MODEL)
-    if (/counterparties|legal-entities/.test(url)) expect(text, `${url} names SIMM`).not.toMatch(/\bSIMM\b/)
+    // a record's page does not name a licensed methodology as the margin's basis
+    if (/counterparties|legal-entities/.test(url)) expect(text, `${url} names a licensed methodology`).not.toMatch(/\bSIMM\b/)
     expectClean(problems)
   })
 }

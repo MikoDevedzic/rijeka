@@ -107,7 +107,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - Before a release a new user will see, a fresh first-time visitor's pass over pictures of every screen, with the
   arithmetic checked from the screen. It finds what journeys and readers of code do not.
 - A blanket change (a colour map, a rename) is tried on one page and its pictures read before it is run
-  everywhere; and a rule about words ("no SIMM on the public site") includes the pictures.
+  everywhere; and a rule about words ("no licensed methodology named on the public site") includes the pictures.
 - A picture of a state is drawn for every state the thing can be in: write the state as a pure function of its
   inputs and test each case before drawing it.
 - Fit before sizing; and "does not move" is measured component by component, not on the total.
@@ -193,7 +193,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   the map: the brief summed the pricers' own figures for weeks after the home had been moved to the risk report,
   because the home's fix had not asked who else showed the book's value.
 - A word that must go from public copy is searched for over the whole repository, the page's head and what a
-  search engine reads included, not over the screens alone: "ISDA SIMM" stood in the app page's structured data
+  search engine reads included, not over the screens alone: a licensed margin methodology stood in the app page's structured data
   for a week after it had been taken off every screen, and "open-source" in the assistant's own description.
 - A class that hides a cell on a narrow page is not used for a cell's colour in a table that keeps all its
   columns: the head stayed, three cells went, and every figure after them stood under the wrong heading.

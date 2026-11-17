@@ -3,7 +3,7 @@ Rijeka is licensed in two parts. The boundary is by path.
 APACHE LICENSE 2.0  (see LICENSE-APACHE)  — the engine and the standard,
 meant to be adopted, embedded and forked freely, with an explicit patent grant:
 
-    backend/pricing/        curve bootstrap, pricing, XVA, SIMM, SA-CCR
+    backend/pricing/        curve bootstrap, pricing, XVA, initial margin estimate, SA-CCR
     backend/risk/           key-rate ladder, VaR, stress, backtesting, limits, vol history
     backend/ccr/            counterparty-credit exposure paths and calibration
     backend/ipv/            independent price verification: inputs, pillar ladder, tolerances, the run

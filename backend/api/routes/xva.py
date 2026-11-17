@@ -158,7 +158,7 @@ class SimulateRequest(BaseModel):
     # supply it we return npv=None rather than silently reporting 0.0,
     # so the UI cannot display an all-in that ignores the trade's MtM.
     npv: Optional[float] = None
-    ir01: Optional[float] = None         # $ per bp, from the pricer; no longer read (it sized a SIMM-weighted margin)
+    ir01: Optional[float] = None         # $ per bp, from the pricer; no longer read
     # Term structure the paths are generated from. Same shape the pricer takes,
     # so both can be handed the identical payload. If omitted, the curve is
     # loaded from the DB snapshot exactly as /price does.
@@ -184,11 +184,9 @@ class SimulateRequest(BaseModel):
     capital_model: str = "sa_ccr"        # sa_ccr | cem | imm
     counterparty_rw: float = 1.0         # Basel counterparty risk weight (1.0 = 100%)
     wwr_multiplier: float = 1.0
-    # Initial margin, each way, in the trade's currency: the desk's own figure (a firm with an ISDA SIMM licence
-    # enters its SIMM here). None = the engine's estimate, the 99th percentile move over the margin period.
-    # Rijeka does not compute ISDA SIMM. `simm_im_m` ($M) is the old name of the same input, still read.
+    # Initial margin, each way, in the trade's currency: the desk's own figure. None = the engine's estimate,
+    # the 99th percentile move over the margin period (not an industry margin model).
     im_usd: Optional[float] = Field(default=None, ge=0)
-    simm_im_m: Optional[float] = Field(default=None, ge=0)
     direction: str = "PAY"                # PAY or RECEIVE — flips EE/ENE
     # The trade itself (0.52.0): the booking body the ticket would send (instrument_type, terms, legs), or a stored
     # trade's id. With either, the paths value THAT trade: its own schedule and frequencies, what is left of its
@@ -903,11 +901,9 @@ class CurrencyXvaRequest(BaseModel):
     vol_mode: str = "SURFACE"        # SURFACE: the term structure (and smile) along the paths; FLAT: one vol held
     vol_regimes: bool = True         # a digital asset's vol regimes (pricing/vol_regimes); false: one vol, for comparison
     fees: Optional[list[dict]] = None    # the trade's fees still to come (pricing/fees.py): they are part of its value and of its exposure
-    # Initial margin, each way, in the trade's currency: the desk's own figure (a firm with an ISDA SIMM licence
-    # enters its SIMM here). None = the engine's estimate, the 99th percentile move over the margin period.
-    # Rijeka does not compute ISDA SIMM. `simm_im_m` ($M) is the old name of the same input, still read.
+    # Initial margin, each way, in the trade's currency: the desk's own figure. None = the engine's estimate,
+    # the 99th percentile move over the margin period (not an industry margin model).
     im_usd: Optional[float] = Field(default=None, ge=0)
-    simm_im_m: Optional[float] = Field(default=None, ge=0)
     crypto_group: Optional[str] = None   # a digital asset's Basel group for the capital add-on: 2a | 2b; None = the engine's default
     # wrong-way risk (pricing/xva_engine.path_survival): the multiple a party's default intensity takes when the asset
     # halves against its forward. 1 = default independent of the asset (the numbers before this existed)
@@ -939,11 +935,9 @@ def one_wrong_way(body) -> None:
 
 
 def im_amount_of(body) -> Optional[float]:
-    """The initial margin the desk set, in currency units: `im_usd`, or the older `simm_im_m` in millions."""
+    """The initial margin the desk set, in currency units: `im_usd`."""
     if getattr(body, "im_usd", None) is not None:
         return float(body.im_usd)
-    if getattr(body, "simm_im_m", None) is not None:
-        return float(body.simm_im_m) * 1e6
     return None
 
 
@@ -954,8 +948,8 @@ def crypto_group_or_422(group: Optional[str]) -> Optional[str]:
     return g or None
 
 
-IM_NOTE = ("Initial margin is the amount the desk set, or this engine's own estimate. Rijeka does not compute ISDA SIMM: "
-           "SIMM is ISDA's licensed methodology, and a firm with a licence enters its own figure.")
+IM_NOTE = ("Initial margin is the amount the desk set, or this engine's own estimate. The estimate is not an industry margin model: "
+           "a desk with its own figure enters it.")
 
 
 def unilateral_block(wf) -> dict:
@@ -1097,11 +1091,9 @@ class CurrencyOptionXvaRequest(BaseModel):
     vol_mode: str = "SURFACE"        # SURFACE: the term structure (and smile) along the paths; FLAT: one vol held
     vol_regimes: bool = True         # a digital asset's vol regimes (pricing/vol_regimes); false: one vol, for comparison
     fees: Optional[list[dict]] = None    # the trade's fees still to come (pricing/fees.py): they are part of its value and of its exposure
-    # Initial margin, each way, in the trade's currency: the desk's own figure (a firm with an ISDA SIMM licence
-    # enters its SIMM here). None = the engine's estimate, the 99th percentile move over the margin period.
-    # Rijeka does not compute ISDA SIMM. `simm_im_m` ($M) is the old name of the same input, still read.
+    # Initial margin, each way, in the trade's currency: the desk's own figure. None = the engine's estimate,
+    # the 99th percentile move over the margin period (not an industry margin model).
     im_usd: Optional[float] = Field(default=None, ge=0)
-    simm_im_m: Optional[float] = Field(default=None, ge=0)
     crypto_group: Optional[str] = None   # a digital asset's Basel group for the capital add-on: 2a | 2b; None = the engine's default
     # wrong-way risk (pricing/xva_engine.path_survival): the multiple a party's default intensity takes when the asset
     # halves against its forward. 1 = default independent of the asset (the numbers before this existed)
@@ -1238,11 +1230,9 @@ class CurrencyPackageXvaRequest(BaseModel):
     vol_mode: str = "SURFACE"
     vol_regimes: bool = True         # a digital asset's vol regimes (pricing/vol_regimes); false: one vol, for comparison
     fees: Optional[list[dict]] = None    # the trade's fees still to come (pricing/fees.py): they are part of its value and of its exposure
-    # Initial margin, each way, in the trade's currency: the desk's own figure (a firm with an ISDA SIMM licence
-    # enters its SIMM here). None = the engine's estimate, the 99th percentile move over the margin period.
-    # Rijeka does not compute ISDA SIMM. `simm_im_m` ($M) is the old name of the same input, still read.
+    # Initial margin, each way, in the trade's currency: the desk's own figure. None = the engine's estimate,
+    # the 99th percentile move over the margin period (not an industry margin model).
     im_usd: Optional[float] = Field(default=None, ge=0)
-    simm_im_m: Optional[float] = Field(default=None, ge=0)
     crypto_group: Optional[str] = None
     # wrong-way risk (pricing/xva_engine.path_survival): the multiple a party's default intensity takes when the asset
     # halves against its forward. 1 = default independent of the asset (the numbers before this existed)

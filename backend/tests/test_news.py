@@ -11,8 +11,8 @@ RSS = b"""<?xml version="1.0"?><rss version="2.0"><channel><title>Fed</title>
 </channel></rss>"""
 
 ATOM = b"""<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><title>ISDA</title>
-<entry><title>ISDA publishes SIMM 2.8 margin methodology</title>
-<link rel="alternate" href="https://www.isda.org/a/simm"/><link rel="self" href="https://www.isda.org/self"/>
+<entry><title>ISDA publishes margin survey</title>
+<link rel="alternate" href="https://www.isda.org/a/margin"/><link rel="self" href="https://www.isda.org/self"/>
 <published>2026-10-26T09:30:00Z</published><id>urn:x</id></entry></feed>"""
 
 
@@ -23,7 +23,7 @@ def test_parse_rss_and_atom():
     assert rss[0].url.endswith("/1.htm") and rss[0].published_at.year == 2026 and rss[0].published_at.tzinfo
     assert rss[1].published_at is None                      # bad date → None, item kept
     atom = parse(ATOM, "ISDA")
-    assert len(atom) == 1 and atom[0].url == "https://www.isda.org/a/simm"   # alternate link, not self
+    assert len(atom) == 1 and atom[0].url == "https://www.isda.org/a/margin"   # alternate link, not self
     assert atom[0].published_at.hour == 9 and "REGULATION" in atom[0].tags
 
 
@@ -35,7 +35,7 @@ def test_parse_garbage_is_empty():
 def test_tags():
     from news.feeds import tag
     assert tag("Fed holds rates, signals cut as Treasury yields fall") == ("RATES",)
-    assert set(tag("ISDA SIMM margin update for cleared swaps")) >= {"REGULATION", "DERIVATIVES"}
+    assert set(tag("ISDA margin update for cleared swaps")) >= {"REGULATION", "DERIVATIVES"}
     assert tag("Bitcoin tops $100k") == ("CRYPTO",)
     assert tag("Company announces new CEO") == ()
 

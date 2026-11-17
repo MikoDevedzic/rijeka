@@ -59,6 +59,8 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 CHALLENGE_PREFIX = "Rijeka: register signing wallet"
 CHALLENGE_TTL_S = 600
+# removed once the migration 2026-11-17_im_model_default.sql has run
+OLD_IM_DEFAULT = "SIMM"   # a record from before 0.30.3 carries the column's old default
 
 
 # ── Parties ──────────────────────────────────────────────────────────────────
@@ -528,11 +530,11 @@ def _entity(db: Session, user_id, template: LegalEntity, own: bool) -> LegalEnti
     le = db.query(LegalEntity).filter(LegalEntity.user_id == user_id, LegalEntity.lei == template.lei).first()
     if le is None:
         # Every column is set explicitly: the ORM sends NULL for unset ones, which
-        # would override the DB defaults (simm_version) and trip NOT NULL.
+        # would override the DB defaults and trip NOT NULL.
         le = LegalEntity(id=uuid.uuid4(), lei=template.lei, name=template.name,
                          short_name=template.short_name or template.name,
                          home_currency=template.home_currency or "USD", jurisdiction=template.jurisdiction or "",
-                         regulatory_regime=template.regulatory_regime, simm_version=template.simm_version or "v2.6",
+                         regulatory_regime=template.regulatory_regime,
                          im_threshold_m=template.im_threshold_m, ois_curve_id=template.ois_curve_id,
                          is_own_entity=own, is_active=True, user_id=user_id, created_by=user_id)
         db.add(le); db.flush()
@@ -547,7 +549,7 @@ def _counterparty(db: Session, user_id, le: LegalEntity, template: Counterparty)
                           isda_agreement=template.isda_agreement, csa_type=template.csa_type,
                           csa_currency=template.csa_currency, csa_threshold_m=template.csa_threshold_m,
                           csa_mta_k=template.csa_mta_k, discount_curve_id=template.discount_curve_id,
-                          im_model="MODEL" if (template.im_model or "SIMM") == "SIMM" else template.im_model, user_id=user_id, created_by=user_id)
+                          im_model="MODEL" if (template.im_model or OLD_IM_DEFAULT) == OLD_IM_DEFAULT else template.im_model, user_id=user_id, created_by=user_id)
         db.add(cp); db.flush()
     return cp
 

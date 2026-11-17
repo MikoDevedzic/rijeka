@@ -323,7 +323,7 @@ def test_counterparties_both_users_coexist_same_name(client, auth_a, auth_b):
     body = {
         "name": f"TEST-RLS-CP-{suf}",
         "csa_type": "NO_CSA",
-        "im_model": "SIMM",
+        "im_model": "MODEL",
     }
 
     r_a = client.post("/api/counterparties/", json=body, headers=auth_a)

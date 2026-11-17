@@ -6,7 +6,7 @@ const PHASES = [
   { title: 'PHASE 1 · RATES', status: 'LIVE', items: [
     ['DONE', 'OIS bootstrap, IRS / OIS / basis pricing, cashflows, IR01'],
     ['DONE', 'European swaptions and caps/floors (Bachelier), SABR β=0 surface, Bermudans (HW1F trinomial)'],
-    ['DONE', 'XVA Monte Carlo on HW1F calibrated to the surface; CSA presets with margin period of risk; initial margin as an amount the desk sets or the engine\'s own estimate (ISDA SIMM is licensed and is not implemented)'],
+    ['DONE', 'XVA Monte Carlo on HW1F calibrated to the surface; CSA presets with margin period of risk; initial margin as an amount the desk sets or the engine\'s own estimate (not an industry margin model)'],
     ['DONE', 'On-chain bilateral confirmation: canonical record v2 → EIP-712 → registry on Sepolia; amend (notional up, rate, spread, price or strike), partially terminate and terminate from the ticket; public verifier'],
     ['DONE', 'Messenger: firms, rooms, trade cards, wallet countersigning; Telegram mirror; Market News room'],
     ['DONE', 'Hosted demo: sandbox workspace on sign-in, demo counterparty, Excel methodology replications'],
@@ -43,7 +43,7 @@ const PHASES = [
     ['DONE', 'Capital of a trade, computed by the engine: initial margin, SA-CCR EAD by asset class (CRE52, SCO60.98), RWA, CCR and CVA capital (MAR50), KVA, MVA, leverage exposure and HQLA under collateral regimes (cash and government securities, stablecoin, tokenised fund shares, tokenised sovereign) and counterparty types; the Basel worked examples as the reference suite', 'CAPITAL'],
     ['NEXT', 'Regulatory capital as one calculation under Risk → CAPITAL, by book and by trade', 'CAPITAL'],
     ['DONE', 'Risk → CAPITAL: the book under collateral regimes, every netting set re-collateralised channel by channel from the CSA as booked to on-chain under current rules and to the forward states, the attribution per step with its paragraph, the invariants stated', 'CAPITAL'],
-    ['NEXT', 'Capital next: FRTB sensitivities-based market-risk capital from the ladder, initial margin across risk classes with incremental IM and netting-set consolidation (ISDA SIMM itself only under a licence), a CSV import for a client book, an Excel replication'],
+    ['NEXT', 'Capital next: FRTB sensitivities-based market-risk capital from the ladder, initial margin across risk classes with incremental IM and netting-set consolidation, a CSV import for a client book, an Excel replication'],
     ['DONE', 'MARKET RISK tab: key-rate IR01 ladder by bump-and-reprice, historical-simulation VaR by full revaluation (every trade repriced on each of two years of observed days, the ladder VaR alongside as the linear comparison), named stress by full revaluation, limits on any reported number with utilisation and breaches'],
     ['DONE', 'VaR backtesting: yesterday\'s VaR against today\'s clean, hypothetical or dirty P&L; exceptions, the Basel traffic light from the binomial, Kupiec\'s test; the 95% and ladder VaR alongside'],
     ['DONE', 'VaR: volatility surfaces as risk factors (every quote of an FX surface, the swaption grid point by point, repriced in full; a surface is secondary to the curves and spots and the page says its coverage); VOL stress scenarios; the ladder VaR carries vega; the demo\'s surfaces scaled day by day by realised vol, labelled'],

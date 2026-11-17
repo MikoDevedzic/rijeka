@@ -25,7 +25,7 @@
 \titleformat{\section}{\large\bfseries\color{ink}}{\thesection}{0.8em}{}
 \titleformat{\subsection}{\normalsize\bfseries\color{ink}}{\thesubsection}{0.8em}{}
 \pagestyle{fancy}\fancyhf{}
-\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.36 · November 2026}
+\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.37 · November 2026}
 \fancyfoot[C]{\small\color{dim}\thepage}
 \renewcommand{\headrulewidth}{0.2pt}
 % breaks at / _ . in text (url's \path); literal typewriter inside maths
@@ -45,7 +45,7 @@
 \begin{center}
 {\LARGE\bfseries Rijeka Methodology}\\[4pt]
 {\large Curve construction, pricing, market and counterparty risk, XVA, FX and digital-asset derivatives, on-chain confirmation}\\[6pt]
-{\color{dim} Version 1.36 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
+{\color{dim} Version 1.37 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
 \end{center}
 
 \vspace{4pt}
@@ -56,6 +56,7 @@
 \section*{Version history}
 {\small
 \begin{itemize}[leftmargin=1.4em, itemsep=4pt]
+\item \textbf{1.37 (17 November 2026).} Wording only; no figure changes. The licensed margin methodology the engine does not compute is named once, in \S\ref{sec:exposure}, where the initial margin is described; elsewhere the margin is called what it is, the desk's amount or the engine's own estimate.
 \item \textbf{1.36 (17 November 2026).} Two corrections found by putting one trade through every XVA run (\S\ref{sec:xva}). The counterparty run's capital charge is on each trade's own asset class: it took the interest-rate add-on on the set's gross notional whatever the set held, so the incremental KVA of a currency forward was a seventeenth of its ticket's and a digital-asset forward's was zero. And under a margin agreement a payment takes its collateral with it: a package leg that settled was taken out of the value and not out of the collateral, which left the whole payment owed for half a step (on a margined calendar spread whose near leg pays 1.7 million, a DVA of 49 where it is 0.9).
 \item \textbf{1.35 (17 November 2026).} The exposure is discounted on its own path (\S\ref{sec:xva}); CVA, DVA, FCA and FBA of every rates ticket and of every counterparty run change, by about $2\,\%$ on a five-year swap. Each charge is, by definition, on $\E[D(t)\,V^{\pm}(t)]$; the engine had taken $P(0,t)\,\E[V^{\pm}(t)]$, which leaves out that a swap's exposure and its discount factor move together. Found by running one swap through ORE (the Open Source Risk Engine) and this engine like for like, and confirmed against a strip of QuantLib swaptions: the first outside figures for an adjustment.
 \item \textbf{1.34 (17 November 2026).} A rates ticket's XVA is of the trade itself (\S\ref{sec:exposure}); every rates ticket's exposure and adjustments change. Until now the ticket ran a generic swap of its notional, coupon and original tenor whose two legs settle every month: a yearly swap's last year of exposure, a stored trade's remaining life and a swaption (whose terms the run did not read: its figures were a swap's) were not in it. The paths now value the trade's own legs on their own dates, by the valuation of \S\ref{sec:ccr}, and a ticket and a netting set of that trade alone are one calculation (within $0.2\,\%$, tested). A cap, floor or collar has no XVA until it is valued on the paths, and the tab says so.
@@ -80,7 +81,7 @@
 \item \textbf{1.14 (11 November 2026).} The value a margin period earlier on currency and digital-asset tickets (\S\ref{sec:exposure}). The forward's level is bridged between grid dates in logs, where it is a Brownian motion, and every leg is valued on it; until this version the value itself was bridged as if Gaussian, which read the margin called 9 to 18\% low at volatilities of 55 to 110\%. Margined figures on those tickets move: on a six-month BTCUSD forward at 55\% under a bilateral CSA, KVA $-150.7\to-134.8$, MVA $-615.5\to-622.1$, CVA $-2.8\to-3.6$; at a currency's volatility by about 1\%. The rates ticket and the netting-set engine are unchanged.
 \item \textbf{1.13 (11 November 2026).} Forward curves to ten years (\S\ref{sec:fx}). Beyond the last quoted tenor a forward is parity plus the basis that tenor shows, held flat as a rate; until this version the last points were held flat. Every forward says whether it is quoted, interpolated or implied, and how. A tenor can be switched off. One equation added, so the displays after it are numbered one higher.
 \item \textbf{1.12 (10 November 2026).} Typesetting, and one correction. No formula changed. The names of quantities are set upright, displays that ran past the margin are set on several lines, the longest paragraphs are divided, code names are printed as they are written, and this history follows the contents. Corrected: the known limitations of \S\ref{sec:capital} still described the initial-margin method that version 1.10 removed.
-\item \textbf{1.10 and 1.11 (10 November 2026).} Initial margin as the desk's own amount or the engine's estimate, with no ISDA SIMM computed or claimed, and the capital add-on of a currency or digital-asset ticket by its own SA-CCR class (\S\ref{sec:exposure}); wrong-way risk and a package of legs as one netting set (\S\ref{sec:xva}); a package of trades confirmed as one record (\S\ref{sec:chain}).
+\item \textbf{1.10 and 1.11 (10 November 2026).} Initial margin as the desk's own amount or the engine's estimate, with no licensed margin methodology computed or claimed, and the capital add-on of a currency or digital-asset ticket by its own SA-CCR class (\S\ref{sec:exposure}); wrong-way risk and a package of legs as one netting set (\S\ref{sec:xva}); a package of trades confirmed as one record (\S\ref{sec:chain}).
 \item \textbf{1.9 (9 November 2026, evening).} The ticket's scenario tab for a currency forward (\S\ref{sec:fxo}, digital assets): it starts from the engine's own forward and carries a rate shock from the spot date, which the pricer's answer now names; where it is the engine priced again and where it is not is stated.
 \item \textbf{1.8 (9 November 2026, later).} Value and expiry dates by market convention, the calendars against QuantLib, \code{CRYBASIS01} in place of \code{FUND01} on the ticket (\S\ref{sec:fx}, \S\ref{sec:fxo}, \S\ref{sec:mr}); the exotic pricer at its limits and the first-passage value in logarithms (\S\ref{sec:fxo}); a strike booked as displayed.
 \item \textbf{1.7 (9 November 2026).} Fixings for digital assets and settlement on the source the record names (\S\ref{sec:fxo}).
@@ -872,7 +873,7 @@ The XVA book (\S\ref{sec:exposure}, \code{methodology/xva_workbook.py}) goes fur
 
 The FX and digital-asset XVA books (\code{methodology/fx_xva_workbook.py}) do the same for a forward: the lognormal paths from the engine's draws, the pair's surface interpolated to the forward's tenor with the smile fixed point at $K=F$ shown iteration by iteration, the initial margin as the percentile move over the margin period, the add-on of the pair's own class, the forward a margin period earlier (bridged in logs) and the trade valued on it, and the same CSA, waterfall and LIVE mode.
 \item \textbf{Independent reference.} Every product is repriced in QuantLib on every commit (\S\ref{sec:quantlib}); a difference that grows past its stated tolerance fails the build.
-\item \textbf{Open items, stated plainly.} Hull--White is single-curve and calibrated to one tenor column (\S7--8). SABR is $\beta=0$ only. The hosted demo prices off a dated snapshot with no live feed, and says so on every screen. The registry contract has had no external audit. Initial margin is the desk's amount or the engine's estimate at current volatility; ISDA SIMM is licensed and is not implemented.
+\item \textbf{Open items, stated plainly.} Hull--White is single-curve and calibrated to one tenor column (\S7--8). SABR is $\beta=0$ only. The hosted demo prices off a dated snapshot with no live feed, and says so on every screen. The registry contract has had no external audit. Initial margin is the desk's amount or the engine's estimate at current volatility; no licensed margin methodology is computed or claimed.
 \item \textbf{Change control.} Every change to a pricing module is a commit in a public repository with its tests; this document is versioned with the code.
 \end{itemize}
 

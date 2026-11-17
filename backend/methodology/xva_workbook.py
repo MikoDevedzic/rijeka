@@ -347,9 +347,9 @@ def _exposure_sheet(wb, eng, blocks, nrows, grid_r0):
             ("IM exchanged (1/0)", '=IF(Preset="UNCOLLATERALISED",0,1)', "0"), ("IM yield pickup (bp)", 0.0, "0.0"),
             ("δ = MPoR/250 (years)", f"=B9/{BUSINESS_DAYS_PER_YEAR}", "0.0000"), ("Steps back = δ/Δ (< 1 here)", "=B12/Dt", "0.0000"), ("w = 1 − δ/Δ", "=1-B13", "0.0000"),
             ("V(0): the model's own t = 0 value", eng["v0"], "#,##0.00"),
-            ("IM confidence, one-tailed, each way (the engine's own estimate from these paths; not ISDA SIMM, which is licensed)", IM_CONFIDENCE / 100.0, "0.00"),
+            ("IM confidence, one-tailed, each way (the engine's own estimate from these paths; not an industry margin model)", IM_CONFIDENCE / 100.0, "0.00"),
             ("IM₀ we call: the margin at the first date", "=K25", "#,##0.00"),
-            ("A desk with its own figure (its SIMM, under its licence) types it on the ticket: that amount is then held for the life", "", "@"),
+            ("A desk with its own figure types it on the ticket: that amount is then held for the life", "", "@"),
             ("IM₀ we post: the margin at the first date (the profile MVA funds)", "=N25", "#,##0.00"),
             ("VM carry, posted (bp over OIS: what the margin we post earns above cash)", 0.0, "0.0"), ("VM carry, received (bp over OIS: what the margin we hold earns above the rebate)", 0.0, "0.0")]
     for i, (label, v, fmt) in enumerate(rows, 4):
@@ -569,7 +569,7 @@ def xva_rates_workbook(mkt):
     W.ticket(wb, "XVA of the workbook's swap (legs settling monthly; a ticket values the trade's own schedule)", [("CVA", f"Waterfall!B{rt}", "#,##0.00", "cost"), ("DVA", f"Waterfall!B{rt + 1}", "#,##0.00", "benefit"), ("FCA", f"Waterfall!B{rt + 2}", "#,##0.00", ""),
                                                ("FBA", f"Waterfall!B{rt + 3}", "#,##0.00", ""), ("KVA", f"Waterfall!B{rt + 4}", "#,##0.00", ""), ("MVA", f"Waterfall!B{rt + 5}", "#,##0.00", ""), ("ColVA", f"Waterfall!B{rt + 6}", "#,##0.00", "carry of the VM held, against cash at OIS"),
                                                ("XVA TOTAL", f"Waterfall!B{rt + 7}", "#,##0.00", "all-in = NPV + XVA on the ticket"),
-                                               ("EAD₀ / CAPITAL₀", f"Waterfall!B{rt + 8}", "#,##0.00", "SA-CCR at t = 0; capital on the next row"), ("IM₀", f"Waterfall!B{rt + 10}", "#,##0.00", "the margin we post at the first date: the engine's estimate, not ISDA SIMM"),
+                                               ("EAD₀ / CAPITAL₀", f"Waterfall!B{rt + 8}", "#,##0.00", "SA-CCR at t = 0; capital on the next row"), ("IM₀", f"Waterfall!B{rt + 10}", "#,##0.00", "the margin we post at the first date: the engine's estimate, not an industry margin model"),
                                                ("PEAK EE", f"Waterfall!B{rt + 11}", "#,##0.00", ""), ("PEAK PFE 95%", f"Waterfall!B{rt + 12}", "#,##0.00", "")])
     W.ticket(wb, "MODEL AND CSA", [("a", "Model!B4", "0.0000", "mean reversion"), ("σ", "Model!B5", "0.0000%", "short-rate vol"), ("RMSE OF THE FIT", f"Calibration!B{cal['rs'] + 1}", "0.00", "bp"),
                                    ("CSA PRESET", "Exposure!B4", "@", ""), ("MPoR", "Exposure!B9", "0", "business days"), ("MODE", "Model!B13", "@", "ENGINE or LIVE")])

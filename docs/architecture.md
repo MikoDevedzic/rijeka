@@ -186,8 +186,7 @@ registry and sign with keys of their own). A verdict is green only when the hash
 were all checked; a self-hosted copy of the page lists its own registry. A change to the
 verifier is made in the source and copied to `netlify_drop/verify`; before a deploy of the landing site the two
 are compared, and a difference that is not the change being shipped is resolved first, never overwritten. The
-public site carries no SIMM tool and no SIMM claim (taken down the same day): ISDA SIMM is licensed and is not
-included.
+public site carries no licensed margin methodology, tool or claim (taken down the same day).
 
 ## Market data, source by source
 

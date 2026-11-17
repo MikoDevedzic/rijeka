@@ -165,6 +165,12 @@ OPTIONAL_MIGRATIONS = (
     ("trades_written_by_the_api", "2026-11-13_trades_written_by_the_api.sql",
      "the browser reads a firm's trades, legs and events and only the API writes them; without it a signed-in user can write those rows straight to the table",
      "api.routes.ops", "trades_written_by_the_api_applied"),
+    ("im_model_default", "2026-11-17_im_model_default.sql",
+     "a counterparty's margin basis defaults to MODEL and no record holds the column's old default (every reader already shows it as MODEL)",
+     "api.routes.ops", "im_model_default_applied"),
+    ("legal_entity_margin_version", "2026-11-17_legal_entity_margin_version.sql",
+     "a column nothing reads is gone from legal_entities (apply only with 0.54.1 or later deployed)",
+     "api.routes.ops", "legal_entity_margin_version_dropped"),
 )
 
 
@@ -188,6 +194,28 @@ def trades_written_by_the_api_applied(db: Session) -> bool:
                                      unnest(ARRAY['INSERT', 'UPDATE', 'DELETE']) AS p""")).scalar()
     return n == 3 and writes is False
 
+
+def im_model_default_applied(db: Session) -> bool:
+    """True when counterparties.im_model defaults to MODEL and no row holds the column's old default
+    (docs/migrations/2026-11-17_im_model_default.sql). Read from the catalogue and the table each time."""
+    default = db.execute(text("""SELECT column_default FROM information_schema.columns
+                                 WHERE table_schema = 'public' AND table_name = 'counterparties' AND column_name = 'im_model'""")).scalar()
+    old = db.execute(text("SELECT count(*) FROM public.counterparties WHERE im_model = :old"), {"old": OLD_IM_DEFAULT}).scalar()
+    return "MODEL" in str(default or "") and int(old or 0) == 0
+
+
+def legal_entity_margin_version_dropped(db: Session) -> bool:
+    """True when legal_entities no longer has the column docs/migrations/2026-11-17_legal_entity_margin_version.sql drops."""
+    cols = db.execute(text("""SELECT count(*), count(*) FILTER (WHERE column_name = :col) FROM information_schema.columns
+                              WHERE table_schema = 'public' AND table_name = 'legal_entities'"""),
+                      {"col": OLD_MARGIN_VERSION_COLUMN}).first()
+    # the table must be there to say a column of it is gone: an empty answer is "not known", never "applied"
+    return bool(cols) and int(cols[0] or 0) > 0 and int(cols[1] or 0) == 0
+
+
+# what the two migrations of 17 November 2026 remove: named here only to ask the catalogue whether they have run
+OLD_IM_DEFAULT = "SIMM"
+OLD_MARGIN_VERSION_COLUMN = "simm_version"
 
 _schema_cache: dict = {"at": 0.0, "body": None}
 

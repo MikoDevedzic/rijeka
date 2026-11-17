@@ -90,7 +90,7 @@ def test_counterparty_capital_attributes_round_trip(client, auth_a, ids):
     lst = client.get("/api/counterparties/", headers=auth_a).json()
     assert next(c for c in lst if c["id"] == cp)["posted_composition"] == {"GOVT": 1.0}
     # the CSA terms themselves are editable through the same route (the page's EDIT TERMS)
-    r = client.put(f"/api/counterparties/{cp}", json={"csa_type": "VM_IM", "csa_threshold_m": 2.5, "csa_mta_k": 250, "im_model": "SIMM"}, headers=auth_a)
+    r = client.put(f"/api/counterparties/{cp}", json={"csa_type": "VM_IM", "csa_threshold_m": 2.5, "csa_mta_k": 250, "im_model": "MODEL"}, headers=auth_a)
     assert r.status_code == 200 and r.json()["csa_threshold_m"] == 2.5 and r.json()["csa_mta_k"] == 250
     r = client.put(f"/api/counterparties/{cp}", json={"csa_type": "SOMETHING"}, headers=auth_a)
     assert r.status_code == 422
@@ -135,7 +135,7 @@ def test_portfolio_capital_under_regimes(client, auth_a, ids, booked):
     assert c["columns"]["ON_CHAIN_FORWARD"]["ead"] <= c["columns"]["ON_CHAIN_CURRENT"]["ead"] <= c["columns"]["BASELINE"]["ead"] + 1e-6
     assert j["totals"]["BASELINE"]["rwa"] >= j["totals"]["ON_CHAIN_CURRENT"]["rwa"] - 1e-6
     assert set(j["quote"]) == set(j["columns"]) and j["quote"]["BASELINE"]["running_bp"] == 0.0
-    assert any("initial margin" in x for x in j["invariants"]) and not any("SIMM" in x for x in j["invariants"])
+    assert any("initial margin" in x for x in j["invariants"]) and not any("licensed" in x for x in j["invariants"])
     # the stored path: nothing yet, then a run (a thread here: no worker), then the report
     r = client.get("/api/capital/portfolio", headers=auth_a)
     assert r.status_code == 200 and "counterparties" in r.json()

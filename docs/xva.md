@@ -155,11 +155,9 @@ model validator (12 November 2026, `tests/reference/test_ref_mva_forward.py`): l
 the bilateral preset, −326.78 against the engine's −326.17 on one vol (0.19 %) and −356.95 against −356.66 on the
 regimes (0.08 %), the margin at the first date within 0.12 %.
 
-**Initial margin (10 November 2026).** Rijeka does not compute ISDA SIMM: SIMM is ISDA's licensed methodology,
-and its risk weights are not in this code. Initial margin is one of two things. An amount the desk sets (`im_usd`
-on every XVA route; `simm_im_m`, in millions, is the old name of the same input and is still read): exchanged
-each way and held for the life, so MVA is that amount funded at the spread, step by step. A firm with a SIMM
-licence enters its own SIMM figure there. Or the engine's own estimate (`pricing/xva_engine.model_im`): at each
+**Initial margin (10 November 2026).** No licensed margin methodology is computed or claimed. Initial margin is one of two things. An amount the desk sets (`im_usd`
+on every XVA route): exchanged
+each way and held for the life, so MVA is that amount funded at the spread, step by step. A desk with its own figure enters it there. Or the engine's own estimate (`pricing/xva_engine.model_im`): at each
 grid date the 99th percentile rise (the margin we call, which stands between us and their default) and fall (the
 margin we post, which MVA funds) of the set's value over the margin period ending at that date, about its mean,
 from the lagged value the variation margin already uses. The confidence is the one the BCBS-IOSCO margin rules
@@ -471,5 +469,5 @@ CDS: counterparty 85bp, own 42bp (flat, or a term curve); LGD 40 % both sides; f
 - Interest inside a monthly step accrues at the rate known when the step begins: the spread of a swap's value just before a yearly coupon is about 1 % low on the monthly grid (measured against ORE, which errs by as much the other way; the two meet on a weekly grid). 0.1 % on CVA.
 - The generic swap (a rates request that carries no trade) and its workbook read the expected exposure at today's discount factor, not discounted on the path (0.53.0 changed the trade's own run and the counterparty runs).
 - CVA and DVA use the credit triangle with a flat LGD; no recovery uncertainty, no correlation between credit and market beyond the WWR multiplier.
-- Initial margin is the desk's amount or the engine's estimate at current volatility (above); ISDA SIMM is licensed and is not implemented.
+- Initial margin is the desk's amount or the engine's estimate at current volatility (above). It is not an industry margin model.
 - KVA's SA-CCR add-on is by asset class since 4 November 2026 (`pricing/sa_ccr.py`: rates, FX, the cryptoasset class, options at their supervisory delta); the CVA-capital leg and the collateral regimes are described in `docs/capital.md`.

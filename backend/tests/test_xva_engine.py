@@ -222,7 +222,7 @@ class TestCSAEffects:
         im    = self._run(CSA.bilateral(im_exchanged=True))
         assert sum(im.ee) < sum(no_im.ee)
         assert no_im.mva == 0.0 and im.mva < 0.0
-        assert "engine's estimate" in im.im_basis and "not ISDA SIMM" in im.im_basis and no_im.im_basis == "none"
+        assert "engine's estimate" in im.im_basis and "not an industry margin model" in im.im_basis and no_im.im_basis == "none"
 
     def test_the_engines_margin_is_the_percentile_it_says_it_is(self):
         """The estimate is the 99th percentile rise (what we call) and fall (what we post) of the value over the
@@ -341,7 +341,7 @@ class TestCSAFromRequest:
 
     def test_to_dict_roundtrip_fields(self):
         d = CSA.on_chain().to_dict()
-        assert "simm_mpor_scale" not in d, "no SIMM scaling: Rijeka does not compute SIMM"
+        assert "simm_mpor_scale" not in d, "no licensed-methodology scaling of the margin period"
         assert d["mpor_years"] == pytest.approx(5 / 250)
 
 
