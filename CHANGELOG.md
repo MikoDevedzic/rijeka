@@ -3,6 +3,39 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.29). Commits on `main` are the detail.
 
+## 0.49.0 · 17 November 2026
+
+**XVA, first of the corrections before launch: the funding adjustment.** The methodology is v1.30.
+
+- **The funding benefit no longer repeats DVA.** A desk's funding spread is its own credit spread plus a basis. On
+  what the desk owes, DVA already credits it with its own credit spread, and the funding benefit was charged on the
+  same exposure at 55 % of the whole funding spread: the credit part was counted in both. FBA is now charged on the
+  basis alone, the funding spread less the desk's own credit spread, tenor by tenor and never below zero (Morini
+  and Prampolini; Burgard and Kjaer). The cost, FCA, stays on the whole funding spread: on what is owed to the desk
+  the credit is the counterparty's, which is CVA. The two stay two figures. The 55 % ratio, a default that was not
+  derived, is gone from the engine, the tabs and the workbooks; the tab shows the funding basis it charges on.
+- **Funding runs only while the trade is alive.** FCA and FBA are weighted, step by step, by the chance that
+  neither party has defaulted.
+- **What moved.** On the pinned five-year swap with no margin: FCA −1,423 to −1,319, FBA 1,532 to 623, the total
+  −5,731 to −6,536. Under a CSA the funding legs are a few dollars and move by cents. CVA, DVA, KVA, MVA and ColVA
+  do not move. Every movement is in `GOLDEN_CHANGES.md` with its arithmetic.
+- **No sign is set at the end of a run.** Each adjustment is reported with the sign its steps gave it, where the
+  engine used to take the absolute value and attach a sign, which would have hidden an accumulator gone wrong. A
+  step in which a credit curve's survival would rise is charged no default.
+- **A swap in another currency is simulated on its own curve, and says which volatility it runs on.** The ticket's
+  XVA tab was never handed the swap's curve and sent the dollar curve for every currency: a EUR swap's exposure was
+  a dollar swap's with the EUR coupon and a euro sign (the model inventory had it as EUR discounting on dollar
+  volatility; a journey that read the run's answer found otherwise). It now runs on the swap's own curve. The
+  volatility is still the dollar swaption surface's, the one stored, and the tab says so above the figures, and
+  why: there is no market data provider for other currencies' swaption volatility here. The margin field on such
+  a ticket is labelled in its currency.
+- **Default spreads are called defaults.** The spread grid says whether its credit and funding spreads are the
+  defaults or typed, and that the defaults are not the counterparty's.
+
+Not done, and said: non-USD swaps are still simulated on dollar volatility; a counterparty has no credit record, so
+spreads are typed per run; there is no first-to-default term beyond the survival weight, and KVA and MVA are not
+weighted by survival. The API still accepts `fba_ratio` and ignores it.
+
 ## 0.48.0 · 17 November 2026
 
 **A booked trade is a record: locked on its ticket, and changed by an amendment.** Seen on the released 0.47.3 by

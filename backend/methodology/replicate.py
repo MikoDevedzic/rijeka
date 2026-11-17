@@ -105,7 +105,7 @@ PRODUCTS = [
      "replication": "doc", "doc": "/docs/xva.md"},
     {"id": "fva", "name": "FVA: the funding cost (FCA) and the funding benefit (FBA)", "group": "Valuation adjustments (XVA)", "section": None,
      "default": "Funding spread 55bp flat or a term curve; benefit at 55% of it",
-     "formula": "FCA = −Σ ftp(t_i)·EE(t_i)·Δt·P(0,t_i);  FBA = +Σ ftp(t_i)·fba_ratio·|ENE(t_i)|·Δt·P(0,t_i);  FVA = FCA + FBA",
+     "formula": "FCA = −Σ ftp(t_i)·EE(t_i)·S(t_i)·Δt·P(0,t_i);  FBA = +Σ max(ftp(t_i) − s_own(t_i), 0)·|ENE(t_i)|·S(t_i)·Δt·P(0,t_i);  S = Q_cp·Q_own at the middle of the step;  FVA = FCA + FBA",
      "replication": "doc", "doc": "/docs/xva.md"},
     {"id": "kva", "name": "KVA", "group": "Valuation adjustments (XVA)", "section": None,
      "default": "SA-CCR EAD (α 1.4, supervisory duration, margined or unmargined maturity factor), CEM or IMM; 8% × RW; hurdle 12%",

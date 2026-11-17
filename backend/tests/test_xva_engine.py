@@ -68,13 +68,14 @@ def legacy_waterfall(paths, p0_grid, P: WaterfallParams, im_0):
         cp_s = interp_spread(P.cp_cds_curve, P.cp_cds_bp, t)
         ow_s = interp_spread(P.own_cds_curve, P.own_cds_bp, t)
         ftp_t = interp_spread(P.ftp_curve, P.ftp_bp, t) if P.ftp_curve else ftp_flat
-        fba_s = ftp_t * P.fba_ratio
+        basis_t = max(ftp_t - ow_s, 0.0)                       # 0.49.0: the benefit is on the funding basis, not a share of the spread
         nqcp = math.exp(-(cp_s / P.lgd) * t)
         nqow = math.exp(-(ow_s / P.own_lgd) * t)
+        alive = 0.5 * (qcp * qow + nqcp * nqow)                # 0.49.0: funding while both are alive
         cva += P.lgd * ee[i] * (qcp - nqcp) * disc * P.wwr_multiplier
         dva -= P.own_lgd * abs(ene[i]) * (qow - nqow) * disc
-        fca += ftp_t * ee[i] * DT * disc
-        fba -= fba_s * abs(ene[i]) * DT * disc
+        fca += ftp_t * ee[i] * alive * DT * disc
+        fba -= basis_t * abs(ene[i]) * alive * DT * disc
         m_t = max(M0 - t + 0.5 * DT, 0.0)          # the remaining life at the middle of the step (0.27.0)
         if m_t > 0:
             sd_t = (1 - math.exp(-0.05 * m_t)) / 0.05

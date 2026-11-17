@@ -5,6 +5,7 @@
 // ────────────────────────────────────────────────────────────────────────────────────
 
 import { lazy, Suspense, useMemo } from 'react'
+import { CCY_CURVE } from './booking'
 import Loading from '../common/Loading'
 import ErrorBoundary from '../ErrorBoundary'
 import { getSessionSafe } from '../../lib/session'
@@ -58,6 +59,10 @@ export default function XvaPanel({
       // Dates
       effDate={state.effDate}
       matDate={state.matDate}
+
+      // The swap's own curve. Until 0.49.0 none was handed over and the tab sent USD_SOFR for every currency: a EUR
+      // swap's exposure was simulated on the dollar curve (found by a journey that read the run's answer).
+      curveId={CCY_CURVE[state.ccy] || 'USD_SOFR'}
 
       // Helpers
       getSession={getSession}

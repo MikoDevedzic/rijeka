@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
+from openpyxl.styles import PatternFill
 import numpy as np
 from openpyxl import Workbook
 from openpyxl.styles import Font
@@ -422,9 +423,9 @@ def _waterfall_sheet(wb, case, eng, rs, grid_r0):
     T = eng["T"]
     ws = wb.create_sheet("Waterfall")
     ws["A1"] = "THE WATERFALL"; ws["A1"].font = W.F_TITLE
-    ws["A2"] = ("Per step: survival from the credit triangle, then CVA, DVA, FCA (the funding cost) and FBA (the funding benefit; FVA is the two together), the SA-CCR exposure at default and the capital it needs (KVA), the initial margin funded (MVA). "
+    ws["A2"] = ("Per step: survival from the credit triangle, then CVA, DVA, FCA (the funding cost, on the whole funding spread) and FBA (the funding benefit, on the funding basis alone, since DVA already carries our own credit spread; FVA is the two together; both run only while the two parties are alive), the SA-CCR exposure at default and the capital it needs (KVA), the initial margin funded (MVA). "
                 "Costs negative, benefits positive. Discounting on the engine's P(0,t) = e^(−r_q·t)."); ws["A2"].font = W.F_SUB
-    params = [("Counterparty CDS (bp)", 85.0), ("Own CDS (bp)", 42.0), ("LGD", 0.40), ("Own LGD", 0.40), ("Funding spread ftp (bp)", 55.0), ("FBA ratio", 0.55),
+    params = [("Counterparty CDS (bp)", 85.0), ("Own CDS (bp)", 42.0), ("LGD", 0.40), ("Own LGD", 0.40), ("Funding spread ftp (bp)", 55.0), ("Funding basis (bp) = max(funding spread − own CDS, 0): the benefit is charged on this", "=MAX(FTP-CDSown,0)"),
               ("Hurdle rate", 0.12), ("Capital model (SA_CCR / CEM / IMM)", "SA_CCR"), ("Counterparty risk weight", 1.0), ("Wrong-way multiplier", 1.0),
               ("SA-CCR α", ALPHA), (f"Supervisory factor: {case['sf_basis']}", eng["sf"]), ("Capital ratio", CAP_R),
               ("CEM factor (the engine's older branch: 0.5 % of the quote notional × the maturity factor)", SF_IR)]
@@ -432,6 +433,7 @@ def _waterfall_sheet(wb, case, eng, rs, grid_r0):
         ws.cell(row=i, column=1, value=label); c = ws.cell(row=i, column=2, value=v); c.fill = W.FILL_IN
         c.number_format = "0.00%" if label in ("LGD", "Own LGD", "Hurdle rate", "Counterparty risk weight") else "0.00##"
     W.dropdown(ws, "B11", ["SA_CCR", "CEM", "IMM"])
+    ws["B9"].fill = PatternFill(fill_type=None)          # the funding basis is worked out from the two cells above it, not typed
     # today's exposure, where the first step's average starts: today's value less the collateral that value calls
     # (no earlier value to lag to), with the first date's initial margin
     c0 = "IF(Coll=1,IF(ABS(MAX(V0-THcp,0)-MAX(-V0-THown,0))<MTA,0,MAX(V0-THcp,0)-MAX(-V0-THown,0)),0)"
@@ -440,7 +442,7 @@ def _waterfall_sheet(wb, case, eng, rs, grid_r0):
     ws["C18"] = "ENE(0)"
     ws["D18"] = f"=MIN(V0-{c0}+Exposure!N{rs + 1},0)"; ws["D18"].number_format = "#,##0.00"
     _names(wb, {"EE0": "Waterfall!B18", "ENE0": "Waterfall!D18"})
-    _names(wb, {"CDScp": "Waterfall!B4", "CDSown": "Waterfall!B5", "LGDcp": "Waterfall!B6", "LGDown": "Waterfall!B7", "FTP": "Waterfall!B8", "FBAr": "Waterfall!B9",
+    _names(wb, {"CDScp": "Waterfall!B4", "CDSown": "Waterfall!B5", "LGDcp": "Waterfall!B6", "LGDown": "Waterfall!B7", "FTP": "Waterfall!B8", "FBasis": "Waterfall!B9",
                 "Hurdle": "Waterfall!B10", "CapModel": "Waterfall!B11", "RWcp": "Waterfall!B12", "WWR": "Waterfall!B13", "AlphaSA": "Waterfall!B14", "SFsa": "Waterfall!B15", "CapR": "Waterfall!B16", "SFcem": "Waterfall!B17"})
     r0 = 20
     hdr = ["step", "t", "P(0,t)", "Q_cp(t)", "ΔQ_cp", "Q_own(t)", "ΔQ_own", "EE", "ENE", "CVA_i", "DVA_i", "FCA_i", "FBA_i", "m = M − t", "SD(m)", "MF", "add-on", "NICA", "RC", "multiplier", "EAD", "K", "KVA_i", "IM we post (t)", "MVA_i", "MF unmargined", "add-on unmargined", "RC unmargined", "multiplier unmargined", "EAD unmargined (the CRE52.2 cap)", "ColVA_i"]
@@ -462,8 +464,11 @@ def _waterfall_sheet(wb, case, eng, rs, grid_r0):
         ene_c = f"(ENE0+I{r})/2" if j == 1 else f"(I{r - 1}+I{r})/2"
         ws.cell(row=r, column=10, value=f"=LGDcp*{ee_c}*E{r}*C{r}*WWR").number_format = "#,##0.00"
         ws.cell(row=r, column=11, value=f"=LGDown*ABS({ene_c})*G{r}*C{r}").number_format = "#,##0.00"
-        ws.cell(row=r, column=12, value=f"=FTP/10000*{ee_c}*Dt*C{r}").number_format = "#,##0.00"
-        ws.cell(row=r, column=13, value=f"=FTP/10000*FBAr*ABS({ene_c})*Dt*C{r}").number_format = "#,##0.00"
+        # funding runs while both parties are alive: the chance both survive, at the middle of the step (Q at the
+        # step's start is Q + ΔQ). The benefit is on the funding basis alone: DVA already carries our own credit spread.
+        alive = f"(0.5*((D{r}+E{r})*(F{r}+G{r})+D{r}*F{r}))"
+        ws.cell(row=r, column=12, value=f"=FTP/10000*{ee_c}*{alive}*Dt*C{r}").number_format = "#,##0.00"
+        ws.cell(row=r, column=13, value=f"=FBasis/10000*ABS({ene_c})*{alive}*Dt*C{r}").number_format = "#,##0.00"
         ws.cell(row=r, column=14, value=f"=MAX(Tyrs-B{r}+Dt/2,0)").number_format = "0.000000"
         ws.cell(row=r, column=15, value=f"=(1-EXP(-0.05*N{r}))/0.05").number_format = "0.000000"
         # CRE52.48 (unmargined: sqrt(min(M, 1)), M floored at ten business days) and CRE52.52 (margined)
@@ -644,7 +649,7 @@ def _xva_forward_workbook(mkt, case: dict):
         ("EE, ENE, PFE", "mean(max(V−C−IM,0)), mean(min(V−C+IM,0)), 95th percentile of V−C", f"Exposure!D{rs + 1}", "step 1", "#,##0.00"),
         ("Q(t)", "exp(−s/LGD·t)", f"Waterfall!D{r0}", "the credit triangle", "0.000000"),
         ("CVA", "−LGD·Σ EE·ΔQ·P(0,t)·WWR", f"Waterfall!B{rt}", "", "#,##0.00"), ("DVA", "+LGD_own·Σ |ENE|·ΔQ_own·P(0,t)", f"Waterfall!B{rt + 1}", "", "#,##0.00"),
-        ("FCA, FBA (FVA is their sum)", "−Σ ftp·EE·Δ·P, +Σ ftp·ratio·|ENE|·Δ·P", f"Waterfall!B{rt + 2}", "", "#,##0.00"),
+        ("FCA, FBA (FVA is their sum)", "−Σ ftp·EE·S·Δ·P, +Σ max(ftp − s_own, 0)·|ENE|·S·Δ·P; S = both parties alive", f"Waterfall!B{rt + 2}", "", "#,##0.00"),
         ("EAD", "α·[RC + multiplier·add-on], add-on = SF·N·F₀·SD(m)·MF", f"Waterfall!U{r0}", "SA-CCR, step 1", "#,##0.00"),
         ("KVA", "−hurdle·Σ 8%·RW·EAD·Δ·P", f"Waterfall!B{rt + 4}", "", "#,##0.00"), ("MVA", "−Σ IM(t)·max(ftp − pickup, 0)·Δ·P", f"Waterfall!B{rt + 5}", "", "#,##0.00"),
         ("ColVA", "Σ (VM posted·s_post + VM received·s_recv)·Δ·P, the carries over OIS of what the margin is held in", f"Waterfall!B{rt + 6}", "zero for cash", "#,##0.00"),

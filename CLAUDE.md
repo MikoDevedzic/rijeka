@@ -270,3 +270,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   is anchored, and the branch that signs and supersedes had no test.
 - A test that takes its dates from today states its premise in the dates it picks: the NDF fixing test assumed a
   settlement date that is the spot date of its fixing date, and failed the day that date fell after a holiday.
+- A line in the model inventory that says what a run reads is checked against the request the screen sends: the
+  inventory had a EUR swap's XVA on its own curve with dollar volatility, and the ticket's tab sent the dollar curve.
+- A statement a person must see is put where it is seen: a note set inside a heading's info mark is in the page and
+  not on the screen, and a journey that reads the page's text passes on it.

@@ -25,7 +25,7 @@ import {
   SpreadCurvesGrid, SettlementBlock, AssumptionsBlock, RunReadout, ChartReadout,
   VaStrip, OnChainCompareRow, VaFooter, FloatingTip, XvaViewToggle, CounterpartyLine, RunAssumes,
 } from './xva-shared.jsx'
-import {
+import { fundingBasis,
   stepWord, stepUnit, stepsShown,
   INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, FX_MVA_NOTE, fmtMoney, recordTerms, tipAt, numOrNull, spreadCurvePayload, imUsdValue, imUsdProblem, CRYPTO_GROUPS,
   buildVaRows, withFunding, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving, useXvaView, runAssumesLine, fxModelWords, HIDDEN_INPUT_DEFAULTS, CREDIT_LINKS, wrongWayLine, regimesParts,
@@ -174,7 +174,6 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   }, [counterpartyId])
   // assumptions
   const [lgd, setLgd] = useState(HIDDEN_INPUT_DEFAULTS.lgd)
-  const [fbaRatio, setFbaRatio] = useState(HIDDEN_INPUT_DEFAULTS.fbaRatio)
   const [hurdle, setHurdle] = useState(HIDDEN_INPUT_DEFAULTS.hurdle)
   const [imUsd, setImUsd] = useState(HIDDEN_INPUT_DEFAULTS.imUsd)             // initial margin in dollars; blank = the engine's estimate
   const [cryptoGroup, setCryptoGroup] = useState('')                          // a digital asset's Basel group; '' = the engine's default
@@ -216,7 +215,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
       const common = {
         seed: useSeed, vol_mode: volMode, vol_pct: numOrNull(volPct), paths,
         ...spreadCurvePayload(spreads.cp, spreads.own, spreads.ftp),
-        lgd: Number(lgd) / 100, own_lgd: Number(lgd) / 100, fba_ratio: Number(fbaRatio) / 100, hurdle_rate: Number(hurdle) / 100,
+        lgd: Number(lgd) / 100, own_lgd: Number(lgd) / 100, hurdle_rate: Number(hurdle) / 100,
         capital_model: capModel, wwr_multiplier: wwr, im_usd: imUsdValue(imUsd), crypto_group: cryptoGroup || null,
         cp_hazard_if_halves: Number(cpLink) || 1, own_hazard_if_halves: Number(ownLink) || 1,
         csa: fxCsaBody(settlement, imExchanged, recTerms),
@@ -304,7 +303,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
             {simulateError}
             <RunAssumes>
               {runAssumesLine({ paths, model: fxModelWords({ volPct, volMode, params: res?.params }), spreads,
-                assumptions: { wwr, lgd, fbaRatio, hurdle, imUsd, capModel, cpLink, ownLink, cryptoGroup } })}
+                assumptions: { wwr, lgd, hurdle, imUsd, capModel, cpLink, ownLink, cryptoGroup } })}
             </RunAssumes>
           </>) : (<>
 
@@ -418,7 +417,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
           {view !== 'simple' && (
             <div style={XVA_BAND} data-testid="xva-assumptions">
               <div><SpreadCurvesGrid spreads={spreads} onChange={setSpread} tip={tip} untip={untip} /></div>
-              <div><AssumptionsBlock lgd={lgd} setLgd={setLgd} fbaRatio={fbaRatio} setFbaRatio={setFbaRatio} hurdle={hurdle} setHurdle={setHurdle} imUsd={imUsd} setImUsd={setImUsd} capModel={capModel} setCapModel={setCapModel} note={FX_MVA_NOTE} tip={tip} untip={untip} imCcy={ccy}>
+              <div><AssumptionsBlock lgd={lgd} setLgd={setLgd} funding={fundingBasis(spreads)} hurdle={hurdle} setHurdle={setHurdle} imUsd={imUsd} setImUsd={setImUsd} capModel={capModel} setCapModel={setCapModel} note={FX_MVA_NOTE} tip={tip} untip={untip} imCcy={ccy}>
                 {res?.capital?.crypto_group != null || isDigital ? (<>
                   <label htmlFor="xva-crypto-group" style={{ alignSelf: 'center', fontSize: '0.75rem', color: 'var(--text-dim)', gridColumn: '1' }}>Basel group</label>
                   <select id="xva-crypto-group" data-testid="xva-crypto-group" value={cryptoGroup} onChange={e => setCryptoGroup(e.target.value)} style={{ ...INP, cursor: 'pointer', gridColumn: '2 / span 3' }}

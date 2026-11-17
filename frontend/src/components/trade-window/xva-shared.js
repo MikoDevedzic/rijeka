@@ -25,8 +25,8 @@ export const VA_DEFS = {
   npv:    { label:'NPV',    color:T.textHi, desc:'Present value at mid-market. Positive = asset to you. This is the base price before any XVA adjustments.', curve:'none' },
   cva:    { label:'CVA',    color:T.down, desc:'Credit Valuation Adjustment = -LGD x Sum[ EE(t) x (PD_cp(t) - PD_cp(t-dt)) x DF(t) ]. Cost of counterparty default risk over the EE profile. Always negative.', curve:'EE' },
   dva:    { label:'DVA',    color:T.blue, desc:'Debt Valuation Adjustment = +LGD x Sum[ |ENE(t)| x (PD_own(t) - PD_own(t-dt)) x DF(t) ]. Benefit from your own default risk. Always positive. Excluded from regulatory capital.', curve:'ENE' },
-  fca:    { label:'FCA',    color:T.down, desc:'Funding Cost Adjustment = -(FTP/10000) x Sum[ EE(t) x dt x DF(t) ]. Cost of funding positive exposure when no CSA. Always negative. FVA, the funding valuation adjustment, is FCA + FBA.', curve:'EE' },
-  fba:    { label:'FBA',    color:T.blue, desc:'Funding Benefit Adjustment = +(FTP x ratio/10000) x Sum[ |ENE(t)| x dt x DF(t) ]. Benefit when counterparty funds your negative MTM. FBA/FTP ratio typically 0.5-0.7.', curve:'ENE' },
+  fca:    { label:'FCA',    color:T.down, desc:'Funding Cost Adjustment = -(FTP/10000) x Sum[ EE(t) x S(t) x dt x DF(t) ]. The cost of funding what the counterparty owes us, at the whole funding spread, while both parties are alive (S: the chance neither has defaulted). Negative. FVA, the funding valuation adjustment, is FCA + FBA.', curve:'EE' },
+  fba:    { label:'FBA',    color:T.blue, desc:'Funding Benefit Adjustment = +(max(FTP - own CDS, 0)/10000) x Sum[ |ENE(t)| x S(t) x dt x DF(t) ]. The benefit where we owe, on the funding basis alone: the part of the funding spread that is not our own credit spread. DVA already credits us with our own credit spread on the same exposure, so a benefit at the whole funding spread would count it twice. Zero when the desk funds at its own credit spread.', curve:'ENE' },
   kva:    { label:'KVA',    color:T.down, desc:'Capital Valuation Adjustment = -(Hurdle/100) x Sum[ Capital(t) x dt x DF(t) ]. Capital(t) = SA-CCR EAD x 8% RWA. Often the largest VA for vanilla IRS.', curve:'EE' },
   mva:    { label:'MVA',    color:T.amber, desc:'Margin Valuation Adjustment = -Sum[ IM(t) x max(FTP(t) - pickup, 0) x dt x DF(t) ]. Cost of funding initial margin, less what the asset it is posted in earns over OIS. IM is derived from the ISDA SIMM IR delta risk weight applied to the trade IR01, and amortises with residual maturity.', curve:'none' },
   colva:  { label:'ColVA',  color:T.amber, desc:'Collateral Valuation Adjustment = Sum[ (VM posted(t) x s_post + VM held(t) x s_recv) x dt x DF(t) ]: the carry of the variation margin against cash at OIS. s = what the asset the margin is held in earns over OIS (a Treasury bill at OIS: 0; a stablecoin earning nothing: minus OIS). Cash on both sides: zero. Positive = benefit.', curve:'none' },
@@ -62,11 +62,11 @@ export const TIPS = {
   ownCds: { title: 'Own CDS spread (bp)',
     body: 'Your institution\'s CDS spread. Drives DVA.\n\nh_own = ownCDS_bp / (LGD x 10000)\nDVA = +LGD x Sum[ |ENE(t)| x (PD_own(t) - PD_own(t-dt)) x DF(t) ]\n\nDVA = gain from your own default option on negative exposure. Recognised in P&L under IFRS 9 but excluded from regulatory capital. Some desks zero it by policy.' },
   ftp: { title: 'FTP - Funding Transfer Price (bp)',
-    body: 'Internal funding cost charged by treasury for uncollateralised exposure.\n\nFCA = -(FTP/10000) x Sum[ EE(t) x dt x DF(t) ]\nFBA = +(FTP x ratio/10000) x Sum[ |ENE(t)| x dt x DF(t) ]\n\nFVA: cost of borrowing to fund positive MTM with no CSA.\nFBA: benefit when counterparty funds your negative MTM.\nFTP ~= own CDS + liquidity spread. Typical: 40-70bp.' },
+    body: 'The desk\'s funding spread over OIS: its own credit spread plus a funding basis (what funding costs beyond credit).\n\nFCA = -(FTP/10000) x Sum[ EE(t) x S(t) x dt x DF(t) ]\nFBA = +(max(FTP - own CDS, 0)/10000) x Sum[ |ENE(t)| x S(t) x dt x DF(t) ]\n\nThe cost is on the whole spread. The benefit is on the basis alone, because DVA already carries the own-credit part. S(t) is the chance both parties are still alive.' },
   lgd: { title: 'LGD - Loss Given Default (%)',
     body: 'Fraction of exposure lost on default. LGD = 1 - Recovery Rate.\n\nAppears twice:\n1. Loss scaling: CVA proportional to LGD x EE\n2. Hazard rate: h = CDS_bp / (LGD x 10000). Higher LGD -> lower h -> fewer expected defaults. The two effects partially offset.\n\nISDA standard: LGD=40% (60% recovery). With daily VM CSA, effective LGD can be under 5%.' },
-  fbaRatio: { title: 'FBA / FTP ratio',
-    body: 'Fraction of funding benefit you recognise.\n\nFBA = FTP x ratio x Sum[ |ENE(t)| x dt x DF(t) ]\n\n1.0 = full benefit. 0.5 = conservative. Most desks use 0.5-0.7.\n\nRationale for < 1: if the counterparty defaults while out of the money, you lose the benefit. Conservative booking discounts it.' },
+  fundingBasis: { title: 'Funding basis (bp)',
+    body: 'FTP less OWN CDS at five years, floored at zero. Worked out from the two rows of the spread grid, not typed.\n\nThe funding benefit (FBA) is charged on this, tenor by tenor. Our own credit spread is already credited on what we owe by DVA; only what funding costs beyond our credit is a further benefit.\n\nRaise FTP or lower OWN CDS in the grid to change it.' },
   hurdle: { title: 'Hurdle rate (%)',
     body: 'Required return on regulatory capital.\n\nKVA = -(Hurdle/100) x Sum[ Capital(t) x dt x DF(t) ]\nCapital(t) = SA-CCR EAD(t) x 8% (Basel III RWA)\n\nTypical: 10-15% for investment banks. At 12% hurdle, a 5Y $10M IRS generates ~$70-80K KVA. KVA is often larger than CVA for vanilla rates trades.' },
   imUsd: { title: 'Initial margin (USD)',
@@ -210,6 +210,13 @@ export function flatSpread(obj) {
 // The spread grid's initial state: the desk defaults, one copy per tab.
 export function defaultSpreads() {
   return { cp: { ...SPREAD_DEFAULTS.cp }, own: { ...SPREAD_DEFAULTS.own }, ftp: { ...SPREAD_DEFAULTS.ftp } }
+}
+
+// What the funding benefit is charged on, as the tab shows it: the funding spread less the desk's own credit spread
+// at five years (the grid's flat value), floored at zero. The engine does the same at every tenor.
+export function fundingBasis(spreads) {
+  const ftp = flatSpread(spreads?.ftp), own = flatSpread(spreads?.own)
+  return { ftp, own, basis: Math.max(ftp - own, 0) }
 }
 
 // The request fields the spread grid produces, the same on every route: the three
@@ -439,7 +446,7 @@ export function useXvaView() {
 
 // What the inputs the simple view hides start at, the same on both tabs: each tab's state is initialised from this,
 // and the line's "default" is measured against it.
-export const HIDDEN_INPUT_DEFAULTS = Object.freeze({ wwr: 1.0, lgd: '40', fbaRatio: '55', hurdle: '12', imUsd: '', capModel: 'sa_ccr' })
+export const HIDDEN_INPUT_DEFAULTS = Object.freeze({ wwr: 1.0, lgd: '40', hurdle: '12', imUsd: '', capModel: 'sa_ccr' })
 
 // Wrong-way risk on a currency or digital-asset ticket: the multiple a party's default intensity takes when the
 // asset halves against its forward (the request's cp_hazard_if_halves / own_hazard_if_halves). 1 is independence.
@@ -466,10 +473,10 @@ export function spreadsAreDefault(spreads) {
   return Object.keys(SPREAD_DEFAULTS).every(g => TENORS_6.every(t => n(spreads?.[g]?.[t]) === n(SPREAD_DEFAULTS[g][t])))
 }
 
-// WWR, LGD, the FBA ratio, the hurdle, the initial margin, the capital model and group are all as the tab opened.
-export function assumptionsAreDefault({ wwr, lgd, fbaRatio, hurdle, imUsd, capModel, cpLink, ownLink, cryptoGroup } = {}) {
+// WWR, LGD, the hurdle, the initial margin, the capital model and group are all as the tab opened.
+export function assumptionsAreDefault({ wwr, lgd, hurdle, imUsd, capModel, cpLink, ownLink, cryptoGroup } = {}) {
   const D = HIDDEN_INPUT_DEFAULTS
-  return Number(wwr) === D.wwr && Number(cpLink ?? 1) === 1 && Number(ownLink ?? 1) === 1 && parseFloat(lgd) === parseFloat(D.lgd) && parseFloat(fbaRatio) === parseFloat(D.fbaRatio)
+  return Number(wwr) === D.wwr && Number(cpLink ?? 1) === 1 && Number(ownLink ?? 1) === 1 && parseFloat(lgd) === parseFloat(D.lgd)
     && parseFloat(hurdle) === parseFloat(D.hurdle) && imUsdValue(imUsd) == null && capModel === D.capModel && !cryptoGroup
 }
 

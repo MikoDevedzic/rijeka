@@ -12,7 +12,7 @@ vi.mock('../../lib/session', () => ({ getSessionMaybe: async () => null, getSess
 import {
   VA_KEYS, SPREAD_DEFAULTS, defaultSpreads, fmtMoney, fmtDollar, toCurve, flatSpread, spreadCurvePayload, imUsdValue, imUsdProblem, CRYPTO_GROUPS, IM_NOTE, RATES_MVA_NOTE, FX_MVA_NOTE, numOrNull,
   buildVaRows, withFunding, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, collateralLabel, onChainSaving, rateBp01, allInRate, recordTerms,
-  XVA_VIEW_KEY, defaultXvaView, storedXvaView, HIDDEN_INPUT_DEFAULTS, spreadsAreDefault, assumptionsAreDefault,
+  XVA_VIEW_KEY, defaultXvaView, storedXvaView, HIDDEN_INPUT_DEFAULTS, spreadsAreDefault, assumptionsAreDefault, fundingBasis,
   ratesModelWords, fxModelWords, runAssumesLine, NO_CALIBRATION_LINE, wrongWayLine, CREDIT_LINKS, regimesWords, regimesParts,
   stepWord, stepUnit, stepsShown,
 } from './xva-shared'
@@ -253,13 +253,18 @@ describe('the simple view', () => {
     expect(spreadsAreDefault(blank)).toBe(false)
     expect(spreadsAreDefault(null)).toBe(false)
   })
+  it('the funding basis is the funding spread less the desk\'s own credit spread at five years, never below zero', () => {
+    expect(fundingBasis(defaultSpreads())).toEqual({ ftp: 55, own: 48, basis: 7 })
+    expect(fundingBasis({ ftp: { '5Y': '40' }, own: { '5Y': '48' } })).toEqual({ ftp: 40, own: 48, basis: 0 })
+    expect(fundingBasis(null)).toEqual({ ftp: 0, own: 0, basis: 0 })
+  })
   it('knows the hidden assumptions as the tab opened from a changed one', () => {
     // the values both tabs open with (their state is initialised from this), pinned: a change here changes what a run sends
-    expect(HIDDEN_INPUT_DEFAULTS).toEqual({ wwr: 1.0, lgd: '40', fbaRatio: '55', hurdle: '12', imUsd: '', capModel: 'sa_ccr' })
+    expect(HIDDEN_INPUT_DEFAULTS).toEqual({ wwr: 1.0, lgd: '40', hurdle: '12', imUsd: '', capModel: 'sa_ccr' })
     expect(Object.isFrozen(HIDDEN_INPUT_DEFAULTS)).toBe(true)
     expect(assumptionsAreDefault(HIDDEN_INPUT_DEFAULTS)).toBe(true)
     expect(assumptionsAreDefault({ ...HIDDEN_INPUT_DEFAULTS, lgd: '40.0' })).toBe(true)
-    for (const changed of [{ wwr: 1.5 }, { lgd: '60' }, { fbaRatio: '70' }, { hurdle: '' }, { imUsd: '250k' }, { capModel: 'cem' }, { cryptoGroup: '2b' }]) {
+    for (const changed of [{ wwr: 1.5 }, { lgd: '60' }, { hurdle: '' }, { imUsd: '250k' }, { capModel: 'cem' }, { cryptoGroup: '2b' }]) {
       expect(assumptionsAreDefault({ ...HIDDEN_INPUT_DEFAULTS, ...changed })).toBe(false)
     }
   })

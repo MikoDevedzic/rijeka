@@ -247,6 +247,16 @@ test('a rates ticket writes its figures in its own currency, and says in its foo
   await expect(grid, 'no dollar sign under ANALYTICS on a EUR swap').not.toContainText('$')
   await expect(win.getByTestId('cf-curve-line')).toContainText(/stored curve saved .* valued on/)
   await app.screenshot({ path: 'e2e/.out/shots/second-look-eur-swap.png' })
+  // its XVA runs on volatility calibrated to dollar swaptions, the one surface stored: said above the figures, with the reason
+  await win.getByRole('button', { name: 'XVA', exact: true }).click()
+  const sim = app.waitForResponse(r => r.url().endsWith('/api/xva/simulate') && r.request().method() === 'POST' && r.request().postDataJSON()?.csa?.preset !== 'ON_CHAIN', { timeout: 90_000 })
+  await win.getByRole('button', { name: /SIMULATE/ }).click()
+  const run = await (await sim).json()
+  expect(run.vol_basis, JSON.stringify(run).slice(0, 300)).toMatchObject({ surface: 'USD_SWVOL_ATM', currency: 'EUR', proxy: true })
+  const said = win.getByTestId('xva-vol-basis')
+  await expect(said).toContainText('simulated on volatility calibrated to USD swaptions')
+  await expect(said).toContainText('no market data provider for EUR swaption volatility')
+  await app.screenshot({ path: 'e2e/.out/shots/second-look-eur-swap-xva.png' })
   // the engine refuses (here: answered for it, so the journey does not depend on which curves the stack holds):
   // the footer says why, in view, instead of standing empty over a reason below the fold
   await win.getByRole('button', { name: 'TRADE', exact: true }).click()

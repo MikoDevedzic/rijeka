@@ -13,7 +13,7 @@ import {
   SpreadCurvesGrid, SettlementBlock, AssumptionsBlock, RunReadout, ChartReadout,
   VaStrip, OnChainCompareRow, VaFooter, FloatingTip, XvaViewToggle, CounterpartyLine, RunAssumes,
 } from '../trade-window/xva-shared.jsx'
-import {
+import { fundingBasis,
   INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, fmtMoney, tipAt, spreadCurvePayload, imUsdValue, imUsdProblem, rateBp01, allInRate, recordTerms,
   buildVaRows, withFunding, onChainCompareRows, collateralBody, onChainSaving, useXvaView, runAssumesLine, ratesModelWords, HIDDEN_INPUT_DEFAULTS,
 } from '../trade-window/xva-shared'
@@ -198,7 +198,6 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
   const [spreads, setSpreads] = useState(defaultSpreads)
   const setSpread = (g, t, v) => setSpreads(s => ({ ...s, [g]: { ...s[g], [t]: v } }))
   const [lgd, setLgd] = useState(HIDDEN_INPUT_DEFAULTS.lgd)
-  const [fbaRatio, setFbaRatio] = useState(HIDDEN_INPUT_DEFAULTS.fbaRatio)
   const [hurdle, setHurdle] = useState(HIDDEN_INPUT_DEFAULTS.hurdle)
   const [capModel, setCapModel] = useState(HIDDEN_INPUT_DEFAULTS.capModel)
   const [wwr, setWwr] = useState(HIDDEN_INPUT_DEFAULTS.wwr)
@@ -341,7 +340,6 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
         sigma_bp: sigOverride ? parseFloat(sigOverride) : undefined,
         ...spreadCurvePayload(spreads.cp, spreads.own, spreads.ftp),
         lgd:           parseFloat(lgd)/100,
-        fba_ratio:   parseFloat(fbaRatio)/100,
         hurdle_rate: parseFloat(hurdle)/100,
         capital_model: capModel,
         wwr_multiplier: wwr,
@@ -400,7 +398,6 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
       return {
         ...spreadCurvePayload(spreads.cp, spreads.own, spreads.ftp),
         lgd:          parseFloat(lgd)/100,
-        fba_ratio:    parseFloat(fbaRatio)/100,
         hurdle_rate:  parseFloat(hurdle)/100,
         capital_model: capModel,
         wwr_multiplier: wwr,
@@ -488,7 +485,7 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
           {modelWords == null && calibrationBadge}
           <RunAssumes>
             {runAssumesLine({ paths, model: modelWords, spreads,
-              assumptions: { wwr, lgd, fbaRatio, hurdle, imUsd, capModel } })}
+              assumptions: { wwr, lgd, hurdle, imUsd, capModel } })}
           </RunAssumes>
         </>) : (<>
 
@@ -606,6 +603,11 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
           </ChartReadout>
         </ExposureCanvas>
 
+        {/* a swap in another currency runs on volatility calibrated to USD swaptions: said above its figures */}
+        {simResult?.vol_basis?.proxy && (
+          <div data-testid="xva-vol-basis" style={{flexShrink:0,padding:'6px 12px',fontSize:'12px',lineHeight:1.5,color:'var(--amber)',borderBottom:'1px solid var(--border)'}}>{simResult.vol_basis.note}</div>
+        )}
+
         {/* Unified XVA waterfall - $ and bp in same cell */}
         <div style={{flexShrink:0,overflowX:'auto'}} data-testid="xva-outputs">
           <VaStrip rows={vaRows} fmt={fmtCcy} expanded={expandedVa} setExpanded={setExpandedVa} onHighlight={setHighlightCurve} runLabel={simResult?.csa?.preset ? String(simResult.csa.preset).replace('_', '-') : 'THIS RUN'} also={cmpRows.map(r => r.oc)} />
@@ -618,7 +620,7 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
           {view !== 'simple' && (
             <div style={XVA_BAND} data-testid="xva-assumptions">
               <div><SpreadCurvesGrid spreads={spreads} onChange={setSpread} tip={tip} untip={untip} /></div>
-              <div><AssumptionsBlock lgd={lgd} setLgd={setLgd} fbaRatio={fbaRatio} setFbaRatio={setFbaRatio} hurdle={hurdle} setHurdle={setHurdle} imUsd={imUsd} setImUsd={setImUsd} capModel={capModel} setCapModel={setCapModel} tip={tip} untip={untip} /></div>
+              <div><AssumptionsBlock lgd={lgd} setLgd={setLgd} funding={fundingBasis(spreads)} hurdle={hurdle} setHurdle={setHurdle} imUsd={imUsd} setImUsd={setImUsd} capModel={capModel} setCapModel={setCapModel} tip={tip} untip={untip} imCcy={ticketCcy} /></div>
             </div>
           )}
       </div>

@@ -18,6 +18,7 @@ simulation on every recalculation and the Convergence sheet shows the Monte Carl
 swap on a monthly grid at 200 paths keeps the book near 60,000 formula cells."""
 from __future__ import annotations
 
+from openpyxl.styles import PatternFill
 import math
 from datetime import timedelta
 
@@ -406,15 +407,16 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
     T = eng["T"]
     ws = wb.create_sheet("Waterfall")
     ws["A1"] = "THE WATERFALL"; ws["A1"].font = W.F_TITLE
-    ws["A2"] = "Per step: survival from the credit triangle, then CVA, DVA, FCA (the funding cost) and FBA (the funding benefit; FVA is the two together), the SA-CCR exposure at default and the capital it needs (KVA), the initial margin funded (MVA), the carry of the variation margin against cash (ColVA). Costs negative, benefits positive."; ws["A2"].font = W.F_SUB
-    params = [("Counterparty CDS (bp)", 85.0), ("Own CDS (bp)", 42.0), ("LGD", 0.40), ("Own LGD", 0.40), ("Funding spread ftp (bp)", 55.0), ("FBA ratio", 0.55),
+    ws["A2"] = "Per step: survival from the credit triangle, then CVA, DVA, FCA (the funding cost, on the whole funding spread) and FBA (the funding benefit, on the funding basis alone, since DVA already carries our own credit spread; FVA is the two together; both run only while the two parties are alive), the SA-CCR exposure at default and the capital it needs (KVA), the initial margin funded (MVA), the carry of the variation margin against cash (ColVA). Costs negative, benefits positive."; ws["A2"].font = W.F_SUB
+    params = [("Counterparty CDS (bp)", 85.0), ("Own CDS (bp)", 42.0), ("LGD", 0.40), ("Own LGD", 0.40), ("Funding spread ftp (bp)", 55.0), ("Funding basis (bp) = max(funding spread − own CDS, 0): the benefit is charged on this", "=MAX(FTP-CDSown,0)"),
               ("Hurdle rate", 0.12), ("Capital model (SA_CCR / CEM / IMM)", "SA_CCR"), ("Counterparty risk weight", 1.0), ("Wrong-way multiplier", 1.0),
               ("SA-CCR α", ALPHA), ("Supervisory factor, rates", SF_IR), ("Capital ratio", CAP_R)]
     for i, (label, v) in enumerate(params, 4):
         ws.cell(row=i, column=1, value=label); c = ws.cell(row=i, column=2, value=v); c.fill = W.FILL_IN
         c.number_format = "0.00%" if label in ("LGD", "Own LGD", "Hurdle rate", "Counterparty risk weight") else "0.00##"
     W.dropdown(ws, "B11", ["SA_CCR", "CEM", "IMM"])
-    _names(wb, {"CDScp": "Waterfall!B4", "CDSown": "Waterfall!B5", "LGDcp": "Waterfall!B6", "LGDown": "Waterfall!B7", "FTP": "Waterfall!B8", "FBAr": "Waterfall!B9",
+    ws["B9"].fill = PatternFill(fill_type=None)          # the funding basis is worked out from the two cells above it, not typed
+    _names(wb, {"CDScp": "Waterfall!B4", "CDSown": "Waterfall!B5", "LGDcp": "Waterfall!B6", "LGDown": "Waterfall!B7", "FTP": "Waterfall!B8", "FBasis": "Waterfall!B9",
                 "Hurdle": "Waterfall!B10", "CapModel": "Waterfall!B11", "RWcp": "Waterfall!B12", "WWR": "Waterfall!B13", "AlphaSA": "Waterfall!B14", "SFir": "Waterfall!B15", "CapR": "Waterfall!B16"})
     r0 = 20
     hdr = ["step", "t", "P(0,t)", "Q_cp(t)", "ΔQ_cp", "Q_own(t)", "ΔQ_own", "EE", "ENE", "CVA_i", "DVA_i", "FCA_i", "FBA_i", "m = M − t", "SD(m)", "MF", "add-on", "NICA", "RC", "multiplier", "EAD", "K", "KVA_i", "IM we post (t)", "MVA_i", "MF unmargined", "add-on unmargined", "RC unmargined", "multiplier unmargined", "EAD unmargined (the CRE52.2 cap)", "ColVA_i"]
@@ -432,8 +434,11 @@ def _waterfall_sheet(wb, eng, rs, grid_r0):
         ws.cell(row=r, column=9, value=f"=Exposure!E{e}").number_format = "#,##0.00"
         ws.cell(row=r, column=10, value=f"=LGDcp*H{r}*E{r}*C{r}*WWR").number_format = "#,##0.00"
         ws.cell(row=r, column=11, value=f"=LGDown*ABS(I{r})*G{r}*C{r}").number_format = "#,##0.00"
-        ws.cell(row=r, column=12, value=f"=FTP/10000*H{r}*Dt*C{r}").number_format = "#,##0.00"
-        ws.cell(row=r, column=13, value=f"=FTP/10000*FBAr*ABS(I{r})*Dt*C{r}").number_format = "#,##0.00"
+        # funding runs while both parties are alive: the chance both survive, at the middle of the step (Q at the
+        # step's start is Q + ΔQ). The benefit is on the funding basis alone: DVA already carries our own credit spread.
+        alive = f"(0.5*((D{r}+E{r})*(F{r}+G{r})+D{r}*F{r}))"
+        ws.cell(row=r, column=12, value=f"=FTP/10000*H{r}*{alive}*Dt*C{r}").number_format = "#,##0.00"
+        ws.cell(row=r, column=13, value=f"=FBasis/10000*ABS(I{r})*{alive}*Dt*C{r}").number_format = "#,##0.00"
         ws.cell(row=r, column=14, value=f"=MAX(Nsteps*Dt-B{r}+Dt/2,0)").number_format = "0.0000"
         ws.cell(row=r, column=15, value=f"=(1-EXP(-0.05*N{r}))/0.05").number_format = "0.0000"
         ws.cell(row=r, column=16, value=f"=IF(Coll=1,1.5*SQRT(MAX(MPoR,IF(Preset=\"ON_CHAIN\",{MPOR_FLOOR_CLEARED_BD},{MPOR_FLOOR_BILATERAL_BD}))/{BUSINESS_DAYS_PER_YEAR}),SQRT(MIN(MAX(N{r},1/25),1)))").number_format = "0.0000"
@@ -579,7 +584,7 @@ def xva_rates_workbook(mkt):
         ("EE, ENE, PFE", "mean(max(V−C−IM,0)), mean(min(V−C+IM,0)), 95th percentile of V−C", f"Exposure!D{rs + 1}", "step 1", "#,##0.00"),
         ("Q(t)", "exp(−s/LGD·t)", f"Waterfall!D{r0}", "the credit triangle", "0.000000"),
         ("CVA", "−LGD·Σ EE·ΔQ·P(0,t)·WWR", f"Waterfall!B{rt}", "", "#,##0.00"), ("DVA", "+LGD_own·Σ |ENE|·ΔQ_own·P(0,t)", f"Waterfall!B{rt + 1}", "", "#,##0.00"),
-        ("FCA, FBA (FVA is their sum)", "−Σ ftp·EE·Δ·P, +Σ ftp·ratio·|ENE|·Δ·P", f"Waterfall!B{rt + 2}", "", "#,##0.00"),
+        ("FCA, FBA (FVA is their sum)", "−Σ ftp·EE·S·Δ·P, +Σ max(ftp − s_own, 0)·|ENE|·S·Δ·P; S = both parties alive", f"Waterfall!B{rt + 2}", "", "#,##0.00"),
         ("EAD", "α·[RC + multiplier·add-on], add-on = SF·N·SD(m)·MF; a margined set capped at the same set unmargined (CRE52.2)", f"Waterfall!U{r0}", "SA-CCR, step 1", "#,##0.00"),
         ("KVA", "−hurdle·Σ 8%·RW·EAD·Δ·P", f"Waterfall!B{rt + 4}", "", "#,##0.00"), ("MVA", "−Σ IM(t)·max(ftp − pickup, 0)·Δ·P", f"Waterfall!B{rt + 5}", "", "#,##0.00"),
         ("ColVA", "Σ (VM posted·s_post + VM received·s_recv)·Δ·P, the carries over OIS of what the margin is held in", f"Waterfall!B{rt + 6}", "zero for cash", "#,##0.00"),

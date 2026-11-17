@@ -76,6 +76,15 @@ CALIB_STALE_WARN_DAYS  = 5
 CALIB_STALE_ALERT_DAYS = 14
 
 
+def _vol_basis(curve_id: Optional[str]) -> dict:
+    """Which swaption surface a rates run's volatility came from, and whether that is the trade's own currency."""
+    ccy = str(curve_id or "USD_SOFR").split("_")[0].upper() or "USD"
+    proxy = ccy != "USD"
+    return {"surface": "USD_SWVOL_ATM", "currency": ccy, "proxy": proxy,
+            "note": (f"This {ccy} swap is simulated on volatility calibrated to USD swaptions: there is no market data "
+                     f"provider for {ccy} swaption volatility here. Its discounting and its forwards are {ccy}'s own.") if proxy else None}
+
+
 def _staleness_block(calib_date, mkt_curve, val_date) -> dict:
     """
     Age of the two inputs an XVA number rests on: the vol calibration and the
@@ -162,7 +171,7 @@ class SimulateRequest(BaseModel):
     lgd: float = 0.40                    # counterparty LGD (1 - recovery)
     own_lgd: float = 0.40                # own LGD for DVA
     ftp_bp: float = 55.0
-    fba_ratio: float = 0.55
+    fba_ratio: Optional[float] = None    # read and ignored since 0.49.0: the funding benefit is charged on the funding basis (pricing/xva_engine.py); kept so a browser on an older build is not refused
     hurdle_rate: float = 0.12
     capital_model: str = "sa_ccr"        # sa_ccr | cem | imm
     counterparty_rw: float = 1.0         # Basel counterparty risk weight (1.0 = 100%)
@@ -614,7 +623,7 @@ def simulate(
             lgd=body.lgd, own_lgd=body.own_lgd,
             cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
             cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve,
-            ftp_bp=body.ftp_bp, ftp_curve=body.ftp_curve, fba_ratio=body.fba_ratio,
+            ftp_bp=body.ftp_bp, ftp_curve=body.ftp_curve,
             hurdle_rate=body.hurdle_rate, capital_model=body.capital_model,
             counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
             im_amount=im_amount_of(body),
@@ -674,6 +683,10 @@ def simulate(
         # calibration priced against today is a model-validation finding, not a
         # detail — so it is reported alongside the numbers it produced.
         "staleness": _staleness_block(calib_date, mkt_curve, val_date),
+        # The Hull-White parameters are calibrated to USD swaptions (USD_SWVOL_ATM, the one surface stored). A swap in
+        # another currency is discounted and projected on its own curve and simulated on that USD volatility: said with
+        # the figures, not left to be found.
+        "vol_basis": _vol_basis(body.curve_id),
         "params": {
             "a":        a,
             "sigma_bp": sigma_bp,
@@ -757,7 +770,7 @@ class CurrencyXvaRequest(BaseModel):
     cp_cds_bp: float = 85.0
     own_cds_bp: float = 42.0
     ftp_bp: float = 55.0
-    fba_ratio: float = 0.55
+    fba_ratio: Optional[float] = None    # read and ignored since 0.49.0: the funding benefit is charged on the funding basis (pricing/xva_engine.py); kept so a browser on an older build is not refused
     lgd: float = 0.40
     own_lgd: float = 0.40
     hurdle_rate: float = 0.12
@@ -900,7 +913,7 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
     import time as _time
     _t0 = _time.perf_counter()
     wf, meta = fx_xva.forward_xva(inp, csa, n_paths=min(body.paths, 10000), cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
-                                  ftp_bp=body.ftp_bp, fba_ratio=body.fba_ratio, lgd=body.lgd, own_lgd=body.own_lgd,
+                                  ftp_bp=body.ftp_bp, lgd=body.lgd, own_lgd=body.own_lgd,
                                   hurdle_rate=body.hurdle_rate, capital_model=body.capital_model,
                                   counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
                                   cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), im_amount=im_amount_of(body), crypto_group=crypto_group_or_422(body.crypto_group),
@@ -942,7 +955,7 @@ class CurrencyOptionXvaRequest(BaseModel):
     cp_cds_bp: float = 85.0
     own_cds_bp: float = 42.0
     ftp_bp: float = 55.0
-    fba_ratio: float = 0.55
+    fba_ratio: Optional[float] = None    # read and ignored since 0.49.0: the funding benefit is charged on the funding basis (pricing/xva_engine.py); kept so a browser on an older build is not refused
     lgd: float = 0.40
     own_lgd: float = 0.40
     hurdle_rate: float = 0.12
@@ -1038,7 +1051,7 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
     import time as _time
     _t0 = _time.perf_counter()
     wf, meta = fx_xva.option_xva(inp, csa, n_paths=min(body.paths, 10000), cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
-                                 ftp_bp=body.ftp_bp, fba_ratio=body.fba_ratio, lgd=body.lgd, own_lgd=body.own_lgd, hurdle_rate=body.hurdle_rate,
+                                 ftp_bp=body.ftp_bp, lgd=body.lgd, own_lgd=body.own_lgd, hurdle_rate=body.hurdle_rate,
                                  capital_model=body.capital_model, counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
                                  cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), im_amount=im_amount_of(body), crypto_group=crypto_group_or_422(body.crypto_group),
                                   cp_hazard_if_halves=body.cp_hazard_if_halves, own_hazard_if_halves=body.own_hazard_if_halves,
@@ -1084,7 +1097,7 @@ class CurrencyPackageXvaRequest(BaseModel):
     cp_cds_bp: float = 85.0
     own_cds_bp: float = 42.0
     ftp_bp: float = 55.0
-    fba_ratio: float = 0.55
+    fba_ratio: Optional[float] = None    # read and ignored since 0.49.0: the funding benefit is charged on the funding basis (pricing/xva_engine.py); kept so a browser on an older build is not refused
     lgd: float = 0.40
     own_lgd: float = 0.40
     hurdle_rate: float = 0.12
@@ -1164,7 +1177,7 @@ def currency_package_xva(body: CurrencyPackageXvaRequest, db: Session = Depends(
     import time as _time
     _t0 = _time.perf_counter()
     wf, meta = fx_xva.package_xva(inputs, csa, n_paths=min(body.paths, 10000), cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
-                                  ftp_bp=body.ftp_bp, fba_ratio=body.fba_ratio, lgd=body.lgd, own_lgd=body.own_lgd, hurdle_rate=body.hurdle_rate,
+                                  ftp_bp=body.ftp_bp, lgd=body.lgd, own_lgd=body.own_lgd, hurdle_rate=body.hurdle_rate,
                                   capital_model=body.capital_model, counterparty_rw=body.counterparty_rw, wwr_multiplier=body.wwr_multiplier,
                                   cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve, ftp_curve=body.ftp_curve, seed=int(body.seed), im_amount=im_amount_of(body), crypto_group=crypto_group_or_422(body.crypto_group),
                                   cp_hazard_if_halves=body.cp_hazard_if_halves, own_hazard_if_halves=body.own_hazard_if_halves,

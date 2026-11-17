@@ -71,6 +71,16 @@ test('rates ticket: price, XVA with the saving on chain, collateral, book, confi
   await win.getByRole('button', { name: 'XVA', exact: true }).click()
   await win.getByRole('button', { name: 'BILATERAL', exact: true }).click()
   const one = await simulateWithComparison(app, win, '/api/xva/simulate')
+  // what the figures rest on is said: the spreads are the defaults until typed, the funding benefit is charged on the
+  // funding basis the grid gives (FTP 55 less OWN CDS 48 at five years), and a dollar swap runs on dollar volatility
+  await expect(win.getByTestId('xva-spreads-source')).toHaveText("Default spreads, not this counterparty's. Type your own in any cell.")
+  await expectFullyInView(win.getByTestId('xva-spreads-source'), 'whose spreads the figures rest on')
+  await expect(win.getByTestId('xva-funding-basis')).toHaveText('7')
+  await expect(win.getByTestId('xva-vol-basis'), 'a USD swap is on its own volatility: nothing to say').toHaveCount(0)
+  expect(one.request.fba_ratio, 'the ratio is not sent any more').toBeUndefined()
+  expect(one.run.xva.fba, 'a benefit is a benefit').toBeGreaterThanOrEqual(0)
+  expect(one.run.xva.fca, 'a cost is a cost').toBeLessThanOrEqual(0)
+  expect(one.run.vol_basis).toMatchObject({ surface: 'USD_SWVOL_ATM', currency: 'USD', proxy: false })
   expect(Math.abs(one.request.ir01), 'the simulation runs on the priced ticket (IR01 drives the IM behind MVA)').toBeGreaterThan(1000)
   const first = one.run
   expectZero(first.xva.colva, 'cash collateral carries nothing')
@@ -135,7 +145,7 @@ test('rates ticket: price, XVA with the saving on chain, collateral, book, confi
   const inc = win.getByTestId('xva-below')
   const heads = await win.evaluate(w => {
     const style = e => { const s = getComputedStyle(e); return `${s.fontSize} ${s.fontWeight} ${s.color}` }
-    const curves = [...w.querySelectorAll('*')].find(e => !e.children.length && /^SPREAD CURVES/.test(e.textContent))
+    const curves = [...w.querySelectorAll('*')].find(e => e.firstChild?.nodeType === 3 && /^SPREAD CURVES/.test(e.firstChild.nodeValue))     // the heading itself: it now carries a note beside its words
     return { incremental: style(w.querySelector('[data-testid="xva-below"] .tbw-lbl')), curves: style(curves) }
   })
   expect(heads.incremental, 'the incremental heading reads as SPREAD CURVES does').toBe(heads.curves)

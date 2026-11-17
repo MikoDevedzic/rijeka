@@ -96,9 +96,8 @@ class WaterfallParams:
     own_cds_bp:      float = 42.0
     cp_cds_curve:    Optional[list] = None
     own_cds_curve:   Optional[list] = None
-    ftp_bp:          float = 55.0
+    ftp_bp:          float = 55.0             # the desk's funding spread over OIS: its own credit spread plus a funding basis
     ftp_curve:       Optional[list] = None
-    fba_ratio:       float = 0.55
     hurdle_rate:     float = 0.12
     capital_model:   str   = "sa_ccr"      # sa_ccr | cem | imm
     counterparty_rw: float = 1.0
@@ -119,8 +118,8 @@ class WaterfallResult:
     exposure_paths: np.ndarray      # residual V − C (for visualisation)
     cva: float
     dva: float
-    fca: float                      # funding cost adjustment (called `fva` until 0.41.0)
-    fba: float
+    fca: float                      # funding cost adjustment (called `fva` until 0.41.0): the whole funding spread on what we are owed
+    fba: float                      # funding benefit: the funding BASIS (funding spread less our own credit spread) on what we owe
     kva: float
     mva: float
     ead_0: float
@@ -453,23 +452,41 @@ def run_waterfall(
         cp_s = interp_spread(params.cp_cds_curve,  params.cp_cds_bp,  t)
         ow_s = interp_spread(params.own_cds_curve, params.own_cds_bp, t)
         ftp_t = interp_spread(params.ftp_curve, params.ftp_bp, t) if params.ftp_curve else ftp_flat
-        fba_s = ftp_t * params.fba_ratio
+        # The funding benefit and DVA are not two benefits. On what we owe, DVA already credits us with our own credit
+        # spread (own LGD x default probability is that spread over the step). The funding spread is that credit spread
+        # plus a basis (what our funding costs beyond our credit: liquidity), so a benefit at the whole funding spread
+        # would count the credit part a second time. FBA is therefore charged at the basis alone, floored at zero:
+        # a desk that funds at its credit spread has no funding benefit beyond its DVA. (Morini and Prampolini, "Risky Funding:
+        # A Unified Framework for Counterparty and Liquidity Charges"; Burgard and Kjaer, "In the Balance" and "Funding
+        # Strategies, Funding Costs", Risk. Until 0.49.0 the benefit was a fixed 55 % of the funding spread, whatever
+        # the desk's own spread was.) The cost is not netted: on what we are owed the credit is the counterparty's (CVA).
+        basis_t = max(ftp_t - ow_s, 0.0)
 
         # Credit triangle: hazard = spread / LGD
         nqcp = math.exp(-(cp_s / lgd)     * t) if lgd     > 0 else 0.0
         nqow = math.exp(-(ow_s / own_lgd) * t) if own_lgd > 0 else 0.0
+        # A step in which a curve's survival would rise defaults nobody (as path_survival has it): a negative default
+        # probability is not netted against the other steps.
+        dq_cp, dq_ow = max(qcp - nqcp, 0.0), max(qow - nqow, 0.0)
+        # Funding is paid and earned only while the trade is alive: neither party has defaulted. The step is weighted
+        # by the chance both survive it, read at its middle, on the curves as the market has them (default independent
+        # of the market here, also when CVA and DVA carry wrong-way risk).
+        alive = 0.5 * (qcp * qow + nqcp * nqow)
 
         # ColVA: the carry of the variation margin against cash at OIS (the discounting's own rate). Posted margin in
         # an asset yielding more than OIS earns the excess; held margin in an asset yielding less than the OIS rebate
         # costs the shortfall. Cash on both sides: zero.
         if s_post != 0.0 or s_recv != 0.0:
             colva += (post_mean[i] * s_post + recv_mean[i] * s_recv) * DT * disc
-        cva_ind += lgd     * ee_c[i]       * (qcp - nqcp) * disc * wwr
-        dva_ind -= own_lgd * abs(ene_c[i]) * (qow - nqow) * disc
-        cva += (lgd * float(np.mean(c_pos[:, i] * dpd_cp[:, i])) * disc * wwr) if dpd_cp is not None else (lgd * ee_c[i] * (qcp - nqcp) * disc * wwr)
-        dva -= (own_lgd * float(np.mean(np.abs(c_neg[:, i]) * dpd_ow[:, i])) * disc) if dpd_ow is not None else (own_lgd * abs(ene_c[i]) * (qow - nqow) * disc)
-        fca += ftp_t   * ee_c[i]       * DT * disc
-        fba -= fba_s   * abs(ene_c[i]) * DT * disc
+        # Every adjustment is accumulated with its own sign (a cost negative, a benefit positive) and reported as it
+        # was accumulated: nothing is made positive or negative at the end, so a sign that came out wrong would show.
+        # ee_c is what we are owed (>= 0), ene_c what we owe (<= 0).
+        cva_ind -= lgd     * ee_c[i]    * dq_cp * disc * wwr
+        dva_ind += own_lgd * (-ene_c[i]) * dq_ow * disc
+        cva -= (lgd * float(np.mean(c_pos[:, i] * dpd_cp[:, i])) * disc * wwr) if dpd_cp is not None else (lgd * ee_c[i] * dq_cp * disc * wwr)
+        dva += (own_lgd * float(np.mean(-c_neg[:, i] * dpd_ow[:, i])) * disc) if dpd_ow is not None else (own_lgd * (-ene_c[i]) * dq_ow * disc)
+        fca -= ftp_t   * ee_c[i]     * alive * DT * disc
+        fba += basis_t * (-ene_c[i]) * alive * DT * disc
 
         # ── Capital profile → KVA ────────────────────────────────────────────
         # Capital and initial margin are held through the step, so the remaining life is read at the middle of it:
@@ -513,15 +530,15 @@ def run_waterfall(
                     if ead_u < ead_t:
                         ead_t = ead_u
             k_t  = CAP_R * rw_cp * ead_t
-            kva_ccr += hurdle * k_t * DT * disc
+            kva_ccr -= hurdle * k_t * DT * disc
             if s_c > 0.0:
                 # MAR50.15: SCVA = (1/α) S_c M EAD DF(M); MAR50.14: one counterparty, K = 0.65 · SCVA
                 df_m = (1.0 - math.exp(-0.05 * m_t)) / (0.05 * m_t)
                 k_cva_t = 0.65 * (1.0 / ALPHA) * s_c * m_t * ead_t * df_m
-                kva_cva += hurdle * k_cva_t * DT * disc
+                kva_cva -= hurdle * k_cva_t * DT * disc
             else:
                 k_cva_t = 0.0
-            kva += hurdle * (k_t + k_cva_t) * DT * disc
+            kva -= hurdle * (k_t + k_cva_t) * DT * disc
             if i == 0:
                 ead_0, cap_0, mf_0 = ead_t, k_t, mf_t
                 k_cva_0, rwa_0, addon_0, rc_0, mult_0 = k_cva_t, rw_cp * ead_t, addon, rc_t, mult
@@ -536,13 +553,13 @@ def run_waterfall(
         ee_gross=ee_g.tolist(), ene_gross=ene_g.tolist(),
         collateral_mean=coll_mean.tolist(), im_profile=im_profile,
         exposure_paths=resid, bridge_noise=bridge,
-        cva=-abs(cva), dva=abs(dva), fca=-abs(fca), fba=abs(fba),
-        kva=-abs(kva), mva=-abs(mva), colva=float(colva),
+        cva=float(cva), dva=float(dva), fca=float(fca), fba=float(fba),
+        kva=float(kva), mva=float(mva), colva=float(colva),
         ead_0=ead_0, capital_0=cap_0, im_0=im_0,
         mf_0=mf_0, im_received_profile=[float(x) for x in im_recv], im_basis=im_basis,
-        kva_ccr=-abs(kva_ccr), kva_cva=-abs(kva_cva), k_cva_0=k_cva_0, rwa_0=rwa_0, addon_0=addon_0, rc_0=rc_0,
+        kva_ccr=float(kva_ccr), kva_cva=float(kva_cva), k_cva_0=k_cva_0, rwa_0=rwa_0, addon_0=addon_0, rc_0=rc_0,
         multiplier_0=mult_0, v_mean_0=float(v_mean[0]) if T else 0.0, coll_mean_0=float(coll_mean[0]) if T else 0.0,
         regulatory_margined=bool(reg.sa_ccr_margined),
-        cva_independent=(-abs(cva_ind) if dpd_cp is not None else None),
-        dva_independent=(abs(dva_ind) if dpd_ow is not None else None),
+        cva_independent=(float(cva_ind) if dpd_cp is not None else None),
+        dva_independent=(float(dva_ind) if dpd_ow is not None else None),
     )

@@ -40,12 +40,14 @@ Reported positive: a benefit (the controversial one; shown, not netted away).
 
 ## 5. FVA and FBA
 
-Funding the uncollateralised positive exposure at the funds-transfer price, and the benefit of funding received on the negative one at a fraction of it:
+The cost of funding what is owed to us, at the whole funding spread, and the benefit where we owe, at the funding basis alone (0.49.0):
 
-    FVA = − Σ_i ftp(t_i) · EE(t_i) · Δt · P(0,t_i)
-    FBA = + Σ_i ftp(t_i) · fba_ratio · |ENE(t_i)| · Δt · P(0,t_i)
+    FCA = − Σ_i ftp(t_i) · EE(t_i) · S(t_i) · Δt · P(0,t_i)
+    FBA = + Σ_i max(ftp(t_i) − s_own(t_i), 0) · |ENE(t_i)| · S(t_i) · Δt · P(0,t_i)
+    S(t_i) = ½ · [Q_cp(t_{i−1})·Q_own(t_{i−1}) + Q_cp(t_i)·Q_own(t_i)]        both parties alive, at the middle of the step
+    FVA = FCA + FBA
 
-ftp is the desk's funding spread (flat or a term curve); fba_ratio (0.55 by default) is the share of the funding spread credited on benefit.
+ftp is the desk's funding spread (flat or a term curve) and s_own its own credit spread. The funding spread is that credit spread plus a basis. DVA already credits the desk with its own credit spread on what it owes, so the benefit is charged on the basis only: a benefit at the whole funding spread would count the credit part twice (Morini and Prampolini; Burgard and Kjaer). Until 0.49.0 the benefit was `fba_ratio` (0.55) of the funding spread and neither leg carried S. The API still accepts `fba_ratio` and ignores it.
 
 ## 5b. The grid of a currency or digital-asset ticket, and the exposure a charge reads (§8d, 0.28.0)
 
@@ -422,7 +424,7 @@ behind its own validation gate. A pair without a surface uses the demo default, 
 
 ## Parameters and defaults
 
-CDS: counterparty 85bp, own 42bp (flat, or a term curve); LGD 40 % both sides; ftp 55bp; fba_ratio 0.55; hurdle 12 %; capital model SA-CCR; counterparty risk weight 100 %; WWR 1. Monthly grid for a swap; for a currency or digital-asset ticket weekly to a year and monthly beyond (§8d); `n_paths` from the ticket (2000 default).
+CDS: counterparty 85bp, own 42bp (flat, or a term curve); LGD 40 % both sides; ftp 55bp (the benefit on ftp less own CDS); hurdle 12 %; capital model SA-CCR; counterparty risk weight 100 %; WWR 1. Monthly grid for a swap; for a currency or digital-asset ticket weekly to a year and monthly beyond (§8d); `n_paths` from the ticket (2000 default).
 
 ## Limits, stated
 

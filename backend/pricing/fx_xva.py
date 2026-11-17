@@ -372,7 +372,7 @@ def simulate_paths(inp: ForwardXvaInput, n_paths: int = 2000, seed: int = 42, no
 
 
 def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float = 85.0,
-                own_cds_bp: float = 42.0, ftp_bp: float = 55.0, fba_ratio: float = 0.55, lgd: float = 0.40,
+                own_cds_bp: float = 42.0, ftp_bp: float = 55.0, lgd: float = 0.40,
                 own_lgd: float = 0.40, hurdle_rate: float = 0.12, capital_model: str = "sa_ccr",
                 counterparty_rw: float = 1.0, wwr_multiplier: float = 1.0, cp_cds_curve=None, own_cds_curve=None,
                 ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None,
@@ -387,7 +387,7 @@ def forward_xva(inp: ForwardXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_b
     params = WaterfallParams(
         notional=abs(inp.base_notional * inp.forward), maturity_y=inp.t_years, dt=dt, theta=max(inp.quote_zero, 1e-6),
         lgd=lgd, own_lgd=own_lgd, cp_cds_bp=cp_cds_bp, own_cds_bp=own_cds_bp, cp_cds_curve=cp_cds_curve,
-        own_cds_curve=own_cds_curve, ftp_bp=ftp_bp, ftp_curve=ftp_curve, fba_ratio=fba_ratio, hurdle_rate=hurdle_rate,
+        own_cds_curve=own_cds_curve, ftp_bp=ftp_bp, ftp_curve=ftp_curve, hurdle_rate=hurdle_rate,
         capital_model=capital_model, counterparty_rw=counterparty_rw, wwr_multiplier=wwr_multiplier,
         im_amount=im_amount,
     )
@@ -551,7 +551,7 @@ def simulate_option_paths(inp: OptionXvaInput, n_paths: int = 2000, seed: int = 
 
 
 def option_xva(inp: OptionXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float = 85.0, own_cds_bp: float = 42.0,
-               ftp_bp: float = 55.0, fba_ratio: float = 0.55, lgd: float = 0.40, own_lgd: float = 0.40, hurdle_rate: float = 0.12,
+               ftp_bp: float = 55.0, lgd: float = 0.40, own_lgd: float = 0.40, hurdle_rate: float = 0.12,
                capital_model: str = "sa_ccr", counterparty_rw: float = 1.0, wwr_multiplier: float = 1.0, cp_cds_curve=None,
                own_cds_curve=None, ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None,
                im_amount: Optional[float] = None, cp_hazard_if_halves: float = 1.0, own_hazard_if_halves: float = 1.0,
@@ -567,7 +567,7 @@ def option_xva(inp: OptionXvaInput, csa: CSA, *, n_paths: int = 2000, cp_cds_bp:
     params = WaterfallParams(
         notional=max(notional, 1.0), maturity_y=inp.t_settle, dt=dt, theta=max(inp.quote_zero, 1e-6),
         lgd=lgd, own_lgd=own_lgd, cp_cds_bp=cp_cds_bp, own_cds_bp=own_cds_bp, cp_cds_curve=cp_cds_curve,
-        own_cds_curve=own_cds_curve, ftp_bp=ftp_bp, ftp_curve=ftp_curve, fba_ratio=fba_ratio, hurdle_rate=hurdle_rate,
+        own_cds_curve=own_cds_curve, ftp_bp=ftp_bp, ftp_curve=ftp_curve, hurdle_rate=hurdle_rate,
         capital_model=capital_model, counterparty_rw=counterparty_rw, wwr_multiplier=wwr_multiplier,
         im_amount=im_amount,
     )
@@ -749,7 +749,7 @@ def capital_inputs(legs: list, csa: CSA, steps: int, dt: float, capital_model: s
 
 
 def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float = 85.0, own_cds_bp: float = 42.0,
-                ftp_bp: float = 55.0, fba_ratio: float = 0.55, lgd: float = 0.40, own_lgd: float = 0.40, hurdle_rate: float = 0.12,
+                ftp_bp: float = 55.0, lgd: float = 0.40, own_lgd: float = 0.40, hurdle_rate: float = 0.12,
                 capital_model: str = "sa_ccr", counterparty_rw: float = 1.0, wwr_multiplier: float = 1.0, cp_cds_curve=None,
                 own_cds_curve=None, ftp_curve=None, seed: int = 42, noise_out: Optional[dict] = None, waterfall_rng=None,
                 im_amount: Optional[float] = None, cp_hazard_if_halves: float = 1.0, own_hazard_if_halves: float = 1.0,
@@ -767,7 +767,7 @@ def package_xva(legs: list, csa: CSA, *, n_paths: int = 2000, cp_cds_bp: float =
     params = WaterfallParams(
         notional=sum(_leg_notional(l) for l in legs), maturity_y=_horizon(longest), dt=dt, theta=max(float(longest.quote_zero), 1e-6),
         lgd=lgd, own_lgd=own_lgd, cp_cds_bp=cp_cds_bp, own_cds_bp=own_cds_bp, cp_cds_curve=cp_cds_curve,
-        own_cds_curve=own_cds_curve, ftp_bp=ftp_bp, ftp_curve=ftp_curve, fba_ratio=fba_ratio, hurdle_rate=hurdle_rate,
+        own_cds_curve=own_cds_curve, ftp_bp=ftp_bp, ftp_curve=ftp_curve, hurdle_rate=hurdle_rate,
         capital_model=capital_model, counterparty_rw=counterparty_rw, wwr_multiplier=wwr_multiplier,
         im_amount=im_amount,
     )

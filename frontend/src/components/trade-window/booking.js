@@ -42,7 +42,7 @@ const CAP_LIKE = new Set(['RATES_CAP', 'RATES_FLOOR', 'RATES_COLLAR'])
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
 // Mirrors legacy TradeBookingWindow.CCY_CURVE
-const CCY_CURVE = {
+export const CCY_CURVE = {
   USD: 'USD_SOFR', EUR: 'EUR_ESTR', GBP: 'GBP_SONIA',
   JPY: 'JPY_TONAR', CHF: 'CHF_SARON', AUD: 'AUD_AONIA',
   CAD: 'CAD_CORRA',

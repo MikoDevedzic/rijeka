@@ -9,7 +9,7 @@
 // Pure helpers and constants live in xva-shared.js. The simple view's three pieces are here
 // too: the toggle, the counterparty line and the line on what a run assumes.
 // ────────────────────────────────────────────────────────────────────────────────────
-import { INP, LBL, SEC_HDR, TENORS_6, TIPS, SETTLEMENT_PRESETS, SETTLEMENT_DESC, RATES_MVA_NOTE, VA_DEFS, fmtDollar, moneySize, imUsdProblem } from './xva-shared'
+import { INP, LBL, SEC_HDR, TENORS_6, TIPS, SETTLEMENT_PRESETS, SETTLEMENT_DESC, RATES_MVA_NOTE, VA_DEFS, fmtDollar, moneySize, imUsdProblem, spreadsAreDefault } from './xva-shared'
 import { Keycap } from '../common/Shortcuts'
 import Roll from '../common/Roll'
 import { Note } from '../common/Note'
@@ -168,6 +168,7 @@ function SpreadRow({ label, values, onChange, tipKey, tip, untip }) {
 // {cp, own, ftp}, each {tenor: string}; onChange(group, tenor, value) on blur;
 // spreadCurvePayload() turns the three into the request fields.
 export function SpreadCurvesGrid({ spreads, onChange, tip = noop, untip = noop }) {
+  const asOpened = spreadsAreDefault(spreads)
   return (
     <>
       <SectionHeader>SPREAD CURVES (bp)</SectionHeader>
@@ -178,6 +179,10 @@ export function SpreadCurvesGrid({ spreads, onChange, tip = noop, untip = noop }
       <SpreadRow label='CP CDS'  values={spreads.cp}  onChange={(t,v)=>onChange('cp',t,v)}  tipKey='cpCds'  tip={tip} untip={untip} />
       <SpreadRow label='OWN CDS' values={spreads.own} onChange={(t,v)=>onChange('own',t,v)} tipKey='ownCds' tip={tip} untip={untip} />
       <SpreadRow label='FTP bp'  values={spreads.ftp} onChange={(t,v)=>onChange('ftp',t,v)} tipKey='ftp'    tip={tip} untip={untip} />
+      {/* whose spreads these are, in words under the grid: the figures rest on them */}
+      <div data-testid="xva-spreads-source" style={{ marginTop:'4px', fontSize:'12px', lineHeight:1.5, color: asOpened ? 'var(--amber)' : 'var(--text-mute)' }}>
+        {asOpened ? 'Default spreads, not this counterparty\'s. Type your own in any cell.' : 'Spreads as typed here.'}
+      </div>
     </>
   )
 }
@@ -286,11 +291,10 @@ function CollateralBlock({ collateral, setCollateral, instruments, scheduleColla
 
 // ASSUMPTIONS: LGD %, FBA/FTP ratio, Hurdle rate %, the initial margin in dollars, the capital model and the MVA note.
 // `children` sits after the capital model (a digital asset's Basel group).
-export function AssumptionsBlock({ lgd, setLgd, fbaRatio, setFbaRatio, hurdle, setHurdle, imUsd, setImUsd, capModel, setCapModel,
+export function AssumptionsBlock({ lgd, setLgd, hurdle, setHurdle, imUsd, setImUsd, capModel, setCapModel, funding = null,
                                    note = RATES_MVA_NOTE, imTip = 'imUsd', tip = noop, untip = noop, children = null, imCcy = 'USD' }) {
   const rows = [
     {label:'LGD %',val:lgd,set:setLgd,tk:'lgd'},
-    {label:'FBA/FTP ratio',val:fbaRatio,set:setFbaRatio,tk:'fbaRatio'},
     {label:'Hurdle rate %',val:hurdle,set:setHurdle,tk:'hurdle'},
     {label:`Initial margin ${imCcy}`,val:imUsd,set:setImUsd,tk:imTip,placeholder:'estimate',testId:'xva-im-usd',bad:!!imUsdProblem(imUsd)},
   ]
@@ -305,6 +309,12 @@ export function AssumptionsBlock({ lgd, setLgd, fbaRatio, setFbaRatio, hurdle, s
               style={{...INP,textAlign:'right',...(bad ? {borderColor:'var(--red)',color:'var(--red)'} : {})}}/>
           </div>
         ))}
+        {/* worked out from the spread grid, not typed: what the funding benefit is charged on */}
+        {funding && <>
+          <TipLabel tipKey='fundingBasis' tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>Funding basis bp</TipLabel>
+          <span data-testid="xva-funding-basis" title={`FTP ${funding.ftp} less OWN CDS ${funding.own}, at five years`}
+            style={{ fontFamily:'var(--mono)', fontSize:'12.5px', textAlign:'right', alignSelf:'center', color:'var(--text)' }}>{funding.basis}</span>
+        </>}
         <TipLabel tipKey='capModel' tip={tip} untip={untip} style={{ alignSelf:'center', marginBottom:0 }}>Capital model</TipLabel>
         <select aria-label='Capital model' value={capModel} onChange={e=>setCapModel(e.target.value)} style={{...INP,cursor:'pointer'}}>
           <option value='sa_ccr'>SA-CCR</option>
