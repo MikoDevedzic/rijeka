@@ -32,6 +32,7 @@ from typing import Any, Optional
 import numpy as np
 from sqlalchemy.orm import Session
 
+from ccr.exposure import paid_by
 from pricing import capital as CAP
 from pricing import collateral as COL
 from pricing import sa_ccr as SA
@@ -79,7 +80,8 @@ def prepare_set(db, user: dict, cp, trades: list, asof: date, mkt, st: dict, tpl
     rows, rnotes = from_netting_set(P["ns"], mkt, P["fx"], asof, dfs)
     notes.extend(rnotes)
     mtm = sum(float(x.get("mtm_usd") or 0.0) for x in P["today"])
-    return {"V": P["V_rn"], "t": P["p_rn"].t, "p0": P["p0"], "rows": rows, "gross": P["gross"], "mtm": mtm,
+    from ccr.valuation import flows_per_step
+    return {"V": P["V_rn"], "t": P["p_rn"].t, "p0": P["p0"], "rows": rows, "gross": P["gross"], "mtm": mtm, "flows": flows_per_step(P["ns"], P["p_rn"], P["fx"]),
             "n_paths": P["n_paths"], "months": P["months"], "ns": P["ns"], "today": P["today"], "empty": False, "csa": P["csa"]}
 
 
@@ -111,7 +113,11 @@ def run_set(S: dict, regime: COL.Regime, ci: CAP.CapitalInputs, cp_cds_bp: float
     # initial margin under each regime is the engine's estimate over that regime's margin period (xva_engine.model_im)
     params = WaterfallParams(notional=max(S["gross"], 1.0), maturity_y=float(t[-1]), dt=dt, theta=max(theta, 1e-6),
                              cp_cds_bp=cp_cds_bp, lgd=lgd, hurdle_rate=hurdle)
-    wf = run_waterfall(V[:, 1:], float(V[:, 0].mean()), p0, params, eco, np.random.default_rng(seed), reg_csa=reg, capital=ci, saccr=S["rows"] or None)
+    # a margined regime draws the value a margin period back with the coupons taken out (ccr/exposure.paid_by): a
+    # payment is not a market move over the margin period
+    paid = paid_by(S.get("flows")) if eco.collateralised else None
+    wf = run_waterfall(V[:, 1:], float(V[:, 0].mean()), p0, params, eco, np.random.default_rng(seed), reg_csa=reg, capital=ci, saccr=S["rows"] or None,
+                       settled=None if paid is None else np.broadcast_to(-paid, V[:, 1:].shape))
     V0 = float(S["mtm"])
     C0 = (regime.recognised_fraction("received") * max(V0 - eco.threshold_cp, 0.0)) if eco.collateralised else 0.0
     nica = wf.im_0 if reg.im_exchanged else 0.0

@@ -147,7 +147,8 @@ def counterparty_report(db: Session, user: dict, cp, trades: list, asof: date, m
         ex = exposures(V_rw, p_rw.t, csa, flows=flows)
     else:
         p_rw, ex = p_rn, None
-    cv = cva_of(V_rn, p_rn.t, p0, csa, gross, cp_cds_bp=float(st["cp_cds_bp"]), lgd=float(st["lgd"]))
+    cv = cva_of(V_rn, p_rn.t, p0, csa, gross, cp_cds_bp=float(st["cp_cds_bp"]), lgd=float(st["lgd"]),
+                flows=flows_per_step(ns, p_rn, fx) if csa.collateralised else None)
     grid = [d.isoformat() for d in p_rw.grid[1:]]
     out = {**base, "empty": False, "asof": asof.isoformat(), "grid": grid, "t": [float(x) for x in p_rw.t[1:]], "n_paths": n_paths, "months": months,
            "csa_model": {"preset": csa.preset, "collateralised": csa.collateralised, "threshold_usd": csa.threshold_cp, "mta_usd": csa.mta, "mpor_days": csa.mpor_days, "im_exchanged": csa.im_exchanged},

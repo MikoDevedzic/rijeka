@@ -148,7 +148,7 @@ def test_a_swap_between_coupon_dates_carries_the_floating_interest_accrued_so_fa
     """Found reconciling the XVA runs, 17 November 2026. A running floating period was valued as if it reset today,
     N·(1 − P(t, end)): the interest accrued since the period began was left out. With both legs paying yearly a
     receive-fixed par swap, worth nothing on average, showed the fixed coupon building up with nothing against it:
-    +34,628 after a month and +375,222 after eleven on 10M at the par rate of a flat 4 % curve (4.0253 %), back to
+    +34,628 after a month and +375,222 after eleven on 10M at the par rate of a flat 4 % curve (4.025 %), back to
     nothing after each payment. That was the expected exposure of every swap in the counterparty report, the
     incremental charge and the XVA P&L.
 
@@ -157,7 +157,7 @@ def test_a_swap_between_coupon_dates_carries_the_floating_interest_accrued_so_fa
     curve coupon by coupon (_left_today). The discounting is done twice: by the engine's cash account, and by the
     trapezoid of the short rate that the reference suite uses, which shares nothing with the engine's accrual. Cases:
     three floating frequencies, both directions, a leg that pays two days after each period ends (the ticket's own
-    swap; the old code overvalued it by 2,300 on 10M at every date), a swap that started ten days ago and one that
+    swap; the old code overvalued it by 2,319 on 10M at the start), a swap that started ten days ago and one that
     starts in ten days (off the grid), leverage and a spread on the floating leg."""
     from datetime import timedelta
     from ccr.simulate import account
@@ -174,13 +174,21 @@ def test_a_swap_between_coupon_dates_carries_the_floating_interest_accrued_so_fa
               dict(float_freq="QUARTERLY", fixed_direction="PAY", rate=0.0402, lag=2),
               dict(float_freq="ANNUAL", fixed_direction="RECEIVE", rate=0.0402, start=ASOF - timedelta(days=10)),
               dict(float_freq="QUARTERLY", fixed_direction="RECEIVE", rate=0.0402, start=ASOF + timedelta(days=10)),
-              dict(float_freq="QUARTERLY", fixed_direction="RECEIVE", rate=0.0402, leverage=1.5, spread=0.002)]
+              dict(float_freq="QUARTERLY", fixed_direction="RECEIVE", rate=0.0402, leverage=1.5, spread=0.002),
+              # a period that has ended and is not yet paid on a grid date: it ended ten days before the date and pays
+              # fifteen business days after its end
+              dict(float_freq="ANNUAL", fixed_direction="PAY", rate=0.0402, start=ASOF - timedelta(days=10), lag=15)]
     for kw in cases:
         it = _par_swap(**kw)
         zs = []
         for i in range(len(p.grid)):
             v = value_swap(it, p, i, {"USD": 1.0})
             want = _left_today(it, float(p.t[i]), p0)
+            if i == 0:
+                # today there is no sampling: the value is today's curve's, coupon by coupon, to the dollar. (This is
+                # the line that sees a leg run to its last payment date: 2,319 on 10M with a two-day lag. The bounds
+                # below are several thousand wide and one seed's sampling error is common to every date.)
+                assert abs(v.mean() - want) < 2.0 and v.std() < 1e-6, (kw, v.mean(), want)
             for disc, slack in ((D, 60.0), (D2, 400.0)):          # the trapezoid's own discretisation is a few hundred on 10M
                 x = disc[:, i] * v
                 se = x.std() / np.sqrt(len(x))
@@ -224,25 +232,73 @@ def test_the_accrued_interest_is_the_paths_own_and_not_the_curves():
 
 def test_the_floating_coupon_is_a_cash_flow_of_its_step_on_each_path():
     """A period carries its accrued interest in the value until it is paid, so the value jumps at the payment: the
-    exposure step must see that payment as it sees a fixed coupon, and as the path has it (flows_per_step)."""
-    from ccr.simulate import growth
+    exposure step must see that payment as it sees a fixed coupon, in the step that holds its date, and as the path
+    has it (flows_per_step). The amount is checked against the short rate integrated along the path, and against the
+    jump the value itself makes."""
     from ccr.valuation import flows_per_step, years
-    p = simulate(_calib("RISK_NEUTRAL", "forward"), _curves(), {"SPOT:EURUSD": 1.10}, {"SPOT:EURUSD": (0.04, 0.02)}, ASOF, 60, n_paths=2000, seed=1)
+    p = simulate(_calib("RISK_NEUTRAL", "forward"), _curves(), {"SPOT:EURUSD": 1.10}, {"SPOT:EURUSD": (0.04, 0.02)}, ASOF, 61, n_paths=4000, seed=1)
     key, N = "RATES:USD_SOFR", 10e6
     it = _par_swap("ANNUAL", "RECEIVE", 0.0402)
     fl = flows_per_step(SimpleNamespace(items=[it]), p, {"USD": 1.0})
-    assert fl.shape == (p.n_paths, len(p.grid))
+    assert fl.shape == (p.n_paths, len(p.grid)) and np.all(fl[:, 0] == 0.0)
     steps = [i for i in range(fl.shape[1]) if np.any(fl[:, i] != 0.0)]
-    assert len(steps) == 5
-    # we receive the fixed coupon (V falls: −) and pay the floating one (V rises: +): on each path the net is the
-    # floating year's interest on that path less the fixed coupon
-    (s1, e1, pay1, tau1) = it["legs"][1][1][1]
-    i1 = steps[1]
-    own = N * (growth(p, key, years(ASOF, s1), years(ASOF, e1)) - 1.0) - N * 0.0402 * it["legs"][0][1][1][3]
-    assert np.allclose(fl[:, i1], own, rtol=1e-12, atol=1e-6)
-    assert abs(fl[:, i1].mean()) < 0.1 * N * 0.0402 and fl[:, i1].std() > 20_000.0, "nets to little on average, and is not the same on every path"
+    pays = [years(ASOF, pay) for (_s, _e, pay, _tau) in it["legs"][0][1]]
+    assert steps == [next(i for i in range(len(p.t)) if float(p.t[i]) >= tp - 1e-9) for tp in pays], "each coupon in the step that holds its payment date"
+    r = p.r[key]
+    integ = np.concatenate([np.zeros((r.shape[0], 1)), np.cumsum(0.5 * (r[:, 1:] + r[:, :-1]) * np.diff(p.t)[None, :], axis=1)], axis=1)
+    V = np.stack([value_swap(it, p, i, {"USD": 1.0}) for i in range(len(p.grid))], axis=1)
+    for n, i in enumerate(steps):
+        # we receive the fixed coupon (V falls) and pay the floating one (V rises): on each path the net is the
+        # floating year's interest on that path, by the path's own short rate, less the fixed coupon
+        # (the period is the year from one 29 October to the next, twelve grid steps; its payment can fall a day or
+        # two later, in the next step, when the 29th is not a business day)
+        own = N * (np.exp(integ[:, 12 * (n + 1)] - integ[:, 12 * n]) - 1.0) - N * 0.0402 * it["legs"][0][1][n][3]
+        assert np.corrcoef(fl[:, i], own)[0, 1] > 0.999 and np.abs(fl[:, i] - own).max() < 2.5e-3 * N
+        assert abs(fl[:, i].mean()) < 0.1 * N * 0.0402, "at par the two coupons net to little on average"
+        if n:
+            assert fl[:, i].std() > 20_000.0, "and the floating one is not the same on every path"
+        # the value itself jumps by that amount in that step, beside what the market did in the month
+        dv = V[:, i] - V[:, i - 1]
+        slope = np.cov(dv, fl[:, i])[0, 1] / fl[:, i].var()
+        assert 0.9 < slope < 1.1, (i, slope)
     # the direction: a swap that receives the floating leg has the mirror
     mirror = flows_per_step(SimpleNamespace(items=[_par_swap("ANNUAL", "PAY", 0.0402)]), p, {"USD": 1.0})
     assert np.allclose(mirror, -fl)
     fq = flows_per_step(SimpleNamespace(items=[_par_swap("QUARTERLY", "RECEIVE", 0.0402)]), p, {"USD": 1.0})
     assert sum(1 for i in range(fq.shape[1]) if np.any(fq[:, i] != 0.0)) == 20 and fq.mean(axis=0).max() > 0.9 * N * 0.0402 / 4      # a floating quarter paid: V rises
+
+
+def test_a_coupon_is_not_a_market_move_over_the_margin_period():
+    """The model validator, 17 November 2026. The value a margin period back is drawn by a bridge between grid dates,
+    with noise from the spread of the step's change. In a step that holds a coupon that spread is the coupon's: the
+    margined exposure at a yearly swap's payment dates stood 8 % to several times above what the market leaves over
+    ten days, and at the last payment, when nothing is left to move, tens of thousands on 10M. The bridge is now
+    drawn on the value with its payments taken out and the payments put back.
+
+    The reference is the same set with its payments taken out, which has no jump at all, through the same exposure
+    step with no flows given."""
+    from ccr.exposure import cva
+    from ccr.valuation import flows_per_step
+    p = simulate(_calib("REAL_WORLD"), _curves(), {"SPOT:EURUSD": 1.10}, {"SPOT:EURUSD": (0.04, 0.02)}, ASOF, 61, n_paths=6000, seed=4)
+    it = _par_swap("ANNUAL", "RECEIVE", 0.0402)
+    V = np.stack([value_swap(it, p, i, {"USD": 1.0}) for i in range(len(p.grid))], axis=1)
+    fl = flows_per_step(SimpleNamespace(items=[it]), p, {"USD": 1.0})
+    csa = csa_from_counterparty(SimpleNamespace(csa_type="VM", csa_threshold_m=0, csa_mta_k=0))
+    got = exposures(V, p.t, csa, flows=fl)
+    smooth = exposures(V - np.cumsum(fl, axis=1), p.t, csa)
+    assert np.allclose(got["ee"], smooth["ee"], rtol=1e-9, atol=1e-6) and np.allclose(got["pfe"]["95"], smooth["pfe"]["95"], rtol=1e-9, atol=1e-6)
+    blind = exposures(V, p.t, csa)                                           # the bridge on the value as it stands
+    steps = [i for i in range(fl.shape[1]) if np.any(fl[:, i] != 0.0)]
+    last = steps[-1] - 1                                                     # the exposure arrays start at the first date after today
+    assert got["ee"][last] < 0.05 * blind["ee"][last] and blind["ee"][last] > 10_000.0, "nothing is left to move after the last coupon"
+    assert all(got["ee"][i - 1] < blind["ee"][i - 1] for i in steps)
+    # one number per step is taken as it was (a fixed coupon), and no flows at all is the bridge on the value
+    assert np.allclose(exposures(V, p.t, csa, flows=fl.mean(axis=0))["ee"][0], exposures(V - np.cumsum(fl.mean(axis=0))[None, :], p.t, csa)["ee"][0])
+    # the credit engine's CVA of a margined set takes the payments out the same way
+    p0 = [float(p.p0["RATES:USD_SOFR"](float(x))) for x in p.t]
+    a = cva(V, p.t, p0, csa, 10e6, flows=fl)
+    b = cva(V, p.t, p0, csa, 10e6)
+    assert abs(a["cva_usd"]) < abs(b["cva_usd"]) and a["ee_rn"][last] < 0.05 * b["ee_rn"][last]
+    # and an uncollateralised set does not read them
+    none = csa_from_counterparty(SimpleNamespace(csa_type="NO_CSA"))
+    assert cva(V, p.t, p0, none, 10e6, flows=fl)["cva_usd"] == cva(V, p.t, p0, none, 10e6)["cva_usd"]

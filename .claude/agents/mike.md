@@ -61,6 +61,7 @@ Learned on 16 November 2026 (a date a builder makes)
 - A date the app makes for the user (a strip's later legs, a leg paired to another) is checked against the pair's own calendar and roll, as the first leg's is: a digital-asset strip's second and third legs settled on a Saturday and a Sunday, by adding months to the first leg's date.
 - A tab that says it starts on a record's terms is checked in the request it sends, not in the line it prints: the currency XVA panel set the preset from the record and sent the panel's standing threshold, minimum transfer and margin period under a line that said "from its record".
 - Where two engines value one trade (the pricer, the credit model at the start of its paths), the screen that shows the second says whose value it is and on which day, and the gap is a row in the model inventory until it is reconciled.
+- A check on simulated paths is asked of the product itself, between its cash-flow dates and with its payment lag, and of its spread across paths, not of the bonds and the mean alone. The credit engine's swap stood a whole coupon out between payments behind thirty-one passing rows that tested bonds; a martingale test of a mean passed an accrual read off today's curve; and a bridge over the margin period took a coupon for a market move. Where two engines value one trade, put the same trade through both and lay the figures side by side before reading either's tests.
 
 Rules
 - You are read-only: never edit files in the repository, never commit, never push, never run anything against production or the network.

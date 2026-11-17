@@ -15,14 +15,22 @@ trade of each product through every XVA run and laying the answers side by side.
   receive-fixed par swap, worth nothing on average, stood at +34,628 a month into the year and +375,222 eleven
   months in on ten million at the par rate of a flat 4 % curve, and fell back at each payment. The leg also ran
   to its last payment date where it should run to its last period end, which overvalued a leg that pays two days
-  after each period by about 2,300 on ten million (the model validator and the independent reviewer).
+  after each period by 2,319 on ten million at the start of a five-year swap (the model validator and the
+  independent reviewer).
 - **Where it reached.** Every swap in the counterparty report (expected exposure, PFE, EPE, CVA, and the limits
   read against them), the incremental charge shown beneath a ticket's XVA, the capital stock of a swap, and the
   XVA P&L, which reads the report. A ticket's stand-alone XVA figures and every price were not affected.
 - **What it does now.** Each floating period is valued on its own dates: before it begins, while it runs (with
   the interest accrued so far: one unit from the period's start, grown along the path at each grid step's own
   bond), and between its end and its payment. The floating coupon is a cash flow of its step, as a fixed one is,
-  and in the margin step it is the path's own amount.
+  the path's own amount.
+- **A coupon is not a market move over the margin period.** Under a margin agreement the value a margin period
+  back is drawn by a bridge between grid dates, with noise from the spread of the step's change. In a step that
+  holds a coupon that spread was the coupon's: the margined exposure at a yearly swap's payment dates stood 8 %
+  to several times above what the market leaves over ten days, and tens of thousands on ten million at the last
+  payment, when nothing is left to move (the model validator; it held for fixed coupons too, from before this
+  release). The bridge is now drawn on the value with its payments taken out and the payments put back, in the
+  exposure step, in the credit engine's CVA of a margined set and in the capital report's margined regimes.
 - **What moved.** A five-year par swap alone in a netting set, no margin: receive fixed, CVA −7,398 to −3,424
   and DVA 568 to 1,877; pay fixed, CVA −1,149 to −3,799 and DVA 3,655 to 1,692. The
   ticket's run says −2,576 and 1,599, and −3,236 and 1,273: the two engines were three to five times apart and
@@ -35,8 +43,9 @@ trade of each product through every XVA run and laying the answers side by side.
 - **Checked** by a martingale identity that does not use the engine's formula: the value at each grid date,
   discounted along the path, averages to today's value of the coupons not yet paid, read off today's curve coupon
   by coupon. Discounted two ways (the engine's cash account; the trapezoid of the short rate), for yearly,
-  half-yearly and quarterly floating legs, both directions, a two-day payment lag, a start ten days back and ten
-  days ahead, leverage and a spread, at every grid date; and the accrual compared path by path with the
+  half-yearly and quarterly floating legs, both directions, a two-day payment lag, a period ended and not yet
+  paid, a start ten days back and ten days ahead, leverage and a spread, at every grid date, and to the dollar on
+  the valuation date; and the accrual compared path by path with the
   integrated short rate, since a mean cannot see the spread across paths. The model validator derived it again
   with an account of the validator's own: the old value stood 53 to 1,800 standard errors from today's curve
   between coupon dates, the new within 1.6. The reference suite's martingale rows were of bonds alone, which is

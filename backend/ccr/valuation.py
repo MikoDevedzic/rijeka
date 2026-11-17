@@ -204,7 +204,7 @@ def value_swap(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float]) ->
             # once the period had begun: the interest accrued since its start was left out, so a swap whose two
             # legs pay on the same dates showed the fixed coupon building up with nothing against it, a whole
             # coupon before each payment (found reconciling the XVA runs, 17 November 2026); and the last payment
-            # date in place of the last period end overvalued a leg with a two-day lag by N·(1 − e^(−r·lag)), 2,300
+            # date in place of the last period end overvalued a leg with a two-day lag by about N·(1 − e^(−r·lag)), 2,319
             # on 10M (the model validator and the independent reviewer, the same day).
             lev = 1.0 if lg.get("leverage") is None else float(lg.get("leverage"))
             spread = float(lg.get("spread") or 0.0)

@@ -286,3 +286,8 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - When a figure starts to depend on a second input, read every label that compares it with a reference: a tied
   party's "if independent" figure took out both parties' links once CVA carried the desk's survival, and the
   screen's wrong-way label was computed from the difference.
+- Put one trade of each product through every run that prices it and lay the answers side by side, before a
+  launch and after a change to any of them: three errors stood behind runs that each passed its own tests (a swap
+  between coupon dates in the credit engine, a swaption's XVA that was a swap's, a capital add-on blind to the asset
+  class). A request field the server's model does not declare is dropped without a word: read the answer for what
+  was asked.
