@@ -555,10 +555,23 @@ export function recordTerms(csa, name) {
 export function basisLine(basis) {
   if (!basis || basis.kind !== 'TRADE') return ''
   const opt = Array.isArray(basis.options) && basis.options.length ? basis.options[0] : null
+  const bp = v => (Number.isFinite(Number(v)) && v !== null && v !== '' ? `${Number(v).toFixed(1)}bp` : null)
   if (basis.valued_as === 'SWAPTION' && opt) {
-    const vol = Number.isFinite(Number(opt.vol_bp)) ? ` · σ ${Number(opt.vol_bp).toFixed(1)}bp${opt.vol_source ? ` (${opt.vol_source})` : ''}` : ''
+    // the vol the option was valued at on the paths is the paths' own model's; the market's quote stands beside it
+    const used = bp(opt.vol_used_bp), quoted = bp(opt.vol_bp)
+    const vol = used ? ` · σ ${used}, the paths' own${quoted ? ` (market ${quoted})` : ''}` : quoted ? ` · market σ ${quoted}` : ''
     return `the option to ${opt.expiry}, then its swap${vol}`
   }
-  const capped = opt ? `, its ${String(opt.kind || 'option').toLowerCase()}s on the paths` : ''
-  return `the trade's own schedule${basis.last_date ? ` to ${basis.last_date}` : ''}${capped}`
+  const WORDS = { CAP: 'caps', FLOOR: 'floors' }
+  const word = opt ? WORDS[String(opt.kind || '').toUpperCase()] : null
+  return `the trade's own schedule${word ? `, its ${word} on the paths` : ''}`
+}
+
+// The amber line above a rates run's figures when the paths were a generic swap's and not the trade's: the
+// server's own sentence, or, for an answer that does not say what it valued (an API from before 0.52.0), ours.
+export const GENERIC_SWAP_NOTE = "These figures are of a generic swap of the ticket's notional, coupon and tenor whose two legs settle every month, not of the trade's own schedule: the run did not say it valued the trade."
+export function genericNote(result) {
+  if (!result) return ''
+  if (!result.basis) return GENERIC_SWAP_NOTE
+  return result.basis.kind === 'GENERIC_SWAP' ? (result.basis.note || GENERIC_SWAP_NOTE) : ''
 }

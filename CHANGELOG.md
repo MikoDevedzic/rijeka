@@ -27,19 +27,35 @@ through every XVA run.
 - **What moved**, on the booked five-year swap paying 3.75 % with no margin: CVA −2,111 to −2,551, DVA 1,984 to
   2,448, FCA −1,366 to −1,651, FBA 614 to 758, KVA −5,871 to −5,448. A bought swaption: no exposure against the
   desk before its expiry, where there was a swap's.
+- **An outside figure for the exposure, the first.** On a coupon date a swap is what is left of it, so its
+  discounted expected exposure there is the price of a swaption. The engine's figures stand within 1.3 % of
+  QuantLib's Hull-White swaption prices at every yearly date of a six-year swap, both sides, inside two standard
+  errors: ten new rows of the reference suite, 434 in all. The model validator ran the same at 100,000 paths on a
+  flat curve: within 0.4 %. The adjustments read from the exposure have no outside figure yet.
 - **A cap, floor or collar has no XVA yet.** It is not valued on the paths, and the run says so in words where it
   used to answer with a swap's figures.
+- **A margined swaption.** After exercise its swap's coupons are payments on the paths where it was exercised,
+  and are taken out of the margin period's bridge as a swap's are since 0.51.0 (the model validator).
+- **A trade body is bounded before it is read**, on this route and on the incremental charge: 24 legs, 200 kB,
+  dates within 61 years (the security reviewer: schedules were generated for whatever was sent). A refusal is in
+  the engine's own words and does not repeat the sender's.
 - **Two engines, two figures, both shown.** The paths start at their own value of the trade, which is reported
   beside the pricer's (68 apart on −122,568 for the booked swap); the paths are not moved to meet the pricer, and
   the all-in figure is the pricer's value and the adjustments.
-- The counterparty run takes one step length for its monthly grid, the mean one, and the set's longest remaining
-  life for its capital add-on (it took the first month's length and the grid's end): its figures move by a
-  fraction of a per cent.
+- The counterparty report takes one step length for its monthly grid, the mean one, and the set's longest
+  remaining life for its capital add-on (it took the first month's length and the grid's end): its figures move
+  by a fraction of a per cent. The capital report is unchanged: it reads its stock over the first month and
+  keeps that month's own length.
 
 Not done, and said: a cap, floor or collar on the paths; a swaption's capital add-on is on its whole notional,
-with no adjustment for the option's delta; a Bermudan swaption runs as its European; the replication workbook
-`xva_rates` rebuilds the generic swap, and says so, and the trade's own paths have no workbook; nothing outside
-this code checks a swap's exposure yet (a strip of QuantLib swaptions is next). A request that carries no trade
+with no adjustment for the option's delta; a Bermudan swaption runs as its European; an option on the paths is
+valued at the volatility the paths' own model implies, not the ticket's, and the line under the chart gives both;
+a trade already running starts on the paths with its past floating interest at today's rate, not its fixings; a
+grid date a day or two before a coupon's payment (a weekend) shows that coupon still to come, a quarter above
+its neighbours on a five-year swap; the grid's step is the mean month, and the capital report still takes the
+first month's (each step's own length is the mend, not in this release); "bp on rate" for a swaption is over the
+life from today, not the underlying's annuity; the replication workbook `xva_rates` rebuilds the generic swap,
+and says so, and the trade's own paths have no workbook. A request that carries no trade
 (a tab opened before this release) is still answered with the generic swap, and the answer and the tab say so.
 One run is bounded by the trade's length times the paths. The first XVA P&L and counterparty report after this
 release carry these changes as if the market had moved.

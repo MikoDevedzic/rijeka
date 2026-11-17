@@ -505,6 +505,8 @@ def get_latest_calibration(
 
 # ── Simulate ──────────────────────────────────────────────────────────────────
 
+NOT_ON_PATHS = {"IR_CAP": "a cap", "IR_FLOOR": "a floor", "IR_COLLAR": "a collar", "INTEREST_RATE_CAP": "a cap", "INTEREST_RATE_FLOOR": "a floor",
+                "INTEREST_RATE_COLLAR": "a collar", "RATES_CAP": "a cap", "RATES_FLOOR": "a floor", "RATES_COLLAR": "a collar"}
 RATES_RUN_MAX_WORK = 4_000_000       # months × paths of one rates run that values the trade itself (_trade_paths): 30 years at 10,000 paths fit, 40 do not
 
 
@@ -539,17 +541,24 @@ def _trade_paths(trade, db: Session, user: dict, a: float, sigma: float, curve, 
     dates = Market.dates(db, uid, upto=val_date)
     mkt = Market(db, uid, dates[-1]) if dates else None
     ns = NettingSet(db, user, [trade], val_date, mkt=mkt)
+    itype = str(trade.instrument_type or "").upper()
     if not ns.items:
-        why = "; ".join(str(x.get("reason")) for x in ns.skipped) or "nothing to value"
+        # in fixed words: the reason the engine gives can carry the sender's own text, which is not repeated
+        if any(str(x.get("reason", "")).endswith("not simulated yet") for x in ns.skipped):
+            name = NOT_ON_PATHS.get(itype, "this instrument")
+            raise HTTPException(status_code=422, detail=(
+                f"XVA is not available for this trade yet: {name} is not valued on the exposure paths."))
         raise HTTPException(status_code=422, detail=(
-            f"XVA is not available for this trade yet: the exposure engine does not value it on its paths ({why})."))
+            "XVA could not be run: the trade's legs or dates could not be read. Price the ticket first; if it prices, tell us."))
     it = ns.items[0]
+    if len(ns.items) != 1 or it["kind"] not in ("SWAP", "SWAPTION"):
+        raise HTTPException(status_code=422, detail="This run values a rates trade. A currency or digital-asset trade has its own XVA tab.")
     ccy = it["ccy"]
     # what one run may cost: the trade is valued on every path at every monthly date (a 50-year quarterly swap at
     # 10,000 paths took 6 s when this was written, 17 November 2026); beyond that the answer is how many paths fit
     if ns.months * n_paths > RATES_RUN_MAX_WORK:
         fits = max(200, int(RATES_RUN_MAX_WORK / ns.months // 100 * 100))
-        raise HTTPException(status_code=422, detail=f"a trade {ns.months // 12} years long at {n_paths} paths is more than one run takes; {fits} paths fit")
+        raise HTTPException(status_code=422, detail=f"this trade runs {ns.months} monthly dates; at {n_paths} paths that is more than one run takes: {fits} paths fit")
     key = f"RATES:{C.CURVE_OF.get(ccy, ccy + '_OIS')}"
     calib = C.Calibration("RISK_NEUTRAL", {key: C.Factor(key, "RATES", a=float(a), sigma=float(sigma), source="the run's Hull-White parameters")},
                           np.array([[1.0]]), [key], drift_mode="forward")
@@ -557,6 +566,11 @@ def _trade_paths(trade, db: Session, user: dict, a: float, sigma: float, curve, 
     own = {ccy: 1.0}                                           # the trade's own currency: nothing is converted
     V, _today = netted_paths(ns, p, own, {})
     fl = flows_per_step(ns, p, own)
+    # an option on the paths is valued at the normal vol the paths' own model implies for it, so that its value
+    # before expiry and its exercise are one model; the market's quote for it is reported beside that vol
+    for o in ns.options:
+        if it.get("hw_vol_bp") is not None and it["kind"] == "SWAPTION":
+            o["vol_used_bp"] = round(float(it["hw_vol_bp"]), 2)
     T = len(p.t) - 1
     dt = float(p.t[-1]) / T                                    # the grid is monthly by the calendar: the mean step, as the waterfall takes one length
     p0 = p.p0[key]
@@ -1333,6 +1347,11 @@ XVA_KEYS = ("cva", "dva", "fca", "fba", "kva", "mva", "colva")          # the co
 # later release, when no tab from before can be open.
 
 
+TRADE_BODY_MAX_LEGS = 24        # a ticket's own trade: two legs, a few more for a structure
+TRADE_BODY_MAX_BYTES = 200_000  # the booking body of a ticket is a few kilobytes
+TRADE_BODY_MAX_YEARS = 61       # the longest maturity a run takes is 60 years
+
+
 def hypothetical_trade(d: dict, counterparty_id, user_id: str):
     """A Trade-shaped object the credit engine can value without a row: the ticket's booking body, its legs
     completed per currency convention as POST /api/book/trade would store them."""
@@ -1340,6 +1359,19 @@ def hypothetical_trade(d: dict, counterparty_id, user_id: str):
     from api.routes._instrument_alias import normalize_instrument_type
     from api.routes._leg_defaults import complete_leg
     d = dict(d or {})
+    # What a trade body may cost before anything is valued (the security reviewer, 17 November 2026: schedules were
+    # generated for whatever was sent, and the run's own bound came after): a ticket has a few legs and dates within
+    # a lifetime. The body is the caller's, so its size and its dates are checked before it is read further.
+    import json as _json
+    legs_in = d.get("legs") or []
+    if not isinstance(legs_in, list) or len(legs_in) > TRADE_BODY_MAX_LEGS:
+        raise HTTPException(status_code=422, detail=f"trade.legs: at most {TRADE_BODY_MAX_LEGS} legs")
+    try:
+        size = len(_json.dumps(d, default=str))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="trade: not a JSON object")
+    if size > TRADE_BODY_MAX_BYTES:
+        raise HTTPException(status_code=422, detail="trade: the body is larger than a ticket's")
     itype = normalize_instrument_type(d.get("instrument_type"))
     if not itype:
         raise HTTPException(status_code=422, detail="trade.instrument_type is required")
@@ -1352,6 +1384,18 @@ def hypothetical_trade(d: dict, counterparty_id, user_id: str):
     eff, mat = _d("effective_date"), _d("maturity_date")
     if not mat:
         raise HTTPException(status_code=422, detail="trade.maturity_date is required")
+    lo, hi = date.today() - timedelta(days=366 * TRADE_BODY_MAX_YEARS), date.today() + timedelta(days=366 * TRADE_BODY_MAX_YEARS)
+    every = [x for x in (eff, mat) if x is not None]
+    for lg in legs_in:
+        for kk in ("effective_date", "maturity_date"):
+            v = lg.get(kk) if isinstance(lg, dict) else None
+            if v:
+                try:
+                    every.append(date.fromisoformat(str(v)[:10]))
+                except ValueError:
+                    raise HTTPException(status_code=422, detail=f"trade.legs: {kk} must be an ISO date")
+    if any(not (lo <= x <= hi) for x in every):
+        raise HTTPException(status_code=422, detail=f"trade: dates within {TRADE_BODY_MAX_YEARS} years of today")
     ccy = str(d.get("notional_ccy") or "USD").upper()
     legs = [complete_leg(dict(l), effective_date=eff, maturity_date=mat, currency=ccy,
                          discount_curve_id=d.get("discount_curve_id"), forecast_curve_id=d.get("forecast_curve_id"))

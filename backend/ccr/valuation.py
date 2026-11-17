@@ -254,10 +254,26 @@ def flows_per_step(ns: NettingSet, paths: Paths, fx_to_usd: dict[str, float]) ->
     asof = paths.grid[0]
     out = np.zeros((paths.n_paths, len(paths.grid)))
     for it in ns.items:
-        if it["kind"] != "SWAP":
+        if it["kind"] not in ("SWAP", "SWAPTION"):
             continue
         k = fx_to_usd.get(it["ccy"], 1.0)
         key = f"RATES:{CURVE_OF.get(it['ccy'], it['ccy'] + '_OIS')}"
+        # A swaption pays its swap's coupons on the paths where it was exercised (physical settlement), from our
+        # side of the option: the same payments, times the exercise on the path and the option's sign. (Until
+        # 0.52.0 a swaption had no flows here, so a margined run drew the exercised swap's coupons as market moves,
+        # the error 0.51.0 mended for a swap: the model validator, 17 November 2026.)
+        weight = 1.0
+        if it["kind"] == "SWAPTION":
+            t_exp = years(asof, it["expiry"])
+            i_exp = min((j for j in range(len(paths.t)) if float(paths.t[j]) >= t_exp - 1e-9), default=None)
+            if i_exp is None:
+                continue
+            cache = it.setdefault("_exercised", {})
+            mask = cache.get(id(paths))
+            if mask is None:
+                mask = value_swap(it, paths, i_exp, fx_to_usd) > 0.0
+                cache[id(paths)] = mask
+            weight = float(it.get("sign", 1.0)) * mask.astype(float)
         for lg, sched in it["legs"]:
             pay_sign = 1.0 if str(lg.get("direction", "")).upper().startswith("PAY") else -1.0
             N = float(lg.get("notional") or 0.0)
@@ -274,7 +290,7 @@ def flows_per_step(ns: NettingSet, paths: Paths, fx_to_usd: dict[str, float]) ->
                     amt = N * float(lg.get("fixed_rate") or 0.0) * tau
                 else:
                     amt = lev * N * (growth(paths, key, years(asof, ps), years(asof, pe)) - 1.0) + N * float(lg.get("spread") or 0.0) * tau
-                out[:, step] += pay_sign * amt * k
+                out[:, step] += pay_sign * amt * k * weight
     return out
 
 

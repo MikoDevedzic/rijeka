@@ -424,9 +424,20 @@ describe('what a rates run valued (basisLine)', () => {
     const { basisLine } = await import('./xva-shared.js')
     expect(basisLine(null)).toBe('')
     expect(basisLine({ kind: 'GENERIC_SWAP', note: 'x' })).toBe('')            // the generic run has its own amber line
-    expect(basisLine({ kind: 'TRADE', valued_as: 'SWAP', last_date: '2031-12-17', options: [] })).toBe("the trade's own schedule to 2031-12-17")
-    expect(basisLine({ kind: 'TRADE', valued_as: 'SWAPTION', options: [{ kind: 'PAYER SWAPTION', expiry: '2027-11-02', vol_bp: 94.94, vol_source: 'USD_SWVOL_ATM nearest point' }] }))
-      .toBe('the option to 2027-11-02, then its swap · σ 94.9bp (USD_SWVOL_ATM nearest point)')
+    expect(basisLine({ kind: 'TRADE', valued_as: 'SWAP', last_date: '2031-12-17', options: [] })).toBe("the trade's own schedule")
+    // the vol the option was valued at is the paths' own; the market's quote beside it
+    expect(basisLine({ kind: 'TRADE', valued_as: 'SWAPTION', options: [{ kind: 'PAYER SWAPTION', expiry: '2027-11-02', vol_bp: 94.94, vol_used_bp: 78.31, vol_source: 'USD_SWVOL_ATM nearest point' }] }))
+      .toBe("the option to 2027-11-02, then its swap · σ 78.3bp, the paths' own (market 94.9bp)")
+    expect(basisLine({ kind: 'TRADE', valued_as: 'SWAPTION', options: [{ expiry: '2027-11-02', vol_bp: 94.94 }] })).toBe('the option to 2027-11-02, then its swap · market σ 94.9bp')
     expect(basisLine({ kind: 'TRADE', valued_as: 'SWAP', options: [{ kind: 'CAP' }] })).toBe("the trade's own schedule, its caps on the paths")
+    expect(basisLine({ kind: 'TRADE', valued_as: 'SWAP', options: [{ kind: 'IR_<b>' }] })).toBe("the trade's own schedule")     // a kind it does not know is not echoed
+  })
+
+  it('says a run was a generic swap, also when the answer does not say what it valued', async () => {
+    const { genericNote, GENERIC_SWAP_NOTE } = await import('./xva-shared.js')
+    expect(genericNote(null)).toBe('')
+    expect(genericNote({ basis: { kind: 'TRADE' } })).toBe('')
+    expect(genericNote({ basis: { kind: 'GENERIC_SWAP', note: 'the server\'s sentence' } })).toBe("the server's sentence")
+    expect(genericNote({ xva: {} })).toBe(GENERIC_SWAP_NOTE)            // an API from before 0.52.0: no `basis` at all
   })
 })

@@ -108,6 +108,12 @@ def run_set(S: dict, regime: COL.Regime, ci: CAP.CapitalInputs, cp_cds_bp: float
     eco, reg = regime.economic_csa(), regime.regulatory_csa()
     V, t, p0 = S["V"], S["t"], S["p0"]
     T1 = V.shape[1]
+    # The grid is monthly by the calendar and the waterfall takes one step length. This report reads its stock
+    # (margin, EAD, capital) over the FIRST step, so it takes the first month's own length, which is exact for
+    # those; the counterparty report and a ticket, which read sums over every step, take the mean step
+    # (ccr/exposure.cva). The two differ by the first month's length against the mean (up to 8 % in a February) on
+    # the cost profiles until the waterfall takes each step's own length (the independent reviewer, 17 November 2026;
+    # stated in the methodology's limits).
     dt = float(t[1] - t[0]) if T1 > 1 else 1 / 12
     theta = -math.log(max(p0[-1], 1e-9)) / max(float(t[-1]), 1e-6)
     # initial margin under each regime is the engine's estimate over that regime's margin period (xva_engine.model_im)

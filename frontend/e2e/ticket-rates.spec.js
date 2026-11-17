@@ -350,6 +350,11 @@ test('a cap has no XVA yet, and the tab says so in words', async ({ app, problem
   expect(r.status()).toBe(422)
   await expect(win.getByText(/XVA is not available for this trade yet/)).toBeVisible()
   await expect(win.getByTestId('xva-outputs')).not.toContainText('CVA -')
-  problems.length = 0                                  // the refusal is the point: its 422 is not a problem of the page
+  // the refusal is the point: that one 422, and the console line the browser writes for it, are not problems of the page;
+  // anything else still is
+  const expected = x => /HTTP 422 POST .*\/api\/xva\/simulate/.test(x) || /Failed to load resource.*422/.test(x)
+  const others = problems.filter(x => !expected(x))
+  problems.length = 0
+  problems.push(...others)
   expectClean(problems)
 })

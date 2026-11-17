@@ -16,7 +16,7 @@ import {
 import { fundingBasis,
   INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, fmtMoney, tipAt, spreadCurvePayload, imUsdValue, imUsdProblem, rateBp01, allInRate, recordTerms,
   buildVaRows, withFunding, onChainCompareRows, collateralBody, onChainSaving, useXvaView, runAssumesLine, ratesModelWords, HIDDEN_INPUT_DEFAULTS,
-  basisLine,
+  basisLine, genericNote,
 } from '../trade-window/xva-shared'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -309,7 +309,7 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
     // the ticket's trade as it would be booked: when the ticket cannot build one yet, say so and start nothing
     let own = null
     if (!tradeId && typeof buildTrade === 'function') {
-      try { own = buildTrade() } catch (e) { setSimErr(e?.message || 'The ticket is not complete enough to simulate.'); return }
+      try { own = buildTrade() } catch (e) { setSimErr(`The ticket is not complete enough to simulate${e?.message ? `: ${e.message}` : '.'}`); return }
     }
     setSimulating(true); setSimErr(null)
     try {
@@ -535,14 +535,14 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
             model={<>HW1F · a={simResult?.params?.a?.toFixed(4)} σ={simResult?.params?.sigma_bp?.toFixed(1)}bp</>}>
             {/* what the paths valued, from the run's own answer: the trade's schedule, or an option and then its swap */}
             {basisLine(simResult?.basis) && (
-              <span data-testid="xva-basis" style={{color:'var(--text-mute)', marginLeft:'8px'}}> · {basisLine(simResult.basis)}</span>
+              <span data-testid="xva-basis" style={{color:'var(--text-mute)', whiteSpace:'nowrap'}}> · {basisLine(simResult.basis)}</span>
             )}
           </ChartReadout>
         </ExposureCanvas>
 
         {/* a run that did not carry the trade is a generic swap's: said above its figures */}
-        {simResult?.basis?.kind === 'GENERIC_SWAP' && simResult.basis.note && (
-          <div data-testid="xva-basis-generic" style={{flexShrink:0,padding:'6px 12px',fontSize:'12px',lineHeight:1.5,color:'var(--amber)',borderBottom:'1px solid var(--border)'}}>{simResult.basis.note}</div>
+        {genericNote(simResult) && (
+          <div data-testid="xva-basis-generic" style={{flexShrink:0,padding:'6px 12px',fontSize:'12px',lineHeight:1.5,color:'var(--amber)',borderBottom:'1px solid var(--border)'}}>{genericNote(simResult)}</div>
         )}
         {/* a swap in another currency runs on volatility calibrated to USD swaptions: said above its figures */}
         {simResult?.vol_basis?.proxy && (

@@ -77,7 +77,10 @@ def test_the_paths_start_at_the_pricers_value_of_the_trade(client, auth_a, auth_
     for k in FOUR + ("kva",):
         assert same["xva"][k] == pytest.approx(tk["xva"][k], rel=1e-9, abs=0.01), k
     # a trade is read only among the account's own: this one, asked for by another account, is not found
-    assert client.post("/api/xva/simulate", json={"trade_id": tid}, headers=auth_b).status_code == 404
+    # (and the answer is the one a trade that does not exist gets: nothing says the id is someone's)
+    theirs = client.post("/api/xva/simulate", json={"trade_id": tid}, headers=auth_b)
+    nobody = client.post("/api/xva/simulate", json={"trade_id": "00000000-0000-0000-0000-000000000001"}, headers=auth_b)
+    assert theirs.status_code == 404 and nobody.status_code == 404 and theirs.json() == nobody.json()
     assert client.post("/api/xva/simulate", json={"trade_id": "00000000-0000-0000-0000-000000000001"}, headers=auth_a).status_code == 404
     assert client.post("/api/xva/simulate", json={"trade_id": "not-a-uuid"}, headers=auth_a).status_code == 422
 
@@ -105,7 +108,29 @@ def test_a_swaption_is_an_option_on_the_paths_and_not_a_swap(client, auth_a, ids
 def test_a_cap_is_refused_in_words_and_a_margined_run_takes_the_coupons_out(client, auth_a, ids):
     _free()
     r = client.post("/api/xva/simulate", json={"paths": 500, "trade": B.cap(ids["a"], "RC-CAP")}, headers=auth_a)
-    assert r.status_code == 422 and "XVA is not available for this trade yet" in r.text and "IR_CAP" in r.text
+    assert r.status_code == 422 and "XVA is not available for this trade yet: a cap is not valued on the exposure paths" in r.text
+    # a refusal is in the engine's words, never the sender's: an instrument it does not know is not named back
+    odd = dict(B.cap(ids["a"], "RC-ODD"), instrument_type="<b>x</b>")
+    _free()
+    r = client.post("/api/xva/simulate", json={"paths": 500, "trade": odd}, headers=auth_a)
+    assert r.status_code == 422 and "<b>" not in r.text
+    # a currency trade is not this run's
+    _free()
+    r = client.post("/api/xva/simulate", json={"paths": 500, "trade": {"instrument_type": "FX_FORWARD", "notional": 1e6, "notional_ccy": "EUR",
+                                                                        "maturity_date": "2027-06-01", "terms": {"pair": "EURUSD"}}}, headers=auth_a)
+    assert r.status_code == 422, r.text[:200]
+    # what a trade body may cost is bounded before anything is valued: legs, dates, size
+    many = B.swap(ids["a"], "RC-MANY")
+    many["legs"] = many["legs"] * 20
+    far = B.swap(ids["a"], "RC-FAR")
+    far["maturity_date"] = "9999-12-31"
+    import time
+    for bad, word in ((many, "legs"), (far, "years of today")):
+        for route, body in (("/api/xva/simulate", {"paths": 500, "trade": bad}), ("/api/xva/incremental", {"trade": bad, "n_paths": 300})):
+            _free()
+            t0 = time.time()
+            r = client.post(route, json=body, headers=auth_a)
+            assert r.status_code == 422 and word in r.text and time.time() - t0 < 1.0, (route, word, r.status_code, r.text[:160])
     # what one run may cost is bounded: a very long trade at many paths is told how many fit
     long = B.swap(ids["a"], "RC-LONG")
     for part in (long, *long["legs"]):
@@ -116,6 +141,13 @@ def test_a_cap_is_refused_in_words_and_a_margined_run_takes_the_coupons_out(clie
     sw = B.swap(ids["a"], "RC-SWAP-M")
     open_ = _ticket(client, auth_a, trade=sw)
     vm = _ticket(client, auth_a, trade=sw, csa={"preset": "BILATERAL", "threshold_cp": 0, "mta": 0, "im_exchanged": False})
+    # a margined swaption: after exercise its swap's coupons are payments on the paths where it was exercised, taken
+    # out of the margin period's bridge like a swap's
+    so = B.swaption(ids["a"], "RC-SWO-M")
+    so_open = _ticket(client, auth_a, trade=so)
+    so_vm = _ticket(client, auth_a, trade=so, csa={"preset": "BILATERAL", "threshold_cp": 0, "mta": 0, "im_exchanged": False})
+    assert so_vm["basis"]["options"][0]["vol_used_bp"] > 0, "the vol the option was valued at on the paths, beside the market's"
+    assert max(so_vm["ee"][-8:]) < 0.2 * max(so_open["ee"][-8:]), (max(so_vm["ee"][-8:]), max(so_open["ee"][-8:]))
     # daily margin with a ten-day margin period leaves the move of ten days, not of years
     assert abs(vm["xva"]["cva"]) < 0.3 * abs(open_["xva"]["cva"]) and vm["csa"]["collateralised"] is True
     # the last months hold the last yearly coupon and nothing else to move: with the coupon taken out of the margin
