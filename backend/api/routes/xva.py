@@ -190,6 +190,13 @@ class SimulateRequest(BaseModel):
     im_usd: Optional[float] = Field(default=None, ge=0)
     simm_im_m: Optional[float] = Field(default=None, ge=0)
     direction: str = "PAY"                # PAY or RECEIVE — flips EE/ENE
+    # The trade itself (0.52.0): the booking body the ticket would send (instrument_type, terms, legs), or a stored
+    # trade's id. With either, the paths value THAT trade: its own schedule and frequencies, what is left of its
+    # life, a swaption as an option (ccr/valuation.py, on this run's curve and Hull-White parameters). With
+    # neither, the run is the generic swap of before (notional, maturity_y, fixed_rate, direction), for a tab
+    # opened before this release; its answer says so.
+    trade: Optional[dict] = None
+    trade_id: Optional[str] = None
     # Collateral terms. None → uncollateralised, no IM (MVA = 0).
     #   {"preset": "BILATERAL", "threshold_cp": 5e5, "mta": 1e5, "mpor_days": 10}
     #   {"preset": "ON_CHAIN"}                       # 5bd MPoR, continuous VM
@@ -498,6 +505,68 @@ def get_latest_calibration(
 
 # ── Simulate ──────────────────────────────────────────────────────────────────
 
+RATES_RUN_MAX_WORK = 4_000_000       # months × paths of one rates run that values the trade itself (_trade_paths): 30 years at 10,000 paths fit, 40 do not
+
+
+def _own_trade(body, db: Session, user: dict):
+    """The trade a rates XVA run is asked about, as the credit engine takes it: a stored trade by id (the account's
+    own), or the ticket's booking body. None when the request names neither."""
+    if body.trade_id:
+        from db.models import Trade
+        try:
+            tid = uuid.UUID(str(body.trade_id))
+        except ValueError:
+            raise HTTPException(status_code=422, detail="trade_id must be a UUID")
+        t = db.query(Trade).filter(Trade.id == tid, Trade.user_id == uuid.UUID(user["sub"])).first()
+        if t is None:
+            raise HTTPException(status_code=404, detail="Trade not found")
+        return t
+    if body.trade:
+        return hypothetical_trade(body.trade, None, user["sub"])
+    return None
+
+
+def _trade_paths(trade, db: Session, user: dict, a: float, sigma: float, curve, val_date: date, n_paths: int, seed: int) -> dict:
+    """The trade's own value on Hull-White paths, in its own currency: (paths × months) from the first month after
+    the valuation date, by the credit engine's valuation of the trade's legs on their own dates (ccr/valuation.py:
+    each floating period with its accrued interest, a swaption as an option until its expiry and the swap after),
+    on the run's curve and the run's (a, σ). 422 when the engine cannot value the instrument on paths yet."""
+    from ccr import calibration as C
+    from ccr.simulate import simulate as simulate_factors
+    from ccr.valuation import NettingSet, flows_per_step, netted_paths, years
+    from pnl.market import Market
+    uid = user["sub"]
+    dates = Market.dates(db, uid, upto=val_date)
+    mkt = Market(db, uid, dates[-1]) if dates else None
+    ns = NettingSet(db, user, [trade], val_date, mkt=mkt)
+    if not ns.items:
+        why = "; ".join(str(x.get("reason")) for x in ns.skipped) or "nothing to value"
+        raise HTTPException(status_code=422, detail=(
+            f"XVA is not available for this trade yet: the exposure engine does not value it on its paths ({why})."))
+    it = ns.items[0]
+    ccy = it["ccy"]
+    # what one run may cost: the trade is valued on every path at every monthly date (a 50-year quarterly swap at
+    # 10,000 paths took 6 s when this was written, 17 November 2026); beyond that the answer is how many paths fit
+    if ns.months * n_paths > RATES_RUN_MAX_WORK:
+        fits = max(200, int(RATES_RUN_MAX_WORK / ns.months // 100 * 100))
+        raise HTTPException(status_code=422, detail=f"a trade {ns.months // 12} years long at {n_paths} paths is more than one run takes; {fits} paths fit")
+    key = f"RATES:{C.CURVE_OF.get(ccy, ccy + '_OIS')}"
+    calib = C.Calibration("RISK_NEUTRAL", {key: C.Factor(key, "RATES", a=float(a), sigma=float(sigma), source="the run's Hull-White parameters")},
+                          np.array([[1.0]]), [key], drift_mode="forward")
+    p = simulate_factors(calib, {key: curve}, {}, {}, val_date, ns.months, n_paths, seed=seed)
+    own = {ccy: 1.0}                                           # the trade's own currency: nothing is converted
+    V, _today = netted_paths(ns, p, own, {})
+    fl = flows_per_step(ns, p, own)
+    T = len(p.t) - 1
+    dt = float(p.t[-1]) / T                                    # the grid is monthly by the calendar: the mean step, as the waterfall takes one length
+    p0 = p.p0[key]
+    p0_grid = [float(p0(float(x))) for x in p.t] + [float(p0(float(p.t[-1]) + dt))]
+    return {"paths": V[:, 1:], "v0": float(V[:, 0].mean()), "flows": fl, "T": T, "dt": dt, "p0_grid": p0_grid,
+            "notional": abs(float(trade.notional or 0.0)), "maturity_y": max(years(val_date, it["maturity"]), dt), "currency": ccy,
+            "kind": it["kind"], "instrument": str(trade.instrument_type or "").upper(), "options": ns.options,
+            "grid": [d.isoformat() for d in p.grid[1:]]}
+
+
 @router.post("/simulate")
 def simulate(
     body: SimulateRequest,
@@ -570,42 +639,52 @@ def simulate(
             return 1.0
         return mkt_curve.df(val_date + timedelta(days=int(round(t * 365.0))))
 
-    # P(0, t) and the instantaneous forward f(0, t) on the simulation grid.
-    if mkt_curve is not None:
+    own = _own_trade(body, db, user)
+    paid = None
+    maturity_y = body.maturity_y
+    curve_source = "bootstrapped" if (body.curves and body.curves[0].quotes) else "db-snapshot"
+    if own is not None:
+        # The trade itself on the paths (0.52.0). Until then every rates ticket ran the generic swap below: a swap
+        # whose two legs settle every month, of the ticket's notional, coupon and original tenor. A yearly swap's
+        # last year of exposure, a trade's remaining life, and a swaption (whose fields this route never read: its
+        # figures were a swap's) were not in it. Found reconciling the XVA runs, 17 November 2026.
+        tp = _trade_paths(own, db, user, a, sigma, mkt_curve, val_date, n_paths, int(body.seed))
+        paths, T, DT, p0_grid, N, maturity_y = tp["paths"], tp["T"], tp["dt"], tp["p0_grid"], tp["notional"], tp["maturity_y"]
+        paid = -np.cumsum(tp["flows"], axis=1)[:, 1:]          # the waterfall's `settled`: the payments' jumps, sign turned
+        anchor_v0 = tp["v0"]
+        # the pricer's value and the paths' own value at the start are two engines' figures for one trade: both are
+        # reported, and the paths are not moved to meet the pricer (the exposure is the paths' own)
+        anchor_delta = (body.npv - anchor_v0) if body.npv is not None else 0.0
+        basis = {"kind": "TRADE", "instrument": tp["instrument"], "valued_as": tp["kind"], "currency": tp["currency"], "options": tp["options"],
+                 "grid": "monthly from the valuation date", "first_date": tp["grid"][0] if tp["grid"] else None, "last_date": tp["grid"][-1] if tp["grid"] else None,
+                 "note": None}
+    else:
+        # P(0, t) and the instantaneous forward f(0, t) on the simulation grid.
         p0_grid = [_p0(k * DT) for k in range(T + 2)]
         f0_grid = []
         for k in range(T + 1):
             a_df, b_df = p0_grid[k], p0_grid[k + 1]
             f0_grid.append(-math.log(b_df / a_df) / DT
                            if (a_df > 0 and b_df > 0) else theta)
-        curve_source = "bootstrapped" if (body.curves and body.curves[0].quotes) else "db-snapshot"
 
-    # ── Monte Carlo (pricing/hw1f_mc.py: the exact-fit Hull-White step and the bond reconstitution) ──
-    sim = simulate_swap_paths(a, sigma, p0_grid, f0_grid, T, DT, N, K, n_paths, direction="RECEIVE", rng=rng)
-    paths, ann_mean = sim.paths, sim.ann_mean
-    # ── Exposure profiles ────────────────────────────────────────────────────
-    # `paths` above is the RECEIVER value: K·A − (1 − DF), i.e. receive fixed.
-    # The PAY FIXED trade is its mirror, so the payer is what needs flipping.
-    # (This previously flipped on RECEIVE, which gave every pay-fixed swap the
-    # receiver's exposure profile and therefore swapped CVA with DVA.)
-    if body.direction.upper() == "PAY":
-        paths = -paths
-
-    # ── Anchor the profile to the pricer's TV ────────────────────────────────
-    # The MC runs off a flat curve at theta, so its t=0 value is the ATM value
-    # of a swap struck at `fixed_rate`. The real trade is generally away from
-    # that (on 2026-08-12: TV +$212k = 46.6bp of moneyness), and an exposure
-    # profile that ignores it under-states EE for an ITM trade. A rate-level
-    # offset is worth Δr × annuity × N, so we re-strike the simulated swap by
-    # the offset implied by the pricer's TV — the shift decays with the
-    # annuity and vanishes at maturity, exactly as the real moneyness does.
-    # (Deeper fix: run the MC off the bootstrapped curve rather than flat theta.)
-    anchor_v0 = float(np.mean(paths[:, 0])) if T > 0 else 0.0
-    anchor_delta = 0.0
-    if body.npv is not None and ann_mean[0] > 0:
-        anchor_delta = body.npv - anchor_v0
-        for i in range(T):
-            paths[:, i] += anchor_delta * (ann_mean[i] / ann_mean[0])
+        # ── Monte Carlo (pricing/hw1f_mc.py: the exact-fit Hull-White step and the bond reconstitution) ──
+        sim = simulate_swap_paths(a, sigma, p0_grid, f0_grid, T, DT, N, K, n_paths, direction="RECEIVE", rng=rng)
+        paths, ann_mean = sim.paths, sim.ann_mean
+        # `paths` above is the RECEIVER value: K·A − (1 − DF), i.e. receive fixed. The PAY FIXED trade is its mirror.
+        if body.direction.upper() == "PAY":
+            paths = -paths
+        # Anchor the profile to the pricer's TV: the generic swap is re-struck by the offset the pricer's value
+        # implies, a shift that decays with the annuity and vanishes at maturity.
+        anchor_v0 = float(np.mean(paths[:, 0])) if T > 0 else 0.0
+        anchor_delta = 0.0
+        if body.npv is not None and ann_mean[0] > 0:
+            anchor_delta = body.npv - anchor_v0
+            for i in range(T):
+                paths[:, i] += anchor_delta * (ann_mean[i] / ann_mean[0])
+        basis = {"kind": "GENERIC_SWAP", "instrument": None, "valued_as": "SWAP", "currency": None, "options": [],
+                 "grid": "monthly", "first_date": None, "last_date": None,
+                 "note": ("These figures are of a generic swap of the ticket's notional, coupon and tenor whose two legs settle every "
+                          "month, not of the trade's own schedule: the request did not carry the trade.")}
 
     # ── Collateral + XVA waterfall (pricing/xva_engine.py) ───────────────────
     try:
@@ -614,7 +693,7 @@ def simulate(
         raise HTTPException(status_code=422, detail=f"csa: {e}")
     csa = _with_collateral(db, user["sub"], csa, body.collateral)
 
-    v0 = body.npv if body.npv is not None else anchor_v0
+    v0 = anchor_v0 if own is not None else (body.npv if body.npv is not None else anchor_v0)
     # the trade's fees still to come (pricing/fees.py): on every path the fees dated after each date, on the flat
     # curve the simulation runs off; a fee is not bridged, so one paid inside a margin period is read as paid evenly
     fee_meta = None
@@ -628,7 +707,7 @@ def simulate(
     wf = run_waterfall(
         paths, v0, p0_grid,
         WaterfallParams(
-            notional=N, maturity_y=body.maturity_y, dt=DT, theta=theta,
+            notional=N, maturity_y=maturity_y, dt=DT, theta=theta,
             lgd=body.lgd, own_lgd=body.own_lgd,
             cp_cds_bp=body.cp_cds_bp, own_cds_bp=body.own_cds_bp,
             cp_cds_curve=body.cp_cds_curve, own_cds_curve=body.own_cds_curve,
@@ -638,6 +717,9 @@ def simulate(
             im_amount=im_amount_of(body),
         ),
         csa,
+        # a margined run draws the value a margin period back with the trade's coupons taken out: a coupon is not a
+        # market move over the margin period (ccr/exposure.paid_by, 0.51.0)
+        settled=paid if (paid is not None and csa.collateralised) else None,
     )
     ee, ene, pfe = wf.ee, wf.ene, wf.pfe
     cva, dva, fca, fba_v, kva, mva, colva = wf.cva, wf.dva, wf.fca, wf.fba, wf.kva, wf.mva, wf.colva
@@ -696,6 +778,8 @@ def simulate(
         # another currency is discounted and projected on its own curve and simulated on that USD volatility: said with
         # the figures, not left to be found.
         "vol_basis": _vol_basis(_run_curve_id(body)),
+        # What the paths valued: the trade itself, or the generic swap of a request that did not carry it.
+        "basis": basis,
         "unilateral": unilateral_block(wf),
         "params": {
             "a":        a,

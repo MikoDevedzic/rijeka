@@ -1,7 +1,48 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.33). Commits on `main` are the detail.
+methodology document carries its own version (v1.34). Commits on `main` are the detail.
+
+## 0.52.0 · 17 November 2026
+
+**A rates ticket's XVA is of the trade itself.** The methodology is v1.34. The second finding of putting one trade
+through every XVA run.
+
+- **What was wrong.** The XVA tab of every rates ticket ran a generic swap: the ticket's notional, coupon and
+  original tenor, with both legs settling every month. Three things were not in it. A swap that pays yearly still
+  has a year's net coupon at stake near its end, and the generic swap showed almost none. A stored trade was run
+  at its original tenor, not what is left of it. And a swaption's expiry, tenor and volatility were sent by the
+  tab and not read by the run: its figures were a swap's of expiry plus tenor (on a one-year into five-year payer,
+  a DVA more than three times the option's), while a box on the tab described a two-phase simulation that did not
+  happen.
+- **What it does now.** The tab sends the trade as it would be booked, or a stored trade's id, and the paths value
+  its legs on their own dates: each fixed coupon, each floating period with the interest accrued so far, a
+  swaption as the option to its expiry and the swap after. This is the valuation the counterparty run uses, on
+  the ticket's own curve, Hull-White parameters, spreads and margin terms. The line under the chart says what
+  the paths valued, from the run's own answer; the box is gone.
+- **The ticket and the netting set agree.** For a trade alone in a netting set, on one valuation date, with the
+  same paths and spreads, the two runs are one calculation: within 0.2 % on CVA, DVA, FCA and FBA, within 0.5 %
+  on KVA, and date by date on expected exposure. They stood three to five times apart on a par swap two
+  releases ago.
+- **What moved**, on the booked five-year swap paying 3.75 % with no margin: CVA −2,111 to −2,551, DVA 1,984 to
+  2,448, FCA −1,366 to −1,651, FBA 614 to 758, KVA −5,871 to −5,448. A bought swaption: no exposure against the
+  desk before its expiry, where there was a swap's.
+- **A cap, floor or collar has no XVA yet.** It is not valued on the paths, and the run says so in words where it
+  used to answer with a swap's figures.
+- **Two engines, two figures, both shown.** The paths start at their own value of the trade, which is reported
+  beside the pricer's (68 apart on −122,568 for the booked swap); the paths are not moved to meet the pricer, and
+  the all-in figure is the pricer's value and the adjustments.
+- The counterparty run takes one step length for its monthly grid, the mean one, and the set's longest remaining
+  life for its capital add-on (it took the first month's length and the grid's end): its figures move by a
+  fraction of a per cent.
+
+Not done, and said: a cap, floor or collar on the paths; a swaption's capital add-on is on its whole notional,
+with no adjustment for the option's delta; a Bermudan swaption runs as its European; the replication workbook
+`xva_rates` rebuilds the generic swap, and says so, and the trade's own paths have no workbook; nothing outside
+this code checks a swap's exposure yet (a strip of QuantLib swaptions is next). A request that carries no trade
+(a tab opened before this release) is still answered with the generic swap, and the answer and the tab say so.
+One run is bounded by the trade's length times the paths. The first XVA P&L and counterparty report after this
+release carry these changes as if the market had moved.
 
 ## 0.51.1 · 17 November 2026
 

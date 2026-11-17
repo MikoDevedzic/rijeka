@@ -419,3 +419,14 @@ describe('the XVA tab starts on the counterparty\'s own margin terms', () => {
   })
 })
 
+describe('what a rates run valued (basisLine)', () => {
+  it('names the trade\'s own schedule, an option and its swap, and says nothing for an answer without it', async () => {
+    const { basisLine } = await import('./xva-shared.js')
+    expect(basisLine(null)).toBe('')
+    expect(basisLine({ kind: 'GENERIC_SWAP', note: 'x' })).toBe('')            // the generic run has its own amber line
+    expect(basisLine({ kind: 'TRADE', valued_as: 'SWAP', last_date: '2031-12-17', options: [] })).toBe("the trade's own schedule to 2031-12-17")
+    expect(basisLine({ kind: 'TRADE', valued_as: 'SWAPTION', options: [{ kind: 'PAYER SWAPTION', expiry: '2027-11-02', vol_bp: 94.94, vol_source: 'USD_SWVOL_ATM nearest point' }] }))
+      .toBe('the option to 2027-11-02, then its swap · σ 94.9bp (USD_SWVOL_ATM nearest point)')
+    expect(basisLine({ kind: 'TRADE', valued_as: 'SWAP', options: [{ kind: 'CAP' }] })).toBe("the trade's own schedule, its caps on the paths")
+  })
+})

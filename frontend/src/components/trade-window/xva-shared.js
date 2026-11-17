@@ -548,3 +548,17 @@ export function recordTerms(csa, name) {
     words: `Starts on ${who}'s own terms, from its record: variation margin${im ? ' and initial margin' : ''} (threshold ${n(threshold)}, minimum transfer ${n(mta)}${mpor ? `, margin period ${mpor} business days` : ''}). Press another to see the trade under it.` }
 }
 
+
+
+// What a rates run's paths valued, in a few words, from the answer's `basis` (0.52.0): the trade's own schedule, or
+// an option to its expiry and the swap after, with the vol the option was valued at. '' when the answer says nothing.
+export function basisLine(basis) {
+  if (!basis || basis.kind !== 'TRADE') return ''
+  const opt = Array.isArray(basis.options) && basis.options.length ? basis.options[0] : null
+  if (basis.valued_as === 'SWAPTION' && opt) {
+    const vol = Number.isFinite(Number(opt.vol_bp)) ? ` · σ ${Number(opt.vol_bp).toFixed(1)}bp${opt.vol_source ? ` (${opt.vol_source})` : ''}` : ''
+    return `the option to ${opt.expiry}, then its swap${vol}`
+  }
+  const capped = opt ? `, its ${String(opt.kind || 'option').toLowerCase()}s on the paths` : ''
+  return `the trade's own schedule${basis.last_date ? ` to ${basis.last_date}` : ''}${capped}`
+}

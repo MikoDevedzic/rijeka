@@ -137,7 +137,14 @@ def test_simulation_request_is_bounded():
         SimulateRequest(paths=1)
     with pytest.raises(ValidationError):
         SimulateRequest(maturity_y=0)
-    assert not hasattr(SimulateRequest(), "trade_id")
+    # Since 0.52.0 the run values the trade itself: a stored trade is named by its id and read only among the
+    # account's own (until then the model carried no trade_id, so that an unread field could not be mistaken for one
+    # that scoped the run), and what one run may cost is bounded by the trade's length times the paths.
+    import inspect
+    from api.routes import xva
+    own = inspect.getsource(xva._own_trade)
+    assert "Trade.user_id == uuid.UUID(user[\"sub\"])" in own and "404" in own
+    assert "RATES_RUN_MAX_WORK" in inspect.getsource(xva._trade_paths) and xva.RATES_RUN_MAX_WORK <= 4_000_000
 
 
 def test_expensive_handlers_are_rate_limited():

@@ -16,6 +16,7 @@ import {
 import { fundingBasis,
   INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, fmtMoney, tipAt, spreadCurvePayload, imUsdValue, imUsdProblem, rateBp01, allInRate, recordTerms,
   buildVaRows, withFunding, onChainCompareRows, collateralBody, onChainSaving, useXvaView, runAssumesLine, ratesModelWords, HIDDEN_INPUT_DEFAULTS,
+  basisLine,
 } from '../trade-window/xva-shared'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -168,7 +169,7 @@ const CalibProofPanel = ({ calib }) => {
 }
 
 
-export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, matDate, valDate, curveId, getSession, analytics, parRate: parRateProp, xvaParamsRef, onSimResult, direction, instrumentType, swaptionExpiry, swaptionTenor, swaptionVol, swaptionResult, counterpartyId = null, counterpartyName = null, below = null }) {
+export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, matDate, valDate, curveId, getSession, analytics, parRate: parRateProp, xvaParamsRef, onSimResult, direction, buildTrade = null, tradeId = null, counterpartyId = null, counterpartyName = null, below = null }) {
   // 'simple' shows settlement, SIMULATE and a line on what the run assumes; 'advanced' is the whole tab. Every input's
   // state lives here in both, so hiding an input never changes what SIMULATE sends.
   const [view, setView] = useXvaView()
@@ -305,6 +306,11 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
     // the fees of the ticket (a list, or null while a row is not complete); of a booked trade, the ones it was booked with
     const feeList = fees === undefined ? (Array.isArray(trade?.terms?.fees) ? trade.terms.fees : []) : fees
     if (feeList === null) { setSimErr('A fee on the TRADE tab is not complete: finish or remove it before simulating.'); return }
+    // the ticket's trade as it would be booked: when the ticket cannot build one yet, say so and start nothing
+    let own = null
+    if (!tradeId && typeof buildTrade === 'function') {
+      try { own = buildTrade() } catch (e) { setSimErr(e?.message || 'The ticket is not complete enough to simulate.'); return }
+    }
     setSimulating(true); setSimErr(null)
     try {
       const session = await getSession()
@@ -327,8 +333,6 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
         if (!eff||!mat) return 5
         return (new Date(mat) - new Date(eff)) / (365.25*24*3600*1000)
       })()
-      const EXPIRY_Y = {'1M':1/12,'3M':0.25,'6M':0.5,'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'10Y':10}
-      const TENOR_Y  = {'1Y':1,'2Y':2,'3Y':3,'5Y':5,'7Y':7,'9Y':9,'10Y':10,'15Y':15,'20Y':20,'30Y':30}
       const body = {
         notional: isNaN(notional) ? 10000000 : notional,
         maturity_y: Math.max(0.5, matYears),
@@ -356,16 +360,10 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
         // different market than the TV it is adjusting.
         valuation_date: valDate || undefined,
         curve_id: curveId || 'USD_SOFR',
-        // Swaption-specific
-        ...(instrumentType === 'IR_SWAPTION' ? {
-          instrument_type:   'IR_SWAPTION',
-          swaption_expiry_y: EXPIRY_Y[swaptionExpiry] || 1.0,
-          swaption_tenor_y:  TENOR_Y[swaptionTenor]  || 5.0,
-          swaption_vol_bp:   parseFloat(swaptionVol)  || 84.0,
-          swaption_is_payer: (direction || 'PAY') === 'PAY',
-          maturity_y: (EXPIRY_Y[swaptionExpiry]||1) + (TENOR_Y[swaptionTenor]||5),
-          fixed_rate: swaptionResult?.forward_rate || (isNaN(fixedRate) ? 0.0365 : fixedRate),
-        } : {}),
+        // The trade itself (0.52.0): the paths value its own schedule, what is left of its life, a swaption as an
+        // option. A stored trade by its id; a ticket by the booking body it would send. (The notional, maturity and
+        // coupon above are what an API from before this release reads: a generic swap.)
+        ...(tradeId ? { trade_id: tradeId } : { trade: own }),
       }
       // the trade's fees still to come are part of its value and of its exposure (the ticket's FEES block)
       if (feeList.length) body.fees = feeList
@@ -529,80 +527,23 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
       {/* RIGHT PANEL */}
       <div style={XVA_RIGHT}>
 
-        {/* Swaption 2-phase EE context */}
-        {instrumentType === 'IR_SWAPTION' && (
-          <div style={{flexShrink:0, background:'rgba(143,193,230,0.04)',
-            borderBottom:'1px solid rgba(143,193,230,0.15)', padding:'8px 12px'}}>
-            <div style={{display:'flex', alignItems:'center', gap:'10px',
-              marginBottom:'5px', flexWrap:'wrap'}}>
-              <span style={{fontSize:'0.8rem', fontWeight:700, letterSpacing:'0.10em',
-                color:'var(--blue)', fontFamily:'var(--mono)'}}>
-                SWAPTION XVA — ANDERSEN-PITERBARG 2-PHASE EE
-              </span>
-              {swaptionExpiry && swaptionTenor && (
-                <span style={{fontSize:'0.8rem', padding:'1px 6px', borderRadius:'2px',
-                  background:'rgba(143,193,230,0.1)', border:'1px solid rgba(143,193,230,0.25)',
-                  color:'var(--blue)', fontFamily:'var(--mono)'}}>
-                  {swaptionExpiry}×{swaptionTenor} · {(direction||'PAY')==='PAY'?'Payer':'Receiver'}
-                </span>
-              )}
-              {swaptionVol && (
-                <span style={{fontSize:'0.8rem', color:'var(--text-mute)',
-                  fontFamily:'var(--mono)'}}>
-                  σ_N = {swaptionVol}bp
-                  {swaptionResult?.sabr_vol_bp ? ` (SABR at K=${((swaptionResult.forward_rate||0.036)*100).toFixed(3)}%)` : ' (ATM)'}
-                </span>
-              )}
-            </div>
-            <div style={{display:'grid', gridTemplateColumns:'1fr 1fr',
-              gap:'6px', fontSize:'0.75rem', fontFamily:'var(--mono)'}}>
-              <div style={{background:'rgba(217,178,92,0.04)', border:'1px solid rgba(217,178,92,0.12)',
-                borderRadius:'2px', padding:'6px 8px'}}>
-                <div style={{color:'var(--accent)', fontWeight:700, marginBottom:'3px', fontSize:'0.8rem',
-                  letterSpacing:'0.08em'}}>
-                  PHASE 1 — PRE-EXPIRY (0 → {swaptionExpiry||'T_exp'})
-                </div>
-                <div style={{color:'var(--text-dim)', lineHeight:1.6, fontFamily:'var(--sans)'}}>
-                  Long option → V(t) ≥ 0 always → <strong style={{color:'var(--text-hi)'}}>no negative exposure.</strong>
-                  <br/>
-                  EE(t) = E[N·A(t)·Bachelier(F(t), K, T_exp−t, σ_N)]
-                  <br/>
-                  F(t) from HW1F short rate paths. σ_N from SABR surface at strike K.
-                </div>
-              </div>
-              <div style={{background:'rgba(143,193,230,0.04)', border:'1px solid rgba(143,193,230,0.12)',
-                borderRadius:'2px', padding:'6px 8px'}}>
-                <div style={{color:'var(--blue)', fontWeight:700, marginBottom:'3px', fontSize:'0.8rem',
-                  letterSpacing:'0.08em'}}>
-                  PHASE 2 — POST-EXPIRY ({swaptionExpiry||'T_exp'} → {swaptionExpiry||'T_exp'}+{swaptionTenor||'tenor'})
-                </div>
-                <div style={{color:'var(--text-dim)', lineHeight:1.6, fontFamily:'var(--sans)'}}>
-                  Exercise if F(T_exp) {(direction||'PAY')==='PAY' ? '>' : '<'} K.
-                  <strong style={{color:'var(--text-hi)'}}> Unexercised paths → EE = 0.</strong>
-                  <br/>
-                  EE(t) = E[max(IRS NPV(t), 0) · <strong>1</strong>(F(T_exp){(direction||'PAY')==='PAY'?'>':'<'}K)]
-                  <br/>
-                  CVA substantially lower than equivalent IRS — option caps pre-expiry exposure.
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Exposure chart */}
         <ExposureCanvas result={simResult} height='fill' highlight={highlightCurve} onHighlight={setHighlightCurve}
           style={{flex:'0 0 auto',height:XVA_CHART_HEIGHT,border:'none',borderBottom:'1px solid var(--border)',borderRadius:0}}>
           <RunReadout result={simResult} />
           <ChartReadout result={simResult}
             model={<>HW1F · a={simResult?.params?.a?.toFixed(4)} σ={simResult?.params?.sigma_bp?.toFixed(1)}bp</>}>
-            {simResult?.instrument_type==='IR_SWAPTION' && simResult.swaption && (
-              <span style={{color:'var(--text-mute)', marginLeft:'8px'}}>
-                · 2-phase EE · expiry={simResult.swaption.expiry_y}Y · σ_N={simResult.swaption.vol_bp?.toFixed(1)}bp
-              </span>
+            {/* what the paths valued, from the run's own answer: the trade's schedule, or an option and then its swap */}
+            {basisLine(simResult?.basis) && (
+              <span data-testid="xva-basis" style={{color:'var(--text-mute)', marginLeft:'8px'}}> · {basisLine(simResult.basis)}</span>
             )}
           </ChartReadout>
         </ExposureCanvas>
 
+        {/* a run that did not carry the trade is a generic swap's: said above its figures */}
+        {simResult?.basis?.kind === 'GENERIC_SWAP' && simResult.basis.note && (
+          <div data-testid="xva-basis-generic" style={{flexShrink:0,padding:'6px 12px',fontSize:'12px',lineHeight:1.5,color:'var(--amber)',borderBottom:'1px solid var(--border)'}}>{simResult.basis.note}</div>
+        )}
         {/* a swap in another currency runs on volatility calibrated to USD swaptions: said above its figures */}
         {simResult?.vol_basis?.proxy && (
           <div data-testid="xva-vol-basis" style={{flexShrink:0,padding:'6px 12px',fontSize:'12px',lineHeight:1.5,color:'var(--amber)',borderBottom:'1px solid var(--border)'}}>{simResult.vol_basis.note}</div>

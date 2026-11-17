@@ -100,15 +100,18 @@ def exposures(V: np.ndarray, t: np.ndarray, csa: CSA, seed: int = 11, flows: Opt
 
 
 def cva(V_rn: np.ndarray, t: np.ndarray, p0: list[float], csa: CSA, notional_usd: float, cp_cds_bp: float = 85.0, lgd: float = 0.40,
-        flows: Optional[np.ndarray] = None) -> dict[str, Any]:
-    """The waterfall on the risk-neutral paths. `flows` (flows_per_step on the same paths) is given for a margined
+        flows: Optional[np.ndarray] = None, maturity_y: Optional[float] = None) -> dict[str, Any]:
+    """The waterfall on the risk-neutral paths. The grid is monthly by the calendar and the waterfall takes one step
+    length: the mean one (until 0.52.0 the first month's, 28 to 31 days, which set every later date a little off).
+    `maturity_y` is the set's longest remaining life, for the capital add-on; the grid's end, a month later, when it
+    is not given. `flows` (flows_per_step on the same paths) is given for a margined
     set: the waterfall then draws the value a margin period back with the payments taken out, as exposures() does
     (its `settled`: what has left the set by each date, here the payments' jumps with the sign turned)."""
     n_paths, T1 = V_rn.shape
-    dt = float(t[1] - t[0]) if T1 > 1 else 1 / 12
+    dt = float(t[-1]) / (T1 - 1) if T1 > 1 else 1 / 12
     v0 = float(V_rn[:, 0].mean())
     theta = -math.log(max(p0[-1], 1e-9)) / max(float(t[-1]), 1e-6)
-    params = WaterfallParams(notional=max(notional_usd, 1.0), maturity_y=float(t[-1]), dt=dt, theta=max(theta, 1e-6), cp_cds_bp=cp_cds_bp, lgd=lgd)
+    params = WaterfallParams(notional=max(notional_usd, 1.0), maturity_y=float(maturity_y) if maturity_y else float(t[-1]), dt=dt, theta=max(theta, 1e-6), cp_cds_bp=cp_cds_bp, lgd=lgd)
     paid = paid_by(flows) if csa.collateralised else None
     wf = run_waterfall(V_rn[:, 1:], v0, p0, params, csa, settled=None if paid is None else np.broadcast_to(-paid, V_rn[:, 1:].shape))
     f = lambda x: float(x)

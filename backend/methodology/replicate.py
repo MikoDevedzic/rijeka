@@ -81,7 +81,7 @@ PRODUCTS = [
      "replication": "xlsx"},
     {"id": "xva_rates", "name": "XVA on a swap: Hull-White Monte Carlo, calibration, CSA, waterfall", "group": "Valuation adjustments (XVA)", "section": "9-10",
      "default": "Pay 3.643% on USD 10m for 2y · monthly grid · 200 paths with the engine's own draws (ENGINE) or Excel's (LIVE) · a, σ from the swaption calibration · presets uncollateralised / bilateral 10bd / on-chain 5bd",
-     "formula": "r = x + α(t), x stepped exactly; P(t,T) = A·e^(−B·r); V = (K·annuity − (1 − P))·N; C from V(t−δ) by Brownian bridge; EE/ENE/PFE; CVA, DVA, FCA, FBA, SA-CCR EAD → KVA, IM (the 99th percentile move over the margin period) → MVA; RMSE of the fit and a grid around it",
+     "formula": "the workbook's swap (legs settling monthly; a ticket values the trade's own schedule since 0.52.0, methodology 9): r = x + α(t), x stepped exactly; P(t,T) = A·e^(−B·r); V = (K·annuity − (1 − P))·N; C from V(t−δ) by Brownian bridge; EE/ENE/PFE; CVA, DVA, FCA, FBA, SA-CCR EAD → KVA, IM (the 99th percentile move over the margin period) → MVA; RMSE of the fit and a grid around it",
      "replication": "xlsx"},
     {"id": "xva_fx", "name": "XVA on an FX forward: lognormal forward from the pair's surface, CSA, waterfall", "group": "Valuation adjustments (XVA)", "section": "9-10",
      "default": "Buy EUR 10m six months forward at the fair forward · monthly grid · 200 paths with the engine's own draws (ENGINE) or Excel's (LIVE) · σ from the EURUSD surface at K = F · presets uncollateralised / bilateral 10bd / on-chain 5bd",

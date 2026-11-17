@@ -16,7 +16,6 @@ const XVATab = lazy(() => import('../blotter/XVATab'))
 const getSession = getSessionSafe
 
 export default function XvaPanel({
-  productKey,
   state,
   direction,
   result,
@@ -84,15 +83,12 @@ export default function XvaPanel({
       // Simulation result callback
       onSimResult={onSimResult}
 
-      // Direction + instrument
+      // Direction
       direction={direction}
-      instrumentType={productKey}
 
-      // Swaption context (only relevant for IR_SWAPTION)
-      swaptionExpiry={state.expiry || '1Y'}
-      swaptionTenor={state.tenor || '5Y'}
-      swaptionVol={state.volBp || '86.5'}
-      swaptionResult={productKey === 'IR_SWAPTION' ? result : null}
+      // The trade itself, for the run to value: a stored trade's id, or the ticket's booking body
+      buildTrade={buildTrade}
+      tradeId={tradeId}
       below={<IncrementalXva
         counterpartyId={counterpartyId}
         counterpartyName={counterpartyName}
