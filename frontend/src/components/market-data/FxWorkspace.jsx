@@ -305,7 +305,9 @@ function PairDetail({ p, md, reload, flash, busy, setBusy, bbg }) {
       <DescBox>
         {p.crypto ? 'Forward points in USD per unit (pip 1): the outright at a tenor is spot + points, i.e. the futures or forward price for that expiry.' : `Forward points in pips, Bloomberg convention: the outright at a tenor is spot + points × ${p.pip}.`} The parity column is what {p.crypto ? `USD SOFR and the saved ${p.base} rate imply` : 'the two OIS curves imply'}
         ({p.crypto ? `saved ${p.base} rate ${p.funding_pct ?? 0} %` : p.base_curve_available ? p.base_curve : p.base_fallback} / {p.quote_curve}); the basis is quoted minus parity{p.crypto ? ', the futures basis' : ', the cross-currency basis'}. Forwards are priced
-        <b> {mode === 'MARKET' ? 'off these quoted points' : 'from yields (parity)'}</b> for every pair in this account.
+        <b> {mode === 'MARKET' ? 'off quoted points' : 'from yields (parity)'}</b> for every pair in this account{mode === 'MARKET' ? ' that has points stored' : ''}.
+        {/* this pair with the account on quoted points and none stored: it is priced from yields, and the page says so here too */}
+        {mode === 'MARKET' && !p.forward_curve && <span data-testid="fx-no-points"> This pair has none stored: it is priced {p.crypto ? 'from the carry rate' : 'from yields'} until points are saved.</span>}
         {' '}<button className="btn" style={{ marginLeft: 8 }} disabled={!!busy} onClick={() => setMode(mode === 'MARKET' ? 'IMPLIED' : 'MARKET')}>{mode === 'MARKET' ? 'SWITCH TO IMPLIED FROM YIELDS' : 'SWITCH TO QUOTED POINTS'}</button>
       </DescBox>
       <FxForwardChart p={p} tenors={tenors} pts={pts} off={off} parity={parity} />

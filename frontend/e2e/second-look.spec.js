@@ -216,3 +216,50 @@ test('a new ticket\'s date is the pair\'s own tenor date when the pair changes',
   await expect(win.getByTestId('fx-tenor').locator('option:checked')).toHaveText('3M')
   expectClean(problems)
 })
+
+// Third walk: a EUR swap's PV and IR01 stood under a dollar sign; a swap in a currency with no curve left an empty
+// footer and its reason below the fold.
+test('a rates ticket writes its figures in its own currency, and says in its footer why it could not price', async ({ app, problems }) => {
+  await app.setViewportSize({ width: 1440, height: 900 })
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  await win.getByRole('button', { name: 'RATES', exact: true }).click()
+  await win.locator('select').filter({ has: app.locator('option', { hasText: 'RIJEKA DEMO BANK AG' }) }).first().selectOption({ label: 'RIJEKA DEMO BANK AG' })
+  const ccy = win.getByRole('combobox', { name: /^CCY/ })
+  const footer = win.locator('.tbw-footer-metrics')
+  // dollars first: as it was
+  let priced = app.waitForResponse(r => r.url().endsWith('/price/preview') && r.request().method() === 'POST', { timeout: 60_000 })
+  await win.getByRole('button', { name: '▶ PRICE' }).click()
+  await priced
+  await expect(footer).toContainText('$')
+  // the same swap in EUR: every figure in the footer and under ANALYTICS is in euros
+  await ccy.selectOption('EUR')
+  priced = app.waitForResponse(r => r.url().endsWith('/price/preview') && r.request().method() === 'POST' && r.ok(), { timeout: 60_000 })
+  await win.getByRole('button', { name: '▶ PRICE' }).click()
+  await priced
+  await expect(footer).toContainText('€')
+  await expect(footer, 'no dollar sign on a EUR swap').not.toContainText('$')
+  await win.getByRole('button', { name: 'CASHFLOWS', exact: true }).click()
+  const grid = win.locator('.tbw-metrics-grid')
+  await expect(grid).toContainText('€')
+  await expect(grid, 'no dollar sign under ANALYTICS on a EUR swap').not.toContainText('$')
+  await expect(win.getByTestId('cf-curve-line')).toContainText(/stored curve saved .* valued on/)
+  await app.screenshot({ path: 'e2e/.out/shots/second-look-eur-swap.png' })
+  // the engine refuses (here: answered for it, so the journey does not depend on which curves the stack holds):
+  // the footer says why, in view, instead of standing empty over a reason below the fold
+  await win.getByRole('button', { name: 'TRADE', exact: true }).click()
+  await app.route('**/price/preview', route => route.fulfill({ status: 422, contentType: 'application/json', body: JSON.stringify({ detail: 'no curve is stored for this currency' }) }))
+  const refused = app.waitForResponse(r => r.url().endsWith('/price/preview') && r.status() === 422, { timeout: 60_000 })
+  await win.getByRole('button', { name: '▶ PRICE' }).click()
+  await refused
+  const note = win.getByTestId('tbw-footer-error')
+  await expect(note).toContainText('Not priced:')
+  await expect(note).toContainText('no curve is stored')
+  const box = await note.boundingBox()
+  expect(box.y + box.height, 'the reason is inside the window').toBeLessThanOrEqual(900)
+  await app.screenshot({ path: 'e2e/.out/shots/second-look-not-priced.png' })
+  await app.unroute('**/price/preview')
+  expectClean(problems.filter(p => !/422|404|price\/(preview|par)/.test(String(p))))
+})

@@ -1499,6 +1499,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         onBook={isCurrency ? handleBookCurrency : handleBook}
         booking={booking}
         bookErr={bookErr}
+        priceErr={isCurrency ? '' : error}
         booked={!!bookedTrade}
         bookWord={isCurrency && legsFor && !viewMode && fxLegs.length ? `BOOK ${fxLegs.length + 1} LEGS` : undefined}
         bookDisabled={!viewMode && (!economics.counterpartyId || !economics.ownEntityId)}

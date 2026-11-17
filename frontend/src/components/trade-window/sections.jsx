@@ -378,6 +378,7 @@ export function TradeFooter({
   bookDisabled = false, bookTitle = undefined,         // the window's own reason BOOK cannot be pressed yet (no counterparty chosen)
   stale = false,                                       // a price is owed: these figures are for the terms before the last change
   bookWord = 'BOOK TRADE',                             // a package of legs says how many it books
+  priceErr = '',                                       // why PRICE gave no figures: said here, where it is always in view
 }) {
   const ccy = useContext(TicketCcy)
   const metrics = result ? (descriptor.footer.metrics(result, state) || []).map(m => ({ ...m, value: inCcy(m.value, ccy) })) : []
@@ -386,6 +387,9 @@ export function TradeFooter({
   return (
     <div className="tbw-footer">
       <div className="tbw-footer-metrics">
+        {/* PRICE answered with a reason and no figures (no curve stored for the currency, a rate that did not solve):
+            the reason stood only under ANALYTICS, below the fold of a ticket whose footer was simply empty */}
+        {!result && priceErr && <div data-testid="tbw-footer-error" role="status" style={{ fontSize: 12.5, color: 'var(--amber)', lineHeight: 1.4, maxWidth: 620 }}>Not priced: {priceErr}</div>}
         {metrics.map((m, i) => (
           <div key={labelText(m.label) || i} className="tbw-footer-metric">
             <div className="tbw-lbl" style={{ fontSize: 12, marginBottom: 2 }}><RiskMark label={m.label} />{m.label}</div>
@@ -837,9 +841,15 @@ function SwapCashflowTables({ result, productKey, state }) {
         fontFamily: 'var(--mono)',
         padding: '4px 0',
       }}>
+        {/* which curve, where it came from and of what day, then the day the trade is valued on: the line read
+            "USD_SOFR · db-snapshot · <today>", today being the valuation date, beside a scenario tab that said the
+            curve was saved two weeks before */}
+        <span data-testid="cf-curve-line">
         {CCY_CURVE_MAP[ccy] || 'USD_SOFR'}
-        {result.curve_mode ? ' \u00B7 ' + result.curve_mode : ''}
-        {result.valuation_date ? ' \u00B7 ' + result.valuation_date : ''}
+        {result.curve_mode ? ' \u00B7 ' + (result.curve_mode === 'db-snapshot' ? 'stored curve' : result.curve_mode === 'bootstrapped' ? 'the quotes on this ticket' : result.curve_mode) : ''}
+        {(() => { const c = (result.staleness?.curves || []).find(x => x.curve_id === (CCY_CURVE_MAP[ccy] || 'USD_SOFR')) || (result.staleness?.curves || [])[0]; return c?.snapshot_date ? ' saved ' + c.snapshot_date : '' })()}
+        {result.valuation_date ? ' \u00B7 valued on ' + result.valuation_date : ''}
+        </span>
         {' \u00B7 amber = pay date shifted by calendar'}
       </div>
     </>

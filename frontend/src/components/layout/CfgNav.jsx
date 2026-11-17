@@ -34,13 +34,6 @@ const NAV = [
         ],
       },
       {
-        id: 'fx',
-        label: 'FX',
-        children: [
-          { label: 'FX VOL SURFACE',     path: '/configurations/market-data/fx-vol',        live: false, sprint: '7'  },
-        ],
-      },
-      {
         id: 'credit-md',
         label: 'CREDIT',
         children: [
@@ -51,7 +44,8 @@ const NAV = [
         id: 'crypto-md',
         label: 'FX & DIGITAL ASSETS',
         children: [
-          { label: 'PAIRS · SPOT · FORWARDS',  path: '/configurations/market-data/crypto',  live: true  },
+          // a pair's vol surface is on its page too: the rail listed "FX VOL SURFACE" as on the roadmap while FX options priced off one
+          { label: 'PAIRS · SPOT · FORWARDS · VOL',  path: '/configurations/market-data/crypto',  live: true  },
         ],
       },
       {
