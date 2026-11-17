@@ -191,10 +191,13 @@ export function SpreadCurvesGrid({ spreads, onChange, tip = noop, untip = noop }
 const SWITCH_BOX = { accentColor:'var(--accent)', width:'13px', height:'13px', flexShrink:0, margin:0 }
 
 export function SettlementBlock({ settlement, setSettlement, imExchanged, setImExchanged, compareOnChain, setCompareOnChain,
-                                  fields = [], tip = noop, untip = noop, collateral = null, setCollateral = null, instruments = [], scheduleCollateral = null }) {
+                                  fields = [], tip = noop, untip = noop, collateral = null, setCollateral = null, instruments = [], scheduleCollateral = null,
+                                  fromRecord = null }) {
   return (
     <>
       <SectionHeader>SETTLEMENT & COLLATERAL</SectionHeader>
+      {/* the terms the tab starts on are the counterparty's own, and it says so until another is pressed */}
+      {fromRecord && <div data-testid="xva-terms-from" style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.5, marginBottom: 6 }}>{fromRecord}</div>}
       <div onMouseEnter={e=>tip('settlement',e)} onMouseLeave={untip}
         style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'3px',marginBottom:'6px'}}>
         {SETTLEMENT_PRESETS.map(([k,label,c])=>(

@@ -14,7 +14,7 @@ import {
   VaStrip, OnChainCompareRow, VaFooter, FloatingTip, XvaViewToggle, CounterpartyLine, RunAssumes,
 } from '../trade-window/xva-shared.jsx'
 import {
-  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, fmtMoney, tipAt, spreadCurvePayload, imUsdValue, imUsdProblem, rateBp01, allInRate,
+  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, fmtMoney, tipAt, spreadCurvePayload, imUsdValue, imUsdProblem, rateBp01, allInRate, recordTerms,
   buildVaRows, withFunding, onChainCompareRows, collateralBody, onChainSaving, useXvaView, runAssumesLine, ratesModelWords, HIDDEN_INPUT_DEFAULTS,
 } from '../trade-window/xva-shared'
 
@@ -211,6 +211,9 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
   const [mta, setMta] = useState('')
   const [mporDays, setMporDays] = useState('')
   const [imExchanged, setImExchanged] = useState(false)
+  const chose = useRef(false)                            // a preset has been pressed: the record's terms no longer set it
+  const [fromRecord, setFromRecord] = useState(null)     // the line that says the starting terms are the counterparty's own
+  const choose = (k) => { chose.current = true; setFromRecord(null); setSettlement(k) }
   const [imYieldBp, setImYieldBp] = useState('')
   const [compareOnChain, setCompareOnChain] = useState(true)      // the saving on chain is shown by default
 
@@ -235,6 +238,13 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
         const r = await fetch(API + '/api/collateral/schedule/' + counterpartyId, { headers: { Authorization: 'Bearer ' + (session?.access_token || '') } })
         if (!r.ok) return
         const j = await r.json()
+        // the tab starts on the counterparty's own margin terms, unless a preset has been pressed already
+        const own = recordTerms(j.csa, counterpartyName)
+        if (own && !chose.current) {
+          setSettlement(own.preset); setImExchanged(own.im); setFromRecord(own.words)
+          if (own.threshold > 0) setThresholdCp(String(own.threshold))
+          if (own.mta > 0) setMta(String(own.mta))
+        }
         if (j.schedule) {
           const sc = { posted: j.schedule.posted, received: j.schedule.received, rail: j.schedule.rail }
           setScheduleCollateral(sc)
@@ -446,7 +456,7 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
   )
   const simulateError = simErr && <div style={{fontSize:'0.75rem',color:'var(--red)',marginBottom:'6px'}}>✘ {simErr}</div>
   const settlementBlock = (
-    <SettlementBlock settlement={settlement} setSettlement={setSettlement}
+    <SettlementBlock settlement={settlement} setSettlement={choose} fromRecord={fromRecord}
       imExchanged={imExchanged} setImExchanged={setImExchanged}
       compareOnChain={compareOnChain} setCompareOnChain={setCompareOnChain}
       fields={settlementFields} tip={tip} untip={untip}

@@ -52,6 +52,8 @@
 }
 .ms-greet.ms-behind { z-index: 999; }
 @media (max-width: 599px) { .ms-greet { display: none; } }          /* a window narrowed to a phone's width after the greeting: the card would be most of it */
+/* a ticket is open: it is drawn over the button (trade windows are at 1000), so nothing on a ticket is under it */
+.ms-launcher.under { z-index: 998; }
 .ms-greet-x { position: absolute; top: 4px; right: 4px; z-index: 1; }
 .ms-greet-row {
   display: flex; align-items: baseline; gap: 8px; width: 100%; padding: 8px 36px 8px 14px; background: none; border: none;

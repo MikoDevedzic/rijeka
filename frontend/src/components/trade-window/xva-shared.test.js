@@ -11,7 +11,7 @@ vi.mock('../../lib/session', () => ({ getSessionMaybe: async () => null, getSess
 
 import {
   VA_KEYS, SPREAD_DEFAULTS, defaultSpreads, fmtMoney, fmtDollar, toCurve, flatSpread, spreadCurvePayload, imUsdValue, imUsdProblem, CRYPTO_GROUPS, IM_NOTE, RATES_MVA_NOTE, FX_MVA_NOTE, numOrNull,
-  buildVaRows, withFunding, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, collateralLabel, onChainSaving, rateBp01, allInRate,
+  buildVaRows, withFunding, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, collateralLabel, onChainSaving, rateBp01, allInRate, recordTerms,
   XVA_VIEW_KEY, defaultXvaView, storedXvaView, HIDDEN_INPUT_DEFAULTS, spreadsAreDefault, assumptionsAreDefault,
   ratesModelWords, fxModelWords, runAssumesLine, NO_CALIBRATION_LINE, wrongWayLine, CREDIT_LINKS, regimesWords, regimesParts,
   stepWord, stepUnit, stepsShown,
@@ -391,3 +391,20 @@ describe('the funding adjustments under their names (0.41.0)', () => {
     expect(rows.find(r => r.key === 'fca').value).toBe(-9)
   })
 })
+
+describe('the XVA tab starts on the counterparty\'s own margin terms', () => {
+  it('variation and initial margin on the record: bilateral with IM, and the line says whose terms', () => {
+    const t = recordTerms({ type: 'VM_IM', collateralised: true, im_exchanged: true, threshold: 0, mta: 500000, mpor_days: 10 }, 'RIJEKA DEMO BANK AG')
+    expect(t).toMatchObject({ preset: 'BILATERAL', im: true, threshold: 0, mta: 500000, mpor: 10 })
+    expect(t.words).toBe("Starts on RIJEKA DEMO BANK AG's own terms, from its record: variation margin and initial margin. Press another to see the trade under it.")
+  })
+  it('variation margin alone, and no CSA', () => {
+    expect(recordTerms({ collateralised: true, im_exchanged: false }, 'X')).toMatchObject({ preset: 'BILATERAL', im: false })
+    expect(recordTerms({ collateralised: false }, 'X')).toMatchObject({ preset: 'UNCOLLATERALISED', im: false, words: "Starts on X's own terms: no CSA on its record." })
+  })
+  it('an answer that carries no terms sets nothing', () => {
+    expect(recordTerms(null, 'X')).toBe(null)
+    expect(recordTerms(undefined)).toBe(null)
+  })
+})
+

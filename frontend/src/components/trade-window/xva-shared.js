@@ -521,3 +521,16 @@ export function runAssumesLine({ paths, model, spreads, assumptions }) {
   const last = parts.pop()
   return `${Number(paths).toLocaleString('en-US')} paths on ${parts.join(', ')} and ${last}`
 }
+
+// What the XVA tab starts on: the margin terms the counterparty's own record states (GET /api/collateral/schedule,
+// `csa`), not "no CSA" whatever the record says. -> { preset, im, words } | null when the answer carries none.
+// `words` is the line the tab shows until the user presses another preset.
+export function recordTerms(csa, name) {
+  if (!csa || typeof csa !== 'object') return null
+  const who = name || 'the counterparty'
+  if (!csa.collateralised) return { preset: 'UNCOLLATERALISED', im: false, words: `Starts on ${who}'s own terms: no CSA on its record.` }
+  const im = !!csa.im_exchanged
+  return { preset: 'BILATERAL', im, threshold: Number(csa.threshold) || 0, mta: Number(csa.mta) || 0, mpor: Number(csa.mpor_days) || null,
+    words: `Starts on ${who}'s own terms, from its record: variation margin${im ? ' and initial margin' : ''}. Press another to see the trade under it.` }
+}
+

@@ -92,7 +92,15 @@ test('launch workspace: the ticket has no CAPITAL tab and XVA opens simple, with
   await expect(win.getByTestId('xva-run-assumes')).toContainText('2,000 paths')
   await expect(win.getByText('Counterparty', { exact: true })).toBeVisible()
   await expect(win).toContainText('RIJEKA DEMO BANK AG')
-  await expect(win.getByLabel('VM posted in')).toHaveCount(0)            // NO CSA to start with: nothing is posted
+  // the tab starts on the counterparty's own terms (its record: variation and initial margin), and says so; it
+  // started on NO CSA whatever the record said, three times the charge of the netting set one press lower
+  await expect(win.getByTestId('xva-terms-from')).toContainText("RIJEKA DEMO BANK AG's own terms")
+  await expect(win.getByLabel('VM posted in')).toBeVisible()
+  await expect(win.getByLabel('Initial margin exchanged')).toBeChecked()
+  // another preset pressed is the user's choice: the line goes
+  await win.getByRole('button', { name: 'NO CSA', exact: true }).click()
+  await expect(win.getByTestId('xva-terms-from')).toHaveCount(0)
+  await expect(win.getByLabel('VM posted in')).toHaveCount(0)
   await win.getByRole('button', { name: 'BILATERAL', exact: true }).click()
   await expect(win.getByLabel('VM posted in')).toBeVisible()
   const simple = await simulateWithComparison(app, win, '/api/xva/simulate')

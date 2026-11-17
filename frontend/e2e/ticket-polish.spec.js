@@ -84,6 +84,9 @@ test('XVA: nothing scrolls inside the tab, every assumption is in view, and the 
   await win.getByRole('button', { name: 'XVA', exact: true }).click()
   const show = win.getByRole('button', { name: /SHOW MODEL INPUTS/ })
   if (await show.count()) await show.click()
+  // uncollateralised, so that the run has both a cost and a benefit to colour (the tab starts on the counterparty's
+  // own terms, under which the benefits round to nothing)
+  await win.getByRole('button', { name: 'NO CSA', exact: true }).click()
   await win.getByRole('button', { name: /SIMULATE/ }).click()
   await expect(win.getByTestId('va-on-chain')).toBeVisible({ timeout: 90_000 })
 

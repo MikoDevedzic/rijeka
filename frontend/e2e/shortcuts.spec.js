@@ -119,7 +119,9 @@ test('function keys with two tickets open: the newest, then the one last touched
   await app.keyboard.press('F3')                                         // a second ticket opens over it
   const second = app.locator('.tbw-window').nth(1)
   await expect(second).toBeVisible()
-  expect(await app.evaluate(() => !!document.activeElement?.closest('.tbw-window')), 'the focus is not left in the covered ticket').toBe(false)
+  // the ticket that opened has the keyboard (it takes the focus as it opens); the covered one has let it go
+  expect(await second.evaluate(el => el.contains(document.activeElement)), 'the focus is in the ticket in front').toBe(true)
+  expect(await first.evaluate(el => el.contains(document.activeElement)), 'the focus is not left in the covered ticket').toBe(false)
   // a key now means the ticket in front
   await app.keyboard.press('F5')
   await expect(activeTab(second)).toHaveAttribute('data-tab', 'XVA')

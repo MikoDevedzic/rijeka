@@ -149,6 +149,9 @@ export default function Messenger() {
   // shared one level, and the messenger, drawn later, always won: a ticket opened under an open messenger had its
   // right side covered and could not be brought forward.)
   const [behind, setBehind] = useState(false)
+  // While a ticket is open the button is drawn under it: where a ticket covers that corner (a 1280x720 window), its
+  // BOOK TRADE is not under the button. Where no ticket covers it the button is there and pressed as before.
+  const tickets = useBookingStore(s => s.windows.length) > 0
   useEffect(() => {
     // a ticket that opens comes to the front; with none left there is nothing to stand behind
     const off = useBookingStore.subscribe((now, was) => {
@@ -203,7 +206,7 @@ export default function Messenger() {
       {open && !poppedOut && <MessengerWindow behind={behind} />}
       {greeting && !open && !poppedOut && <MessengerGreeting behind={behind} onEnter={enter} onClose={() => setGreeting(false)} />}
       {!covered && (
-        <button className={`ms-launcher${poppedOut ? ' out' : ''}${alerting ? ' alert' : ''}`} onClick={launch}
+        <button className={`ms-launcher${poppedOut ? ' out' : ''}${alerting ? ' alert' : ''}${tickets ? ' under' : ''}`} onClick={launch}
                 title={poppedOut ? 'Messenger is open in its own window — bring it forward' : 'Messages and Prometheus'}>
           <span className="ms-launcher-star" aria-hidden="true">✦</span><span className="ms-launcher-word">CHAT</span>
           {unread > 0 && <span className="ms-launcher-badge">{badge(unread)}</span>}

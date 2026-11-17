@@ -14,7 +14,7 @@
 // notional, date and strike. A result on screen belongs to the terms it was simulated for;
 // when a new quote lands with other terms it is cleared (fx-requests.js xvaResultMatches).
 // ────────────────────────────────────────────────────────────────────────────────────
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getSessionMaybe } from '../../lib/session'
 import ExposureCanvas from './ExposureCanvas'
 import IncrementalXva from './IncrementalXva'
@@ -27,7 +27,7 @@ import {
 } from './xva-shared.jsx'
 import {
   stepWord, stepUnit, stepsShown,
-  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, FX_MVA_NOTE, fmtMoney, tipAt, numOrNull, spreadCurvePayload, imUsdValue, imUsdProblem, CRYPTO_GROUPS,
+  INP, XVA_ROW, XVA_LEFT, XVA_RIGHT, XVA_BAND, XVA_CHART_HEIGHT, defaultSpreads, FX_MVA_NOTE, fmtMoney, recordTerms, tipAt, numOrNull, spreadCurvePayload, imUsdValue, imUsdProblem, CRYPTO_GROUPS,
   buildVaRows, withFunding, onChainCompareRows, fxCsaBody, quoteNotional, volBadge, collateralBody, onChainSaving, useXvaView, runAssumesLine, fxModelWords, HIDDEN_INPUT_DEFAULTS, CREDIT_LINKS, wrongWayLine, regimesParts,
 } from './xva-shared'
 import { Note } from '../common/Note'
@@ -124,6 +124,9 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   // settlement
   const [settlement, setSettlement] = useState('UNCOLLATERALISED')
   const [imExchanged, setImExchanged] = useState(false)
+  const chose = useRef(false)                            // a preset has been pressed: the record's terms no longer set it
+  const [fromRecord, setFromRecord] = useState(null)     // the line that says the starting terms are the counterparty's own
+  const choose = (k) => { chose.current = true; setFromRecord(null); setSettlement(k) }
   const [compareOnChain, setCompareOnChain] = useState(true)      // the saving on chain is shown by default
 
   // What the margin is held in: the firm's instruments once, the counterparty's schedule when one is selected.
@@ -147,6 +150,11 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
         const r = await fetch(API + '/api/collateral/schedule/' + counterpartyId, { headers: { Authorization: 'Bearer ' + (session?.access_token || '') } })
         if (!r.ok) return
         const j = await r.json()
+        // the tab starts on the counterparty's own margin terms, unless a preset has been pressed already
+        const own = recordTerms(j.csa, counterpartyName)
+        if (own && !chose.current) {
+          setSettlement(own.preset); setImExchanged(own.im); setFromRecord(own.words)
+        }
         if (j.schedule) {
           const sc = { posted: j.schedule.posted, received: j.schedule.received, rail: j.schedule.rail }
           setScheduleCollateral(sc)
@@ -264,7 +272,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   </>)
   const simulateError = err && <div style={{fontSize:'0.75rem',color:'var(--red)',marginBottom:'6px'}}>✘ {err}</div>
   const settlementBlock = (
-    <SettlementBlock settlement={settlement} setSettlement={setSettlement}
+    <SettlementBlock settlement={settlement} setSettlement={choose} fromRecord={fromRecord}
       imExchanged={imExchanged} setImExchanged={setImExchanged}
       compareOnChain={compareOnChain} setCompareOnChain={setCompareOnChain}
       tip={tip} untip={untip}

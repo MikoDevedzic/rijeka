@@ -169,3 +169,29 @@ test('the home\'s snapshot line is whole, old or current: nothing in the strip e
   await app.screenshot({ path: 'e2e/.out/shots/second-look-strip-1280.png', clip: { x: 0, y: 0, width: 1280, height: 120 } })
   expectClean(problems)
 })
+
+// Third walk, 16 November 2026: on a 1280x720 window the round CHAT button stood on the ticket's BOOK TRADE.
+test('on a small window nothing of the messenger stands on a ticket\'s buttons', async ({ app, problems }) => {
+  await app.setViewportSize({ width: 1280, height: 720 })
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  await win.getByRole('button', { name: 'RATES', exact: true }).click()
+  for (const name of [/BOOK TRADE/, /PRICE/, /^CANCEL$/]) {
+    const b = win.locator('.tbw-footer').getByRole('button', { name }).first()
+    await expect(b).toBeVisible()
+    const box = await b.boundingBox()
+    const top = await app.evaluate(([x, y]) => { const el = document.elementFromPoint(x, y); return el?.closest('.ms-launcher') ? 'chat' : el?.closest('.tbw-window') ? 'ticket' : 'other' }, [box.x + box.width / 2, box.y + box.height / 2])
+    expect(top, `what is on top at the middle of ${name}`).toBe('ticket')
+    // and at its right-hand end, where the button used to stand
+    const end = await app.evaluate(([x, y]) => { const el = document.elementFromPoint(x, y); return el?.closest('.ms-launcher') ? 'chat' : el?.closest('.tbw-window') ? 'ticket' : 'other' }, [box.x + box.width - 4, box.y + box.height / 2])
+    expect(end, `what is on top at the end of ${name}`).toBe('ticket')
+  }
+  await app.screenshot({ path: 'e2e/.out/shots/second-look-ticket-1280x720.png' })
+  // with the ticket closed the button is there again, and pressed as before
+  await win.getByTestId('tbw-close').click()
+  await app.locator('.ms-launcher').click()
+  await expect(app.locator('.ms-window')).toBeVisible()
+  expectClean(problems)
+})

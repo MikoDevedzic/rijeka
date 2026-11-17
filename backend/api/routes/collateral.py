@@ -133,8 +133,13 @@ def _schedule_view(db: Session, uid: str, cp, cp_view) -> dict:
     from ccr.exposure import csa_from_counterparty
     sched = store.schedule(db, cp.id)
     mkt, asof = _market(db, uid)
-    regime = regimes.regime_for(db, uid, cp_view, csa_from_counterparty(cp_view), mkt, asof)
+    csa = csa_from_counterparty(cp_view)
+    regime = regimes.regime_for(db, uid, cp_view, csa, mkt, asof)
     return {"counterparty_id": str(cp.id), "counterparty": cp.name, "schedule": sched.to_dict() if sched else None, "history": store.history(db, cp.id),
+            # the margin terms the counterparty's record states, as the credit engine reads them: what a ticket's XVA tab
+            # starts on (it started on no CSA whatever the record said)
+            "csa": {"type": csa.preset, "collateralised": bool(csa.collateralised), "im_exchanged": bool(csa.im_exchanged),
+                    "threshold": float(csa.threshold_cp or 0.0), "mta": float(csa.mta or 0.0), "mpor_days": int(csa.mpor_days)},
             "regime": regime.to_dict(), "explain": regime.explain(), "writable": store.tables_present(db), "asof": asof.isoformat() if asof else None}
 
 
