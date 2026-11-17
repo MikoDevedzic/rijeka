@@ -190,3 +190,29 @@ def test_the_size_limit_counts_the_steps_the_run_takes():
     assert 24 * 3200 * 52 <= CURRENCY_RUN_MAX_WORK < 24 * 3300 * 52
     _run_fits(24, 10000, 1.2)          # beyond a year the steps are monthly, as before: 24 × 10,000 × 15
 
+
+
+def test_under_margin_a_payment_takes_its_collateral_with_it_at_the_steps_start():
+    """A margined set worth 100 on every path, fully collateralised, of which a leg worth 60 is paid on the third
+    date. The payment is not a move: the collateral goes with it, and nothing is owed either way before or after.
+    Until 0.54.0 the step after the payment started with the payment taken out of the value and not out of the
+    collateral: 60 owed by us for half a step, a DVA and a funding benefit on a set that has no exposure (this case
+    gave DVA 0.0024 and FBA 0.0045; a margined calendar spread whose near leg pays 1.7 million, through
+    fx_xva.package_xva at 3,000 paths: DVA 49.33 where it is 0.90, FBA 15.27 where it is 0.28)."""
+    T, dt, n = 4, 1.0 / 52, 50
+    paths = np.tile(np.array([100.0, 100.0, 40.0, 40.0]), (n, 1))
+    settled = np.tile(np.array([0.0, 0.0, 60.0, 60.0]), (n, 1))
+    p0 = [math.exp(-0.04 * k * dt) for k in range(T + 1)]
+    P = WaterfallParams(notional=1e6, maturity_y=T * dt, dt=dt, theta=0.04, ftp_bp=120.0)
+    csa = CSA.from_request({"preset": "BILATERAL", "threshold_cp": 0, "threshold_own": 0, "mta": 0, "im_exchanged": False})
+    whole_a_margin_period_ago = lambda lag, gen, noise: np.full(paths.shape, 100.0)     # the set with what has settled still in it
+    wf = run_waterfall(paths, 100.0, p0, P, csa, average_exposure=True, settled=settled, lag_values=whole_a_margin_period_ago)
+    assert wf.ee == [0.0] * T and wf.ene == [0.0] * T
+    assert (wf.cva, wf.dva, wf.fca, wf.fba) == (0.0, 0.0, 0.0, 0.0)
+    # with a threshold the uncollateralised part is still exposure, and the payment comes out of it, not of the collateral's part
+    csa = CSA.from_request({"preset": "BILATERAL", "threshold_cp": 30, "threshold_own": 0, "mta": 0, "im_exchanged": False})
+    wf = run_waterfall(paths, 100.0, p0, P, csa, average_exposure=True, settled=settled, lag_values=whole_a_margin_period_ago)
+    assert wf.ee == [30.0] * T                                             # 100 less 70 held, then 40 less 10 held
+    q = lambda k: math.exp(-(P.cp_cds_bp / 1e4 / P.lgd) * k * dt)
+    assert wf.cva_unilateral == pytest.approx(-P.lgd * sum(30.0 * (q(i) - q(i + 1)) * p0[i + 1] for i in range(T)), rel=1e-12)
+    assert wf.dva == 0.0

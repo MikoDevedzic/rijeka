@@ -64,7 +64,7 @@ def test_a_swap_on_the_ticket_and_alone_in_a_netting_set_is_one_calculation(clie
 
 def test_a_forwards_capital_charge_in_a_netting_set_is_on_its_own_asset_class(client, auth_a, ids, pairs, empty_cp):
     """Until 0.54.0 the counterparty run charged every set the interest-rate add-on on its gross notional: a EURUSD
-    forward's KVA was −78 where its ticket's was −1,361, and a BTCUSD forward's zero where its ticket's was −1,095
+    forward's KVA was −78 where its ticket's was some −1,400, and a BTCUSD forward's zero where its ticket's was some −1,100
     (found reconciling the XVA runs, 17 November 2026). The set now carries its SA-CCR rows, as the capital report's
     does. The two runs still differ in their grid (the ticket weekly, the set monthly) and in how each draws the
     asset, which is what the tolerances here leave room for; measured at the mend: 1.0 % and 6.8 %."""

@@ -299,3 +299,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   value; and a test of a simulated difference compares the two on the same paths, where the sampling error cancels,
   not each against a threshold (0.53.0: "0.37 %" was one seed of four between −0.41 and +0.04, and the test that the
   old figure was outside the tolerance passed only at the pinned seed).
+- A reading or convention that is right for one product is measured on every product it would reach, against an
+  outside figure, before it is switched for all: each step's average mends a short forward in a set (10 % of CVA)
+  and hurts a swap on a monthly grid (2 %, against ORE). And putting an old branch under a new caller is a test of
+  the old callers: the margined package's phantom amount owed was found the hour the rates runs took its branch.

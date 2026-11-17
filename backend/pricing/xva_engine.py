@@ -412,7 +412,16 @@ def run_waterfall(
         # amount it settled on its date and is gone after, so the step after it must not start with it still owed
         # (Emmy, 12 Nov 2026: half the paid leg would have been charged for one more step).
         if settled is not None and T > 1:
-            start = resid[:, :-1] - (settled[:, 1:] - settled[:, :-1])
+            paid_in = settled[:, 1:] - settled[:, :-1]              # what leaves the set on the step's date
+            if v_lag is not None:
+                # under a margin agreement the collateral goes with the payment: a payment is not a move, so it is
+                # not left standing as collateral (or as a shortfall) for the step. Until 0.54.0 the payment was
+                # taken out of the value and not out of the collateral, which left a phantom exposure of the whole
+                # payment at the step's start (on a margined swap, a coupon: CVA −3.81 became −44.74 the day the
+                # rates runs took this branch, which is how it was found).
+                start = (paths[:, :-1] - paid_in) - collateral_held(v_lag[:, :-1] - paid_in, csa)
+            else:
+                start = resid[:, :-1] - paid_in
             s_pos = np.maximum(start - im_recv[None, :-1], 0.0)
             s_neg = np.minimum(start + im_post[None, :-1], 0.0)
         else:

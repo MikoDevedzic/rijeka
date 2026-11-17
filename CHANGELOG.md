@@ -1,7 +1,39 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.35). Commits on `main` are the detail.
+methodology document carries its own version (v1.36). Commits on `main` are the detail.
+
+## 0.54.0 · 17 November 2026
+
+**Two corrections from putting one trade through every XVA run.** The methodology is v1.36.
+
+- **The counterparty run's capital charge is on each trade's own asset class.** The run behind the counterparty
+  report, the incremental charge on a ticket and the XVA P&L took the interest-rate add-on on the set's gross
+  notional, whatever the set held. A six-month EURUSD forward of 10 million was charged a KVA of −78 in the set
+  where its ticket says some −1,400; a forward on ten bitcoin, nothing where its ticket says some −1,100. The set now
+  carries its SA-CCR rows, the ones the capital report charges on: −1,388 against the ticket's −1,409, and −1,030
+  against −1,109 (one day's market, 4,000 paths on the ticket). A swap
+  alone in a set is unchanged to the cent.
+- **Under a margin agreement a payment takes its collateral with it.** Where the charges are read on a step's
+  average (a currency or digital-asset ticket, a package), a leg that settled was taken out of the value at the
+  step's start and not out of the collateral: the whole payment stood as owed for half a step. On a margined
+  calendar spread whose near leg pays 1.7 million: DVA 49.33 where it is 0.90, FBA 15.27 where it is 0.28; without
+  initial margin, DVA 173.49 where it is 109.83. A single forward or option, and an unmargined package, are
+  unchanged.
+- **Why a forward's ticket and its set differ, measured.** The ticket steps weekly and reads the exposure averaged
+  across each step; the set steps monthly and reads each step's end, so a trade stands in the set until the first
+  monthly date after it has gone. A six-month forward that settles on a monthly date is charged 10.4 % more CVA that
+  way than on a fine grid (the ticket's reading: 0.04 % less), a two-year forward about 1 % more. On the stack's
+  market the set's CVA of a six-month EURUSD forward is 8 % above the ticket's. This is said, not mended: the
+  averaged reading on a monthly grid understates a five-year swap's CVA by 2 % against ORE (a coupon would leave
+  up to a month before it is paid), where the step's end is 0.3 % off.
+
+Not done, and said: a payment carried to its own date inside a step, which would mend the forward without hurting
+the swap; a digital asset is drawn with volatility regimes on its ticket and one lognormal volatility in a set (DVA
+18 % apart on a six-month bitcoin forward); the set's risk weight and hurdle are the firm's settings and the
+engine's defaults, not a ticket's. The pinned book reaches neither change (it holds no counterparty-run charge,
+whose set other tests edit, and no margined package): each has its own test. The first XVA P&L and counterparty
+report after this release carry the KVA change as if the market had moved.
 
 ## 0.53.0 · 17 November 2026
 

@@ -96,8 +96,15 @@ package that has settled is not charged for one more step.
 
 The charge was overstated, not understated. The profiles on the chart (EE, ENE, PFE) are still the values at the
 grid dates. KVA's replacement cost, MVA's margin and ColVA are read at each step's end. A swap's waterfall and
-the credit page's netting-set engine keep monthly steps and the step's end (not measured there), so the
-incremental charge on a ticket (`CHARGE THIS TRADE`) and the ticket's stand-alone figure are on different grids.
+the credit page's netting-set engine keep monthly steps and the step's end, so the incremental charge on a ticket
+(`CHARGE THIS TRADE`) and the ticket's stand-alone figure are on different grids. Measured 17 November 2026: a
+six-month forward that settles on a monthly date is charged 10.4 % more CVA at the monthly step's end than on a fine
+grid (the ticket's weekly average 0.04 % less), a two-year forward about 1 % more; on the stack's market the set's
+CVA of a six-month EURUSD forward is 8 % above the ticket's. The averaged reading is not the mend for a swap on a
+monthly grid (against ORE: −2.0 % on a five-year swap's CVA, where the step's end is −0.3 %): a coupon would leave
+up to a month before it is paid. Carrying each payment to its own date inside the step is the mend; not built.
+The set's KVA is on each trade's own asset class since 0.54.0 (it took the interest-rate add-on on the gross
+notional: −78 against some −1,400 on that forward's ticket; now −1,388 against −1,409).
 Still grid-dependent on a margined ticket: KVA about 4 % below daily steps at six months, MVA 1 % above. The
 replication workbooks run monthly steps (`grid_per_year` on the input) with the averaged charge in their cells;
 that the grids agree is tested on the engine (`tests/test_exposure_grid.py`). The independent quadrature of
@@ -173,7 +180,11 @@ own move at the same percentile (on a six-month forward CVA falls from −71 unc
 so gap risk, jumps, a fatter tail than the model's and a margin call that is not met are not in it; the figure
 says the margin covers the model's move, not that the counterparty risk is that small. A leg of a package that
 settles is a payment, not a move: the value a margin period earlier is read on the set with the settled cash
-still in it (`run_waterfall(settled=)`), so the margin and the collateral do not jump at a settlement. The answer names
+still in it (`run_waterfall(settled=)`), so the margin and the collateral do not jump at a settlement. Since 0.54.0
+the same holds at the start of the step after it: the payment leaves the value and its collateral leaves with it.
+Until then the step started with the payment out of the value and still in the collateral, the whole payment owed
+for half a step (a margined calendar spread whose near leg pays 1.7 million: DVA 49.33 where it is 0.90, FBA 15.27
+where it is 0.28; without initial margin DVA 173 where it is 110). The answer names
 which of the two it used (`capital.im_basis`) and carries the note (`capital.im_note`).
 
 **The capital add-on of a currency or digital-asset ticket (10 November 2026)** is SA-CCR's for its asset class
