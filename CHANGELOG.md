@@ -16,8 +16,9 @@ methodology document carries its own version (v1.31). Commits on `main` are the 
   intensities). The methodology has the derivation.
 - **Why now.** 0.49.0 left one thing said and not mended: the own-credit part of the funding benefit is in DVA,
   weighted by the desk's survival alone, and the basis part is in FBA, weighted by both parties'. The two together
-  stood 4.8 to 4.9 % above the funding spread credited once on a five-year case. With the weight in DVA the two
-  are weighted alike and together are that spread, to one part in ten thousand.
+  stood 4.8 % above the funding spread credited once on a five-year case with flat spreads (5.75 % on the tab's
+  default curves, 13.6 % at ten years). With the weight in DVA the two are weighted alike and together are that
+  spread, to a few parts in ten million flat and in a million on the curves.
 - **What moved.** On the pinned five-year swap with no margin: CVA −2,090.55 to −2,039.04 (2.5 % smaller), DVA
   2,087.70 to 2,011.90 (3.6 % smaller), the total −6,535.51 to −6,559.81. The arithmetic is in
   `GOLDEN_CHANGES.md`: the desk's survival at the middle of the exposure is 0.975, the counterparty's 0.9635.
@@ -25,23 +26,35 @@ methodology document carries its own version (v1.31). Commits on `main` are the 
   effect grows with the length of the trade and with the other party's spread.
 - **Under a wrong-way link the weight is read on the path.** Where a party's default is tied to the asset, its
   survival is read on each path, in its own default probability and in the weight on the other party's. A link on
-  one party therefore moves both figures: the tied party's by the link, the other's a little through the weight.
-  The answer carries both independent figures whenever either party is tied (it carried only the tied party's).
-- **The unilateral figures are kept.** Every XVA answer carries CVA and DVA without the weight (`unilateral.cva`,
+  one party therefore moves both figures: the tied party's by the link, the other's a little through the weight
+  (0.6 % of DVA and 0.3 % of CVA in the two cases the tests pin). A tied party's "if independent" figure is its
+  charge with its own default on the curve and the other party as it is, so the difference shown beside it is
+  that party's link alone, also when both are tied.
+- **The unilateral figures are kept.** The answers of the four XVA routes of a ticket (`/api/xva/simulate`,
+  `/currency`, `/currency-option`, `/currency-package`) carry CVA and DVA without the weight (`unilateral.cva`,
   `unilateral.dva`): what was reported until this version, for a reader who compares with a system that quotes
-  them. The screens show the weighted figures, and the definitions of CVA and DVA on the XVA tab say so.
-- **Checked** by hand; against the exact probability of defaulting first with constant intensities, where the two
-  first-to-default probabilities and the chance both survive sum to one; on each path under a link; and in the
-  CVA and DVA cells of the three replication workbooks, whose formulas were evaluated on the engine's exposures
-  and equal the engine to machine precision (`tests/test_first_to_default.py`).
+  them. The counterparty report and the capital report carry the weighted figures only. The screens show the
+  weighted figures, and the definitions of CVA and DVA on the XVA tab say so.
+- **Checked** against the exact probability of defaulting first with constant intensities and unequal loss
+  rates (one part in ten million at 250 and 120 bp, one in ten thousand with a party at 4,000 bp); by the model
+  validator, who derived CVA and DVA again from the definition on paths of the validator's own, by the exact
+  probability and by simulating the two default times, and DVA plus FBA against the funding spread by quadrature
+  on flat and sloped curves; and in the CVA and DVA cells of the three replication workbooks, whose formulas were
+  evaluated on the engine's exposures and equal the engine to machine precision. Under a link the weight is
+  stated by hand as the engine has it and checked for what must follow from the definition; it has no outside
+  calculation (`tests/test_first_to_default.py`).
 
-Not done, and said: the two defaults have no dependence on each other beyond the market path; a set is closed out
-at its risk-free value; the capital charge for CVA risk is unilateral by rule and does not see the weight; under a
-wrong-way link CVA and DVA read a tied party's survival on the path while the funding weight reads the curves, so
-there the identity holds only on average; KVA and MVA are not weighted by survival; a spread curve is still
-interpolated in a straight line between tenors (decided: left as it is). The first XVA P&L after this release
-compares today's levels with levels stored under the old rule: the change in CVA and DVA appears in that day's
-move as if the market had made it.
+Not done, and said: the two defaults have no dependence on each other beyond the market path, and never come at
+the same instant; a set is closed out at its risk-free value; the weight is read at the default date, so a
+survivor that defaults inside the margin period of a collateralised set is not counted; the capital charge for
+CVA risk is unilateral by rule and does not see the weight; under a wrong-way link on the desk's own default the
+funding weight still reads the curves, so DVA plus FBA is the funding spread credited once only for the
+independent DVA, and the link's effect on DVA stands on top; KVA and MVA are not weighted by survival; a spread
+curve is still interpolated in a straight line between tenors (decided: left as it is). The first XVA P&L after
+this release compares today's levels with levels stored under the old rule: the change in CVA and DVA appears in
+that day's move as if the market had made it. The same holds for anything read against a stored counterparty
+report: a CVA limit's utilisation steps down by the size of the weight (about 2.5 % on a five-year set at the
+default spreads) on the first run after the release.
 
 ## 0.49.0 · 17 November 2026
 

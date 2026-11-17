@@ -148,8 +148,8 @@ def test_with_the_link_off_every_number_is_the_one_before_and_the_independent_fi
     assert linked.cva_independent == pytest.approx(base.cva, rel=1e-12), "what it would be with independence: the run without the link"
     # our own default was left independent: its probability is the run's without the link. DVA itself moves a little,
     # because it counts our default only while the counterparty survives, and that survival is now read on each path
-    assert linked.dva_unilateral == pytest.approx(base.dva_unilateral, rel=1e-12) and linked.dva_independent == pytest.approx(base.dva, rel=1e-12)
-    assert linked.dva != base.dva and linked.dva == pytest.approx(base.dva, rel=0.05)
+    assert linked.dva_unilateral == pytest.approx(base.dva_unilateral, rel=1e-12) and linked.dva_independent is None
+    assert linked.dva != base.dva and linked.dva == pytest.approx(base.dva, rel=0.01)      # measured 0.6 %
     for f in ("fca", "fba", "kva", "mva", "colva"):
         assert getattr(linked, f) == getattr(base, f), "only the credit terms move"
 
@@ -163,8 +163,8 @@ def test_our_own_default_can_be_linked_too_and_it_moves_dva_and_cva_only_through
     assert meta["wwr"]["own_hazard_if_halves"] == 3.0
     # the counterparty's default probability is untouched; CVA counts it while we survive, and we survive more often
     # on the paths where we are owed (the coin has risen, our intensity is lower): a little larger, never by much
-    assert own.cva_unilateral == pytest.approx(base.cva_unilateral, rel=1e-12) and own.cva_independent == pytest.approx(base.cva, rel=1e-12)
-    assert abs(base.cva) < abs(own.cva) < abs(own.cva_unilateral) and own.cva == pytest.approx(base.cva, rel=0.01)
+    assert own.cva_unilateral == pytest.approx(base.cva_unilateral, rel=1e-12) and own.cva_independent is None
+    assert abs(base.cva) < abs(own.cva) < abs(own.cva_unilateral) and own.cva == pytest.approx(base.cva, rel=0.005)      # measured 0.3 %
 
 
 def test_options_and_packages_take_the_link():

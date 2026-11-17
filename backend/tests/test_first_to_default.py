@@ -48,25 +48,31 @@ def test_a_party_that_cannot_default_leaves_the_others_charge_as_it_was():
     assert b.dva == pytest.approx(b.dva_unilateral, rel=1e-9)             # nor can the counterparty
 
 
-def test_the_weight_is_the_probability_of_defaulting_first_and_the_three_outcomes_sum_to_one():
+def test_the_weight_is_the_probability_of_defaulting_first():
     """Against the exact probability, with constant intensities: P(counterparty defaults in the step, before us) =
     Q_cp·Q_own at the step's start × λ_cp / (λ_cp + λ_own) × (1 − exp(−(λ_cp + λ_own)·Δ)). The engine's midpoint rule
-    is that to second order in the step. With an exposure of one on every path, no discounting and LGD of one, CVA
-    and DVA ARE the two first-to-default probabilities, and with the chance both survive they are the whole of it."""
+    is that to second order in the step. With an exposure of one on every path and no discounting, CVA / LGD_cp and
+    DVA / LGD_own ARE the two first-to-default probabilities. The two loss rates differ in half the cases, so a weight
+    built on the wrong party's loss rate (the intensity is spread / LGD) would not pass. Tolerances are a little above
+    what was measured on 17 November 2026: 2e-7, 2e-6, 9e-5 with one party at 4,000 bp, 2e-6 and 7e-6."""
     one = np.ones((10, T))
-    for (cp, own, tol) in ((250.0, 120.0, 2e-5), (1200.0, 900.0, 5e-4), (40.0, 4000.0, 1e-3)):
-        P = WaterfallParams(notional=1e7, maturity_y=T * DT, dt=DT, theta=0.0, cp_cds_bp=cp, own_cds_bp=own, lgd=1.0, own_lgd=1.0)
-        flat = [1.0] * (T + 2)
+    flat = [1.0] * (T + 2)
+    for (cp, own, lgd, own_lgd, tol) in ((250.0, 120.0, 1.0, 1.0, 5e-7), (1200.0, 900.0, 1.0, 1.0, 5e-6), (40.0, 4000.0, 1.0, 1.0, 2e-4),
+                                         (250.0, 120.0, 0.4, 0.7, 5e-6), (1200.0, 900.0, 0.7, 0.4, 2e-5)):
+        P = WaterfallParams(notional=1e7, maturity_y=T * DT, dt=DT, theta=0.0, cp_cds_bp=cp, own_cds_bp=own, lgd=lgd, own_lgd=own_lgd)
         owed = run_waterfall(one, 1.0, flat, P, CSA.uncollateralised())
         owe = run_waterfall(-one, -1.0, flat, P, CSA.uncollateralised())
-        lc, lo = cp / 1e4, own / 1e4
+        lc, lo = cp / 1e4 / lgd, own / 1e4 / own_lgd
         both = math.exp(-(lc + lo) * T * DT)
         exact_c = lc / (lc + lo) * (1.0 - both)
         exact_o = lo / (lc + lo) * (1.0 - both)
-        assert -owed.cva == pytest.approx(exact_c, rel=tol) and owe.dva == pytest.approx(exact_o, rel=tol)
-        assert -owed.cva + owe.dva + both == pytest.approx(1.0, abs=tol), "one of us first, or neither"
+        assert -owed.cva / lgd == pytest.approx(exact_c, rel=tol), (cp, own, lgd, own_lgd)
+        assert owe.dva / own_lgd == pytest.approx(exact_o, rel=tol), (cp, own, lgd, own_lgd)
+        # one of us first, or neither. (For the midpoint rule this sum is an identity of the algebra, so it says the
+        # rule is coherent, not that it is right: the comparison with the exact probabilities above says that.)
+        assert -owed.cva / lgd + owe.dva / own_lgd + both == pytest.approx(1.0, abs=1e-12)
         # without the weight the two default probabilities and joint survival sum to more than one: the overlap
-        assert -owed.cva_unilateral + owe.dva_unilateral + both > 1.0
+        assert -owed.cva_unilateral / lgd + owe.dva_unilateral / own_lgd + both > 1.0
 
 
 def test_dva_and_the_funding_benefit_now_carry_one_weight_and_credit_the_funding_spread_once():
@@ -79,8 +85,8 @@ def test_dva_and_the_funding_benefit_now_carry_one_weight_and_credit_the_funding
     qc = lambda k: math.exp(-(85.0 / 1e4 / P.lgd) * k * DT)
     qo = lambda k: math.exp(-(42.0 / 1e4 / P.own_lgd) * k * DT)
     once = sum(55.0 / 1e4 * ene[i] * 0.5 * (qc(i) * qo(i) + qc(i + 1) * qo(i + 1)) * DT * P0[i + 1] for i in range(T))
-    assert wf.dva + wf.fba == pytest.approx(once, rel=1e-4)
-    assert (wf.dva_unilateral + wf.fba) / once - 1.0 == pytest.approx(0.049, abs=0.01), "what it was: a few per cent over"
+    assert wf.dva + wf.fba == pytest.approx(once, rel=2e-6)              # measured: 3.5e-7
+    assert (wf.dva_unilateral + wf.fba) / once - 1.0 == pytest.approx(0.0483, abs=0.002), "what it was: 4.8 % over"
 
 
 def test_where_a_default_is_linked_to_the_market_the_weight_is_that_partys_survival_on_the_path():
@@ -96,14 +102,55 @@ def test_where_a_default_is_linked_to_the_market_the_weight_is_that_partys_survi
     cva = -P.lgd * sum(float(np.mean(pos[:, i] * (sc[:, i] - sc[:, i + 1]) * 0.5 * (so[:, i] + so[:, i + 1]))) * P0[i + 1] for i in range(T))
     dva = P.own_lgd * sum(float(np.mean(-neg[:, i] * (so[:, i] - so[:, i + 1]) * 0.5 * (sc[:, i] + sc[:, i + 1]))) * P0[i + 1] for i in range(T))
     assert wf.cva == pytest.approx(cva, rel=1e-12) and wf.dva == pytest.approx(dva, rel=1e-12)
-    # the independent figures are the run without the link, weight and all
-    _, plain = _run(paths, cp_cds_bp=250.0, own_cds_bp=120.0)
-    assert wf.cva_independent == pytest.approx(plain.cva, rel=1e-12) and wf.dva_independent == pytest.approx(plain.dva, rel=1e-12)
-    # one party linked: the other's default probability is the curve's, and the weight on it is still read on the path
-    _, one = _run(paths, wrong_way={"x": x, "beta_cp": b_cp, "beta_own": 0.0}, cp_cds_bp=250.0, own_cds_bp=120.0)
+    # a tied party's independent figure: ITS default from the curve, the other party as it is (here, on the path)
+    qc = lambda k: math.exp(-(250.0 / 1e4 / P.lgd) * k * DT)
     qo = lambda k: math.exp(-(120.0 / 1e4 / P.own_lgd) * k * DT)
+    cva_i = -P.lgd * sum(float(np.mean(pos[:, i] * 0.5 * (so[:, i] + so[:, i + 1]))) * (qc(i) - qc(i + 1)) * P0[i + 1] for i in range(T))
+    dva_i = P.own_lgd * sum(float(np.mean(-neg[:, i] * 0.5 * (sc[:, i] + sc[:, i + 1]))) * (qo(i) - qo(i + 1)) * P0[i + 1] for i in range(T))
+    assert wf.cva_independent == pytest.approx(cva_i, rel=1e-12) and wf.dva_independent == pytest.approx(dva_i, rel=1e-12)
+    # one party tied: its independent figure is the run without the link; the other party has none of its own, and
+    # its charge moves only through the weight
+    _, plain = _run(paths, cp_cds_bp=250.0, own_cds_bp=120.0)
+    _, one = _run(paths, wrong_way={"x": x, "beta_cp": b_cp, "beta_own": 0.0}, cp_cds_bp=250.0, own_cds_bp=120.0)
+    assert one.cva_independent == pytest.approx(plain.cva, rel=1e-12) and one.dva_independent is None
     dva1 = P.own_lgd * sum(float(np.mean(-neg[:, i] * 0.5 * (sc[:, i] + sc[:, i + 1]))) * (qo(i) - qo(i + 1)) * P0[i + 1] for i in range(T))
     assert one.dva == pytest.approx(dva1, rel=1e-12) and one.dva_unilateral == pytest.approx(plain.dva_unilateral, rel=1e-12)
+    # and with the exposure read as the mean of each step's two ends (a currency ticket's grid), the same weight
+    Pa = WaterfallParams(notional=1e7, maturity_y=T * DT, dt=DT, theta=0.035, cp_cds_bp=250.0, own_cds_bp=120.0)
+    avg = run_waterfall(paths, 0.0, P0, Pa, CSA.uncollateralised(), wrong_way={"x": x, "beta_cp": b_cp, "beta_own": b_ow}, average_exposure=True)
+    mid = 0.5 * (np.column_stack((np.zeros(len(paths)), pos[:, :-1])) + pos)
+    cva_a = -P.lgd * sum(float(np.mean(mid[:, i] * (sc[:, i] - sc[:, i + 1]) * 0.5 * (so[:, i] + so[:, i + 1]))) * P0[i + 1] for i in range(T))
+    assert avg.cva == pytest.approx(cva_a, rel=1e-12)
+
+
+def test_under_a_link_the_weight_behaves_as_the_definition_says_it_must():
+    """Properties that follow from the definition and are not the code written out again (the model validator,
+    17 November 2026: the by-hand test above restates the engine's own expression)."""
+    paths = _paths(n=4000)
+    rng = np.random.default_rng(4)
+    x = np.cumsum(rng.standard_normal(paths.shape) * 0.6 * math.sqrt(DT), axis=1)
+    kw = dict(cp_cds_bp=250.0, own_cds_bp=120.0)
+    _, plain = _run(paths, **kw)
+    # 1. a market variable that is the same on every path ties nothing: every figure is the run without the link
+    same = np.tile(x[0], (len(paths), 1))
+    _, tied = _run(paths, wrong_way={"x": same, "beta_cp": -1.5, "beta_own": 0.9}, **kw)
+    assert tied.cva == pytest.approx(plain.cva, rel=1e-10) and tied.dva == pytest.approx(plain.dva, rel=1e-10)
+    # 2. an exposure that is the same on every path cannot be the wrong or the right way round: with ONE party tied
+    #    the mean survival is the curve's, so both charges are the plain run's
+    level = np.tile(paths.mean(axis=0) + 50_000.0, (len(paths), 1))
+    _, p2 = _run(level, **kw)
+    for betas in ({"beta_cp": -1.5, "beta_own": 0.0}, {"beta_cp": 0.0, "beta_own": 0.9}):
+        _, t2 = _run(level, wrong_way={"x": x, **betas}, **kw)
+        assert t2.cva == pytest.approx(p2.cva, rel=1e-9) and t2.dva == pytest.approx(p2.dva, rel=1e-9), betas
+    # 3. BOTH tied to the same variable in the same direction, on that level exposure: the two defaults now come
+    #    together more often than independent defaults would (both intensities are high on the same paths), so the
+    #    counterparty is less often the first, and so are we: both charges are smaller than the plain run's.
+    #    In opposite directions they come together less often: both are larger.
+    _, same_way = _run(level, wrong_way={"x": x, "beta_cp": -1.5, "beta_own": -1.5}, **kw)
+    _, opposite = _run(level, wrong_way={"x": x, "beta_cp": -1.5, "beta_own": 1.5}, **kw)
+    assert abs(same_way.cva) < abs(p2.cva) < abs(opposite.cva)
+    # the unweighted figures do not see any of it: a level exposure, each curve repriced on average
+    assert same_way.cva_unilateral == pytest.approx(p2.cva_unilateral, rel=1e-9) and opposite.cva_unilateral == pytest.approx(p2.cva_unilateral, rel=1e-9)
 
 
 def test_the_total_is_the_sum_of_the_weighted_charges():

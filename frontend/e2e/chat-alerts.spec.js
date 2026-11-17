@@ -119,6 +119,10 @@ test('chat: a sent message shows at once, a reply arrives without the live strea
   // the messenger closed: the next message blinks its button, and looking stops the blink
   await win.locator('.ms-titlebar').getByRole('button', { name: '✕' }).click()
   await expect(win).toHaveCount(0)
+  // A fetch that began while the window was open marks the room read when it lands. Sent before that mark, the next
+  // message is read on the server by the time it is counted: the button blinks and has no number (seen three times
+  // on a loaded machine, 17 November 2026). One fetch period lets a mark in flight land first.
+  await app.waitForTimeout(6000)
   await say(request, 'USER.B', room, `again ${Date.now()}`)
   const launcher = app.locator('.ms-launcher')
   await expect(launcher).toHaveClass(/alert/, { timeout: 30_000 })

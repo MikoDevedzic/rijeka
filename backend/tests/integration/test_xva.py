@@ -271,7 +271,8 @@ def test_wrong_way_risk_on_the_three_currency_routes(client, auth_a, ids, pairs)
         assert linked["xva"][k] == plain["xva"][k], k
     # DVA's own default probability is untouched; since 0.50.0 it counts only while the counterparty survives, and that
     # survival is read on each path, so DVA moves a little with the counterparty's link
-    assert linked["unilateral"]["dva"] == plain["unilateral"]["dva"] and linked["wwr"]["dva_independent"] == plain["xva"]["dva"]
+    # (the desk is not tied, so it has no independent figure of its own: the block repeats its DVA)
+    assert linked["unilateral"]["dva"] == plain["unilateral"]["dva"] and linked["wwr"]["dva_independent"] == linked["xva"]["dva"]
     assert linked["xva"]["dva"] == pytest.approx(plain["xva"]["dva"], rel=0.02)
     assert linked["xva"]["xva_total"] == pytest.approx(sum(linked["xva"][k] for k in SEVEN), abs=0.05)
     # an option, and a package
@@ -292,11 +293,11 @@ def test_wrong_way_risk_on_the_three_currency_routes(client, auth_a, ids, pairs)
     alone = client.post("/api/xva/currency", json={**sold, "wwr_multiplier": 1.5}, headers=auth_a)
     assert alone.status_code == 200 and alone.json()["xva"]["cva"] == pytest.approx(1.5 * plain["xva"]["cva"], abs=0.02), "the multiplier alone is as before"
     # our own link moves DVA and the answer carries what it would be without. CVA moves only through the weight (it
-    # counts the counterparty's default while we survive, and our survival is now read on each path): its
-    # independent figure is the plain run's, and without the weight it is the plain run's unilateral figure
+    # counts the counterparty's default while we survive, and our survival is now read on each path): the
+    # counterparty is not tied, so the block repeats its CVA, and without the weight it is the plain run's
     own = client.post("/api/xva/currency", json={**sold, "own_hazard_if_halves": 3.0}, headers=auth_a).json()
     assert own["wwr"]["dva_independent"] == plain["xva"]["dva"] and own["xva"]["dva"] != plain["xva"]["dva"]
-    assert own["wwr"]["cva_independent"] == plain["xva"]["cva"] and own["unilateral"]["cva"] == plain["unilateral"]["cva"]
+    assert own["wwr"]["cva_independent"] == own["xva"]["cva"] and own["unilateral"]["cva"] == plain["unilateral"]["cva"]
     assert own["xva"]["cva"] == pytest.approx(plain["xva"]["cva"], rel=0.02)
     # first to default: every answer carries CVA and DVA without the weight, and the weighted ones are the smaller
     for r_ in (plain, linked, own):

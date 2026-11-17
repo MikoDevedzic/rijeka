@@ -203,8 +203,8 @@ def wwr_of(x: np.ndarray, cp_hazard_if_halves: float, own_hazard_if_halves: floa
 def wwr_meta(wf: WaterfallResult, cp_hazard_if_halves: float, own_hazard_if_halves: float) -> Optional[dict]:
     if wf.cva_independent is None and wf.dva_independent is None:
         return None
-    # with a link on either party both independent figures are reported (0.50.0: a linked party's survival is also the
-    # weight on the other's default, so both charges move); the fallback is for a result built by hand without them
+    # a party that was not linked has no separate independent figure: its charge is on its own curve already. (Since
+    # 0.50.0 that charge still moves a little with the OTHER party's link, through the first-to-default weight.)
     return {"cp_hazard_if_halves": float(cp_hazard_if_halves), "own_hazard_if_halves": float(own_hazard_if_halves),
             "cva_independent": wf.cva_independent if wf.cva_independent is not None else wf.cva,
             "dva_independent": wf.dva_independent if wf.dva_independent is not None else wf.dva,

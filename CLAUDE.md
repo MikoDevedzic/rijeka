@@ -279,3 +279,10 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   a curve is read a new way, look at what the reading does between its tenors and beyond the last one.
 - A sentence that says what a run used is checked against every fallback of that run: the answer named the curve a
   swap ran on while a missing curve was silently replaced by a flat rate.
+- A figure in the documents is one that was measured, and says how: a test's tolerance was written as the agreement
+  (2e-5 where 1e-7 was measured), arithmetic read back from a result was written as its derivation, and a by-hand
+  test that writes the engine's expression again was called a check. A claim about an identity under a branch
+  ("holds only on average") is computed before it is written: it stood 66 % out.
+- When a figure starts to depend on a second input, read every label that compares it with a reference: a tied
+  party's "if independent" figure took out both parties' links once CVA carried the desk's survival, and the
+  screen's wrong-way label was computed from the difference.

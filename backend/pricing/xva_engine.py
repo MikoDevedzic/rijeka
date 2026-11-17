@@ -524,8 +524,6 @@ def run_waterfall(
         # own-credit part of the funding benefit, which is in DVA, was weighted by our survival alone while the
         # basis part, in FBA, was weighted by both parties'.
         mid_cp, mid_ow = 0.5 * (qcp + nqcp), 0.5 * (qow + nqow)
-        cva_ind -= lgd     * ee_c[i]    * dq_cp * mid_ow * disc * wwr
-        dva_ind += own_lgd * (-ene_c[i]) * dq_ow * mid_cp * disc
         if s_cp_path is None and s_ow_path is None:
             cva_uni -= lgd     * ee_c[i]    * dq_cp * disc * wwr
             dva_uni += own_lgd * (-ene_c[i]) * dq_ow * disc
@@ -540,6 +538,14 @@ def run_waterfall(
             dva_uni += own_lgd * float(np.mean(-c_neg[:, i] * d_ow)) * disc
             cva -= lgd     * float(np.mean(c_pos[:, i]  * d_cp * m_ow)) * disc * wwr
             dva += own_lgd * float(np.mean(-c_neg[:, i] * d_ow * m_cp)) * disc
+            # What a tied party's charge would be with ITS default independent of the market and the other party as
+            # it is: its default probability from the curve, the weight still the other's survival (on the path
+            # when the other is tied too). So the difference from the charge is that party's link alone, also when
+            # both are tied. (The independent reviewer, 17 November 2026: with both links off in this figure, the
+            # screen's "if independent" beside a weakly tied counterparty also took out a strongly tied desk's
+            # effect on the weight, and could name the wrong direction.)
+            cva_ind -= lgd     * float(np.mean(c_pos[:, i]  * m_ow)) * dq_cp * disc * wwr
+            dva_ind += own_lgd * float(np.mean(-c_neg[:, i] * m_cp)) * dq_ow * disc
         fca -= ftp_t   * ee_c[i]     * alive * DT * disc
         fba += basis_t * (-ene_c[i]) * alive * DT * disc
 
@@ -615,9 +621,10 @@ def run_waterfall(
         kva_ccr=float(kva_ccr), kva_cva=float(kva_cva), k_cva_0=k_cva_0, rwa_0=rwa_0, addon_0=addon_0, rc_0=rc_0,
         multiplier_0=mult_0, v_mean_0=float(v_mean[0]) if T else 0.0, coll_mean_0=float(coll_mean[0]) if T else 0.0,
         regulatory_margined=bool(reg.sa_ccr_margined),
-        # with a link on either party both charges move (a linked party's survival is also the weight on the other's
-        # default), so both independent figures are reported whenever there is a link at all
-        cva_independent=(float(cva_ind) if (s_cp_path is not None or s_ow_path is not None) else None),
-        dva_independent=(float(dva_ind) if (s_cp_path is not None or s_ow_path is not None) else None),
+        # a party that is not tied has no independent figure of its own: its charge is already on its curve (it
+        # still moves a little with the OTHER party's link, through the weight; the run without any link is that
+        # run, not a figure of this one)
+        cva_independent=(float(cva_ind) if dpd_cp is not None else None),
+        dva_independent=(float(dva_ind) if dpd_ow is not None else None),
         cva_unilateral=float(cva_uni), dva_unilateral=float(dva_uni),
     )
