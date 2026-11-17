@@ -83,6 +83,10 @@ premium line and the notes that say why there is no price. A stored currency tra
 no valuation block (it never had).
 A new ticket opens on a digital-asset forward; the asset classes read CRYPTO, FX, RATES.
 
+**A booked ticket's terms are locked**, in the window it was booked in as in one opened from the blotter: TRADE's
+fields, lists and chips, the fees, and the schedules on DETAILS. The title says TERMS LOCKED and NEW TRADE starts
+another from the same terms. What sets a run and not the trade (the XVA tab's margin terms, a scenario) stays open.
+
 **A ticket can leave the page.** OWN WINDOW on its tab bar, and the green light of its title bar, open it in a
 browser window of its own (`/ticket`), which the ticket fills: it can sit on another screen while the blotter stays
 where it is. A stored trade moves there and leaves the page; its window is named for the trade, so asking again

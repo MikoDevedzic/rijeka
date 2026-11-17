@@ -59,7 +59,7 @@ const S = {
 // typed in, the field holds the typing itself, read by the ticket's one parser (fx-ticket.js parseNumber): grouping
 // commas are understood, a comma used as a decimal ("3,5") is refused and marked, never read as 35. A refused
 // typing changes nothing, and leaving the field puts back the figure that is kept.
-function EditCell({ value, original, onChange, placeholder='', kind='rate', label }) {
+function EditCell({ value, original, onChange, placeholder='', kind='rate', label, locked=false }) {
   const [typing, setTyping] = useState(null)                 // the text being typed, or null at rest
   const changed = original !== undefined && String(value) !== String(original)
   const refused = typing != null && parseNumber(typing, { signed: true }).state === 'invalid'
@@ -69,7 +69,7 @@ function EditCell({ value, original, onChange, placeholder='', kind='rate', labe
     if (p.state === 'ok') onChange(String(p.value))
     else if (p.state === 'empty') onChange('')
   }
-  return <input type='text' inputMode='decimal' aria-label={label} aria-invalid={refused || undefined} placeholder={placeholder}
+  return <input type='text' inputMode='decimal' disabled={locked} aria-label={label} aria-invalid={refused || undefined} placeholder={placeholder}
     title={refused ? 'Not a number as the ticket reads one: digits, one point, commas only between thousands' : undefined}
     style={refused ? { ...S.cellAmber, borderColor:'var(--down)', color:'var(--down)' } : changed ? S.cellAmber : S.cell}
     value={typing != null ? typing : atRest(value, kind)} onFocus={()=>setTyping(String(value ?? ''))} onBlur={()=>setTyping(null)}
@@ -195,6 +195,7 @@ function deriveSchedules(fixedRows, floatRows) {
 }
 
 export default function LegDetailsTab({
+  locked = false,          // a booked trade: every cell and every button that changes a schedule is off; REFRESH and EXPORT stay
   struct, dir, floatDir, ccy, index,
   effDate, matDate, valDate,
   notionalRef, rateRef, spreadRef, parRate,
@@ -349,7 +350,7 @@ export default function LegDetailsTab({
       <div style={S.banner}>
         <span style={S.structLbl}>DERIVED STRUCTURE</span>
         <span style={S.structVal}>{structLabel}</span>
-        <div style={S.zcWrap} onClick={()=>setZcToggle(v=>!v)}>
+        <div style={S.zcWrap} onClick={()=>{ if (!locked) setZcToggle(v=>!v) }}>
           <div style={S.zcBox(zcToggle)}>{zcToggle?'v':''}</div>
           ZERO COUPON
         </div>
@@ -362,7 +363,7 @@ export default function LegDetailsTab({
             {struct === 'BASIS' ? 'FLOAT LEG 1' : 'FIXED LEG'}
             <span style={S.badge(dir==='PAY')}>{struct === 'BASIS' ? (dir==='PAY'?'PAY LEG 1':'RECEIVE LEG 1') : (dir==='PAY'?'PAY FIXED':'RECEIVE FIXED')}</span>
             {hasFixedOverrides && (
-              <button className="rj-press" onClick={resetFixed} style={{marginLeft:'auto', fontSize:'12px', color:C.amber, background:'rgba(233,151,90,0.06)', border:'1px solid rgba(233,151,90,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em'}}>
+              <button className="rj-press" disabled={locked} onClick={resetFixed} style={{marginLeft:'auto', fontSize:'12px', color:C.amber, background:'rgba(233,151,90,0.06)', border:'1px solid rgba(233,151,90,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em'}}>
                 RESET TO PAR
               </button>
             )}
@@ -372,10 +373,10 @@ export default function LegDetailsTab({
           <div style={S.secHint}>Edit COUPON % for step-up or NOTIONAL for amortizing. Amber = overridden. Hit PRICE to reprice.</div>
           <div style={S.toolbar}>
             <button className="rj-btn" style={S.toolBtn()} onClick={forceReload}>REFRESH</button>
-            <button className="rj-btn" style={S.toolBtn()} onClick={handlePasteFixed}>PASTE</button>
+            <button className="rj-btn" style={S.toolBtn()} disabled={locked} onClick={handlePasteFixed}>PASTE</button>
             <button className="rj-press" style={S.toolBtn(C.blue)} onClick={handleExport}>EXPORT XLS</button>
             <input ref={fileInputRef} type='file' accept='.xlsx' style={{display:'none'}} onChange={e=>{handleFileImport(e.target.files[0]);e.target.value=''}} />
-            <button className="rj-press" style={S.toolBtn(C.blue)} onClick={()=>{fileTarget.current='fixed';fileInputRef.current?.click()}}>IMPORT XLS</button>
+            <button className="rj-press" style={S.toolBtn(C.blue)} disabled={locked} onClick={()=>{fileTarget.current='fixed';fileInputRef.current?.click()}}>IMPORT XLS</button>
           </div>
           <div onDragOver={e=>{e.preventDefault();setDropFixed(true)}} onDragLeave={()=>setDropFixed(false)} onDrop={e=>handleDrop(e,false)}>
             {dropFixed ? <div style={S.dropZone(true)}>DROP EXCEL FILE TO IMPORT FIXED LEG SCHEDULE</div> : (
@@ -399,9 +400,9 @@ export default function LegDetailsTab({
                           <td style={S.td}><div className="ldt-ro" style={S.cellRo}>{row.period_start}</div></td>
                           <td style={S.td}><div className="ldt-ro" style={S.cellRo}>{row.period_end}</div></td>
                           <td style={S.td}><div className="ldt-ro" style={S.cellRo}>{row.payment_date}</div></td>
-                          <td style={S.td}><EditCell kind='amount' label={`Fixed leg notional, period ${i+1}`} value={row.notional} original={row.orig_notional} placeholder='10,000,000' onChange={v=>updateFixed(i,'notional',v)}/></td>
-                          <td style={S.td}><EditCell label={`Coupon %, period ${i+1}`} value={row.rate} original={row.orig_rate} placeholder='3.500' onChange={v=>updateFixed(i,'rate',v)}/></td>
-                          <td style={{...S.td,textAlign:'center'}}><button className="ldt-del" style={S.del} onClick={()=>setFixedRows(p=>p.filter((_,j)=>j!==i))}>x</button></td>
+                          <td style={S.td}><EditCell locked={locked} kind='amount' label={`Fixed leg notional, period ${i+1}`} value={row.notional} original={row.orig_notional} placeholder='10,000,000' onChange={v=>updateFixed(i,'notional',v)}/></td>
+                          <td style={S.td}><EditCell locked={locked} label={`Coupon %, period ${i+1}`} value={row.rate} original={row.orig_rate} placeholder='3.500' onChange={v=>updateFixed(i,'rate',v)}/></td>
+                          <td style={{...S.td,textAlign:'center'}}><button className="ldt-del" style={S.del} disabled={locked} onClick={()=>setFixedRows(p=>p.filter((_,j)=>j!==i))}>x</button></td>
                         </tr>
                       ))}
                     </tbody>
@@ -421,7 +422,7 @@ export default function LegDetailsTab({
             {struct === 'BASIS' ? 'FLOAT LEG 2' : 'FLOAT LEG'}
             <span style={S.badge(floatDir==='PAY')}>{struct === 'BASIS' ? (dir==='PAY'?'RECEIVE LEG 2':'PAY LEG 2') : (floatDir==='PAY'?'PAY FLOAT':'RECEIVE FLOAT')}</span>
             {hasFloatOverrides && (
-              <button className="rj-press" onClick={resetFloat} style={{marginLeft:'auto', fontSize:'12px', color:C.amber, background:'rgba(233,151,90,0.06)', border:'1px solid rgba(233,151,90,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em'}}>
+              <button className="rj-press" disabled={locked} onClick={resetFloat} style={{marginLeft:'auto', fontSize:'12px', color:C.amber, background:'rgba(233,151,90,0.06)', border:'1px solid rgba(233,151,90,0.3)', borderRadius:'2px', padding:'2px 8px', cursor:'pointer', fontFamily:'var(--sans)', letterSpacing:'0.04em'}}>
                 RESET TO PAR
               </button>
             )}
@@ -433,7 +434,7 @@ export default function LegDetailsTab({
             <div style={{display:'flex', alignItems:'center', gap:'8px', margin:'4px 0 6px 0', fontSize:'12px', letterSpacing:'0.07em', color:C.muted}}>
               <span>OPTION DIRECTION:</span>
               <button className="rj-press"
-                onClick={()=>setCapFloorDirection('BUY')}
+                disabled={locked} onClick={()=>setCapFloorDirection('BUY')}
                 style={{
                   ...S.toolBtn(capFloorDirection==='BUY' ? C.accent : null),
                   opacity: capFloorDirection==='BUY' ? 1 : 0.5,
@@ -441,7 +442,7 @@ export default function LegDetailsTab({
                 }}
               >BUY</button>
               <button className="rj-press"
-                onClick={()=>setCapFloorDirection('SELL')}
+                disabled={locked} onClick={()=>setCapFloorDirection('SELL')}
                 style={{
                   ...S.toolBtn(capFloorDirection==='SELL' ? C.red : null),
                   opacity: capFloorDirection==='SELL' ? 1 : 0.5,
@@ -457,9 +458,9 @@ export default function LegDetailsTab({
           )}
           <div style={S.toolbar}>
             <button className="rj-btn" style={S.toolBtn()} onClick={forceReload}>REFRESH</button>
-            <button className="rj-btn" style={S.toolBtn()} onClick={handlePasteFloat}>PASTE</button>
+            <button className="rj-btn" style={S.toolBtn()} disabled={locked} onClick={handlePasteFloat}>PASTE</button>
             <button className="rj-press" style={S.toolBtn(C.blue)} onClick={handleExport}>EXPORT XLS</button>
-            <button className="rj-press" style={S.toolBtn(C.blue)} onClick={()=>{fileTarget.current='float';fileInputRef.current?.click()}}>IMPORT XLS</button>
+            <button className="rj-press" style={S.toolBtn(C.blue)} disabled={locked} onClick={()=>{fileTarget.current='float';fileInputRef.current?.click()}}>IMPORT XLS</button>
           </div>
           <div onDragOver={e=>{e.preventDefault();setDropFloat(true)}} onDragLeave={()=>setDropFloat(false)} onDrop={e=>handleDrop(e,true)}>
             {dropFloat ? <div style={S.dropZone(true)}>DROP EXCEL FILE TO IMPORT FLOAT LEG SCHEDULE</div> : (
@@ -484,9 +485,9 @@ export default function LegDetailsTab({
                           <td style={S.td}><div className="ldt-ro" style={S.cellRo}>{row.period_start}</div></td>
                           <td style={S.td}><div className="ldt-ro" style={S.cellRo}>{row.period_end}</div></td>
                           <td style={S.td}><div className="ldt-ro" style={S.cellRo}>{row.payment_date}</div></td>
-                          <td style={S.td}><EditCell kind='amount' label={`Float leg notional, period ${i+1}`} value={row.notional} original={row.orig_notional} placeholder='10,000,000' onChange={v=>updateFloat(i,'notional',v)}/></td>
+                          <td style={S.td}><EditCell locked={locked} kind='amount' label={`Float leg notional, period ${i+1}`} value={row.notional} original={row.orig_notional} placeholder='10,000,000' onChange={v=>updateFloat(i,'notional',v)}/></td>
                           <td style={S.td}><div className="ldt-ro" style={S.cellRo}>{index}</div></td>
-                          <td style={S.td}><EditCell label={`Spread bp, period ${i+1}`} value={row.spread_bps} original={row.orig_spread_bps} placeholder='0' onChange={v=>updateFloat(i,'spread_bps',v)}/></td>
+                          <td style={S.td}><EditCell locked={locked} label={`Spread bp, period ${i+1}`} value={row.spread_bps} original={row.orig_spread_bps} placeholder='0' onChange={v=>updateFloat(i,'spread_bps',v)}/></td>
                           {isEmbedded && (
                             <td style={S.td}>
                               <input
@@ -494,11 +495,11 @@ export default function LegDetailsTab({
                                 placeholder={isCapped ? 'cap K %' : 'flr K %'}
                                 style={{...S.cell, color:C.amber, borderColor:'rgba(233,151,90,0.4)'}}
                                 value={strikeForRow(row.period_start)}
-                                onChange={e=>updateStrikeForRow(row.period_start, e.target.value)}
+                                disabled={locked} onChange={e=>updateStrikeForRow(row.period_start, e.target.value)}
                               />
                             </td>
                           )}
-                          <td style={{...S.td,textAlign:'center'}}><button className="ldt-del" style={S.del} onClick={()=>setFloatRows(p=>p.filter((_,j)=>j!==i))}>x</button></td>
+                          <td style={{...S.td,textAlign:'center'}}><button className="ldt-del" style={S.del} disabled={locked} onClick={()=>setFloatRows(p=>p.filter((_,j)=>j!==i))}>x</button></td>
                         </tr>
                       ))}
                     </tbody>
@@ -538,27 +539,27 @@ export default function LegDetailsTab({
                     <>
                       <div style={{background:'var(--bg)',padding:'3px 6px'}}>
                         <input type='date' value={row.date}
-                          onChange={e=>setFeeSchedule(s=>s.map((r,j)=>j===i?{...r,date:e.target.value}:r))}
+                          disabled={locked} onChange={e=>setFeeSchedule(s=>s.map((r,j)=>j===i?{...r,date:e.target.value}:r))}
                           style={{width:'100%',background:'transparent',border:'1px solid var(--border)',
                             color:'var(--text)',fontFamily:'var(--mono)',fontSize:'0.8125rem',
                             padding:'2px 4px',borderRadius:'2px',outline:'none'}}/>
                       </div>
                       <div style={{background:'var(--bg)',padding:'3px 6px'}}>
                         <input type='text' value={row.amount} placeholder='amount'
-                          onChange={e=>setFeeSchedule(s=>s.map((r,j)=>j===i?{...r,amount:e.target.value}:r))}
+                          disabled={locked} onChange={e=>setFeeSchedule(s=>s.map((r,j)=>j===i?{...r,amount:e.target.value}:r))}
                           style={{width:'100%',background:'transparent',border:'1px solid var(--border)',
                             color:'var(--text)',fontFamily:'var(--mono)',fontSize:'0.8125rem',
                             padding:'2px 4px',borderRadius:'2px',outline:'none'}}/>
                       </div>
                       <div style={{background:'var(--bg)',padding:'5px 8px',fontSize:'0.875rem',color:'var(--text-dim)'}}>{feeAmountType}</div>
                       <div style={{background:'var(--bg)',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                        <button onClick={()=>setFeeSchedule(s=>s.filter((_,j)=>j!==i))}
+                        <button disabled={locked} onClick={()=>setFeeSchedule(s=>s.filter((_,j)=>j!==i))}
                           style={{background:'transparent',border:'none',color:'var(--text-dim)',cursor:'pointer',fontSize:'1rem',lineHeight:1}}>×</button>
                       </div>
                     </>
                   ))}
                   <div style={{gridColumn:'1/-1',background:'var(--panel)',padding:'4px 8px',borderTop:'1px solid var(--border)'}}>
-                    <button onClick={()=>setFeeSchedule(s=>[...(s||[]),{date:'',amount:''}])}
+                    <button disabled={locked} onClick={()=>setFeeSchedule(s=>[...(s||[]),{date:'',amount:''}])}
                       style={{background:'transparent',border:'none',color:'var(--accent)',cursor:'pointer',
                         fontSize:'0.75rem',fontWeight:700,letterSpacing:'0.08em',fontFamily:'var(--mono)',padding:'0'}}>
                       + ADD PAYMENT DATE

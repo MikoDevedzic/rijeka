@@ -23,6 +23,8 @@ import { TicketCcy } from './ticket-ccy'
 import React, { useState, useRef, useEffect, useLayoutEffect, useMemo, useCallback } from 'react'
 import { usePhone, useStackedTables } from '../../lib/phone'
 import { priced } from '../../lib/activity'
+import { markSeen } from '../../lib/seen'
+import { useAuthStore } from '../../store/useAuthStore'
 import { popOutTicket, isSoloTicket } from '../../lib/windows'
 import './styles.css'
 
@@ -504,6 +506,10 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   // Sprint 10 Patch 6 — booking state. In view mode the stored trade is the
   // booked trade: the footer and the CONFIRM tab start in the booked state.
   const [bookedTrade, setBookedTrade] = useState(initialTrade || null)
+  // A booked trade is a record: nothing typed on its ticket changes it, so nothing on its ticket can be typed. That holds
+  // for the window it was booked in as for one opened from the blotter (17 November 2026: a ticket stayed open to
+  // typing after it was booked and confirmed, and what was typed went nowhere). NEW TRADE starts another from these terms.
+  const locked = viewMode || !!bookedTrade
   const [booking,     setBooking]     = useState(false)
   const [bookErr,     setBookErr]     = useState('')
   const [popBlocked,  setPopBlocked]  = useState(false)      // the browser refused the ticket's own window
@@ -528,6 +534,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   // switches. TRADE is always considered visited (it's the default tab
   // and uses the always-mounted display:none pattern from Patch 8).
   const [tabsVisited, setTabsVisited] = useState({ TRADE: true })
+  const account = useAuthStore(s => s.session?.user?.id)
+  useEffect(() => { if (activeTab === 'XVA') markSeen('xva', account) }, [activeTab, account])     // the launch home ticks its XVA step from this
   useEffect(() => {
     if (!tabsVisited[activeTab]) {
       setTabsVisited(v => ({ ...v, [activeTab]: true }))
@@ -1244,7 +1252,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             : viewMode
               ? (bookedTrade.trade_ref || bookedTrade.id) + ' · ' + status
               : bookedTrade
-                ? '✓ BOOKED · ' + (bookedTrade.trade_ref || bookedTrade.id)
+                ? '✓ BOOKED · ' + (bookedTrade.trade_ref || bookedTrade.id) + ' · TERMS LOCKED'
                 : bookErr
                   ? 'ERROR: ' + bookErr
                   : 'NEW TRADE'}
@@ -1292,7 +1300,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       <div style={{ display: activeTab === 'TRADE' ? 'block' : 'none' }}>
         {/* View mode: the whole ticket is read-only — a disabled fieldset
             disables every input, select and chip inside it at once. */}
-        <fieldset className="tbw-fieldset" disabled={viewMode}>
+        <fieldset className="tbw-fieldset" disabled={locked} data-testid="tbw-terms"
+          title={bookedTrade && !viewMode ? 'Booked: the terms are locked. NEW TRADE starts another from these terms.' : undefined}>
         <InstrumentSelector
           assetClasses={[...new Set([...ASSET_ORDER, ...listAssetClasses()])]}
           activeAssetClass={assetClass}
@@ -1331,7 +1340,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
 
         </>)}
         <FeesBlock
-          rows={feeRows} onChange={(next) => { setFeeRows(next); setBookErr('') }} currency={feeCcy} disabled={viewMode}
+          rows={feeRows} onChange={(next) => { setFeeRows(next); setBookErr('') }} currency={feeCcy} disabled={locked}
           npv={isCurrency ? (fxQuote?.npv ?? null) : (result?.npv ?? result?.net_npv ?? null)}
           valuationDate={isCurrency ? (fxQuote?.valuation_date || null) : (state.valDate || null)}
           premium={isCurrency
@@ -1382,6 +1391,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             state={state}
             direction={direction}
             setProductState={setProductState}
+            locked={locked}
           />
         </div>
       )}

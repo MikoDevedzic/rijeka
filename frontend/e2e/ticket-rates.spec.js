@@ -158,6 +158,16 @@ test('rates ticket: price, XVA with the saving on chain, collateral, book, confi
   const booked = app.waitForResponse(r => r.url().includes('/api/book/trade'))
   await win.getByRole('button', { name: /BOOK TRADE/ }).click()
   expect((await booked).status()).toBe(201)
+  // a booked trade is a record: the ticket it was booked in takes no more typing, on TRADE or on DETAILS, and says so
+  const terms = win.getByTestId('tbw-terms')
+  await expect(terms, 'the terms lock when the trade is booked').toHaveJSProperty('disabled', true)
+  await expect(win.locator('.tbw-title')).toContainText('TERMS LOCKED')
+  await app.screenshot({ path: 'e2e/.out/shots/ticket-booked-locked.png' })
+  expect(await terms.locator('input:enabled, select:enabled, button:enabled').count(), 'no field, list or chip of a booked ticket can be changed').toBe(0)
+  await win.getByRole('button', { name: 'DETAILS', exact: true }).click()
+  await expect(win.getByRole('button', { name: 'EXPORT XLS' }).first(), 'a booked schedule can still be taken out').toBeEnabled()
+  expect(await win.locator('input[aria-label^="Coupon %"]:enabled, input[aria-label^="Fixed leg notional"]:enabled').count(), 'a booked schedule is read, not edited').toBe(0)
+  await expect(win.getByRole('button', { name: 'PASTE' }).first()).toBeDisabled()
   await win.getByRole('button', { name: '◆ CONFIRM' }).click()
   await expect(win).toContainText('PENDING')
   const confirmed = app.waitForResponse(r => r.url().includes('/api/chain/confirm/'), { timeout: 60_000 })
@@ -168,6 +178,7 @@ test('rates ticket: price, XVA with the saving on chain, collateral, book, confi
   await expect(win).toContainText('CONFIRMED', { timeout: 60_000 })
   await expect(win).toContainText('TRADE HASH')
   await expect(win).toContainText('demo, not bilateral')
+  await expect(terms, 'and stay locked once it is confirmed').toHaveJSProperty('disabled', true)
   // the certificate: the heading says what the record is (the stack has no chain, and one side's key is Rijeka's),
   // and the seal is drawn from the hash once the tab is looked at again
   await win.getByRole('button', { name: '◆ CONFIRM' }).click()

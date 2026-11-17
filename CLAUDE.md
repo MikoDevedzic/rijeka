@@ -251,3 +251,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   written of a ticket with no trap, and "no payment lag" of a model that passes the lag on.
 - A text that was cut is mended when a journey measures it whole (`scrollWidth` against `clientWidth`), not when
   its words are put in another order: the IPV row's line was reordered, and the ellipsis took the new first part.
+- A rule a screen keeps one way in is checked the other ways in: a ticket opened from the blotter was locked, the
+  same ticket in the window it was booked in was not, and DETAILS was locked in neither.
+- A step shown as to be done has something that can mark it done: two of the launch home's four steps were written
+  `done={false}`.

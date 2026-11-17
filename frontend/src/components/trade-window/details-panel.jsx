@@ -36,6 +36,7 @@ export default function DetailsPanel({
   state,
   direction,
   setProductState,
+  locked = false,          // a booked trade: the schedules are read, not edited
 }) {
   // scheduleRef is a sync handoff point LegDetailsTab writes to on every
   // schedule derivation. The shell doesn't need to read it — the setters
@@ -96,6 +97,7 @@ export default function DetailsPanel({
 
   return (
     <LegDetailsTab
+      locked={locked}
       // Structure & direction
       struct={state.structure || 'VANILLA'}
       dir={direction}

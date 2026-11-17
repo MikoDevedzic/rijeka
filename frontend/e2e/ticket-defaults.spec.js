@@ -252,9 +252,9 @@ test('BOOK pressed straight after a change does not book unseen figures: it repr
 })
 
 // Vera, 2026-11-09: the DETAILS sheet is headed AS BOOKED only while the figures on screen are the ones that were sent.
-// A term changed after the booking, or NEW TRADE, puts it back to AS IT WILL BE BOOKED: the trade in the blotter is
-// not what is on screen any more.
-test('the term sheet says AS BOOKED only for the quote that was booked: a changed term or NEW TRADE takes it back', async ({ app, problems }) => {
+// NEW TRADE puts it back to AS IT WILL BE BOOKED: the trade in the blotter is not what is on screen any more. Until
+// then the booked ticket's terms cannot be typed over (17 November 2026: they could, and what was typed went nowhere).
+test('the term sheet says AS BOOKED for the quote that was booked; its terms are locked, and NEW TRADE takes it back', async ({ app, problems }) => {
   const win = await open(app, 'CRYPTO', /^CRYPTO FORWARD$/i)
   await counterparty(app, win)
   await settled(win)
@@ -275,19 +275,24 @@ test('the term sheet says AS BOOKED only for the quote that was booked: a change
   await expect(will).toHaveCount(0)
   await app.screenshot({ path: 'e2e/.out/shots/ticket-details-as-booked.png' })
 
-  // a term changed after the booking: what is on screen is no longer the trade
+  // the booked ticket's terms take no typing: what is on screen stays the trade
   await tab('TRADE')
-  await win.getByTestId('fx-notional').fill('25')
-  await settled(win)
-  await expect(win.getByTestId('fx-footer-stale')).toHaveCount(0)
+  await expect(win.getByTestId('fx-notional'), 'a booked ticket is not typed over').toBeDisabled()
+  await expect(win.locator('.tbw-title')).toContainText('TERMS LOCKED')
+  expect(await win.getByTestId('tbw-terms').locator('input:enabled, select:enabled, button:enabled').count(), 'no field, list or chip of a booked ticket can be changed').toBe(0)
   await tab('DETAILS')
-  await expect(will, 'a changed term is a proposal again').toBeVisible()
-  await expect(done).toHaveCount(0)
+  await expect(done, 'still the sheet of the trade').toBeVisible()
 
-  // and back to the booked terms is still not the booked quote unless the same figures come back; NEW TRADE clears it either way
+  // NEW TRADE starts another from these terms: a proposal again, and typed as before
   await win.getByRole('button', { name: 'NEW TRADE', exact: true }).click()
   await expect(will, 'a new trade is a proposal').toBeVisible()
   await expect(done).toHaveCount(0)
+  await tab('TRADE')
+  await expect(win.getByTestId('fx-notional'), 'a new ticket is typed as before').toBeEnabled()
+  await win.getByTestId('fx-notional').fill('25')
+  await settled(win)
+  await tab('DETAILS')
+  await expect(will).toBeVisible()
   expectClean(problems)
 })
 

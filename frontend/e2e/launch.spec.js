@@ -64,6 +64,45 @@ test('launch workspace: the home is four next steps and the navigation is the na
   expectClean(problems)
 })
 
+// 17 November 2026: a launch workspace's home read START HERE with two steps that could never be ticked, and showed
+// none of the trades its owner had booked and confirmed.
+test('launch workspace: the home ticks the steps that are done and lists the trades, and a row opens its trade', async ({ app, problems }) => {
+  await onLaunch(app)
+  const win = await openTicket(app)
+  await win.getByRole('button', { name: '▶ PRICE' }).click()
+  await expect(win.getByRole('button', { name: /BOOK TRADE/ })).toBeEnabled({ timeout: 60_000 })
+  const booked = app.waitForResponse(r => r.url().includes('/api/book/trade'))
+  await win.getByRole('button', { name: /BOOK TRADE/ }).click()
+  const trade = (await (await booked).json())
+  const ref = trade.trade?.trade_ref || trade.trade_ref
+  expect(ref, 'the booking answers with the trade').toBeTruthy()
+  await win.getByRole('button', { name: 'XVA', exact: true }).click()            // the home's third step: the XVA tab was opened
+  await app.goto('/command-center')
+  const home = app.getByTestId('launch-home')
+  await expect(home).toBeVisible()
+  const step = text => home.locator('.dh-step', { hasText: text }).locator('.dh-step-n')
+  for (const done of ['Book a trade', 'Price it', 'See the XVA charge']) await expect(step(done), `"${done}" is done`).toHaveClass(/done/)
+  const rows = app.getByTestId('launch-trades').locator('tbody tr')
+  await expect(rows.first(), 'the trade just booked is the first of the list').toContainText(ref)
+  expect(await rows.count()).toBeLessThanOrEqual(5)
+  await expectNoHorizontalOverflow(home, 'launch home with trades')
+  await app.waitForTimeout(900)                                                  // the three counts run up to their figures
+  await app.screenshot({ path: 'e2e/.out/shots/launch-home-trades.png' })
+  // on a phone the list keeps to the screen: the trade, what it is and where it stands
+  await app.setViewportSize({ width: 390, height: 844 })
+  await expectNoHorizontalOverflow(home, 'launch home with trades, on a phone')
+  await expect(rows.first()).toContainText(ref)
+  await app.screenshot({ path: 'e2e/.out/shots/launch-home-trades-phone.png' })
+  await app.setViewportSize({ width: 1440, height: 900 })
+  await rows.first().click()
+  await expect(app).toHaveURL(/\/blotter/)
+  const view = app.locator('.tbw-window')
+  await expect(view.locator('.tbw-title'), 'the row opens its own trade').toContainText(ref, { timeout: 30_000 })
+  await expect(view.getByTestId('tbw-terms')).toHaveJSProperty('disabled', true)
+  await app.unrouteAll({ behavior: 'ignoreErrors' })
+  expectClean(problems)
+})
+
 test('launch workspace: one module switched on keeps the simple home; a member who cannot switch is told who can', async ({ app, problems }) => {
   await onLaunch(app, { canEdit: false, alsoOn: ['PNL'] })
   await app.goto('/command-center')

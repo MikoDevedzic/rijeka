@@ -330,3 +330,8 @@
 .lh-go:hover { filter:brightness(1.12); }
 .lh-more { margin-top:0.6rem; font-size:0.86rem; color:var(--text-dim); text-decoration:none; }
 a.lh-more:hover { color:var(--accent); text-decoration:underline; }
+/* the launch home's trades: the trader's home's table (home/TraderHome.css), the width of the steps above it */
+.lh .lh-trades { align-self:stretch; padding:4px 0 0; }
+.lh-trades .dh-st { font-size:11px; }
+@media (max-width: 640px) { .lh-trades .lh-wide { display:none; } .lh-trades .th-t td.lh-what { white-space:normal; } }
+.lh .lh-trades .th-t td:first-child, .lh .lh-trades .th-t th:first-child { padding-left:0; }

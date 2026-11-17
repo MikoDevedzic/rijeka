@@ -23,6 +23,7 @@ import { chainStatus, useNetwork } from '../lib/chain-status'
 import { networkOf } from '../lib/network'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuthStore } from '../store/useAuthStore'
+import { hasSeen } from '../lib/seen'
 import './CommandCenter.css'
 
 export default function CommandCenter() {
@@ -203,8 +204,10 @@ function DeskHome({ demo, navigate }) {
         <h1 className="lh-h">Book one trade and follow it through</h1>
         <div className="dh-path">
           <Step n="1" done={trades.length > 0} text="Book a trade" onClick={() => navigate('/blotter')} />
-          <Step n="2" done={false} text="Price it" onClick={() => navigate('/blotter')} />
-          <Step n="3" done={false} text="See the XVA charge and what settling on chain saves" onClick={() => navigate('/blotter')} />
+          {/* a trade is booked from a price and no other way, so a booked trade is a priced one; that the XVA tab was
+              opened is this browser's own memory (lib/seen.js), marked by the ticket */}
+          <Step n="2" done={trades.length > 0} text="Price it" onClick={() => navigate('/blotter')} />
+          <Step n="3" done={hasSeen('xva', uid)} text="See the XVA charge and what settling on chain saves" onClick={() => navigate('/blotter')} />
           <Step n="4" done={confirmed > 0} text="Confirm it on chain" onClick={() => navigate('/blotter')} />
         </div>
         <button className="lh-go" data-testid="launch-book" onClick={() => navigate('/blotter')}>BOOK A TRADE</button>
@@ -213,6 +216,27 @@ function DeskHome({ demo, navigate }) {
             <Kpi label="TRADES" value={trades.length} />
             <Kpi label="PENDING" value={pending} tone={pending ? 'amber' : ''} />
             <Kpi label="CONFIRMED" value={confirmed} tone={confirmed ? 'accent' : ''} />
+          </div>
+        )}
+        {/* the trades this workspace has booked, set as the trader's home sets them; a row opens its trade */}
+        {trades.length > 0 && (
+          <div className="th-panel lh-trades" data-testid="launch-trades">
+            <span className="th-k">YOUR TRADES</span>
+            <table className="th-t">
+              <thead><tr><th>TRADE</th><th>WHAT</th><th className="r lh-wide">NOTIONAL</th><th className="r lh-wide">MATURITY</th><th className="r">STATUS</th></tr></thead>
+              <tbody>
+                {trades.slice(0, 5).map(t => (
+                  <tr key={t.id} tabIndex={0} onClick={() => navigate(`/blotter?trade=${t.id}`)} onKeyDown={e => { if (e.key === 'Enter') navigate(`/blotter?trade=${t.id}`) }}>
+                    <td className="fig">{t.trade_ref}</td>
+                    <td className="lh-what">{productLabel(t.instrument_type)}</td>
+                    <td className="fig r lh-wide">{t.notional_ccy} {fmtM(t.notional)}</td>
+                    <td className="fig r lh-wide">{fmtD(t.maturity_date)}</td>
+                    <td className="r"><span className={`dh-st ${String(t.status).toLowerCase()}`}>{t.status}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {trades.length > 5 && <div className="th-note">the latest 5 of {trades.length}; all of them are in the blotter</div>}
           </div>
         )}
         {onRequest.includes('PNL') || onRequest.includes('MARKET_RISK')

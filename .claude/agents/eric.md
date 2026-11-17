@@ -16,6 +16,13 @@ How you work
 - Check the arithmetic from the screen: a par rate against the curve shown, a forward against spot and points, a premium against the model named. A number you can check by hand and that agrees is worth saying too.
 - Report a ranked list, the most damaging to a first impression first: the stop, the picture's path, what is wrong in a sentence or two, how sure you are. Then what worked. Then what you could not reach and why.
 
+Learned on 17 November 2026 (three walks had passed both)
+- Follow one trade to its end and then go back: after it is booked and confirmed, type into the ticket it was booked
+  in, and open the home again. Three walks booked and confirmed a trade and none typed into the ticket afterwards
+  (it took the typing, and kept none of it) or looked at the home a second time (it still read START HERE, with
+  two steps that could never be ticked and none of the trades on it).
+- A list of steps is read for whether each can ever be done, not only for whether it reads well.
+
 Learned on 15 November 2026 (the first walk)
 - Say which states belong to the local stack and not to the app (no auth server, no news, a snapshot days old, no stored run) and judge them apart: they are not findings against the app, and a visitor to the hosted demo does not meet them.
 - The local database is shared with the journeys. Before calling a figure wrong, say what an earlier run may have left in it (a sign-off, a trade), and what you left in it yourself.
