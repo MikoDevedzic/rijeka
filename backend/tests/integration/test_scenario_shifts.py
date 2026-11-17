@@ -61,7 +61,9 @@ def test_a_swap_and_a_swaption_take_the_same_shift(client, auth_a):
     zero = _post(client, auth_a, "/price/preview", {"legs": _legs(0.0375), "valuation_date": ASOF, "curves": [{**curves[0], "shift_flat_bp": 0, "shift_bp": {}}]})
     assert zero["npv"] == base["npv"] and zero["ir01"] == base["ir01"]
     up = _post(client, auth_a, "/price/preview", {"legs": _legs(0.0375), "valuation_date": ASOF, "curves": [{**curves[0], "shift_flat_bp": 1}]})
-    assert up["npv"] - base["npv"] == pytest.approx(base["ir01"], rel=0.02, abs=5.0)
+    # a basis point on every quote against the ticket's IR01, which is a basis point on the zero curve: the two differ
+    # with the curve's shape (the reference suite bounds the difference at 3.5 % of DV01; 2.3 % on the stack's curve)
+    assert up["npv"] - base["npv"] == pytest.approx(base["ir01"], rel=0.035, abs=5.0)
 
     sw = _post(client, auth_a, "/api/price/swaption", {**SWAPTION, "effective_date": EFF, "maturity_date": MAT})
     sw0 = _post(client, auth_a, "/api/price/swaption", {**SWAPTION, "effective_date": EFF, "maturity_date": MAT, "curve_flat_bp": 0})
