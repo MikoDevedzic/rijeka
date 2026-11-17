@@ -1,5 +1,7 @@
 """Counterparty credit: joint simulation under both measures, netting, the CSA on the netted value, limits keys."""
 from datetime import date, timedelta
+import math
+
 import numpy as np
 
 from ccr import calibration as C
@@ -302,3 +304,24 @@ def test_a_coupon_is_not_a_market_move_over_the_margin_period():
     # and an uncollateralised set does not read them
     none = csa_from_counterparty(SimpleNamespace(csa_type="NO_CSA"))
     assert cva(V, p.t, p0, none, 10e6, flows=fl)["cva_usd"] == cva(V, p.t, p0, none, 10e6)["cva_usd"]
+
+
+def test_the_credit_engines_capital_charge_reads_the_sets_own_rows():
+    """ccr.exposure.cva with the set as SA-CCR rows charges KVA on those rows' asset class; without them, the
+    interest-rate add-on on the gross notional (what every set was charged until 0.54.0). A six-month currency
+    forward of 10 million: the FX class's add-on is 4 % of notional, the rates class's a few basis points."""
+    from ccr.exposure import cva
+    from pricing.csa import CSA
+    from pricing.sa_ccr import SaccrTrade
+    rng = np.random.default_rng(4)
+    T = 6
+    t = np.arange(T + 1) / 12.0
+    V = np.column_stack((np.zeros(4000), np.cumsum(rng.standard_normal((4000, T)) * 250_000.0, axis=1)))
+    V[:, -1] = 0.0
+    p0 = [math.exp(-0.035 * x) for x in t] + [math.exp(-0.035 * (t[-1] + 1 / 12))]
+    row = SaccrTrade(asset_class="FX", hedging_set="EURUSD", notional=10_000_000.0, start_y=0.0, end_y=0.5, maturity_y=0.5, delta=1.0)
+    bare = cva(V, t, p0, CSA.uncollateralised(), 10_000_000.0, maturity_y=0.5)
+    rows = cva(V, t, p0, CSA.uncollateralised(), 10_000_000.0, maturity_y=0.5, saccr=[row])
+    assert rows["kva_usd"] < 0 and abs(rows["kva_usd"]) > 5 * abs(bare["kva_usd"]), (rows["kva_usd"], bare["kva_usd"])
+    for k in ("cva_usd", "dva_usd", "fca_usd", "fba_usd"):                  # the rows are capital's: nothing else moves
+        assert rows[k] == bare[k], k

@@ -63,21 +63,14 @@ CURRENT_LAST = "IM_ELIGIBILITY"
 def prepare_set(db, user: dict, cp, trades: list, asof: date, mkt, st: dict, tpl, notes: list[str]) -> Optional[dict]:
     """The netting set on the risk-neutral paths with its SA-CCR rows, gross notional and today's
     mark; None for no trades; {"empty": True, ...} when nothing could be simulated."""
-    from ccr import calibration as C
     from ccr.report import netting_set_paths
-    from ccr.saccr_map import from_netting_set
-    from ccr.simulate import df_fn
+    from ccr.saccr_map import rows_of_paths
     if not trades:
         return None
     P = netting_set_paths(db, user, cp, trades, asof, mkt, st, tpl, exposure=False)
     if P["empty"]:
         return {"empty": True, "ns": P["ns"], "missing": P.get("missing")}
-    dfs = {}
-    for c in P["currencies"]:
-        key = f"RATES:{C.CURVE_OF.get(c, c + '_OIS')}"
-        if key in P["curves"]:
-            dfs[c] = df_fn(P["curves"][key], asof)
-    rows, rnotes = from_netting_set(P["ns"], mkt, P["fx"], asof, dfs)
+    rows, rnotes = rows_of_paths(P, mkt, asof)
     notes.extend(rnotes)
     mtm = sum(float(x.get("mtm_usd") or 0.0) for x in P["today"])
     from ccr.valuation import flows_per_step

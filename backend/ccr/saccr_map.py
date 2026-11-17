@@ -117,3 +117,18 @@ def from_netting_set(ns: NettingSet, mkt, fx_to_usd: dict[str, float], asof: dat
         except Exception as e:          # noqa: BLE001
             notes.append(f"{ref}: not mapped ({str(e)[:80]})")
     return rows, notes
+
+
+def rows_of_paths(P: dict, mkt, asof: date) -> tuple[list[SaccrTrade], list[str]]:
+    """The SA-CCR rows of a set from what ccr.report.netting_set_paths returns: each currency's own discount
+    function (for a swaption's par rate), then from_netting_set. One place for the capital report and the
+    counterparty report, so the two charge capital on the same rows."""
+    from ccr import calibration as C
+    from ccr.simulate import df_fn
+    dfs = {}
+    for c in P["currencies"]:
+        key = f"RATES:{C.CURVE_OF.get(c, c + '_OIS')}"
+        if key in P["curves"]:
+            dfs[c] = df_fn(P["curves"][key], asof)
+    return from_netting_set(P["ns"], mkt, P["fx"], asof, dfs)
+

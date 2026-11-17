@@ -150,9 +150,13 @@ def counterparty_report(db: Session, user: dict, cp, trades: list, asof: date, m
         ex = exposures(V_rw, p_rw.t, csa, flows=flows)
     else:
         p_rw, ex = p_rn, None
+    # KVA on each trade's own asset class (the rows the capital report charges on): without them every set took
+    # the interest-rate add-on on its gross notional
+    from ccr.saccr_map import rows_of_paths
+    saccr_rows, saccr_notes = rows_of_paths(P, mkt, asof)
     cv = cva_of(V_rn, p_rn.t, p0, csa, gross, cp_cds_bp=float(st["cp_cds_bp"]), lgd=float(st["lgd"]),
                 flows=flows_per_step(ns, p_rn, fx) if csa.collateralised else None,
-                maturity_y=max((ns.max_maturity - asof).days / 365.25, 1 / 12), deflator=P.get("deflator"))
+                maturity_y=max((ns.max_maturity - asof).days / 365.25, 1 / 12), deflator=P.get("deflator"), saccr=saccr_rows)
     grid = [d.isoformat() for d in p_rw.grid[1:]]
     out = {**base, "empty": False, "asof": asof.isoformat(), "grid": grid, "t": [float(x) for x in p_rw.t[1:]], "n_paths": n_paths, "months": months,
            "csa_model": {"preset": csa.preset, "collateralised": csa.collateralised, "threshold_usd": csa.threshold_cp, "mta_usd": csa.mta, "mpor_days": csa.mpor_days, "im_exchanged": csa.im_exchanged},

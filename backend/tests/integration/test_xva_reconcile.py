@@ -62,6 +62,28 @@ def test_a_swap_on_the_ticket_and_alone_in_a_netting_set_is_one_calculation(clie
         assert len(ee_net) == len(tk["ee"]) and max(abs(a - b) for a, b in zip(tk["ee"], ee_net)) < 0.002 * max(ee_net) + 1.0, name
 
 
+def test_a_forwards_capital_charge_in_a_netting_set_is_on_its_own_asset_class(client, auth_a, ids, pairs, empty_cp):
+    """Until 0.54.0 the counterparty run charged every set the interest-rate add-on on its gross notional: a EURUSD
+    forward's KVA was −78 where its ticket's was −1,361, and a BTCUSD forward's zero where its ticket's was −1,095
+    (found reconciling the XVA runs, 17 November 2026). The set now carries its SA-CCR rows, as the capital report's
+    does. The two runs still differ in their grid (the ticket weekly, the set monthly) and in how each draws the
+    asset, which is what the tolerances here leave room for; measured at the mend: 1.0 % and 6.8 %."""
+    from datetime import date, timedelta
+    for pair, shape, n, make, tol in (("EURUSD", "FORWARD", 10_000_000, B.fx_forward, 0.03), ("BTCUSD", "NDF", 10, B.crypto_forward, 0.12)):
+        _free()
+        asof = date.fromisoformat(_alone(client, auth_a, B.swap(ids["a"], "RC-ASOF"), empty_cp, n=200)["asof"])
+        settle = (asof + timedelta(days=183)).isoformat()
+        q = client.post("/api/currency/forward/price", json={"pair": pair, "shape": shape, "base_notional": n, "direction": "BUY", "settlement_date": settle}, headers=auth_a)
+        assert q.status_code == 200, q.text[:300]
+        net = _alone(client, auth_a, make(ids["a"], f"RC-{pair}", pairs[pair], q.json()), empty_cp)
+        _free()
+        r = client.post("/api/xva/currency", json={"pair": pair, "base_notional": n, "settlement_date": settle, "forward_rate": q.json()["forward"], "direction": "BUY",
+                                                   "valuation_date": net["asof"], "paths": 2000, "seed": 7, "cp_cds_bp": net["cp_cds_bp"], "lgd": net["lgd"]}, headers=auth_a)
+        assert r.status_code == 200, r.text[:300]
+        ticket, alone = r.json()["xva"]["kva"], net["incremental"]["kva"]
+        assert ticket < -500 and alone == pytest.approx(ticket, rel=tol), (pair, ticket, alone)
+
+
 def test_the_paths_start_at_the_pricers_value_of_the_trade(client, auth_a, auth_b, booked):
     """Two engines value one trade: the pricer, and the paths at their start. They are not forced together; the answer
     carries both, and on a swap they stand within a thousandth of the notional's basis point value."""
