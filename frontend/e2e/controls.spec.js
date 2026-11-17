@@ -54,7 +54,12 @@ test('buttons are raised, fields are wells with a ring in focus, and the row und
   // the other families: a P&L button, a workbook button, the methodology's own
   await app.goto('/pnl')
   const pnl = app.locator('.pnl-btn:not(.ghost):not(:disabled)').first()
-  await expect(pnl).toBeVisible()
+  // The page's buttons read WORKING… and cannot be pressed until the day's attribution is back. On the journeys'
+  // shared database, which keeps every run's trades (390 of them on 17 November 2026), that took more than the
+  // default twenty seconds in three full runs of four; a fresh database, as in CI, answers in a few.
+  const t0 = Date.now()
+  await expect(pnl).toBeVisible({ timeout: 120_000 })
+  console.log(`P&L buttons pressable after ${Math.round((Date.now() - t0) / 1000)} s`)
   expect(await css(pnl, 'backgroundColor')).toBe(RAISED)
   // one that cannot be pressed just now is flat
   const off = app.locator('.pnl-btn:not(.ghost):disabled').first()
