@@ -197,9 +197,10 @@ def test_margin_is_the_desks_amount_or_the_engines_estimate_and_nothing_is_named
     # MVA of an amount held for the life is that amount funded at the spread: more margin, more cost, in proportion
     double = client.post("/api/xva/currency", json={**body, "im_usd": 500_000}, headers=auth_a).json()
     assert double["xva"]["mva"] == pytest.approx(2 * typed["xva"]["mva"], abs=0.016)      # each is rounded to a cent: twice one rounded figure and the other can differ by a cent and a half
-    # the old name of the input (in millions) is no longer read: a request carrying only it is answered with the engine's estimate
-    old = client.post("/api/xva/currency", json={**body, "simm_im_m": 0.25}, headers=auth_a).json()
-    assert "engine's estimate" in old["capital"]["im_basis"]
+    # the old name of the input (in millions) is no longer read, and a request that still carries it is refused with
+    # what to send instead: answered silently it would get the engine's estimate where the desk typed an amount
+    old = client.post("/api/xva/currency", json={**body, "simm_im_m": 0.25}, headers=auth_a)
+    assert old.status_code == 422 and "im_usd" in old.text
     assert client.post("/api/xva/currency", json={**body, "im_usd": -1}, headers=auth_a).status_code == 422
     # no margin exchanged: none charged whatever is typed
     none = client.post("/api/xva/currency", json={**body, "csa": None, "im_usd": 250_000}, headers=auth_a).json()

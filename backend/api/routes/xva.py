@@ -26,7 +26,7 @@ from datetime import date, timedelta
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -137,6 +137,24 @@ def _staleness_block(calib_date, mkt_curve, val_date) -> dict:
     }
 
 
+# A request field that was retired, with what to send instead. A model that does not declare a field drops it
+# without a word, and a caller that still sent the desk's margin under its old name would be answered with the
+# engine's estimate and no reason (the independent reviewer, 17 November 2026): such a request is refused.
+RETIRED_FIELDS = {"simm_im_m": "the desk's initial margin is sent as im_usd, in currency units"}
+
+
+class _MarginInputs(BaseModel):
+    """What the four XVA requests share about a retired input: it is refused by name, not ignored."""
+    @model_validator(mode="before")
+    @classmethod
+    def _no_retired_field(cls, data):
+        if isinstance(data, dict):
+            for name, instead in RETIRED_FIELDS.items():
+                if data.get(name) is not None:
+                    raise ValueError(f"a field of this request is no longer read: {instead}")
+        return data
+
+
 class CalibrateRequest(BaseModel):
     valuation_date: Optional[date] = None
     theta: Optional[float] = None        # long-run rate; if None, uses 5Y SOFR from DB
@@ -146,7 +164,7 @@ class CalibrateRequest(BaseModel):
     curves: Optional[List[CurveInput]] = None   # explicit quotes; else latest DB snapshot
 
 
-class SimulateRequest(BaseModel):
+class SimulateRequest(_MarginInputs):
     notional: float = Field(default=10_000_000.0, gt=0)
     maturity_y: float = Field(default=5.0, gt=0, le=60)
     fixed_rate: float = 0.03643
@@ -869,7 +887,7 @@ def _fee_cash(fees, currency: Optional[str], val_date: date) -> Optional[list]:
         raise HTTPException(status_code=422, detail=str(e))
 
 
-class CurrencyXvaRequest(BaseModel):
+class CurrencyXvaRequest(_MarginInputs):
     pair: str
     base_notional: float = 1_000_000.0
     settlement_date: Optional[date] = None
@@ -1065,7 +1083,7 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
 
 # ── Stand-alone XVA for an FX or digital-asset option, any style ──────────────────────────────
 
-class CurrencyOptionXvaRequest(BaseModel):
+class CurrencyOptionXvaRequest(_MarginInputs):
     trade: dict                           # the ticket's booking body (instrument_type, notional, notional_ccy, maturity_date, terms)
     vol_pct: Optional[float] = None       # override; else the pair's surface at the option's expiry and strike
     paths: int = Field(default=2000, ge=200, le=10000)
@@ -1206,7 +1224,7 @@ PACKAGE_FORWARDS = ("FX_FORWARD", "NDF", "CRYPTO_FORWARD")
 PACKAGE_OPTIONS = ("FX_OPTION", "CRYPTO_OPTION")
 
 
-class CurrencyPackageXvaRequest(BaseModel):
+class CurrencyPackageXvaRequest(_MarginInputs):
     trades: list[dict] = Field(min_length=1, max_length=PACKAGE_MAX_LEGS)   # the booking body of each leg, the ticket's first
     vol_pct: Optional[float] = None       # one override for every leg; else each leg reads the pair's surface as on its own
     paths: int = Field(default=2000, ge=200, le=10000)

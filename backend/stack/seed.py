@@ -124,9 +124,12 @@ def seed_people(db, minimal: bool) -> dict:
         db.execute(text("""
             INSERT INTO counterparties (id, legal_entity_id, name, isda_agreement, csa_type, csa_currency, csa_threshold_m, csa_mta_k,
                                         discount_curve_id, im_model, is_active, created_by, user_id)
-            VALUES (:id, :le, :name, 'ISDA 2002 (demo)', 'VM_IM', 'USD', 0, 500, 'USD_SOFR', 'MODEL', true, :u, :u)
+            VALUES (:id, :le, :name, 'ISDA 2002 (demo)', 'VM_IM', 'USD', 0, 500, 'USD_SOFR', :old_default, true, :u, :u)
             ON CONFLICT (id) DO UPDATE SET legal_entity_id = EXCLUDED.legal_entity_id, is_active = true"""),
-            {"id": cp_id, "le": bank_id, "name": DEMO_BANK_NAME, "u": uid})
+            # the counterparty is a record from before the column's default changed, on purpose: the journeys over
+            # the counterparty pages prove such a record is shown as MODEL (frontend/e2e/pages.spec.js). It goes
+            # with the readers' constants once docs/migrations/2026-11-17_im_model_default.sql has run in production.
+            {"id": cp_id, "le": bank_id, "name": DEMO_BANK_NAME, "u": uid, "old_default": "SIMM"})
         if not minimal:
             firm_node, desk_node, book_node = (str(did("org", uid, k)) for k in ("firm", "desk", "book"))
             for nid, parent, name, kind in ((firm_node, None, f"{trader} STACK", "firm"), (desk_node, firm_node, "RATES", "desk"),

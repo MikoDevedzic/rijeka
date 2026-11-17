@@ -26,8 +26,8 @@ An amount the desk sets (each way, held for the life), or the engine's own
 estimate from its simulated paths: the 99th percentile rise and fall of the
 value over the MPoR at each date (pricing/xva_engine.model_im), the
 confidence the BCBS-IOSCO margin rules name. The estimate is not an
-industry margin model: a desk with its own figure enters it. IM received reduces our exposure; IM posted is funded and drives
-MVA.
+industry margin model: a desk with its own figure enters it. IM received
+reduces our exposure; IM posted is funded and drives MVA.
 
 SA-CCR
 ------

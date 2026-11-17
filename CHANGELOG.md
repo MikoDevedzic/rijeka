@@ -14,7 +14,9 @@ methodology document carries its own version (v1.37). Commits on `main` are the 
   tooltip still described a margin derived from that methodology's risk weights, which the engine stopped doing on
   10 November: corrected.
 - **The old request field is gone.** The XVA routes read the desk's margin as `im_usd`; the older name in millions
-  is no longer read. A page loaded before 10 November that still sends it is answered with the engine's estimate.
+  is no longer read, and a request that still carries it is refused (422) with what to send instead: ignored
+  silently it would have been answered with the engine's estimate where the desk had typed an amount (the
+  independent reviewer). The app has sent `im_usd` since 10 November.
 - **Two record fields, by migration, on the owner's word.** A counterparty's margin basis still defaults in the
   database to the old name, and legal entities carry a version column nothing reads. The code no longer writes or
   reads either (a record holding the old default is shown as MODEL, as since 0.30.3). Two migrations are written
@@ -22,8 +24,10 @@ methodology document carries its own version (v1.37). Commits on `main` are the 
   reports both under `schema`.
 
 Not done, and said: the design paper in `docs/` discusses that methodology and is left as it is; the name stands
-in the repository's history; three places still hold the old default as a constant, to read records made before
-the migration, and go when it has run.
+in the repository's history. "Once" is what a reader of the screens and documents sees: in the code the old value
+is still recognised where a record made before the migration, or a request with the retired field, has to be read
+(constants in four files and the health checks), in the two migrations, and in tests that assert its absence;
+those constants go when the migrations have run.
 
 ## 0.54.0 · 17 November 2026
 

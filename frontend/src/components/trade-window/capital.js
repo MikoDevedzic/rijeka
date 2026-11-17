@@ -43,7 +43,7 @@ export const METRIC_ROWS = [
 export const COST_ROW = null
 
 export const FORMULA = {
-  im: 'IM = the engine\'s own estimate: the 99th percentile move of the set\'s value over the margin period, at the first date (not an industry margin model and is not computed here); posted only where the collateral is eligible IM',
+  im: 'IM = the engine\'s own estimate: the 99th percentile move of the set\'s value over the margin period, at the first date (not an industry margin model); posted only where the collateral is eligible IM',
   ead: 'EAD = 1.4 × (RC + multiplier × AddOn)  (CRE52.1); RC margined max(V − C, TH + MTA − NICA, 0), unmargined max(V − C, 0); AddOn by asset class and hedging set (CRE52.57, 52.59, SCO60.98)',
   rwa: 'RWA = RW × EAD, the counterparty risk weight from CRE20',
   k_ccr: 'K_CCR = 8 % × RW × EAD',

@@ -45,6 +45,11 @@ the file and what it gates.
   jobs file bundles the worker tables with `pending_anchors`, which is why the confirm path waited on the worker;
   `2026-11-11_pending_anchors.sql` is that table on its own.
 - A production write happens only on the user's own words. Show the exact statements first.
+- A migration that takes something away from a running API (a dropped column, a narrowed type) is approved only
+  after the release that stops using it has been read back from production, and in an approval of its own, never
+  in the same commit as that release: the runner applies an approved file when the new API starts, while the old
+  instance is still serving. `2026-11-17_legal_entity_margin_version.sql` is one (it needs 0.54.1 or later
+  deployed, and the `destructive` flag). Its header says so; the header is not where a release is checked.
 - **The runner applies it** (`backend/db/migrate.py`, `docs/architecture.md` → Migrations in production). To
   approve a migration: quote the owner's words; `cd backend && python -m db.migrate --stage <file>` copies the file
   into `backend/db/approved/` and prints its line; add the line to `backend/db/migrations_approved.txt` with who
