@@ -157,3 +157,34 @@ def bond(paths: Paths, key: str, i: int, T_years: float) -> np.ndarray:
     # martingale check in tests/reference/test_ref_ccr.py pins it.
     phi = (sig ** 2) / (2 * a * a) * (1 - math.exp(-a * t_i)) ** 2
     return ratio * np.exp(-B * (paths.x[key][:, i] + phi) - var)
+
+
+def account(paths: Paths, key: str) -> np.ndarray:
+    """One unit of cash rolled along each path at each grid step's own bond: A_0 = 1, A_{k+1} = A_k / P(t_k, t_{k+1}),
+    shape (paths, T+1). It is the realised growth of money on the path, and 1/A discounts a value on the path back
+    to today: a bond's discounted price is then a martingale from one grid date to the next by construction. Kept on the paths object: a
+    netting set asks for it once per leg and date."""
+    cache = paths.__dict__.setdefault("_account", {})
+    if key not in cache:
+        A = np.ones((paths.n_paths, len(paths.t)))
+        for k in range(len(paths.t) - 1):
+            A[:, k + 1] = A[:, k] / bond(paths, key, k, float(paths.t[k + 1]))
+        cache[key] = A
+    return cache[key]
+
+
+def accrued(paths: Paths, key: str, i: int, t_start: float) -> np.ndarray:
+    """What one unit placed at t_start (years from as-of) has grown to by grid date i, on every path: the interest a
+    floating period that began at t_start has accrued so far, plus the unit. From t_start to the next grid date it
+    grows at the forward seen on the grid date before it, then with the account. A period that began before the
+    as-of date has no path behind it: its past part grows at today's rate for that length (the fixings themselves
+    are not read here)."""
+    t = paths.t
+    A = account(paths, key)
+    if t_start <= 0.0:
+        return A[:, i] / max(paths.p0[key](-t_start), 1e-12)
+    j = int(np.searchsorted(t, t_start + 1e-12, side="right") - 1)        # the last grid date at or before the start
+    if j >= i:
+        return np.ones(paths.n_paths)
+    first = bond(paths, key, j, t_start) / bond(paths, key, j, float(t[j + 1])) if t_start > float(t[j]) + 1e-12 else A[:, j + 1] / A[:, j]
+    return first * A[:, i] / A[:, j + 1]

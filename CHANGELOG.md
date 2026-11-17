@@ -1,7 +1,41 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.31). Commits on `main` are the detail.
+methodology document carries its own version (v1.32). Commits on `main` are the detail.
+
+## 0.51.0 · 17 November 2026
+
+**A correction in counterparty credit: a swap between coupon dates.** The methodology is v1.32. Found by putting one
+trade of each product through every XVA run and laying the answers side by side.
+
+- **What was wrong.** The credit engine values a swap's floating leg from the path's bonds. Between coupon dates it
+  valued the running period as if it reset on the valuation date, leaving out the interest accrued since the
+  period began. The fixed leg carried its whole coming coupon. A swap whose two legs pay on the same dates (the
+  dollar OIS swap the ticket books) therefore showed the fixed coupon building up with nothing against it: a
+  receive-fixed par swap, worth nothing on average, stood at +34,628 a month into the year and +375,222 eleven
+  months in on ten million at 4 %, and fell back at each payment.
+- **Where it reached.** Every swap in the counterparty report (expected exposure, PFE, EPE, CVA, and the limits
+  read against them), the incremental charge on a ticket, the capital stock of a swap, and the XVA P&L, which
+  reads the report. The ticket's own XVA run and every price were not affected.
+- **What it does now.** A running period carries its accrued interest: one unit placed at the period's start,
+  grown along the path at each grid step's own bond. The floating coupon is a cash flow of its step, as a fixed
+  one is.
+- **What moved.** A five-year par swap alone in a netting set, no margin: receive fixed, CVA −7,398 to −3,394 and
+  DVA 568 to 1,902; pay fixed, CVA −1,149 to −3,849 and DVA 3,655 to 1,677. The ticket's run says −2,576 and
+  1,599, and −3,236 and 1,273: the two engines were three to five times apart and are now 20 to 30 % apart, which
+  is the ticket's generic swap against the trade's own schedule (next in this work). The pinned swap's capital
+  stock under margin is 7 to 10 % higher (`GOLDEN_CHANGES.md`).
+- **Checked** by a martingale identity that does not use the engine's formula: the value at each grid date,
+  discounted by the path's cash account, averages to today's value of the coupons still to come, read off today's
+  curve, for yearly, half-yearly and quarterly floating legs, both directions, at every grid date. The reference
+  suite's martingale rows were of bonds alone, which is how this passed them.
+
+Not done, and said: a period that began before the valuation date accrues its past part at today's rate, not from
+its fixings; in the margin step the floating coupon is the one today's curve implies, one number per step. The
+first counterparty report after this release differs from the stored ones by this correction: the XVA P&L of that
+day carries it as if the market had moved, and a limit's utilisation steps. The other findings of the comparison
+are open: a swaption's XVA on the ticket is a swap's; the netting-set run's KVA takes no asset class; the ticket
+simulates a generic swap, not the trade's schedule.
 
 ## 0.50.0 · 17 November 2026
 

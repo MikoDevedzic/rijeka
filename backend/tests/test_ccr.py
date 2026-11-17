@@ -106,3 +106,74 @@ def test_stored_numbers_are_plain_floats():
     import numpy as np
     from ccr.report import _num
     assert _num(np.float64(1.5)) == 1.5 and type(_num(np.float64(1.5))) is float and _num(None) is None
+
+
+def _par_swap(float_freq: str, fixed_direction: str, rate: float, notional: float = 10e6):
+    from ccr.valuation import leg_schedule
+    eff, mat = ASOF, ASOF.replace(year=ASOF.year + 5)
+    common = {"notional": notional, "day_count": "ACT/360", "effective_date": str(eff), "maturity_date": str(mat), "currency": "USD"}
+    legs = [{**common, "leg_type": "FIXED", "direction": fixed_direction, "fixed_rate": rate, "payment_frequency": "ANNUAL"},
+            {**common, "leg_type": "FLOAT", "direction": "PAY" if fixed_direction == "RECEIVE" else "RECEIVE", "payment_frequency": float_freq}]
+    return {"kind": "SWAP", "ccy": "USD", "legs": [(lg, leg_schedule(lg, ASOF)) for lg in legs], "maturity": mat, "trade": SimpleNamespace(trade_ref="T")}
+
+
+def test_a_swap_between_coupon_dates_carries_the_floating_interest_accrued_so_far():
+    """Found reconciling the XVA runs, 17 November 2026. A running floating period was valued as if it reset today,
+    N·(1 − P(t, end)): the interest accrued since the period began was left out. With both legs paying yearly a
+    receive-fixed par swap, worth nothing on average, showed the fixed coupon building up with nothing against it:
+    +34,628 after a month and +375,222 after eleven on 10M at 4 %, back to nothing after each payment. That was
+    the expected exposure of every swap in the counterparty report, the incremental charge and the XVA P&L.
+
+    The check is the martingale one, and it does not use the engine's own formula: the value on the path at a grid
+    date, discounted by the path's cash account, averages to today's value of the coupons still to come at that
+    date, read off today's curve (the fixed coupons not yet paid, less the floating leg from the start of its
+    running period, since E[D(t)·accrued(t)] = P(0, start))."""
+    from ccr.simulate import account
+    from ccr.valuation import years
+    p = simulate(_calib("RISK_NEUTRAL", "forward"), _curves(), {"SPOT:EURUSD": 1.10}, {"SPOT:EURUSD": (0.04, 0.02)}, ASOF, 60, n_paths=20000, seed=1)
+    key, N = "RATES:USD_SOFR", 10e6
+    D = 1.0 / account(p, key)
+    p0 = p.p0[key]
+    se36 = D[:, 36].std() / np.sqrt(D.shape[0])
+    assert np.allclose(D[:, 0], 1.0) and abs(D[:, 36].mean() - p0(float(p.t[36]))) < 4.0 * se36, "the account discounts back to the curve, within sampling"
+    for freq in ("ANNUAL", "QUARTERLY", "SEMI_ANNUAL"):
+        for direction in ("RECEIVE", "PAY"):
+            it = _par_swap(freq, direction, 0.0402)
+            sgn = 1.0 if direction == "RECEIVE" else -1.0
+            fixed, flt = it["legs"][0][1], it["legs"][1][1]
+            worst = 0.0
+            for i in range(len(p.grid)):
+                t_i = float(p.t[i])
+                x = D[:, i] * value_swap(it, p, i, {"USD": 1.0})
+                fx_left = sum(N * 0.0402 * tau * p0(years(ASOF, pay)) for (_s, _e, pay, tau) in fixed if years(ASOF, pay) > t_i + 1e-9)
+                left = [(s, e, pay) for (s, e, pay, _tau) in flt if years(ASOF, pay) > t_i + 1e-9]
+                fl_left = N * (p0(max(years(ASOF, left[0][0]), 0.0)) - p0(years(ASOF, left[-1][2]))) if left else 0.0
+                want = sgn * (fx_left - fl_left)
+                se = x.std() / np.sqrt(len(x))
+                worst = max(worst, abs(x.mean() - want) / max(se, 1.0))
+                assert abs(x.mean() - want) < 4.0 * se + 150.0, (freq, direction, i, x.mean(), want, se)
+            assert worst < 5.0
+    # and what it was: eleven months in, with both legs yearly, the old value stood a whole floating year's interest out
+    it = _par_swap("ANNUAL", "RECEIVE", 0.0402)
+    v11 = value_swap(it, p, 11, {"USD": 1.0}).mean()
+    assert abs(v11) < 5_000.0, "about nothing on average; it read +375,222"
+    # a leg that pays more often than the other does leave a real saw-tooth: three quarters of floating interest
+    # have been paid and the year's fixed coupon has not
+    q11 = value_swap(_par_swap("QUARTERLY", "RECEIVE", 0.0402), p, 11, {"USD": 1.0}).mean()
+    assert 250_000.0 < q11 < 350_000.0
+
+
+def test_the_floating_coupon_is_a_cash_flow_of_its_step():
+    """A running period carries its accrued interest in the value, so the value jumps when the coupon is paid: the
+    exposure step must see that payment as it sees a fixed coupon (flows_per_step)."""
+    from ccr.valuation import NettingSet, flows_per_step
+    p = simulate(_calib("RISK_NEUTRAL", "forward"), _curves(), {"SPOT:EURUSD": 1.10}, {"SPOT:EURUSD": (0.04, 0.02)}, ASOF, 60, n_paths=500, seed=1)
+    ns = NettingSet.__new__(NettingSet)
+    ns.items = [_par_swap("ANNUAL", "RECEIVE", 0.0402)]
+    fl = flows_per_step(ns, p, {"USD": 1.0})
+    # both legs pay on the same dates: we receive the fixed coupon and pay the floating one, and at par the two net to little
+    paid = [i for i in range(len(fl)) if fl[i] != 0.0]
+    assert len(paid) == 5 and all(abs(fl[i]) < 0.1 * 10e6 * 0.0402 for i in paid)
+    ns.items = [_par_swap("QUARTERLY", "RECEIVE", 0.0402)]
+    fq = flows_per_step(ns, p, {"USD": 1.0})
+    assert sum(1 for x in fq if x != 0.0) == 20 and max(fq) > 0.9 * 10e6 * 0.0402 / 4      # a floating quarter paid: V rises

@@ -17,7 +17,7 @@ import numpy as np
 
 from ccr import options as O
 from ccr.calibration import CURVE_OF
-from ccr.simulate import Paths, bond
+from ccr.simulate import Paths, accrued, bond
 from pnl.valuation import _currency_terms
 
 log = logging.getLogger("rijeka.ccr")
@@ -187,8 +187,14 @@ def value_swap(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float]) ->
             c = float(lg.get("fixed_rate") or 0.0)
             pv = sum(N * c * tau * bond(paths, key, i, years(asof, pay)) for (_, _, pay, tau) in future)
         else:
+            # The floating coupons still to come, together: N·(P(t, start) − P(t, end)) while the first of them has
+            # not begun. Once it has, the period's interest so far is owed as well: one unit placed at its start has
+            # grown to `accrued` by now, so the leg is N·(accrued − P(t, end)). (Until 0.51.0 a running period was
+            # valued as if it reset today, N·(1 − P): the interest accrued since its start was left out, and a swap
+            # whose two legs pay on the same dates showed the fixed coupon building up with nothing against it,
+            # up to a whole coupon before each payment. Found reconciling the XVA runs, 17 November 2026.)
             ps0 = future[0][0]
-            p_start = bond(paths, key, i, years(asof, ps0)) if years(asof, ps0) > t_i else np.ones(paths.n_paths)
+            p_start = bond(paths, key, i, years(asof, ps0)) if years(asof, ps0) > t_i else accrued(paths, key, i, years(asof, ps0))
             p_end = bond(paths, key, i, years(asof, future[-1][2]))
             lev = 1.0 if lg.get("leverage") is None else float(lg.get("leverage"))
             pv = lev * N * (p_start - p_end)
@@ -220,10 +226,12 @@ def value_forward(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float],
 
 def flows_per_step(ns: NettingSet, paths: Paths, fx_to_usd: dict[str, float]) -> np.ndarray:
     """Net trade flow we pay in (t_{i−1}, t_i], per grid step, as the jump it makes in our value
-    (paying a coupon raises V, receiving one lowers it). Fixed coupons and float spreads: the
-    flows that jump the valued V (the OIS float leg, valued as N·(P_s − P_N), does not jump at a
-    reset). The exposure step uses it so a payment between grid points is margined, not smeared
-    into the margin period of risk by the bridge."""
+    (paying a coupon raises V, receiving one lowers it). Fixed coupons, float spreads and, since
+    0.51.0, the floating coupon itself: a running period carries its accrued interest in V, so V
+    jumps when the coupon is paid. The floating amount differs path by path; this array is one
+    number per step, so it takes the coupon today's curve implies, N·(P(0,start)/P(0,end) − 1).
+    The exposure step uses it so a payment between grid points is margined, not smeared into the
+    margin period of risk by the bridge."""
     asof = paths.grid[0]
     out = np.zeros(len(paths.grid))
     for it in ns.items:
@@ -240,9 +248,13 @@ def flows_per_step(ns: NettingSet, paths: Paths, fx_to_usd: dict[str, float]) ->
                 if str(lg.get("leg_type", "")).upper() == "FIXED":
                     amt = N * float(lg.get("fixed_rate") or 0.0) * tau
                 else:
-                    # the OIS float leg is valued as N·(P(t,T_s) − P(t,T_N)), which does not jump at a
-                    # coupon (the reset offsets the payment); only a spread paid on it does
-                    amt = N * float(lg.get("spread") or 0.0) * tau
+                    key = f"RATES:{CURVE_OF.get(it['ccy'], it['ccy'] + '_OIS')}"
+                    p0 = paths.p0[key]
+                    lev = 1.0 if lg.get("leverage") is None else float(lg.get("leverage"))
+                    grown = p0(max(years(asof, _ps), 0.0)) / max(p0(max(years(asof, _pe), 0.0)), 1e-12)
+                    if years(asof, _ps) < 0.0:                       # began before today: its past part at today's rate, as value_swap has it
+                        grown = grown / max(p0(-years(asof, _ps)), 1e-12)
+                    amt = lev * N * (grown - 1.0) + N * float(lg.get("spread") or 0.0) * tau
                     if amt == 0.0:
                         continue
                 for i in range(1, len(paths.t)):
