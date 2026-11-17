@@ -96,7 +96,7 @@ Learned on 16 November 2026 (a link opens what it names)
 - A journey's own selector is checked on the page it starts from: the home draws its own top bar (`.cc-nav-btn`), every other page the app's (`.ab-link`); a press that waits four minutes for a class is a wrong selector before it is a slow page.
 
 Learned on 16 November 2026 (a dialog and the keyboard)
-- A journey that opens a dialog says where the focus is once it is open, that Tab stays inside it, what Escape does, and where the focus is after it closes: the ticket was given a dialog's name and role in 0.47.2 and the focus stayed on the page behind it.
+- A journey that opens a dialog says where the focus is once it is open, where Tab goes from there, what Escape does (also with a sheet open over it), and where the focus is after it closes: the ticket was given a dialog's name and role in 0.47.2 and the focus stayed on the page behind it.
 - A journey that needs the engine to refuse answers for the engine itself (a route fulfilled with the refusal), so that it does not depend on which curves the stack happens to hold.
 
 Rules

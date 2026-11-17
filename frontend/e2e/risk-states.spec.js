@@ -216,7 +216,7 @@ test('a signed day that has since moved says so, and the credit page says whose 
   if (await shown(moved, 'the stack has no P&L day to sign')) {
     await expect(moved).toContainText('The last signature is of a day')
     await expect(moved).toContainText('it has moved by +1,250')
-    await expect(moved).toContainText('sign again to sign the day as it is now')
+    await expect(moved).toContainText('The signature stands for the day as it was signed')
     await moved.scrollIntoViewIfNeeded()
     await app.screenshot({ path: 'e2e/.out/shots/pnl-signed-moved.png' })
     // signed at the figure the day reads now: nothing is said

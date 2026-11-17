@@ -366,9 +366,14 @@ export function onChainSaving(xva, cmpXva, notional) {
   return { money, bpUpfront, bpRunning, annuity: Number.isFinite(ann) ? ann : null }
 }
 
-// The FX routes' csa body for a preset: the shape the panel has always sent.
-export function fxCsaBody(settlement, imExchanged) {
-  if (settlement === 'BILATERAL') return { preset: 'BILATERAL', threshold_cp: 500000, mta: 100000, mpor_days: 10, im_exchanged: !!imExchanged }
+// The FX routes' csa body for a preset: the shape the panel has always sent. A bilateral run is on the
+// counterparty's own threshold, minimum transfer and margin period where its record gives them (`terms`, from
+// `recordTerms`); with no record it is on the panel's standing numbers, as before.
+export function fxCsaBody(settlement, imExchanged, terms = null) {
+  if (settlement === 'BILATERAL') {
+    const fin = (v, d) => (Number.isFinite(Number(v)) && v != null ? Number(v) : d)
+    return { preset: 'BILATERAL', threshold_cp: fin(terms?.threshold, 500000), mta: fin(terms?.mta, 100000), mpor_days: terms?.mpor > 0 ? Number(terms.mpor) : 10, im_exchanged: !!imExchanged }
+  }
   if (settlement === 'ON_CHAIN') return { preset: 'ON_CHAIN', im_exchanged: !!imExchanged }
   return imExchanged ? { preset: 'UNCOLLATERALISED', im_exchanged: true } : null
 }
@@ -530,7 +535,9 @@ export function recordTerms(csa, name) {
   const who = name || 'the counterparty'
   if (!csa.collateralised) return { preset: 'UNCOLLATERALISED', im: false, words: `Starts on ${who}'s own terms: no CSA on its record.` }
   const im = !!csa.im_exchanged
-  return { preset: 'BILATERAL', im, threshold: Number(csa.threshold) || 0, mta: Number(csa.mta) || 0, mpor: Number(csa.mpor_days) || null,
-    words: `Starts on ${who}'s own terms, from its record: variation margin${im ? ' and initial margin' : ''}. Press another to see the trade under it.` }
+  const threshold = Number(csa.threshold) || 0, mta = Number(csa.mta) || 0, mpor = Number(csa.mpor_days) || null
+  const n = (v) => v.toLocaleString('en-US', { maximumFractionDigits: 0 })
+  return { preset: 'BILATERAL', im, threshold, mta, mpor,
+    words: `Starts on ${who}'s own terms, from its record: variation margin${im ? ' and initial margin' : ''} (threshold ${n(threshold)}, minimum transfer ${n(mta)}${mpor ? `, margin period ${mpor} business days` : ''}). Press another to see the trade under it.` }
 }
 

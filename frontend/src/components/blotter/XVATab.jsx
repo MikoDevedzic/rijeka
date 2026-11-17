@@ -3,7 +3,7 @@
 // readouts, VA strip, on-chain row, tooltip) are shared with the FX / digital-asset panel through
 // trade-window/xva-shared.jsx; the HW1F model block, the calibration proof and the swaption
 // context stay here.
-import { TicketCcy } from '../trade-window/ticket-ccy'
+import { TicketCcy, ccySign } from '../trade-window/ticket-ccy'
 import { useState, useEffect, useRef, useContext } from 'react'
 import ExposureCanvas from '../trade-window/ExposureCanvas'
 import { normaliseCalibration } from './calibration'
@@ -214,6 +214,8 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
   const chose = useRef(false)                            // a preset has been pressed: the record's terms no longer set it
   const [fromRecord, setFromRecord] = useState(null)     // the line that says the starting terms are the counterparty's own
   const choose = (k) => { chose.current = true; setFromRecord(null); setSettlement(k) }
+  // a term the user sets is the user's: the record no longer sets it, and the line that says "from its record" goes
+  const own = (set) => (v) => { chose.current = true; setFromRecord(null); set(v) }
   const [imYieldBp, setImYieldBp] = useState('')
   const [compareOnChain, setCompareOnChain] = useState(true)      // the saving on chain is shown by default
 
@@ -231,19 +233,25 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
     })()
   }, [])
   useEffect(() => {
+    // another counterparty is another record: what was pressed or typed for the last one does not stand over it,
+    // and an answer that comes back late for the last one is dropped
+    chose.current = false; setFromRecord(null)
     if (!counterpartyId) { setScheduleCollateral(null); return }
+    let live = true
     ;(async () => {
       try {
         const session = await getSessionMaybe()
         const r = await fetch(API + '/api/collateral/schedule/' + counterpartyId, { headers: { Authorization: 'Bearer ' + (session?.access_token || '') } })
-        if (!r.ok) return
+        if (!r.ok || !live) return
         const j = await r.json()
-        // the tab starts on the counterparty's own margin terms, unless a preset has been pressed already
-        const own = recordTerms(j.csa, counterpartyName)
-        if (own && !chose.current) {
-          setSettlement(own.preset); setImExchanged(own.im); setFromRecord(own.words)
-          if (own.threshold > 0) setThresholdCp(String(own.threshold))
-          if (own.mta > 0) setMta(String(own.mta))
+        if (!live) return
+        // the tab starts on the counterparty's own margin terms, unless the user has set one already. Every term
+        // is set, a zero and a blank too: the last counterparty's threshold is not left in the field
+        const rec = recordTerms(j.csa, counterpartyName)
+        if (rec && !chose.current) {
+          const bi = rec.preset === 'BILATERAL'
+          setSettlement(rec.preset); setImExchanged(rec.im); setFromRecord(rec.words)
+          setThresholdCp(bi ? String(rec.threshold) : ''); setMta(bi ? String(rec.mta) : ''); setMporDays(bi && rec.mpor ? String(rec.mpor) : '')
         }
         if (j.schedule) {
           const sc = { posted: j.schedule.posted, received: j.schedule.received, rail: j.schedule.rail }
@@ -252,6 +260,7 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
         } else { setScheduleCollateral(null) }
       } catch { /* no schedule: the ticket's own choice stands */ }
     })()
+    return () => { live = false }
   }, [counterpartyId])
   const [compareResult, setCompareResultState] = useState(() => {
     try { const s = sessionStorage.getItem('rijeka_xva_cmp'); return s ? JSON.parse(s) : null } catch { return null }
@@ -432,11 +441,11 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
   const saving = onChainSaving(xva, compareResult?.xva, simResult?.xva?.notional)
 
   const settlementFields = settlement==='BILATERAL' ? [
-    {label:'Threshold $',val:thresholdCp,set:setThresholdCp,tk:'threshold',ph:'0'},
-    {label:'MTA $',val:mta,set:setMta,tk:'mtaTip',ph:'0'},
-    {label:'MPoR bd',val:mporDays,set:setMporDays,tk:'mpor',ph:'10'},
+    {label:`Threshold ${ccySign(ticketCcy).trim()}`,val:thresholdCp,set:own(setThresholdCp),tk:'threshold',ph:'0'},
+    {label:`MTA ${ccySign(ticketCcy).trim()}`,val:mta,set:own(setMta),tk:'mtaTip',ph:'0'},
+    {label:'MPoR bd',val:mporDays,set:own(setMporDays),tk:'mpor',ph:'10'},
   ] : settlement==='ON_CHAIN' ? [
-    {label:'MPoR bd',val:mporDays,set:setMporDays,tk:'mpor',ph:'5'},
+    {label:'MPoR bd',val:mporDays,set:own(setMporDays),tk:'mpor',ph:'5'},
     {label:'IM yield bp',val:imYieldBp,set:setImYieldBp,tk:'imYield',ph:'0'},
   ] : []
 
@@ -457,7 +466,7 @@ export default function XVATab({ fees, trade, notionalRef, rateRef, effDate, mat
   const simulateError = simErr && <div style={{fontSize:'0.75rem',color:'var(--red)',marginBottom:'6px'}}>✘ {simErr}</div>
   const settlementBlock = (
     <SettlementBlock settlement={settlement} setSettlement={choose} fromRecord={fromRecord}
-      imExchanged={imExchanged} setImExchanged={setImExchanged}
+      imExchanged={imExchanged} setImExchanged={own(setImExchanged)}
       compareOnChain={compareOnChain} setCompareOnChain={setCompareOnChain}
       fields={settlementFields} tip={tip} untip={untip}
       collateral={collateral} setCollateral={setCollateral} instruments={instruments} scheduleCollateral={scheduleCollateral} />

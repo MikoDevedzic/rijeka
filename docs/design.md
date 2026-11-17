@@ -356,8 +356,9 @@ the tab: the inputs column is as tall as its inputs, and the credit curves and t
 results they drive.
 
 The tab starts on the counterparty's own terms, read from its record (collateralised or not, threshold, minimum
-transfer, whether initial margin is exchanged), and says under the settlement choice that it did. A preset the
-user presses is the user's and is kept; the record is not read over it.
+transfer, margin period, whether initial margin is exchanged), and says under the settlement choice that it did,
+with the numbers. A term the user sets is the user's and is kept; the record is not read over it. Another
+counterparty is another record: the tab starts again on that one's.
 
 ## The scenario tab
 

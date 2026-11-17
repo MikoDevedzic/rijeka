@@ -247,3 +247,5 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   a dollar sign written into a formatter is found on every screen that formatter serves.
 - A sentence about two figures ("they differ by a small part") is a claim: it is measured, or it says only what is
   known (that they are not the same figure).
+- A sentence in the changelog is checked against the diff by someone who did not write it: "Tab stays inside" was
+  written of a ticket with no trap, and "no payment lag" of a model that passes the lag on.

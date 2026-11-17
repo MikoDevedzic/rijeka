@@ -635,6 +635,10 @@
 }
 .tbw-fx-tag > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tbw-fx-tag-wrap { flex-wrap: wrap; row-gap: 0; }
+/* a line said whole on one line: it runs on under the cells to its right, which hold nothing at its height (how
+   an implied forward was reached; cut at its cell's edge it read "parity on the two curves (…") */
+.tbw-fx-tag-run { overflow: visible; }
+.tbw-fx-tag-run > span { overflow: visible; white-space: nowrap; min-width: max-content; }
 /* a rule in words, which runs onto a second line before it is cut short */
 .tbw-fx-tag-free > span { white-space: normal; overflow: visible; }
 .tbw-fx-tag-override { color: var(--accent); }

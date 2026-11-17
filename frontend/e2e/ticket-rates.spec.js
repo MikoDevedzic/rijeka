@@ -215,6 +215,7 @@ test('rates ticket: price, XVA with the saving on chain, collateral, book, confi
   await app.keyboard.press('Escape')
   await expect(sheet).toHaveCount(0)
   await expect(cert.getByTestId('paper-open'), 'focus goes back to the button that opened the sheet').toBeFocused()
+  await expect(app.locator('.tbw-window'), 'Escape closed the sheet, not the ticket under it').toHaveCount(1)
 
   expectClean(problems)
 })

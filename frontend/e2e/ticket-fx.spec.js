@@ -27,8 +27,12 @@ for (const c of CASES) {
     await expect(win, 'a forward shows its value, an option its premium').toContainText(c.xva.endsWith('option') ? 'PREMIUM' : 'NET NPV')
 
     await win.getByRole('button', { name: 'XVA', exact: true }).click()
+    // the tab starts on the counterparty's record and says its numbers; the run is on those numbers too, also after
+    // BILATERAL is pressed again (it sent the panel's standing 500,000 / 100,000 / 10 under "from its record")
+    await expect(win.getByTestId('xva-terms-from')).toContainText('threshold 0, minimum transfer 500,000')
     await win.getByRole('button', { name: 'BILATERAL', exact: true }).click()
     const one = await simulateWithComparison(app, win, c.xva)
+    expect(one.request.csa, 'a bilateral run is on the record\'s own terms').toMatchObject({ preset: 'BILATERAL', threshold_cp: 0, mta: 500000 })
     const first = one.run
     expectZero(first.xva.colva, 'cash collateral carries nothing')
     const strip = win.getByTestId('va-strip')

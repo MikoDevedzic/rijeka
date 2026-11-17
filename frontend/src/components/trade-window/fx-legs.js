@@ -70,9 +70,13 @@ export const monthsOn = (date, from, months) => {
 }
 
 // The leg after the last one: the same kind, style, side and size, a month later, at the fair forward.
+// Where the legs so far are a month apart from the ticket's own date, the new one is counted from that date too
+// (as STRIP counts): a month on from a rolled date, rolled again, drifted (2 April's third leg 3 June, not 2 June).
 export function nextLeg(first, legs, roll = asIs) {
   const last = legs.length ? legs[legs.length - 1] : first
-  return newLeg(last, { date: roll(addMonths(last.date, 1), last.kind), strike: null })
+  const onGrid = legs.every((l, i) => monthsOn(l.date, first.date, i + 1))
+  const date = onGrid ? addMonths(first.date, legs.length + 1) : addMonths(last.date, 1)
+  return newLeg(last, { date: roll(date, last.kind), strike: null })
 }
 
 // A strip of `n` legs in all from the ticket's own: the further n − 1, a month apart, each at its own fair forward.

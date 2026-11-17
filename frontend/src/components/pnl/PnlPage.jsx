@@ -320,7 +320,7 @@ function SignOff({ rep, role, canControl, onSign, busy }) {
       {/* a signature is of the day as it stood when it was made. Where the day has since moved (trades booked or
           changed for that date, the day run again), the page says so: three different figures for one day, and
           nothing to say which was signed, was what a first-time reader met */}
-      {moved != null && <div className="pnl-note" data-testid="pnl-signed-moved" style={{ color: 'var(--amber)', lineHeight: 1.5 }}>The last signature is of a day's P&amp;L of {sgn(lastSigned)} USD. The day now reads {sgn(today)}: it has moved by {sgn(moved)} since it was signed (trades booked or changed for this date, or the day run again). The signature stands for what was signed; sign again to sign the day as it is now.</div>}
+      {moved != null && <div className="pnl-note" data-testid="pnl-signed-moved" style={{ color: 'var(--amber)', lineHeight: 1.5 }}>The last signature is of a day's P&amp;L of {sgn(lastSigned)} USD. The day now reads {sgn(today)}: it has moved by {sgn(moved)} since it was signed (trades booked or changed for this date, or the day run again). The signature stands for the day as it was signed, not as it reads now.</div>}
       {signs.length > 0 && <ul className="pnl-comments">
         {signs.map((s, i) => <li key={i}><span className="pnl-grp mk">{s.role}</span><b>{s.by}</b><em>{s.at ? new Date(s.at).toLocaleString() : ''}</em>{s.usd_signed != null && <small>signed {sgn(s.usd_signed)} USD</small>}{s.comment && <p>{s.comment}</p>}</li>)}
       </ul>}

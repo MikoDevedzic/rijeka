@@ -59,6 +59,7 @@ Learned on 16 November 2026 (an agreement is a number)
 
 Learned on 16 November 2026 (a date a builder makes)
 - A date the app makes for the user (a strip's later legs, a leg paired to another) is checked against the pair's own calendar and roll, as the first leg's is: a digital-asset strip's second and third legs settled on a Saturday and a Sunday, by adding months to the first leg's date.
+- A tab that says it starts on a record's terms is checked in the request it sends, not in the line it prints: the currency XVA panel set the preset from the record and sent the panel's standing threshold, minimum transfer and margin period under a line that said "from its record".
 - Where two engines value one trade (the pricer, the credit model at the start of its paths), the screen that shows the second says whose value it is and on which day, and the gap is a row in the model inventory until it is reconciled.
 
 Rules

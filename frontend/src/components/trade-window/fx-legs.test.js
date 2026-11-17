@@ -197,6 +197,14 @@ describe('a leg made a month on keeps a date the ticket itself would keep', () =
     expect(structureOf(first, legs)).toBe('STRIP')
     expect(structureOf(first, stripLegs(first, 3))).toBe('STRIP')                     // and one booked before the rule, as stepped
   })
+  it('ADD LEG counts from the ticket\'s own date as STRIP does, so two added legs are the strip\'s', () => {
+    const f = { kind: 'FWD', direction: 'BUY', notional: 10, date: '2027-04-02' }               // a Friday; a month on is a Sunday
+    const one = nextLeg(f, [], roll), two = nextLeg(f, [one], roll)
+    expect([one.date, two.date]).toEqual(stripLegs(f, 3, roll).map(l => l.date))
+    expect(two.date).toBe('2027-06-02')                                                          // not 3 June, a month on from the rolled 3 May
+    // legs that are not a month apart: the next is a month after the last, as before
+    expect(nextLeg(f, [{ ...f, date: '2027-09-15' }], roll).date).toBe('2027-10-15')
+  })
   it('the next leg and a calendar\'s second leg are rolled the same way', () => {
     expect(nextLeg(first, [], roll).date).toBe('2027-01-18')
     const call = { kind: 'CALL', direction: 'BUY', notional: 10, date: '2026-12-16', strike: 100 }

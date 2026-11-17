@@ -127,6 +127,10 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   const chose = useRef(false)                            // a preset has been pressed: the record's terms no longer set it
   const [fromRecord, setFromRecord] = useState(null)     // the line that says the starting terms are the counterparty's own
   const choose = (k) => { chose.current = true; setFromRecord(null); setSettlement(k) }
+  const own = (set) => (v) => { chose.current = true; setFromRecord(null); set(v) }
+  // the record's own bilateral terms (threshold, minimum transfer, margin period): a bilateral run is on these, not
+  // on the panel's standing numbers, for as long as the counterparty is this one
+  const [recTerms, setRecTerms] = useState(null)
   const [compareOnChain, setCompareOnChain] = useState(true)      // the saving on chain is shown by default
 
   // What the margin is held in: the firm's instruments once, the counterparty's schedule when one is selected.
@@ -143,17 +147,21 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
     })()
   }, [])
   useEffect(() => {
+    chose.current = false; setFromRecord(null); setRecTerms(null)      // another counterparty is another record
     if (!counterpartyId) { setScheduleCollateral(null); return }
+    let live = true
     ;(async () => {
       try {
         const session = await getSessionMaybe()
         const r = await fetch(API + '/api/collateral/schedule/' + counterpartyId, { headers: { Authorization: 'Bearer ' + (session?.access_token || '') } })
-        if (!r.ok) return
+        if (!r.ok || !live) return
         const j = await r.json()
         // the tab starts on the counterparty's own margin terms, unless a preset has been pressed already
-        const own = recordTerms(j.csa, counterpartyName)
-        if (own && !chose.current) {
-          setSettlement(own.preset); setImExchanged(own.im); setFromRecord(own.words)
+        if (!live) return
+        const rec = recordTerms(j.csa, counterpartyName)
+        setRecTerms(rec && rec.preset === 'BILATERAL' ? { threshold: rec.threshold, mta: rec.mta, mpor: rec.mpor } : null)
+        if (rec && !chose.current) {
+          setSettlement(rec.preset); setImExchanged(rec.im); setFromRecord(rec.words)
         }
         if (j.schedule) {
           const sc = { posted: j.schedule.posted, received: j.schedule.received, rail: j.schedule.rail }
@@ -162,6 +170,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
         } else { setScheduleCollateral(null) }
       } catch { /* no schedule: the ticket's own choice stands */ }
     })()
+    return () => { live = false }
   }, [counterpartyId])
   // assumptions
   const [lgd, setLgd] = useState(HIDDEN_INPUT_DEFAULTS.lgd)
@@ -210,7 +219,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
         lgd: Number(lgd) / 100, own_lgd: Number(lgd) / 100, fba_ratio: Number(fbaRatio) / 100, hurdle_rate: Number(hurdle) / 100,
         capital_model: capModel, wwr_multiplier: wwr, im_usd: imUsdValue(imUsd), crypto_group: cryptoGroup || null,
         cp_hazard_if_halves: Number(cpLink) || 1, own_hazard_if_halves: Number(ownLink) || 1,
-        csa: fxCsaBody(settlement, imExchanged),
+        csa: fxCsaBody(settlement, imExchanged, recTerms),
         ...(fees && fees.length ? { fees } : {}),      // the trade's fees still to come are part of its value and its exposure
         collateral: collateralBody(collateral),
       }
@@ -273,7 +282,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
   const simulateError = err && <div style={{fontSize:'0.75rem',color:'var(--red)',marginBottom:'6px'}}>✘ {err}</div>
   const settlementBlock = (
     <SettlementBlock settlement={settlement} setSettlement={choose} fromRecord={fromRecord}
-      imExchanged={imExchanged} setImExchanged={setImExchanged}
+      imExchanged={imExchanged} setImExchanged={own(setImExchanged)}
       compareOnChain={compareOnChain} setCompareOnChain={setCompareOnChain}
       tip={tip} untip={untip}
       collateral={collateral} setCollateral={setCollateral} instruments={instruments} scheduleCollateral={scheduleCollateral} />

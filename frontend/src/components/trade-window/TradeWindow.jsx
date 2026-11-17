@@ -244,9 +244,15 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   // A ticket that opens takes the focus, and gives it back to what opened it when it closes. (It was announced as a
   // dialog and the keyboard stayed on the blotter behind it: Tab walked seventy rows the ticket was standing on.)
   useEffect(() => {
-    const opener = document.activeElement
-    winRef.current?.focus({ preventScroll: true })
-    return () => { if (opener && opener !== document.body && document.contains(opener)) opener.focus?.({ preventScroll: true }) }
+    const opener = document.activeElement, node = winRef.current
+    node?.focus({ preventScroll: true })
+    // back to the opener only where the focus was still the ticket's (or nowhere) when it closed: a user who has
+    // since gone to the chat box or another ticket is not pulled back
+    return () => {
+      const at = document.activeElement
+      const ours = !at || at === document.body || (node && node.contains(at))
+      if (ours && opener && opener !== document.body && document.contains(opener)) opener.focus?.({ preventScroll: true })
+    }
   }, [])
   const phoneView = usePhone()
   const soloTicket = isSoloTicket()                    // this page is a ticket's own window (/ticket): no second pop-out
@@ -1203,7 +1209,11 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       tabIndex={-1}
       // Escape closes a booked trade's ticket: nothing typed is lost with it. A new ticket is not closed by a key
       // (an unbooked ticket lost to a stray key is the worse fault), nor is one closed from inside a field.
-      onKeyDown={(e) => { if (e.key === 'Escape' && viewMode && onClose && !e.defaultPrevented && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) onClose() }}
+      onKeyDown={(e) => {
+        // only a key pressed in the ticket's own frame: a sheet drawn outside it (the paper confirmation) sends its
+        // keys up through React all the same, and its Escape closed the sheet and the ticket under it
+        if (e.key === 'Escape' && viewMode && onClose && !e.defaultPrevented && e.currentTarget.contains(e.target) && !/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) onClose()
+      }}
     >
       <div className="tbw-header">
         <div className="tbw-traffic-lights">

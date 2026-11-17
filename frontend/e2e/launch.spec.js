@@ -95,6 +95,7 @@ test('launch workspace: the ticket has no CAPITAL tab and XVA opens simple, with
   // the tab starts on the counterparty's own terms (its record: variation and initial margin), and says so; it
   // started on NO CSA whatever the record said, three times the charge of the netting set one press lower
   await expect(win.getByTestId('xva-terms-from')).toContainText("RIJEKA DEMO BANK AG's own terms")
+  await expect(win.getByTestId('xva-terms-from')).toContainText('threshold 0, minimum transfer 500,000')
   await expect(win.getByLabel('VM posted in')).toBeVisible()
   await expect(win.getByLabel('Initial margin exchanged')).toBeChecked()
   // another preset pressed is the user's choice: the line goes

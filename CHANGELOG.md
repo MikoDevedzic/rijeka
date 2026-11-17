@@ -12,13 +12,18 @@ say enough about itself.
 - **A swap's figures are in the swap's currency.** A EUR swap's PV, IR01, flows and XVA stood under a dollar sign
   on every tab. The ticket now says which currency it is and every amount on it is written in that one.
 - **The XVA tab starts on the counterparty's own terms.** It opened on NO CSA for a counterparty whose record
-  holds margin terms. It reads the record (collateralised or not, threshold, minimum transfer, initial margin) and
-  says that it did; a preset the user presses is kept.
+  holds margin terms. It reads the record (collateralised or not, threshold, minimum transfer, margin period,
+  initial margin), runs on those and says so with the numbers; a term the user sets is the user's, and another
+  counterparty is another record. On a currency or digital-asset ticket a bilateral run is on the record's
+  threshold, minimum transfer and margin period, where it ran on standing numbers.
 - **A strip's legs settle on business days.** The later legs of a digital-asset strip were the first leg's date
-  plus months, a Saturday and a Sunday among them. Each leg's date is rolled on the pair's calendar as the first
-  one is, and a new ticket keeps its tenor when the pair is changed (an option's expiry read "CUSTOM · 2.9…").
-- **The ticket takes the keyboard.** Opening a ticket puts the focus in it, Tab stays inside, Escape closes a
-  booked trade's ticket (a new ticket is not thrown away by a key), and the focus returns to where it was.
+  plus months, a Saturday and a Sunday among them. Each leg's date is counted in months from the ticket's own date
+  and rolled on the pair's calendar as that date is, by STRIP and by ADD LEG alike, and a new ticket keeps its
+  tenor when the pair is changed (an option's expiry read "CUSTOM · 2.9…").
+- **The ticket takes the keyboard.** Opening a ticket puts the focus in it, so Tab goes on through the ticket's
+  own fields and not the rows behind it; Escape closes a booked trade's ticket (a new ticket is not thrown away by
+  a key, and a sheet open over the ticket closes alone); the focus returns to where it was unless the user has
+  since gone elsewhere. The ticket is a window, not a trap: Tab leaves it after its last field.
 - **A signed day that has since moved says so.** The P&L page showed three figures for one day where trades were
   booked after the sign-off, and nothing to say which was signed. It names the signed figure, the day as it now
   reads and the difference. The IPV page no longer says OFFICIAL · SIGNED in green over an input marked pending.
@@ -36,7 +41,10 @@ say enough about itself.
   on BOOK TRADE in a small window. Cut labels are whole: the strike's caption, how an implied forward was reached,
   a certificate's sentence (broken inside a word), an IPV row (the part that asks for a decision comes first).
 
-Not done, and said: at 1280 by 720 the blotter still scrolls sideways to reach STATUS and UTI; a digital-asset
+Not done, and said: a strip from the last business day of a month does not follow the end-of-month rule (from
+29 January its third leg is 29 March, not 31 March); a swap in another currency is simulated on Hull-White
+parameters calibrated to the USD swaption surface (written in the model inventory); the CHAT button cannot be
+reached under a ticket that covers the corner until the ticket is moved; at 1280 by 720 the blotter still scrolls sideways to reach STATUS and UTI; a digital-asset
 forward is CRYPTO NDF on the blotter and CRYPTO FORWARD on the ticket; LIVE on the blotter is not explained where
 it is counted.
 

@@ -161,6 +161,12 @@ describe('fxCsaBody', () => {
     expect(fxCsaBody('BILATERAL', true)).toEqual({ preset: 'BILATERAL', threshold_cp: 500000, mta: 100000, mpor_days: 10, im_exchanged: true })
     expect(fxCsaBody('ON_CHAIN', false)).toEqual({ preset: 'ON_CHAIN', im_exchanged: false })
   })
+  it('a bilateral run is on the record\'s own terms where there are any, a zero threshold too', () => {
+    expect(fxCsaBody('BILATERAL', true, { threshold: 0, mta: 500000, mpor: 14 })).toEqual({ preset: 'BILATERAL', threshold_cp: 0, mta: 500000, mpor_days: 14, im_exchanged: true })
+    expect(fxCsaBody('BILATERAL', false, { threshold: 2e6, mta: 0, mpor: null })).toEqual({ preset: 'BILATERAL', threshold_cp: 2e6, mta: 0, mpor_days: 10, im_exchanged: false })
+    expect(fxCsaBody('BILATERAL', false, null)).toEqual({ preset: 'BILATERAL', threshold_cp: 500000, mta: 100000, mpor_days: 10, im_exchanged: false })
+    expect(fxCsaBody('ON_CHAIN', false, { threshold: 0, mta: 0, mpor: 14 })).toEqual({ preset: 'ON_CHAIN', im_exchanged: false })
+  })
 })
 
 describe('quoteNotional', () => {
@@ -396,7 +402,7 @@ describe('the XVA tab starts on the counterparty\'s own margin terms', () => {
   it('variation and initial margin on the record: bilateral with IM, and the line says whose terms', () => {
     const t = recordTerms({ type: 'VM_IM', collateralised: true, im_exchanged: true, threshold: 0, mta: 500000, mpor_days: 10 }, 'RIJEKA DEMO BANK AG')
     expect(t).toMatchObject({ preset: 'BILATERAL', im: true, threshold: 0, mta: 500000, mpor: 10 })
-    expect(t.words).toBe("Starts on RIJEKA DEMO BANK AG's own terms, from its record: variation margin and initial margin. Press another to see the trade under it.")
+    expect(t.words).toBe("Starts on RIJEKA DEMO BANK AG's own terms, from its record: variation margin and initial margin (threshold 0, minimum transfer 500,000, margin period 10 business days). Press another to see the trade under it.")
   })
   it('variation margin alone, and no CSA', () => {
     expect(recordTerms({ collateralised: true, im_exchanged: false }, 'X')).toMatchObject({ preset: 'BILATERAL', im: false })
