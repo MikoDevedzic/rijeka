@@ -640,8 +640,9 @@ checklist in `docs/ops/release.md`.
 - One API process, in-request Monte Carlo and full-revaluation VaR, rate-limited per account
   (`api/routes/_limits.py`). A larger book moves these to a worker without changing the engines.
 - One request may send 256 kB (`middleware/body_limit.py`, `RIJEKA_MAX_BODY_KB`): a layer in front of every route,
-  inside CORS, answers 413 before a route reads a larger body (by its declared length, or for a chunked body as
-  soon as it passes the cap). The refusal for size and the one for too many heavy runs in a minute say, on the
+  inside CORS, answers 413 for a larger body: by its declared length before a byte is read, and for every body by
+  counting what arrives (a length declared beside `chunked` is not taken on trust); thirty seconds for a piece
+  that does not come. The history import's 4,096 kB is for a caller showing `RIJEKA_CRON_SECRET`. The refusal for size and the one for too many heavy runs in a minute say, on the
   hosted demo, that it is a demo on one small server and where to write (`_limits.demo_line`, one place).
 - A report (market risk, P&L, counterparty credit) values each trade many times and reads once what none of those
   valuations changes: the cap surface for the date, a swaption's legs (`db/reading.py`). The scheduler asks the

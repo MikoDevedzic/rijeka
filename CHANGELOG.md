@@ -10,10 +10,12 @@ methodology document carries its own version (v1.40). Commits on `main` are the 
 - **Why.** Every route read its body into memory before looking at it, and sign-up is open: one account could have
   posted hundreds of megabytes to any route and taken the single small server down for everyone. The security
   reviewer raised it on 17 November; two routes were bounded then, the rest were not.
-- **The limit.** A layer in front of every route answers 413 before a route reads a body over the cap: by the
-  length the request declares, or, for a body that declares none, as soon as what has arrived passes it. The cap is
-  256 kB (`RIJEKA_MAX_BODY_KB`, for a self-hosted desk loading its own book); the history import takes 4,096 kB.
-  A ticket's request is a few kB, so nothing a desk does on a screen comes near it.
+- **The limit.** A layer in front of every route answers 413 for a body over the cap. One that declares a length
+  over it is refused before a byte is read; every other body is counted as it arrives and refused the moment it
+  passes the cap, whatever it says about itself, and under the cap is handed on untouched. A body that stops
+  arriving is given up after thirty seconds. The cap is 256 kB (`RIJEKA_MAX_BODY_KB`, for a self-hosted desk
+  loading its own book); the history import takes 4,096 kB from the scheduler alone. A ticket's request is a few
+  kB, so nothing a desk does on a screen comes near it.
 - **What the refusal says.** How large the request was and what one request may carry. On the hosted demo it adds
   that this is the demo desk, one small server shared by everyone trying it and not sized for heavy use, and where
   to write for commercial use. A desk a firm runs for itself is told only the sizes.
@@ -21,8 +23,14 @@ methodology document carries its own version (v1.40). Commits on `main` are the 
   its allowance for a minute was told "wait a minute". It is now also told how many seconds until the next one is
   taken (and the answer carries `Retry-After`), with the same line about the demo. Nothing is held in a queue: a
   refused run is asked again by the user.
-- **Tests.** Under the cap, at it and over it; a chunked body; the larger route; the setting and nonsense in it;
-  the wording on the demo and off it; the wait in the refusal for frequency.
+- **The security review before it shipped changed it.** The first version judged a body that declared its length
+  on that length alone; a request that declares a small length and also says it is chunked may be framed by its
+  chunks. The layer now counts every body. The larger cap of the history import was open to anyone before the
+  route's own check ran; it now needs the scheduler's secret.
+- **Tests.** Under the cap, at it and over it; a chunked body; a small length beside chunked; a length that is
+  not a number; the history import with and without the secret; the setting and nonsense in it; a body that
+  stalls; a sender who leaves; the browser reading the refusal; the wording on the demo and off it; the wait in
+  the refusal for frequency.
 
 ## 0.57.0 · 18 November 2026
 
