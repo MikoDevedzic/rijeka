@@ -96,9 +96,15 @@ describe('IR_SWAPTION', () => {
 
   it('with no vol typed it books the vol the price was struck at, else the surface\'s as the ticket showed it', () => {
     const untouched = { ...swaptionState, volBp: '', volDefault: { vol_bp: 94.9, tier: 'QUOTED', point: '1Yx5Y' } }
-    expect(buildBookingBody(untouched, 'PAY', { ...extras, priced: { ...(extras.priced || {}), vol_bp: 93.1 } }).terms.vol_bp).toBe(93.1)
-    expect(buildBookingBody(untouched, 'PAY', extras).terms.vol_bp).toBe(extras.priced?.vol_bp ?? 94.9)
-    expect(buildBookingBody({ ...untouched, volBp: '80' }, 'PAY', extras).terms.vol_bp).toBe(80)
+    expect(buildBookingBody(untouched, 'PAY', { ...extras, priced: { vol_bp: 93.1 } }).terms.vol_bp).toBe(93.1)
+    expect(buildBookingBody(untouched, 'PAY', extras).terms.vol_bp).toBe(94.9)
+    expect(buildBookingBody({ ...untouched, volBp: '80' }, 'PAY', { ...extras, priced: { vol_bp: 93.1 } }).terms.vol_bp).toBe(80)
+    expect(() => buildBookingBody({ ...untouched, volBp: '0' }, 'PAY', extras)).toThrow(/is not a normal vol in basis points/)
+  })
+  it('a Bermudan books the σ its tree priced at, whatever stands in the vol field', () => {
+    const berm = { ...swaptionState, structure: 'BERMUDAN', expiry: '3Y', volBp: '80' }
+    expect(buildBookingBody(berm, 'PAY', { ...extras, priced: { vol_bp: 71.4 } }).terms.vol_bp).toBe(71.4)
+    expect(buildBookingBody({ ...berm, volBp: 'abc' }, 'PAY', { ...extras, priced: { vol_bp: 71.4 } }).terms.vol_bp).toBe(71.4)
   })
 
   it('an expiry that is not after the valuation date is not booked, and the reason is the ticket\'s own words', () => {

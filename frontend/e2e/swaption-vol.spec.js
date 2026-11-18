@@ -28,8 +28,9 @@ test('a swaption\'s vol is read from the surface at its expiry and tenor, says s
     return { body: r.request().postDataJSON(), quote: await r.json() }
   }
   let { body, quote } = await price()
-  expect(body.vol_bp, 'the request carries the vol the field shows').toBeCloseTo(read.vol_bp, 9)
-  expect(quote.vol_bp).toBeCloseTo(read.vol_bp, 9)
+  expect(body.vol_bp, 'untouched, the ticket sends no vol: the engine reads the surface for the option on the ticket').toBeNull()
+  expect(quote.vol_bp, 'and prices at the number the field shows').toBeCloseTo(read.vol_bp, 9)
+  expect(quote, 'naming the point it read').toMatchObject({ vol_tier: 'QUOTED', vol_source: { point: '1Yx5Y', asof: read.asof } })
   const atSurface = quote.npv
 
   // another expiry: another point of the surface, a lower vol on the stack's (the surface falls with the expiry)
@@ -58,5 +59,14 @@ test('a swaption\'s vol is read from the surface at its expiry and tenor, says s
   expect(body.vol_bp).toBe(60)
   expect(quote.vol_tier).toBe('MANUAL')
   expect(quote.npv, 'at the money the price goes with the vol').toBeCloseTo(atSurface * 60 / read.vol_bp, -1)
+
+  // what is not a vol is refused in words, not replaced by the surface's behind the field
+  await vol.fill('0')
+  await vol.blur()
+  await expect(win.getByTestId('swaption-vol-problem')).toBeVisible()
+  const sent = app.waitForResponse(r => /\/api\/price\/swaption$/.test(r.url()) && r.request().method() === 'POST', { timeout: 4000 }).then(() => 'sent', () => 'nothing sent')
+  await win.getByRole('button', { name: '▶ PRICE' }).click()
+  await expect(win.getByTestId('tbw-footer-error')).toContainText('is not a normal vol in basis points')
+  expect(await sent).toBe('nothing sent')
   expectClean(problems)
 })

@@ -139,8 +139,8 @@ export default function RatesScenario({ product, productKey, state, result, payl
   }
   const firsts = factors.map(first), firstTotal = firsts.some(v => v == null) ? null : firsts.reduce((a, b) => a + b, 0)
   const volShift = volF ? volAt(shocks.vol || NO_SHOCK) : 0
-  // (before the market's answer is back: a European swaption's typed vol; a Bermudan's σ as the ticket's own price reports it, never the surface's)
-  const tradeVol = market?.vol ?? (bermudan ? (Number.isFinite(Number(result?.vol_bp)) ? Number(result.vol_bp) : null) : kind === 'swaption' ? Number(payload.vol_bp) : null)
+  // (before the market's answer is back: a European swaption's typed vol, or with none typed the vol its price read off the surface; a Bermudan's σ as the ticket's own price reports it, never the surface's)
+  const tradeVol = market?.vol ?? (bermudan ? (Number.isFinite(Number(result?.vol_bp)) ? Number(result.vol_bp) : null) : kind === 'swaption' ? (payload.vol_bp != null ? Number(payload.vol_bp) : (Number.isFinite(Number(result?.vol_bp)) ? Number(result.vol_bp) : null)) : null)
 
   // ── the left column ──
   const shock = shocks[cur.key] || NO_SHOCK

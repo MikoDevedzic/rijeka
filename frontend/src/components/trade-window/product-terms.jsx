@@ -522,6 +522,9 @@ function useSwaptionVolDefault(state, update, years) {
   const tenorY = TENOR_Y[tenor] || 5
   const y = Math.round(years * 1e6) / 1e6
   useEffect(() => {
+    // the answer on screen was for the ticket as it stood: gone the moment the question changes, so the field never
+    // shows one option's vol under another option's terms
+    update({ volDefault: null })
     if (readOnly || !valDate || !(y > 0)) return
     let cancelled = false
     ;(async () => {
@@ -567,10 +570,13 @@ export function SwaptionTermsBody({ state, update }) {
           {ex.problem && <div className="tbw-fx-limit" data-testid="swaption-expiry-problem" style={{ color: 'var(--amber)' }}>not after the valuation date</div>}
         </Field>
         <Field label="NORMAL VOL (bp)">
-          {/* the surface's vol for this expiry and tenor until one is typed; the words under it say which point and day */}
-          <DefaultedInput testId="swaption-vol" value={state.volBp ?? ''} onChange={v => update({ volBp: v })}
-                          fallback={vol.typed ? null : vol.bp} format={x => String(+Number(x).toFixed(2))}
-                          tag={bermudan ? 'the tree prices at the model\'s σ' : volSourceWords(state.volDefault)} />
+          {/* the surface's vol for this expiry and tenor until one is typed; the words under it say which point and day.
+              A Bermudan's tree prices at the model's own σ and reads no vol: nothing to type */}
+          {bermudan
+            ? <><input className="tbw-mono" disabled value="" placeholder="model σ" data-testid="swaption-vol" /><div className="tbw-fx-limit">the tree prices at the model's σ</div></>
+            : <DefaultedInput testId="swaption-vol" value={state.volBp ?? ''} onChange={v => update({ volBp: v })}
+                              fallback={vol.shown} format={x => String(+Number(x).toFixed(2))} tag={volSourceWords(state.volDefault)} />}
+          {vol.problem && !bermudan && <div className="tbw-fx-limit" data-testid="swaption-vol-problem" style={{ color: 'var(--amber)' }}>not a vol: above zero, at most 5,000 bp</div>}
         </Field>
         <Field label="STRIKE (%) blank=ATM">
           <input className="tbw-mono tbw-blue" value={strike} placeholder="ATM forward"

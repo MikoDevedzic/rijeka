@@ -122,7 +122,12 @@ def test_the_vol_a_swaption_reads_says_where_it_came_from():
             return date(2026, 11, 18)
     on = O.swaption_vol_point(M(), "USD", 1.0, 5.0)
     assert on == {"vol_bp": 80.0, "tier": "QUOTED", "point": "1Yx5Y", "asof": "2026-11-18", "source": "USD_SWVOL_ATM nearest point"}
-    assert O.swaption_vol_point(M(), "USD", 365 / 365.0 + 1e-12, 5.0)["tier"] == "QUOTED"          # a year of 365 days is the one-year point
+    # a year by the calendar is the one-year point whatever the trade date: 365 days, 366 across a 29 February, 367 or
+    # 368 after a weekend's roll; five years is 1,826 or 1,827 days; a swap of five years is 1,826 / 365.25 as the P&L asks
+    for days in (364, 365, 366, 367, 368):
+        assert O.swaption_vol_point(M(), "USD", days / 365, 5.0)["tier"] == "QUOTED", days
+    assert O.swaption_vol_point(M(), "USD", 1826 / 365, 1826 / 365.25)["tier"] == "QUOTED"
+    assert O.swaption_vol_point(M(), "USD", 11 / 12, 5.0)["tier"] == "NEAREST"                     # a month short is not on it
     near = O.swaption_vol_point(M(), "USD", 92 / 365, 5.0)                                         # three months: below the grid
     assert (near["vol_bp"], near["tier"], near["point"]) == (80.0, "NEAREST", "1Yx5Y")
     far = O.swaption_vol_point(M(), "USD", 10.0, 10.0)                                             # beyond it

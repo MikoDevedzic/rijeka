@@ -86,16 +86,22 @@ describe('a swaption\'s expiry on the ticket', () => {
 
 describe('a swaption\'s vol on the ticket', () => {
   const surface = { vol_bp: 94.9, tier: 'QUOTED', point: '1Yx5Y', asof: '2026-11-18', currency: 'USD' }
-  it('is the surface\'s for the option\'s expiry and tenor until one is typed', () => {
-    expect(swaptionVol({ volDefault: surface })).toEqual({ bp: 94.9, typed: false, source: surface })
-    expect(swaptionVol({ volBp: '', volDefault: surface }).bp).toBe(94.9)
-    expect(swaptionVol({ volBp: '80', volDefault: surface })).toEqual({ bp: 80, typed: true, source: null })
-    // not a number, or not above zero, is not a vol: the surface's stands
-    for (const bad of ['abc', '0', '-5']) expect(swaptionVol({ volBp: bad, volDefault: surface })).toMatchObject({ bp: 94.9, typed: false })
+  it('untouched, the ticket shows the surface\'s and sends none: the engine reads the market for the option on the ticket', () => {
+    expect(swaptionVol({ volDefault: surface })).toEqual({ bp: null, typed: false, shown: 94.9, problem: null })
+    expect(swaptionVol({ volBp: '', volDefault: surface })).toMatchObject({ bp: null, shown: 94.9 })
+    expect(swaptionVol({})).toEqual({ bp: null, typed: false, shown: null, problem: null })          // the surface has not answered yet
   })
-  it('is nothing until the surface has answered: the request then carries no vol and the engine reads the same market', () => {
-    expect(swaptionVol({})).toEqual({ bp: null, typed: false, source: null })
-    expect(swaptionVol({ volDefault: null }).bp).toBeNull()
+  it('a typed vol is the vol', () => {
+    expect(swaptionVol({ volBp: '80', volDefault: surface })).toEqual({ bp: 80, typed: true, shown: null, problem: null })
+    expect(swaptionVol({ volBp: ' 1,250.5 ' }).bp).toBe(1250.5)
+    expect(swaptionVol({ volBp: '5000' }).typed).toBe(true)
+  })
+  it('what is not a vol is refused in words, never quietly replaced by the surface\'s', () => {
+    for (const bad of ['abc', '0', '-5', '5000.01', '1e9']) {
+      const v = swaptionVol({ volBp: bad, volDefault: surface })
+      expect(v, bad).toMatchObject({ bp: null, typed: false })
+      expect(v.problem, bad).toContain('is not a normal vol in basis points (above zero, at most 5,000)')
+    }
   })
   it('says in a few words where an untouched vol comes from', () => {
     expect(volSourceWords(surface)).toBe('surface 1Y×5Y · 2026-11-18')

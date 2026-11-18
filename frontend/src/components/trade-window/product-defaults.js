@@ -38,17 +38,29 @@ export const CCY_CURVE = {
   CAD: 'CAD_CORRA',
 }
 
-// A swaption ticket's normal vol in bp: { bp, typed, source }. The number typed in the field when there is one;
-// otherwise the one the desk's market gives for the option's expiry and tenor (state.volDefault, what
-// GET /api/price/swaption/vol answered: the nearest point of the currency's ATM swaption grid, or the desk default
-// with no surface), and null until that has arrived, which the pricing request sends as "no vol" so the engine reads
-// the same market itself. Until 0.57.0 an untouched field was 86.5 bp whatever the expiry, the tenor or the day.
+// A swaption ticket's normal vol in bp: { bp, typed, shown, problem }.
+// - `typed`: a number was typed in the field; `bp` is then that number, and it is what the request sends.
+// - Untouched, `bp` is null: the request sends no vol and the engine reads the desk's market for the option on the
+//   ticket (the nearest point of the currency's ATM swaption grid, or the desk default with no surface), naming the
+//   point in its answer. The ticket never sends the number it shows: a field that still held the vol of the
+//   expiry chosen a moment ago would have priced the new option at it, as if typed (the independent reviewer and
+//   the model validator, 18 November 2026).
+// - `shown`: what the field shows while untouched: state.volDefault, the answer of GET /api/price/swaption/vol for
+//   the ticket as it stands (the same lookup), null until it has arrived.
+// - `problem`: the field holds something that is not a vol (not a number, zero or less, above 5,000 bp, the
+//   API's bound). The request and the booking refuse it in these words; it is not quietly replaced.
+// Until 0.57.0 an untouched field was 86.5 bp whatever the expiry, the tenor or the day.
+export const MAX_VOL_BP = 5000
 export function swaptionVol(state = {}) {
-  const raw = String(state.volBp ?? '').trim()
-  const typed = raw !== '' && Number.isFinite(parseFloat(raw)) && parseFloat(raw) > 0
-  if (typed) return { bp: parseFloat(raw), typed: true, source: null }
+  const raw = String(state.volBp ?? '').replace(/,/g, '').trim()
   const d = state.volDefault
-  return { bp: d && Number.isFinite(Number(d.vol_bp)) ? Number(d.vol_bp) : null, typed: false, source: d || null }
+  const shown = d && Number.isFinite(Number(d.vol_bp)) ? Number(d.vol_bp) : null
+  if (raw === '') return { bp: null, typed: false, shown, problem: null }
+  const v = Number(raw)
+  if (!Number.isFinite(v) || v <= 0 || v > MAX_VOL_BP) {
+    return { bp: null, typed: false, shown, problem: `The vol "${raw.slice(0, 20)}" is not a normal vol in basis points (above zero, at most ${MAX_VOL_BP.toLocaleString('en-US')}): type one, or clear the field for the surface's.` }
+  }
+  return { bp: v, typed: true, shown: null, problem: null }
 }
 // The few words under the field that say where an untouched vol comes from.
 export function volSourceWords(d) {

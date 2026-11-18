@@ -28,6 +28,7 @@ from ccr.simulate import Paths, bond
 
 log = logging.getLogger("rijeka.ccr")
 DEFAULT_VOL_BP = 85.0
+ON_POINT = 0.02            # swaption_vol_point: how near a grid point, in |ln expiry| + |ln tenor|, is "on" it
 SWAPTIONS = ("IR_SWAPTION", "SWAPTION")
 
 
@@ -61,7 +62,10 @@ def swaption_vol_point(mkt, ccy: str, expiry_y: float, tenor_y: float) -> dict:
     {vol_bp, tier, point, source, asof}. The rule is the nearest point of the {CCY}_SWVOL_ATM grid, nearest in the
     log of the expiry plus the log of the tenor (a 3M expiry reads the 1Y row, a 10Y the 7Y: the grid's edges, flat).
     `tier`: QUOTED when the option sits on a grid point, NEAREST when it does not, DEFAULT when the currency has no
-    surface and the desk's default stands in (85 bp). One rule for the ticket's default, the booked option's
+    surface and the desk's default stands in (85 bp). "On a point" is within ON_POINT of it in that distance, two
+    per cent: a year by the calendar is 365 to 368 days over 365, and five years 1,826 or 1,827 over 1,825, so
+    an exact comparison called a one-year option QUOTED on some trade dates and NEAREST on others for the same
+    vol (the model validator's sweep, 18 November 2026). The vol is the point's either way; only the word differs. One rule for the ticket's default, the booked option's
     revaluation (pnl/valuation.py) and the reported market vol of the exposure run (ccr/valuation.py)."""
     cid = f"{ccy}_SWVOL_ATM"
     q = mkt.quotes(cid) if mkt is not None else None
@@ -82,7 +86,7 @@ def swaption_vol_point(mkt, ccy: str, expiry_y: float, tenor_y: float) -> dict:
     except Exception:              # noqa: BLE001
         asof = None
     g = lambda v: f"{v:g}"         # noqa: E731
-    return {"vol_bp": best, "tier": "QUOTED" if bd < 1e-9 else "NEAREST", "point": f"{g(at[0])}Yx{g(at[1])}Y",
+    return {"vol_bp": best, "tier": "QUOTED" if bd < ON_POINT else "NEAREST", "point": f"{g(at[0])}Yx{g(at[1])}Y",
             "asof": asof.isoformat() if asof is not None else None, "source": f"{ccy}_SWVOL_ATM nearest point"}
 
 

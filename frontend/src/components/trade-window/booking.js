@@ -337,9 +337,11 @@ export function buildSwaptionBookingBody(state, direction, extras = {}) {
   if (ex.problem) throw new Error(ex.problem)
   const strike    = swaptionStrike(state, extras)
   const structure = state.structure || 'EUROPEAN'
-  // the vol typed; else the vol the price being booked was struck at; else the surface's as the ticket showed it
+  // the vol typed; else the vol the price being booked was struck at; else the surface's as the ticket showed it.
+  // A Bermudan's is the model's σ its tree priced at, whatever stands in the field (the tree reads no other).
   const vol       = swaptionVol(state)
-  const volBp     = vol.typed ? vol.bp : (extras.priced?.vol_bp ?? vol.bp ?? NaN)
+  if (vol.problem && structure !== 'BERMUDAN') throw new Error(vol.problem)
+  const volBp     = vol.typed && structure !== 'BERMUDAN' ? vol.bp : (extras.priced?.vol_bp ?? vol.shown ?? NaN)
   const terms = {
     ...vanillaTerms(state, direction, strike),
     option: 'SWAPTION',

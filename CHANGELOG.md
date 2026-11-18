@@ -15,17 +15,32 @@ swaption ticket on which no vol is typed changes.
   at-the-money swaption grid nearest its expiry and tenor, the rule the booked option was already revalued on.
   Under the field: which point and which day ("surface 1Y×5Y · 2026-11-18", or "nearest point" when the option is
   off the grid). Type a vol and it is the vol, marked as an override, with a control that puts the surface's back.
-- **The engine reads the same market.** `POST /api/price/swaption` takes no vol to mean the surface's, and its
-  answer names the tier (QUOTED, NEAREST, DEFAULT; MANUAL for a vol sent), the point and the surface's date.
-  `GET /api/price/swaption/vol` gives the ticket the number before PRICE. A request that sends a vol is unchanged.
+- **The engine reads the market, not the ticket.** `POST /api/price/swaption` takes no vol to mean the surface's,
+  and its answer names the tier (QUOTED, NEAREST, DEFAULT; MANUAL for a vol sent), the point and the surface's
+  date. The ticket sends no vol unless one is typed, so the option priced is always the one on the ticket;
+  `GET /api/price/swaption/vol` gives it the number to show before PRICE. A request that sends a vol is priced at
+  it as before, now within bounds: above zero, at most 5,000 bp. A field that holds something else is refused in
+  words, on the ticket and by the API.
+- **QUOTED means on a grid point to within two per cent**: a year by the calendar is 365 to 368 days and reads as
+  the one-year point on every trade date.
 - **What moves, at the money** (the price is proportional to the vol): on the tests' reference market, 94.9 bp at
   one year into five against 86.5, +9.7 %. On the hosted demo the figure is whatever its surface holds that day.
 - **What it does not do.** There is no interpolation between grid points, and beyond the grid's edges the edge
   stands (a three-month expiry reads the one-year row; the grid runs one to seven years into one to nine). Only the
   dollar has a surface, and it is synthetic: a swaption in another currency is priced at the desk default of 85 bp
   (it was 86.5, −1.7 %) unless a vol is typed, and the field says "desk default". A Bermudan is priced at the
-  model's own volatility, as before; the field says so.
-- **Booking.** The booked vol is the one typed, else the one the price being booked was struck at.
+  model's own volatility, as before; its field takes no vol and says so. Away from the money, where a smile is
+  stored, the ticket is struck at the smile's vol (also over a typed one) while the booked option is revalued at
+  the at-the-money point: there before, now stated in the methodology. The lookup has no reference comparison and
+  no workbook.
+- **A booked swaption with no vol stored** is re-priced on its ticket at the surface's point for its remaining
+  time, as its P&L is; it was 86.5.
+- **Booking.** The booked vol is the one typed, else the one the price being booked was struck at; a Bermudan's is
+  the model volatility its tree priced at.
+- **Two reviews before it shipped changed it.** The first version sent the number the field showed: for a moment
+  after an expiry or a tenor changed that was the previous option's vol, and it would have been priced as if typed
+  (both reviewers). A typed zero showed as an override and was quietly replaced. The tier read "nearest" for a
+  one-year option on trade dates where the year had 366 or 367 days (the model validator's sweep).
 - **Tests.** The lookup's tiers; the route with and without a vol and the new read route, on the local stack; the
   field's default and its words; the booking; a journey of the ticket (the default, its source, another expiry,
   below the grid, a typed vol).

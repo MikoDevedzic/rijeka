@@ -429,7 +429,8 @@ registerProduct({
       const under = swaptionUnderlying(state)
       const strikeRaw = String(state.strike ?? SWAPTION_DEFAULTS.strike).trim()
       const strike   = strikeRaw !== '' && isFinite(parseFloat(strikeRaw)) ? parseFloat(strikeRaw) / 100 : null
-      const vol      = swaptionVol(state)           // typed, or the surface's for this expiry and tenor; null = the engine reads it
+      const vol      = swaptionVol(state)           // typed, or none: the engine reads the surface for this expiry and tenor
+      if (vol.problem) throw new Error(vol.problem)
       // ── Sprint 13B: Bermudan dispatch ────────────────────────────────────
       // When structure === 'BERMUDAN', send a default annual exercise
       // schedule from year 1 through expiry_y (inclusive): "annual European
@@ -460,7 +461,7 @@ registerProduct({
         expiry_y,
         tenor_y:             TENOR_Y_MAP[state.tenor] || 5,
         strike,
-        vol_bp:              vol.bp,
+        vol_bp:              state.structure === 'BERMUDAN' ? null : vol.bp,   // a tree prices at the model's own σ
         is_payer:            state.direction === 'PAY',
         pay_freq_y:          1.0,
         valuation_date:      state.valDate,
