@@ -3,6 +3,27 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.40). Commits on `main` are the detail.
 
+## 0.57.1 · 18 November 2026
+
+**One request may send 256 kB.** No figure changes.
+
+- **Why.** Every route read its body into memory before looking at it, and sign-up is open: one account could have
+  posted hundreds of megabytes to any route and taken the single small server down for everyone. The security
+  reviewer raised it on 17 November; two routes were bounded then, the rest were not.
+- **The limit.** A layer in front of every route answers 413 before a route reads a body over the cap: by the
+  length the request declares, or, for a body that declares none, as soon as what has arrived passes it. The cap is
+  256 kB (`RIJEKA_MAX_BODY_KB`, for a self-hosted desk loading its own book); the history import takes 4,096 kB.
+  A ticket's request is a few kB, so nothing a desk does on a screen comes near it.
+- **What the refusal says.** How large the request was and what one request may carry. On the hosted demo it adds
+  that this is the demo desk, one small server shared by everyone trying it and not sized for heavy use, and where
+  to write for commercial use. A desk a firm runs for itself is told only the sizes.
+- **The same words on the limit that was already there.** An account that runs a heavy calculation more often than
+  its allowance for a minute was told "wait a minute". It is now also told how many seconds until the next one is
+  taken (and the answer carries `Retry-After`), with the same line about the demo. Nothing is held in a queue: a
+  refused run is asked again by the user.
+- **Tests.** Under the cap, at it and over it; a chunked body; the larger route; the setting and nonsense in it;
+  the wording on the demo and off it; the wait in the refusal for frequency.
+
 ## 0.57.0 · 18 November 2026
 
 **A swaption's vol on the ticket is read from the swaption surface.** The methodology is v1.40. The value of every

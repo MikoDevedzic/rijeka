@@ -639,6 +639,10 @@ checklist in `docs/ops/release.md`.
   quoted tenor it is sensitive to.
 - One API process, in-request Monte Carlo and full-revaluation VaR, rate-limited per account
   (`api/routes/_limits.py`). A larger book moves these to a worker without changing the engines.
+- One request may send 256 kB (`middleware/body_limit.py`, `RIJEKA_MAX_BODY_KB`): a layer in front of every route,
+  inside CORS, answers 413 before a route reads a larger body (by its declared length, or for a chunked body as
+  soon as it passes the cap). The refusal for size and the one for too many heavy runs in a minute say, on the
+  hosted demo, that it is a demo on one small server and where to write (`_limits.demo_line`, one place).
 - A report (market risk, P&L, counterparty credit) values each trade many times and reads once what none of those
   valuations changes: the cap surface for the date, a swaption's legs (`db/reading.py`). The scheduler asks the
   database one question before a group of batches and does not start a group that gets no answer; the group runs
