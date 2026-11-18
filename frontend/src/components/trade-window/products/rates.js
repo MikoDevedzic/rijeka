@@ -32,7 +32,7 @@ const fmtCurrency = v => {
 
 const signClass = v => (v == null || Math.round(v) === 0) ? null : (v > 0 ? 'positive' : 'negative')
 
-const metricCurrency = (label, value) => ({
+export const metricCurrency = (label, value) => ({
   label, value: fmtCurrency(value), format: 'currency', colorBy: signClass(value)
 })
 
@@ -49,7 +49,9 @@ export const swapLegFigures = r => {
     // a leg that is only its options (a cap, floor or collar is booked as a floating leg with no coupons) has no
     // coupon figure: "FLOAT PV $0" would name a leg the trade does not have
     .filter(x => !(x.l.option_pv != null && Math.abs(x.coupons) < 0.005))
-    .map(x => metricCurrency(`${byKind ? kinds[x.i] : (x.l.leg_ref || `LEG ${x.i + 1}`)} PV`, x.coupons))
+    // `secondary`: a split of the value, which gives way in the footer when the strip would run past one line
+    // (TradeFooter: a fee's two figures beside a swap with an option on a leg); the valuation on CASHFLOWS keeps it
+    .map(x => ({ ...metricCurrency(`${byKind ? kinds[x.i] : (x.l.leg_ref || `LEG ${x.i + 1}`)} PV`, x.coupons), secondary: true }))
 }
 // The embedded options' own figures: their value and what one basis point of normal vol does to it. Nothing when
 // the swap has no embedded option (the API sends null, which is not an option worth zero).

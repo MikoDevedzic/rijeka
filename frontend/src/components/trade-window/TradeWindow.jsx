@@ -55,7 +55,7 @@ import useBookingStore from '../../store/useBookingStore'
 
 // Import all product modules to register them at load time.
 // Adding FX/credit = add one import line here.
-import './products/rates'
+import { metricCurrency } from './products/rates'
 import useMarketDataStore from '../../store/useMarketDataStore'
 import { getSessionMaybe } from '../../lib/session'
 import FeesBlock from './FeesBlock'
@@ -269,6 +269,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   const [fxQuote, setFxQuote]          = useState(null)
   // the trade's fees, as rows being typed (fees.js): one list for the ticket, whatever the product
   const [feeRows, setFeeRows]          = useState(() => (initialTrade ? rowsFromTerms(initialTrade.terms) : []))
+  // what the fees are worth today and the value net of them (FeesBlock asks the API and reports here), for the footer
+  const [feeValue, setFeeValue]        = useState(null)
   // where the currency panel draws its valuation block: under the flows on the CASHFLOWS tab, once that tab has been opened
   const [valuationSlot, setValuationSlot] = useState(null)
   // the quote a trade was booked from in this window: the term sheet reads AS BOOKED only while it is still the one shown
@@ -388,7 +390,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           // Six figures (a package with an option in it) share the footer's one line with a structure's name and the
           // buttons: they are then named without their units, which the TRADE tab's tiles carry. Paid or received,
           // and what a package is waiting for, are not units and stay. (The count of legs is on BOOK.)
-          const six = !!t && t.options !== 'NONE'
+          const six = (!!t && t.options !== 'NONE') || !!feeValue      // or a fee's two figures beside the value
           const u = (name, what) => (six ? name : unit(name, what))
           return [
             t && t.options === 'ALL'
@@ -405,20 +407,23 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         const crybasis = r.crybasis01 ?? (r.fund01 != null ? -r.fund01 : r.ir01_base != null ? -r.ir01_base : r.rho_base_per_bp != null ? -r.rho_base_per_bp : 0)
         const spot01 = r.spot01 ?? r.delta_quote_per_pct
         const option = r.shape === 'OPTION'
+        // with a fee's two figures beside the value the strip holds seven or eight: the sensitivities are then named
+        // without their units (the TRADE tab's tiles carry them), as a package of six already is, so it stays one line
+        const su = (name, what) => (feeValue ? name : unit(name, what))
         return [
           // an option's first figure is its premium, paid or received (the NET NPV tile stays in the analytics block)
           option
             ? { label: unit('PREMIUM ' + r.quote_currency, r.direction === 'SELL' ? 'received' : 'paid'), value: n0(Math.abs(r.npv)) }
             : { label: 'NET NPV ' + r.quote_currency, value: n0(r.npv) },
-          { label: unit(DELTA_LABEL(crypto), '1 % spot'), value: n0(spot01) },
+          { label: su(DELTA_LABEL(crypto), '1 % spot'), value: n0(spot01) },
           ...(crypto
-            ? [{ label: unit('IR01', '1 bp'), value: n0(r.ir01 ?? r.ir01_disc ?? r.rho_quote_per_bp) },
-               { label: unit('CRYBASIS01', '1 bp basis'), value: n0(crybasis) }]
+            ? [{ label: su('IR01', '1 bp'), value: n0(r.ir01 ?? r.ir01_disc ?? r.rho_quote_per_bp) },
+               { label: su('CRYBASIS01', '1 bp basis'), value: n0(crybasis) }]
             // a currency pair: each currency's curve on its own (their sum reads as zero), forward and option alike
-            : [{ label: unit(`${r.quote_currency} IR01`, '1 bp'), value: n0(r.ir01_disc ?? r.rho_quote_per_bp) },
-               { label: unit(`${r.base_currency} IR01`, '1 bp'), value: n0(r.ir01_base ?? r.rho_base_per_bp) }]),
-          { label: unit('THETA', '1 day'), value: n0(r.theta ?? 0) },
-          ...(r.shape === 'OPTION' ? [{ label: unit('VEGA', '1 pt'), value: n0(r.vega ?? 0) }] : []),
+            : [{ label: su(`${r.quote_currency} IR01`, '1 bp'), value: n0(r.ir01_disc ?? r.rho_quote_per_bp) },
+               { label: su(`${r.base_currency} IR01`, '1 bp'), value: n0(r.ir01_base ?? r.rho_base_per_bp) }]),
+          { label: su('THETA', '1 day'), value: n0(r.theta ?? 0) },
+          ...(r.shape === 'OPTION' ? [{ label: su('VEGA', '1 pt'), value: n0(r.vega ?? 0) }] : []),
         ]
       },
     },
@@ -675,6 +680,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   // the fees in the trade's own currency, as the API takes them: a list, or null while a row is not complete
   const feeCcy  = isCurrency ? (fxQuote?.quote_currency || initialTrade?.terms?.premium_currency || 'USD') : (state.ccy || 'USD')
   const feesOut = useMemo(() => cleanFees(feeRows, feeCcy), [feeRows, feeCcy])
+
 
   // Fields that belong in `economics` (shell-level). Everything else is
   // routed to productState. Descriptors call update() with either kind
@@ -1365,8 +1371,9 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
 
         </>)}
         <FeesBlock
-          rows={feeRows} onChange={(next) => { setFeeRows(next); setBookErr('') }} currency={feeCcy} disabled={locked}
-          npv={isCurrency ? (fxQuote?.npv ?? null) : (result?.npv ?? result?.net_npv ?? null)}
+          rows={feeRows} onChange={(next) => { setFeeRows(next); setBookErr('') }} currency={feeCcy} disabled={locked} onValue={setFeeValue}
+          // a package's value is the sum over its legs, as the footer shows it (not its first leg's); none until every leg is priced
+          npv={isCurrency ? (pkg ? (packageRisk(pkg.quotes)?.npv ?? null) : (fxQuote?.npv ?? null)) : (result?.npv ?? result?.net_npv ?? null)}
           valuationDate={isCurrency ? (fxQuote?.valuation_date || null) : (state.valDate || null)}
           premium={isCurrency
             ? (fxQuote?.shape === 'OPTION' && Number.isFinite(Number(fxQuote.npv))
@@ -1550,6 +1557,12 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         booking={booking}
         bookErr={bookErr}
         priceErr={isCurrency ? '' : error}
+        fees={!feeValue ? null : isCurrency
+          // a currency ticket's strip is plain figures in the currency its first label names; a rates ticket's are signed and coloured
+          ? [{ label: 'PV OF FEES', value: n0(feeValue.pv), testid: 'footer-fees-pv' },
+             ...(feeValue.net != null ? [{ label: 'NET OF FEES', value: n0(feeValue.net), testid: 'footer-fees-net' }] : [])]
+          : [{ ...metricCurrency('PV OF FEES', feeValue.pv), testid: 'footer-fees-pv' },
+             ...(feeValue.net != null ? [{ ...metricCurrency('NET OF FEES', feeValue.net), testid: 'footer-fees-net' }] : [])]}
         booked={!!bookedTrade}
         bookWord={isCurrency && legsFor && !viewMode && fxLegs.length ? `BOOK ${fxLegs.length + 1} LEGS` : undefined}
         bookDisabled={!viewMode && (!economics.counterpartyId || !economics.ownEntityId)}

@@ -58,6 +58,10 @@ Learned on 16 November 2026 (a figure's sign is its currency's; a ticket in a sm
 - A ticket's buttons are pictured in a 1280 by 720 window as well: the CHAT button stood on BOOK TRADE there and nowhere wider.
 - A text cut by an ellipsis is read in the picture for what it hides: an IPV row's "24 pill…" hid "1 beyond tolerance", the one part of the line that asks for a decision. What can give way goes last.
 
+Learned on 18 November 2026 (where a figure that changes the value is shown)
+- An input that changes what a trade is worth (a fee, a premium) is followed to the place the value is read, on every instrument's ticket, pictured side by side: the fees' value and the net of fees stood at the right of the FEES block and the footer showed the value before fees on all nine instruments from 0.25.0 until the owner asked why his premium changed nothing (0.55.2: value, PV OF FEES, NET OF FEES, then the sensitivities; `footer-fees.spec.js`).
+- A strip that gains a figure is pictured at its longest (a swap with an option on a leg, a currency option) and at 1280 by 720: two more figures wrapped every name onto two lines there.
+
 Rules
 - Read-only on the working tree unless you are asked to fix: never `git checkout`, `switch`, `stash` or `reset` in the shared checkout.
 - The local stack only. Never the hosted app, never credentials.

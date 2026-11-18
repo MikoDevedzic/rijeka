@@ -10,7 +10,7 @@ const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 const money = (v) => (v == null || !Number.isFinite(Number(v)) ? '—' : (Number(v) < 0 ? '−' : Number(v) > 0 ? '+' : '') + Math.abs(Number(v)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
 const tone = (v) => (Number(v) < 0 ? 'var(--red)' : Number(v) > 0 ? 'var(--green)' : 'var(--text-hi)')
 
-export default function FeesBlock({ rows, onChange, currency = 'USD', npv = null, valuationDate = null, premium = null, disabled = false }) {
+export default function FeesBlock({ rows, onChange, currency = 'USD', npv = null, valuationDate = null, premium = null, disabled = false, onValue = null }) {
   const fees = useMemo(() => cleanFees(rows, currency), [rows, currency])
   // the API's answer, kept with the fees it was for: { key, pv: { pv, fees: [{ df, pv, paid }] } } or { key, error }.
   // An answer for other fees than the ones on screen is not shown.
@@ -40,6 +40,10 @@ export default function FeesBlock({ rows, onChange, currency = 'USD', npv = null
   const add = (seed) => onChange(prev => [...prev, feeRow({ ...seed, currency })])
   const remove = (id) => onChange(prev => prev.filter(r => r.id !== id))
   const net = pv && npv != null && Number.isFinite(Number(npv)) ? Number(npv) + Number(pv.pv) : null
+  // the two figures go up to the window's footer too (TradeFooter): the value with and without its fees stands where
+  // the value stands, on every instrument and every tab, not only at the right of this block
+  const pvNow = pv ? Number(pv.pv) : null
+  useEffect(() => { if (onValue) onValue(pvNow != null && Number.isFinite(pvNow) ? { pv: pvNow, net } : null) }, [pvNow, net])   // eslint-disable-line react-hooks/exhaustive-deps
   // the premium the model prices, offered as a row when the trade is an option and has no PREMIUM fee yet
   const offer = premium && Number(premium.amount) > 0 && !rows.some(r => r.type === 'PREMIUM') ? premium : null
 

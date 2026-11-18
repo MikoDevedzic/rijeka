@@ -3,6 +3,27 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.38). Commits on `main` are the detail.
 
+## 0.55.2 · 18 November 2026
+
+**A ticket's footer shows the value with and without its fees.** No figure changes; where two of them stand does.
+
+- **What was wrong.** A ticket's value net of its fees stood only at the right of the FEES block. The footer, where
+  the value is read after PRICE, showed the value before fees and nothing else: an option with its premium entered
+  showed OPTION NPV and no sign that a premium had been taken off anywhere.
+- **The footer's order, on every instrument:** the value, then **PV OF FEES**, then **NET OF FEES**, then the
+  sensitivities. A swap, a swaption, a cap, a floor, a collar, a currency forward and option, a digital-asset
+  forward and option and a package of legs all read the same three places. A ticket with no fee shows neither
+  figure. The FEES block keeps its own line.
+- **One line, as before.** With the two figures a currency ticket names its sensitivities without their units (the
+  TRADE tab's tiles carry them, as a package of six already does). A swap with an option on a leg lets its leg split
+  give way (CASHFLOWS has it). In a ticket narrower than about 1,250 px with seven or more figures the word
+  STRUCTURE gives way; no figure's name runs onto a second line.
+- **A package's net was its first leg's.** The FEES block of a package of legs took the first leg's value for its
+  net of fees; it takes the package's, as the footer shows it, and shows none until every leg is priced.
+- **Tests.** A journey of twelve tickets (nine instruments, a swap with a cap, and the two longest strips again in
+  a 1280 by 720 window): the order, the sums against the API's answers, one line, clear of the buttons, the
+  figures still there on another tab.
+
 ## 0.55.1 · 18 November 2026
 
 **The rates history backfill finishes the job, and says what it did.** No figure of the engine changes.

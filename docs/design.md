@@ -76,7 +76,12 @@ The same on every product. **TRADE** is what the user sets. **DETAILS** is the d
 schedule; for a forward or an option, the record as it will be booked beside the market it was priced on.
 **CASHFLOWS** is what comes back: the flows as legs with their present values and their net, then the valuation
 (each figure with its formula, and what the price was built from). The **footer** carries the headline figures
-on every tab. On TRADE the only computed things are the forward (a figure at full strength in a field's solid edge, with no
+on every tab, in one order on every instrument: the value first; when the ticket carries fees, what they are worth
+today (PV OF FEES) and the value net of them (NET OF FEES); then the sensitivities. A figure that changes what the
+trade is worth is shown where the value is shown, not only in the block where it was entered. The strip is one
+line: with the fees' two figures a currency ticket's sensitivities are named without their units, a swap's leg
+split gives way past eight figures, and in a ticket narrower than about 1,250 px the word STRUCTURE gives way
+before a figure's name wraps. On TRADE the only computed things are the forward (a figure at full strength in a field's solid edge, with no
 well: it cannot be typed over), a field that shows its default (a brass rule under it once typed over, a dash
 in place of a number that is not there yet), an option's
 premium line and the notes that say why there is no price. A stored currency trade opened from the blotter has

@@ -372,6 +372,8 @@ export function XVASummary() {
 
 // ── TradeFooter (sticky: metric chips + STRUCTURE + PRICE + BOOK) ───────────
 
+const FOOTER_ROOM = 8
+
 export function TradeFooter({
   descriptor, result, state, pricing, onPrice, onBook, onCancel,
   booking, booked, bookErr,
@@ -379,19 +381,27 @@ export function TradeFooter({
   stale = false,                                       // a price is owed: these figures are for the terms before the last change
   bookWord = 'BOOK TRADE',                             // a package of legs says how many it books
   priceErr = '',                                       // why PRICE gave no figures: said here, where it is always in view
+  fees = null,                                         // [PV OF FEES, NET OF FEES] when the ticket carries fees: set after the value, on every instrument
 }) {
   const ccy = useContext(TicketCcy)
-  const metrics = result ? (descriptor.footer.metrics(result, state) || []).map(m => ({ ...m, value: inCcy(m.value, ccy) })) : []
+  const own = result ? (descriptor.footer.metrics(result, state) || []) : []
+  // The value first, then what its fees are worth and the value net of them, then the sensitivities: the same three
+  // places whatever the instrument. (The net stood only at the right of the FEES block, where the owner did not
+  // see it: an option with its premium entered showed OPTION NPV here and nothing else, 18 November 2026.)
+  // The strip is one line and holds eight figures beside STRUCTURE and the buttons. Past that, with the fees' two,
+  // a split of the value (a swap's legs, marked `secondary`; CASHFLOWS has them) gives way before a name wraps.
+  const kept = fees?.length && own.length + fees.length > FOOTER_ROOM ? own.filter(m => !m.secondary) : own
+  const metrics = (kept.length && fees?.length ? [kept[0], ...fees, ...kept.slice(1)] : kept).map(m => ({ ...m, value: inCcy(m.value, ccy) }))
   const structLabel = descriptor.footer.structureLabel(state)
 
   return (
-    <div className="tbw-footer">
+    <div className={`tbw-footer${metrics.length > 6 ? ' is-full' : ''}`}>
       <div className="tbw-footer-metrics">
         {/* PRICE answered with a reason and no figures (no curve stored for the currency, a rate that did not solve):
             the reason stood only under ANALYTICS, below the fold of a ticket whose footer was simply empty */}
         {!result && priceErr && <div data-testid="tbw-footer-error" role="status" style={{ fontSize: 12.5, color: 'var(--amber)', lineHeight: 1.4, maxWidth: 620 }}>Not priced: {priceErr}</div>}
         {metrics.map((m, i) => (
-          <div key={labelText(m.label) || i} className="tbw-footer-metric">
+          <div key={labelText(m.label) || i} className="tbw-footer-metric" data-testid={m.testid}>
             <div className="tbw-lbl" style={{ fontSize: 12, marginBottom: 2 }}><RiskMark label={m.label} />{m.label}</div>
             <div className={`tbw-mono tbw-${m.colorBy || 'default'}`}
                  style={{ fontSize: 13, fontWeight: 500 }}>
