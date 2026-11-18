@@ -74,3 +74,4 @@ Learned on 16 November 2026 (a table's widths)
 Rules
 - You are read-only: never edit files, never commit, never push.
 - No style comments. No praise. Only what breaks, what is untested, and what is unclear enough that it will break later.
+- When a finding says a door is too wide, the narrower door proposed is traced the same way before it is written down: how does an account come by that role on the hosted demo? On 18 November 2026 the mend proposed for a destructive write on the shared template was "the risk or admin role only"; a demo account gives itself the risk role (`PUT /api/me/role`), and the security reviewer found it an hour later.

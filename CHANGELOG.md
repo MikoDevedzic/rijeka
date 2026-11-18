@@ -23,14 +23,14 @@ methodology document carries its own version (v1.38). Commits on `main` are the 
 - **Replacing the desk's own rows is an explicit, second action**, in two presses on the page:
   `POST /api/risk/history/backfill?replace_own=true`. It writes the generator's curve over every stored day of the
   five rates curves, whoever wrote the row; the desk's rows are not kept anywhere. Its door is narrower than the
-  backfill's: the account's own risk or admin role, not a firm's admin and not the scheduler's secret (the
-  independent reviewer: every demo account is the admin of its own firm, and the history is the template's, read
-  by all of them). Without it nothing a desk entered is touched, as in 0.55.0. A venue's marks are never replaced,
-  with or without it.
+  backfill's: the account that holds the rows (the template account) or an administrator. Not a firm's admin, not
+  the risk role and not the scheduler's secret: two reviews found that every demo account is the admin of its own
+  firm and can give itself the risk role, while the history is the template's, read by all of them. Without it
+  nothing a desk entered is touched, as in 0.55.0. A venue's marks are never replaced, with or without it.
 - **Tests.** Two on the function (kept by default; replaced, with every stored day, when asked), two on a real
   local database (a desk's rows and the old feed's, before the window, after it and on a Saturday, through both
-  runs; the refusal to a firm's admin without the role), and a journey of the page (the count, a backfill's result,
-  the role, the two presses, the request each sends).
+  runs; who is refused and who is not), and a journey of the page (the count, a backfill's result, the refusal,
+  the two presses, the request each sends).
 
 ## 0.55.0 · 18 November 2026
 

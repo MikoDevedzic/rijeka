@@ -14,7 +14,7 @@ const SERIES = (own) => ({
 test('the risk-factor history: a desk\'s own rates rows are counted, kept by a backfill, and replaced only on a second press', async ({ app, problems }) => {
   const posts = []
   let state = { series: SERIES(30), backfill: { running: false, finished: 't0', result: null, error: null } }
-  let allowed = false                                             // the account's own risk or admin role
+  let allowed = false                                             // the template account, or an administrator
   let pending = null                                              // the answer the run will end with, given after one "running"
   await app.route(/\/api\/risk\/settings$/, async r => {
     if (r.request().method() !== 'GET') return r.fallback()
@@ -50,10 +50,10 @@ test('the risk-factor history: a desk\'s own rates rows are counted, kept by a b
   await expect(said).toContainText('Rows written: USD_SOFR 529.')
   expect(posts, 'a plain backfill does not ask for the desk\'s rows').toEqual(['?years=2'])
 
-  // without the risk or admin role the desk's rows are named and cannot be replaced
+  // an account that neither holds the rows nor administers the desk is shown them and cannot replace them
   const own = panel.locator('[data-own-rows]')
   await expect(own.getByRole('button', { name: /REPLACE THE DESK'S OWN RATES ROWS/ })).toBeDisabled()
-  await expect(own).toContainText('It needs the risk or admin role.')
+  await expect(own).toContainText('It is for the account that holds them or an administrator.')
   allowed = true
   await app.reload()
   await expect(own.getByRole('button', { name: /REPLACE THE DESK'S OWN RATES ROWS/ })).toBeEnabled()

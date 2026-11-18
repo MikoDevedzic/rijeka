@@ -73,11 +73,17 @@ def _can_write(db: Session, user: dict) -> bool:
     return bool(fm and fm.role == "ADMIN")
 
 
-def _can_replace_own(db: Session, user: Optional[dict]) -> bool:
-    """Replacing the rates rows a desk entered itself: the risk or admin role of the account, and no other way in.
-    Not a firm's admin (the template's history is every demo account's, and a demo account is the admin of its own
-    firm) and not the scheduler's secret (it is a person's decision; the entered rows are not kept)."""
-    return user is not None and _role(db, user) in WRITE_ROLES
+def _can_replace_own(db: Session, user: Optional[dict], tpl=None) -> bool:
+    """Replacing the rates rows a desk entered itself: the account whose rows they are (the template account), or an
+    administrator. No other way in. Not the risk role: on the hosted demo an account gives itself that role
+    (`PUT /api/me/role`), and the history is the template's, read by every account (the security reviewer,
+    18 November 2026). Not a firm's admin: every demo account is the admin of its own firm (the independent
+    reviewer). Not the scheduler's secret: it is a person's decision, and the desk's rows are not kept. The admin
+    role is given only on the Users page by an administrator, never by the account itself."""
+    if user is None:
+        return False
+    tpl = tpl if tpl is not None else R.template_uid(db)
+    return (tpl is not None and str(user.get("sub")) == str(tpl)) or _role(db, user) == "admin"
 
 
 def _secret_ok(given: Optional[str]) -> bool:
@@ -273,17 +279,17 @@ def history_status(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] =
         raise HTTPException(status_code=401, detail="Missing auth")
     tpl = R.template_uid(db)
     return {"template": str(tpl) if tpl else None, "series": H.status(db, tpl) if tpl else {}, "backfill": _backfill_view(db),
-            "can_replace_own": _can_replace_own(db, user)}
+            "can_replace_own": _can_replace_own(db, user, tpl)}
 
 
 @router.post("/history/backfill")
 def backfill(years: float = Query(default=2.0), overwrite: bool = Query(default=False), replace_own: bool = Query(default=False),
              db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(None), user: Optional[dict] = Depends(optional_token)):
     """`replace_own`: also replace the rates rows this desk entered or imported itself with the synthetic market's.
-    Off by default: a desk's own curve is left as it is, and the result says which were kept. Asking for it needs
-    the account's own risk or admin role (`_can_replace_own`), a narrower door than the backfill's."""
+    Off by default: a desk's own curve is left as it is, and the result says which were kept. Asking for it is for
+    the template account itself or an administrator (`_can_replace_own`), a narrower door than the backfill's."""
     if replace_own and not _can_replace_own(db, user):
-        raise HTTPException(status_code=403, detail="Replacing a desk's own rates rows needs the risk or admin role.")
+        raise HTTPException(status_code=403, detail="Replacing a desk's own rates rows is for the account that holds them or an administrator.")
     if not _secret_ok(x_rijeka_cron):
         if user is None:
             raise HTTPException(status_code=401, detail="Missing auth")

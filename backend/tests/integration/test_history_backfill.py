@@ -11,7 +11,7 @@ from datetime import date
 import pytest
 from sqlalchemy import text
 
-from tests.integration.conftest import USER_A, set_role
+from tests.integration.conftest import USER_B, set_role
 
 pytestmark = pytest.mark.integration
 END = date(2026, 11, 17)
@@ -69,18 +69,24 @@ def test_a_backfill_keeps_a_desks_own_rates_rows_until_it_is_told_to_replace_the
         db.commit(); db.close()
 
 
-def test_replacing_a_desks_own_rows_is_refused_to_a_firms_admin_without_the_risk_or_admin_role(client, auth_a):
-    """The independent reviewer, 18 November 2026: the backfill's door also admits a firm's admin, and every demo
-    account is the admin of its own firm, while the history written is the template's, read by all of them. User A
-    is a trader and her firm's admin: she may not ask for the desk's own rows to be replaced, and the page is told
-    so. With the admin role she may (the page is told; the run is not started here, it would call the spot sources)."""
+def test_replacing_a_desks_own_rows_is_for_the_account_that_holds_them_or_an_administrator(client, auth_a, auth_b):
+    """Two reviews, 18 November 2026. The backfill's door admits a firm's admin and the risk role; every demo account
+    is the admin of its own firm and can give itself the risk role, while the history written is the template's, read
+    by all of them. User B is neither the template account nor an administrator: refused as a trader, refused with
+    the risk role, and the page is told so. An administrator may, and so may user A, whose rows they are (the page
+    is told; the run is not started here, it would call the spot sources)."""
     from api.routes import risk
-    r = client.post("/api/risk/history/backfill?years=0.1&replace_own=true", headers=auth_a)
-    assert r.status_code == 403 and "risk or admin role" in r.json()["detail"]
-    assert not risk._backfill.get("running")
-    assert client.get("/api/risk/history", headers=auth_a).json()["can_replace_own"] is False
-    set_role(USER_A, "admin")
+    ask = "/api/risk/history/backfill?years=0.1&replace_own=true"
     try:
-        assert client.get("/api/risk/history", headers=auth_a).json()["can_replace_own"] is True
+        for role in ("trader", "risk"):
+            set_role(USER_B, role)
+            r = client.post(ask, headers=auth_b)
+            assert r.status_code == 403 and "an administrator" in r.json()["detail"], role
+            assert client.get("/api/risk/history", headers=auth_b).json()["can_replace_own"] is False, role
+        assert not risk._backfill.get("running")
+        set_role(USER_B, "admin")
+        assert client.get("/api/risk/history", headers=auth_b).json()["can_replace_own"] is True
     finally:
-        set_role(USER_A, "trader")
+        set_role(USER_B, "trader")
+    assert client.get("/api/risk/history", headers=auth_a).json()["can_replace_own"] is True          # the template account, a trader
+    assert client.post(ask).status_code in (401, 403)                                                # and nobody without an account

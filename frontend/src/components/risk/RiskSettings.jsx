@@ -263,7 +263,7 @@ export function VarSettingsPage() {
               {!armed
                 ? <button className="pnl-btn ghost" disabled={busy || !hist?.can_replace_own} onClick={() => setArmed(true)}>REPLACE THE DESK'S OWN RATES ROWS…</button>
                 : <><button className="pnl-btn" disabled={busy || !hist?.can_replace_own} onClick={() => backfill(true)}>REPLACE {ownRows} ROWS WITH THE SYNTHETIC MARKET</button><button className="pnl-btn ghost" disabled={busy} onClick={() => setArmed(false)}>CANCEL</button></>}
-              <span className="pnl-note">Own rows ({own.map(([cid, x]) => `${cid} ${x.own}`).join(', ')}) were entered by hand, imported or snapped from a feed. A backfill keeps these curves as they are, so their history is not the synthetic market's. Replacing them writes the generator's curve over every stored day of the five rates curves; the desk's rows are not kept anywhere.{hist?.can_replace_own ? '' : ' It needs the risk or admin role.'}</span>
+              <span className="pnl-note">Own rows ({own.map(([cid, x]) => `${cid} ${x.own}`).join(', ')}) were entered by hand, imported or snapped from a feed. A backfill keeps these curves as they are, so their history is not the synthetic market's. Replacing them writes the generator's curve over every stored day of the five rates curves; the desk's rows are not kept anywhere.{hist?.can_replace_own ? '' : ' It is for the account that holds them or an administrator.'}</span>
             </div>)}
           {note && <div className="pnl-toast" data-backfill-note style={{ marginTop: 12 }}>{note}</div>}
         </section>

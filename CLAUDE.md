@@ -318,3 +318,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   deploy what the first press will and will not do.
 - A button that starts a background job shows the job's result, read when the job has ended, and has a journey
   that waits for it: BACKFILL read the answer "started" as the result and for weeks showed nothing.
+- Before a route is gated by a role, the role is traced to how an account comes by it. On the hosted demo an
+  account gives itself the risk role (`PUT /api/me/role`) and is the admin of its own firm, so neither closes a
+  door on data every account reads: 0.55.1's replace action was first put behind the backfill's door, then behind
+  "risk or admin", and only the security reviewer's read made it the account that holds the rows or an administrator.
