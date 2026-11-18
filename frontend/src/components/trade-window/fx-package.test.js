@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { closedForm, legRisk, legShocks, legWords, packageFlows, packageGap, packageRisk, packageView, payoffAtForward, repricePackage } from './fx-package'
+import { closedForm, legRisk, legShocks, legWords, packageFlows, packageGap, packageRisk, packageView, payoffAtForward, repricePackage, valueBeforeFees } from './fx-package'
 import { TENOR_DAYS, reprice } from './fx-scenario'
 import { packageSheetModel } from './fx-export'
 
@@ -77,6 +77,22 @@ describe('the footer over a package', () => {
     expect(packageRisk([strip[0], opt()]).options).toBe('SOME')
     expect(packageRisk([strip[0], null])).toBeNull()
     expect(packageRisk([])).toBeNull()
+  })
+})
+
+describe('the value a ticket\'s fees are taken off', () => {
+  it('a package\'s is the sum over its legs, not its first leg\'s; none until every leg is priced', () => {
+    const whole = packageRisk(strip).npv
+    expect(whole).not.toBeCloseTo(strip[0].npv, 6)                    // the case tells the two apart
+    expect(valueBeforeFees({ currency: true, pkg: { quotes: strip }, quote: strip[0] })).toBeCloseTo(whole, 6)
+    expect(valueBeforeFees({ currency: true, pkg: { quotes: [strip[0], null] }, quote: strip[0] })).toBeNull()
+  })
+  it('a single currency trade\'s is its quote\'s, a rates ticket\'s its result\'s (a collar answers net_npv)', () => {
+    expect(valueBeforeFees({ currency: true, pkg: null, quote: { npv: -42 } })).toBe(-42)
+    expect(valueBeforeFees({ currency: true, pkg: null, quote: null })).toBeNull()
+    expect(valueBeforeFees({ currency: false, result: { npv: 7 } })).toBe(7)
+    expect(valueBeforeFees({ currency: false, result: { net_npv: 9 } })).toBe(9)
+    expect(valueBeforeFees({ currency: false, result: null })).toBeNull()
   })
 })
 

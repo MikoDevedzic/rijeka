@@ -26,6 +26,8 @@ const TICKETS = [
   // the two longest strips again in a 1280 by 720 window, where the ticket is narrower
   ['RATES', 'IR SWAP', /^NET NPV/, /\/price\/preview/, capped, 'with-a-cap-at-1280', [1280, 720]],
   ['FX', 'FX OPTION', /^PREMIUM/, /\/api\/currency\/option\/price/, null, 'at-1280', [1280, 720]],
+  // a sold option: its value is negative, the premium received; the three figures still add up
+  ['FX', 'FX OPTION', /^PREMIUM/, /\/api\/currency\/option\/price/, async (win) => { await win.getByRole('button', { name: /^Sell /i }).first().click() }, 'sold'],
 ]
 
 for (const [cls, product, first, route, prepare, tag, size] of TICKETS) {
@@ -43,6 +45,7 @@ for (const [cls, product, first, route, prepare, tag, size] of TICKETS) {
     const quote = await (await priced).json()
     const value = Number(quote.npv ?? quote.net_npv)
     const strip = win.locator('.tbw-footer-metrics'), figures = strip.locator('.tbw-footer-metric')
+    const figureAt = async (i) => num(await figures.nth(i).locator('span').last().innerText())
     await expect(figures.first()).toContainText(first, { timeout: 30_000 })
     await expect(strip.getByTestId('footer-fees-pv'), 'no fee, no fee figure').toHaveCount(0)
     const before = await figures.count()
@@ -59,13 +62,14 @@ for (const [cls, product, first, route, prepare, tag, size] of TICKETS) {
     expect(pv).toBeLessThan(-12000)
 
     // the same three places on every instrument: the value, what the fees are worth, the value net of them
-    if (before + 2 > 8) {
-      // more than the strip holds on one line: a swap's leg split gives way (CASHFLOWS has it), the rest stay
-      await expect(strip.locator('.tbw-footer-metric', { hasText: /(FIXED|FLOAT) PV/ })).toHaveCount(0)
-      await expect(strip.locator('.tbw-footer-metric', { hasText: 'OPTION PV' })).toBeVisible()
-      expect(await figures.count()).toBeLessThanOrEqual(8)
-    } else await expect(figures).toHaveCount(before + 2)
-    await expect(figures.nth(0)).toContainText(first)
+    // a swap's leg split gives way to the fees' two figures (CASHFLOWS has it); every other figure stays
+    const legs = product === 'IR SWAP' ? 2 : 0
+    await expect(strip.locator('.tbw-footer-metric', { hasText: /(FIXED|FLOAT) PV/ })).toHaveCount(0)
+    await expect(figures).toHaveCount(before + 2 - legs)
+    // an option on a currency pair or a digital asset names its premium, unsigned, while it carries no fee; with
+    // one its first figure is its value with its sign, so the three add up whichever side was taken
+    await expect(figures.nth(0)).toContainText(first.source === '^PREMIUM' ? /^OPTION NPV/ : first)
+    expect(Math.abs(await figureAt(0) - value), 'the first figure is the value, signed').toBeLessThanOrEqual(1)
     await expect(figures.nth(1)).toHaveAttribute('data-testid', 'footer-fees-pv')
     await expect(figures.nth(1)).toContainText('PV OF FEES')
     await expect(figures.nth(2)).toHaveAttribute('data-testid', 'footer-fees-net')

@@ -64,7 +64,7 @@ import FxCryptoPanel from './FxCryptoPanel'
 import { SHAPE_OF, DELTA_LABEL } from './fx-shape'
 import FxXvaPanel from './FxXvaPanel'
 import { FxDetailsPanel, FxCashflowsPanel, FxScenarioPanel } from './FxTabs'
-import { packageGap, packageRisk, packageView } from './fx-package'
+import { packageGap, packageRisk, packageView, valueBeforeFees } from './fx-package'
 import FxLegs from './FxLegs'
 import { LEG_TERMS, structureOf, packageOf } from './fx-legs'
 
@@ -393,7 +393,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           const six = (!!t && t.options !== 'NONE') || !!feeValue      // or a fee's two figures beside the value
           const u = (name, what) => (six ? name : unit(name, what))
           return [
-            t && t.options === 'ALL'
+            // with fees the first figure is the signed value, so value + fees = net reads across (see the single option below)
+            t && t.options === 'ALL' && !feeValue
               ? { label: unit('NET PREMIUM ' + r.quote_currency, t.npv >= 0 ? 'paid' : 'received'), value: n0(Math.abs(t.npv)) }
               : { label: gap ? unit('PACKAGE NPV ' + r.quote_currency, gap) : 'PACKAGE NPV ' + r.quote_currency, value: v(t?.npv) },
             { label: u(DELTA_LABEL(crypto), '1 % spot'), value: v(t?.spot01) },
@@ -412,8 +413,11 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         const su = (name, what) => (feeValue ? name : unit(name, what))
         return [
           // an option's first figure is its premium, paid or received (the NET NPV tile stays in the analytics block)
-          option
+          // ... unless the ticket carries fees: then it is the option's value with its sign, so that the value, the fees
+          // and the net beside it add up whichever side was taken (an unsigned premium received beside a negative net did not)
+          option && !feeValue
             ? { label: unit('PREMIUM ' + r.quote_currency, r.direction === 'SELL' ? 'received' : 'paid'), value: n0(Math.abs(r.npv)) }
+            : option ? { label: 'OPTION NPV ' + r.quote_currency, value: n0(r.npv) }
             : { label: 'NET NPV ' + r.quote_currency, value: n0(r.npv) },
           { label: su(DELTA_LABEL(crypto), '1 % spot'), value: n0(spot01) },
           ...(crypto
@@ -1372,8 +1376,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         </>)}
         <FeesBlock
           rows={feeRows} onChange={(next) => { setFeeRows(next); setBookErr('') }} currency={feeCcy} disabled={locked} onValue={setFeeValue}
-          // a package's value is the sum over its legs, as the footer shows it (not its first leg's); none until every leg is priced
-          npv={isCurrency ? (pkg ? (packageRisk(pkg.quotes)?.npv ?? null) : (fxQuote?.npv ?? null)) : (result?.npv ?? result?.net_npv ?? null)}
+          npv={valueBeforeFees({ currency: isCurrency, pkg, quote: fxQuote, result })}
           valuationDate={isCurrency ? (fxQuote?.valuation_date || null) : (state.valDate || null)}
           premium={isCurrency
             ? (fxQuote?.shape === 'OPTION' && Number.isFinite(Number(fxQuote.npv))

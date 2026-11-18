@@ -65,6 +65,14 @@ export function packageRisk(quotes) {
 
 // ── CASHFLOWS ────────────────────────────────────────────────────────────────────────
 
+// The value a ticket's fees are taken off (FeesBlock's net, the footer's NET OF FEES): a package's is the sum over
+// its legs, as its footer shows it, and there is none until every leg is priced (it was the first leg's until
+// 0.55.2); a single currency trade's is its quote's; a rates ticket's its result's.
+export function valueBeforeFees({ currency, pkg, quote, result }) {
+  if (!currency) return result?.npv ?? result?.net_npv ?? null
+  return pkg ? (packageRisk(pkg.quotes)?.npv ?? null) : (quote?.npv ?? null)
+}
+
 // What an option pays if it fixed at today's forward, in the quote currency, from the booker's side. The same
 // figure the single-trade tab shows (FxTabs CashflowsBody): a vanilla's intrinsic value, a digital's payout when
 // today's forward is through the strike, nothing for a touch (its payout hangs on the path, not on a fixing).

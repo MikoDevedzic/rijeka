@@ -14,15 +14,22 @@ methodology document carries its own version (v1.38). Commits on `main` are the 
   sensitivities. A swap, a swaption, a cap, a floor, a collar, a currency forward and option, a digital-asset
   forward and option and a package of legs all read the same three places. A ticket with no fee shows neither
   figure. The FEES block keeps its own line.
-- **One line, as before.** With the two figures a currency ticket names its sensitivities without their units (the
-  TRADE tab's tiles carry them, as a package of six already does). A swap with an option on a leg lets its leg split
-  give way (CASHFLOWS has it). In a ticket narrower than about 1,250 px with seven or more figures the word
-  STRUCTURE gives way; no figure's name runs onto a second line.
+- **Three figures that add up.** An option on a currency pair or a digital asset names its premium in the footer,
+  unsigned, paid or received. With a fee on the ticket its first figure is instead the option's value with its
+  sign (OPTION NPV), so the value, the fees and the net read across whichever side was taken; a package of options
+  likewise (PACKAGE NPV).
+- **One line, as before, on a monitor.** With the two figures a currency ticket names its sensitivities without
+  their units (the TRADE tab's tiles carry them, as a package of six already does), and a swap's leg split gives
+  way to them (CASHFLOWS has it). When the strip then holds seven or eight figures the word STRUCTURE gives way
+  too. A ticket without fees is as it was. The phone's footer is not changed: it folds a long name as before.
 - **A package's net was its first leg's.** The FEES block of a package of legs took the first leg's value for its
   net of fees; it takes the package's, as the footer shows it, and shows none until every leg is priced.
-- **Tests.** A journey of twelve tickets (nine instruments, a swap with a cap, and the two longest strips again in
-  a 1280 by 720 window): the order, the sums against the API's answers, one line, clear of the buttons, the
-  figures still there on another tab.
+- **Tests.** A journey of thirteen tickets (nine instruments, a swap with a cap, a sold option, and the two longest
+  strips again in a 1280 by 720 window): the order, the sums against the API's answers, one line, clear of the
+  buttons, the figures still there on another tab. A unit test of the value a package's fees are taken off.
+- **Two reviews before it shipped changed it.** The first version kept the strip on one line with a rule on the
+  ticket window that would have moved pop-ups inside the ticket and stopped the phone's footer folding its names
+  (the independent reviewer); and an unsigned premium received stood beside a negative net (the design keeper).
 
 ## 0.55.1 · 18 November 2026
 

@@ -78,10 +78,12 @@ schedule; for a forward or an option, the record as it will be booked beside the
 (each figure with its formula, and what the price was built from). The **footer** carries the headline figures
 on every tab, in one order on every instrument: the value first; when the ticket carries fees, what they are worth
 today (PV OF FEES) and the value net of them (NET OF FEES); then the sensitivities. A figure that changes what the
-trade is worth is shown where the value is shown, not only in the block where it was entered. The strip is one
-line: with the fees' two figures a currency ticket's sensitivities are named without their units, a swap's leg
-split gives way past eight figures, and in a ticket narrower than about 1,250 px the word STRUCTURE gives way
-before a figure's name wraps. On TRADE the only computed things are the forward (a figure at full strength in a field's solid edge, with no
+trade is worth is shown where the value is shown, not only in the block where it was entered. The three add up: an
+option on a currency pair or a digital asset, whose first figure is otherwise its premium without a sign (paid or
+received), shows its value with its sign once it carries a fee. On a monitor the strip is one line: with the fees'
+two figures a currency ticket's sensitivities are named without their units, a swap's leg split gives way to them
+(CASHFLOWS has it), and when the strip then holds seven or eight figures the word STRUCTURE gives way before a
+figure's name wraps. A ticket without fees is unchanged. On TRADE the only computed things are the forward (a figure at full strength in a field's solid edge, with no
 well: it cannot be typed over), a field that shows its default (a brass rule under it once typed over, a dash
 in place of a number that is not there yet), an option's
 premium line and the notes that say why there is no price. A stored currency trade opened from the blotter has

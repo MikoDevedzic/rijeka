@@ -366,12 +366,10 @@
   align-items: center;
 }
 
-/* A strip of seven or eight figures (a fee's two beside the value) in a ticket narrower than about 1,250 px: the
-   word STRUCTURE and its value give way before a figure's name runs onto a second line. The structure is the lit
-   chip on TRADE and a line of DETAILS. Nine figures do not occur: a swap's leg split gives way first (TradeFooter). */
-.tbw-window { container: tbw / inline-size; }
-@container tbw (max-width: 1250px) { .tbw-footer.is-full .tbw-struct-label { display: none; } }
-.tbw-footer-metric .tbw-lbl { white-space: nowrap; }
+/* A ticket with fees whose strip holds seven or eight figures: the word STRUCTURE and its value give way before a
+   figure's name runs onto a second line (a 1280-wide screen has no room for both). The structure is the lit chip on
+   TRADE and a line of DETAILS. Without fees nothing changes; a phone never shows the word (Phone.css). */
+.tbw-footer.is-full .tbw-struct-label { display: none; }
 
 .tbw-struct-label {
   font-size: 12px;

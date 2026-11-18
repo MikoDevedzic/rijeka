@@ -372,8 +372,6 @@ export function XVASummary() {
 
 // ── TradeFooter (sticky: metric chips + STRUCTURE + PRICE + BOOK) ───────────
 
-const FOOTER_ROOM = 8
-
 export function TradeFooter({
   descriptor, result, state, pricing, onPrice, onBook, onCancel,
   booking, booked, bookErr,
@@ -388,14 +386,15 @@ export function TradeFooter({
   // The value first, then what its fees are worth and the value net of them, then the sensitivities: the same three
   // places whatever the instrument. (The net stood only at the right of the FEES block, where the owner did not
   // see it: an option with its premium entered showed OPTION NPV here and nothing else, 18 November 2026.)
-  // The strip is one line and holds eight figures beside STRUCTURE and the buttons. Past that, with the fees' two,
-  // a split of the value (a swap's legs, marked `secondary`; CASHFLOWS has them) gives way before a name wraps.
-  const kept = fees?.length && own.length + fees.length > FOOTER_ROOM ? own.filter(m => !m.secondary) : own
+  // The strip is one line. With the fees' two figures a split of the value (a swap's legs, marked `secondary`;
+  // CASHFLOWS has them) gives way: the fees stand where the split stood, straight after the value.
+  const kept = fees?.length ? own.filter(m => !m.secondary) : own
   const metrics = (kept.length && fees?.length ? [kept[0], ...fees, ...kept.slice(1)] : kept).map(m => ({ ...m, value: inCcy(m.value, ccy) }))
+  const full = !!fees?.length && metrics.length > 6                 // seven or eight figures: STRUCTURE gives way (styles.css)
   const structLabel = descriptor.footer.structureLabel(state)
 
   return (
-    <div className={`tbw-footer${metrics.length > 6 ? ' is-full' : ''}`}>
+    <div className={`tbw-footer${full ? ' is-full' : ''}`}>
       <div className="tbw-footer-metrics">
         {/* PRICE answered with a reason and no figures (no curve stored for the currency, a rate that did not solve):
             the reason stood only under ANALYTICS, below the fold of a ticket whose footer was simply empty */}
