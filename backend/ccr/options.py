@@ -56,20 +56,40 @@ def _parse_axb(t: str) -> Optional[tuple[float, float]]:
         return None
 
 
-def swaption_vol_bp(mkt, ccy: str, expiry_y: float, tenor_y: float) -> tuple[float, str]:
-    """Nearest ATM normal vol on the (expiry, tenor) grid of {CCY}_SWVOL_ATM, in bp."""
-    q = mkt.quotes(f"{ccy}_SWVOL_ATM") if mkt is not None else None
-    best, bd = None, None
+def swaption_vol_point(mkt, ccy: str, expiry_y: float, tenor_y: float) -> dict:
+    """The ATM normal vol the desk's market gives a swaption of this expiry and tenor, and where it came from:
+    {vol_bp, tier, point, source, asof}. The rule is the nearest point of the {CCY}_SWVOL_ATM grid, nearest in the
+    log of the expiry plus the log of the tenor (a 3M expiry reads the 1Y row, a 10Y the 7Y: the grid's edges, flat).
+    `tier`: QUOTED when the option sits on a grid point, NEAREST when it does not, DEFAULT when the currency has no
+    surface and the desk's default stands in (85 bp). One rule for the ticket's default, the booked option's
+    revaluation (pnl/valuation.py) and the reported market vol of the exposure run (ccr/valuation.py)."""
+    cid = f"{ccy}_SWVOL_ATM"
+    q = mkt.quotes(cid) if mkt is not None else None
+    best, bd, at = None, None, None
     for x in q or []:
         p = _parse_axb(x.get("tenor")); r = x.get("rate")
         if p is None or r is None:
             continue
         d = abs(math.log(max(p[0], 1 / 12) / max(expiry_y, 1 / 12))) + abs(math.log(max(p[1], 0.25) / max(tenor_y, 0.25)))
         if bd is None or d < bd:
-            best, bd = float(r), d
+            best, bd, at = float(r), d, p
     if best is None:
-        return DEFAULT_VOL_BP, "desk default (no ATM swaption surface)"
-    return best, f"{ccy}_SWVOL_ATM nearest point"
+        return {"vol_bp": DEFAULT_VOL_BP, "tier": "DEFAULT", "point": None, "asof": None,
+                "source": "desk default (no ATM swaption surface)"}
+    asof = None
+    try:
+        asof = mkt.snapshot_date(cid)
+    except Exception:              # noqa: BLE001
+        asof = None
+    g = lambda v: f"{v:g}"         # noqa: E731
+    return {"vol_bp": best, "tier": "QUOTED" if bd < 1e-9 else "NEAREST", "point": f"{g(at[0])}Yx{g(at[1])}Y",
+            "asof": asof.isoformat() if asof is not None else None, "source": f"{ccy}_SWVOL_ATM nearest point"}
+
+
+def swaption_vol_bp(mkt, ccy: str, expiry_y: float, tenor_y: float) -> tuple[float, str]:
+    """Nearest ATM normal vol on the (expiry, tenor) grid of {CCY}_SWVOL_ATM, in bp (swaption_vol_point's)."""
+    p = swaption_vol_point(mkt, ccy, expiry_y, tenor_y)
+    return p["vol_bp"], p["source"]
 
 
 def cap_vol_bp(db, uid: str, tenor_y: float) -> tuple[float, str]:

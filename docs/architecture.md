@@ -275,6 +275,12 @@ elsewhere. `fixing_default` stays the benchmark for older web clients. Not done 
 status, and no settlement event is written (the P&L explain shows the amount leaving as carry, with no cash line);
 that is a separate change because it writes into every account each day.
 
+A swaption ticket's vol (0.57.0) is the desk's market's: `GET /api/price/swaption/vol` (signed-in; a curve id of
+the pricer's own list, an expiry and a tenor in years) answers the nearest point of the currency's `{CCY}_SWVOL_ATM`
+snapshot with its tier, point and date (`ccr/options.py` `swaption_vol_point`, the one lookup the P&L's revaluation
+and the exposure run also read), and `POST /api/price/swaption` with no `vol_bp` prices at the same number. No new
+table, job or setting.
+
 The CURVE SCENARIO tab of a rates ticket (`trade-window/RatesScenario.jsx`, `rates-scenario.js`) asks the pricing
 routes themselves: the ticket's own request, with the scenario's shifts added (`shift_flat_bp` and `shift_bp` on a
 curve of `/price/preview`; `curve_flat_bp`, `curve_shift_bp` and `vol_shift_bp` on `/api/price/swaption`, `/cap`,

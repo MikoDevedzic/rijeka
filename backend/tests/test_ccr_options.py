@@ -105,3 +105,31 @@ def test_swaption_terms_from_trade_and_legs():
     t3 = SimpleNamespace(terms={"expiry_date": "2027-11-01", "strike": 0.04, "is_payer": False, "side": "SELL"}, trade_date=None)
     s3 = O.swaption_terms(t3, legs, ASOF)
     assert s3 == {"expiry": date(2027, 11, 1), "K": 0.04, "is_payer": False, "sign": -1.0}
+
+
+def test_the_vol_a_swaption_reads_says_where_it_came_from():
+    """0.57.0: one lookup for the ticket's default, the booked option's revaluation and the exposure run's reported
+    vol. On a grid point it is QUOTED; off it, the NEAREST point in log expiry plus log tenor, named; with no
+    surface for the currency, the desk DEFAULT. The grid's edges are flat: a three-month expiry reads the one-year
+    row and a ten-year expiry the last one."""
+    from datetime import date
+
+    class M:
+        def quotes(self, cid):
+            return [{"tenor": "1Yx5Y", "rate": 80.0}, {"tenor": "5Yx5Y", "rate": 95.0}, {"tenor": "7Yx9Y", "rate": 70.0}] if cid == "USD_SWVOL_ATM" else None
+
+        def snapshot_date(self, cid):
+            return date(2026, 11, 18)
+    on = O.swaption_vol_point(M(), "USD", 1.0, 5.0)
+    assert on == {"vol_bp": 80.0, "tier": "QUOTED", "point": "1Yx5Y", "asof": "2026-11-18", "source": "USD_SWVOL_ATM nearest point"}
+    assert O.swaption_vol_point(M(), "USD", 365 / 365.0 + 1e-12, 5.0)["tier"] == "QUOTED"          # a year of 365 days is the one-year point
+    near = O.swaption_vol_point(M(), "USD", 92 / 365, 5.0)                                         # three months: below the grid
+    assert (near["vol_bp"], near["tier"], near["point"]) == (80.0, "NEAREST", "1Yx5Y")
+    far = O.swaption_vol_point(M(), "USD", 10.0, 10.0)                                             # beyond it
+    assert (far["vol_bp"], far["tier"], far["point"]) == (70.0, "NEAREST", "7Yx9Y")
+    none = O.swaption_vol_point(M(), "EUR", 1.0, 5.0)
+    assert none == {"vol_bp": O.DEFAULT_VOL_BP, "tier": "DEFAULT", "point": None, "asof": None, "source": "desk default (no ATM swaption surface)"}
+    assert O.swaption_vol_point(None, "USD", 1.0, 5.0)["tier"] == "DEFAULT"
+    # the pair the engines already read is the same answer
+    assert O.swaption_vol_bp(M(), "USD", 2.0, 5.0) == (80.0, "USD_SWVOL_ATM nearest point")
+

@@ -1012,7 +1012,10 @@ class SwaptionRequest(BaseModel):
     expiry_y:       float         = 1.0        # option expiry in years
     tenor_y:        float         = 5.0        # underlying swap tenor in years
     strike:         Optional[float] = None     # if None → ATM (= forward rate)
-    vol_bp:         float         = 86.5       # normal vol in bp
+    # normal vol in bp. None: the desk's market gives it (the nearest point of the currency's ATM swaption grid, the
+    # rule a booked option is revalued on; the desk default where the currency has no surface) and the answer says
+    # which. Until 0.57.0 an absent vol was a fixed 86.5 bp, whatever the expiry, the tenor or the day's surface.
+    vol_bp:         Optional[float] = Field(default=None, gt=0.0, le=5000.0)
     is_payer:       bool          = True       # True = payer swaption
     pay_freq_y:     float         = 1.0        # coupon frequency (1=annual, 0.5=semi)
     valuation_date: Optional[date] = None
@@ -1078,6 +1081,30 @@ def price_fees(body: FeesRequest, db: Session = Depends(get_db), user: dict = De
     return {"currency": ccy, "curve_id": curve_id, "valuation_date": val_date.isoformat(), **out}
 
 
+def _surface_vol(db: Session, uid: str, curve_id: str, expiry_y: float, tenor_y: float, val_date: date) -> dict:
+    """The swaption vol the desk's market gives (ccr.options.swaption_vol_point) on the latest market date at or
+    before the valuation date; the desk default when the account has no market at all."""
+    from ccr.options import swaption_vol_point
+    from pnl.market import Market
+    dates = Market.dates(db, uid, upto=val_date)
+    mkt = Market(db, uid, dates[-1]) if dates else None
+    return swaption_vol_point(mkt, CURVE_CCY.get(curve_id, "USD"), float(expiry_y), float(tenor_y))
+
+
+@router.get("/api/price/swaption/vol")
+def swaption_vol_route(curve_id: str = "USD_SOFR", expiry_y: float = 1.0, tenor_y: float = 5.0, valuation_date: Optional[date] = None,
+                       db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """The vol a swaption ticket shows before anybody types one: what POST /api/price/swaption would price at with
+    no vol in its request, with the grid point it was read from and the surface's date."""
+    if curve_id not in CURVE_CCY:
+        raise HTTPException(status_code=422, detail="curve_id is not a curve this desk prices on")
+    if not (0.0 < expiry_y <= 60.0 and 0.0 < tenor_y <= 60.0):
+        raise HTTPException(status_code=422, detail="expiry_y and tenor_y are years, above zero and at most sixty")
+    val_date = valuation_date or date.today()
+    return {"curve_id": curve_id, "currency": CURVE_CCY[curve_id], "expiry_y": expiry_y, "tenor_y": tenor_y,
+            "valuation_date": val_date.isoformat(), **_surface_vol(db, user["sub"], curve_id, expiry_y, tenor_y, val_date)}
+
+
 @router.post("/api/price/swaption")
 def price_swaption_route(
     req: SwaptionRequest,
@@ -1090,6 +1117,11 @@ def price_swaption_route(
     """
     _require_trader(user)
     val_date = req.valuation_date or date.today()
+    # the vol: the request's, or the desk's market's for this expiry and tenor (and then the answer says where from)
+    surface = None
+    if req.vol_bp is None:
+        surface = _surface_vol(db, user["sub"], req.curve_id, req.expiry_y, req.tenor_y, val_date)
+        req = req.model_copy(update={"vol_bp": float(surface["vol_bp"])})
 
     # Build discount curve — use shocked_quotes if provided (scenario repricing)
     base_quotes = [CurveQuote(**q) for q in req.shocked_quotes] if req.shocked_quotes else []
@@ -1358,7 +1390,10 @@ def price_swaption_route(
         # SABR vol surface
         "sabr_vol_bp":    result.sabr_vol_bp,
         "is_sabr_vol":    result.is_sabr_vol,
-        "vol_tier":       getattr(result, "vol_tier", "MANUAL"),
+        # MANUAL: the request's own vol. QUOTED / NEAREST / DEFAULT: read from the desk's market (`vol_source`), unless
+        # the strike is away from the money and the smile gave the vol (the tier price_swaption names).
+        "vol_tier":       (surface["tier"] if surface is not None and not getattr(result, "is_sabr_vol", False) else getattr(result, "vol_tier", "MANUAL")),
+        "vol_source":     ({k: surface[k] for k in ("tier", "point", "asof", "source")} if surface is not None else None),
         # Debug intermediates — exact values for model validation / Excel replication
         "_debug":         getattr(result, "_debug", None),
     }

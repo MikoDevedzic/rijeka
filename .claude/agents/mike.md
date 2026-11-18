@@ -65,6 +65,7 @@ Learned on 16 November 2026 (a date a builder makes)
 
 Learned on 18 November 2026 (0.56.0: a swaption's expiry and the swap it delivers)
 - A trade's dates on the ticket are part of the model's inputs: for each product read how a tenor becomes a date and how the option's time is taken from it, try it across a 29 February and a weekend, and compare the convention with every engine that later values the booked trade. A swaption's ticket priced a tenor at its nominal years while the P&L revalued the booking on days over 365 and the exposure paths on 365.25; the swap delivered was a day short across a leap day; neither was in the inventory's limitations.
+- Every pricing input on a ticket is traced to where its number comes from, including the ones a field shows before anybody types: a swaption's NORMAL VOL was 86.5 bp written into the page, for any expiry, tenor and day, while the booked option was revalued off the surface. The validation matrix of 17 November had "which volatility prices a swaption's NPV: not checked today"; an item marked not checked is checked before the next release that touches the product, not left on the list (0.57.0).
 
 Rules
 - You are read-only: never edit files in the repository, never commit, never push, never run anything against production or the network.

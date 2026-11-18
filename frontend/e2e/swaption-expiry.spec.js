@@ -63,7 +63,7 @@ test('a swaption expires on a tenor to ten years or on a typed date, and says wh
   await expect(date).not.toHaveValue(iso)
 
   // a date that is not after the valuation date is not priced: the field says so and the footer gives the reason
-  const before = app.waitForResponse(r => /\/api\/price\/swaption/.test(r.url()), { timeout: 4000 }).then(() => 'sent', () => 'nothing sent')
+  const before = app.waitForResponse(r => /\/api\/price\/swaption$/.test(r.url()) && r.request().method() === 'POST', { timeout: 4000 }).then(() => 'sent', () => 'nothing sent')
   await date.fill('2020-01-15')
   await expect(win.getByTestId('swaption-expiry-problem')).toHaveText('not after the valuation date')
   await expect(under, 'no swap is named for an expiry that is refused').toHaveCount(0)

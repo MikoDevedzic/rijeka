@@ -26,7 +26,7 @@
 import { withFees } from './fees'
 import { toRateSchedule, toNotionalSchedule, toSpreadSchedule } from './schedule_translator'
 import { getSessionMaybe } from '../../lib/session'
-import { SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS, swaptionExpiry, swaptionUnderlying } from './product-defaults'
+import { SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS, swaptionExpiry, swaptionUnderlying, swaptionVol } from './product-defaults'
 
 // Unified-window product key → the instrument_type the backend stores and the
 // engines match on (ccr/options.py, pnl/valuation.py, pricing/ir_swap.py).
@@ -337,7 +337,9 @@ export function buildSwaptionBookingBody(state, direction, extras = {}) {
   if (ex.problem) throw new Error(ex.problem)
   const strike    = swaptionStrike(state, extras)
   const structure = state.structure || 'EUROPEAN'
-  const volBp     = parseFloat(String(state.volBp ?? SWAPTION_DEFAULTS.volBp))
+  // the vol typed; else the vol the price being booked was struck at; else the surface's as the ticket showed it
+  const vol       = swaptionVol(state)
+  const volBp     = vol.typed ? vol.bp : (extras.priced?.vol_bp ?? vol.bp ?? NaN)
   const terms = {
     ...vanillaTerms(state, direction, strike),
     option: 'SWAPTION',

@@ -28,7 +28,34 @@ export const FREQ_PER_YEAR = { MONTHLY: 12, QUARTERLY: 4, SEMI_ANNUAL: 2, ANNUAL
 // IR_SWAPTION: SwaptionTermsBody. Strike blank = ATM forward.
 // optionSide BUY: we hold the right (we pay the premium); SELL: we wrote it.
 export const SWAPTION_DEFAULTS = {
-  expiry: '1Y', volBp: '86.5', strike: '', optionSide: 'BUY',
+  expiry: '1Y', volBp: '', strike: '', optionSide: 'BUY',
+}
+
+// The overnight curve a rates ticket prices a currency on (the ids the API knows: pricer.py CURVE_CCY).
+export const CCY_CURVE = {
+  USD: 'USD_SOFR', EUR: 'EUR_ESTR', GBP: 'GBP_SONIA',
+  JPY: 'JPY_TONAR', CHF: 'CHF_SARON', AUD: 'AUD_AONIA',
+  CAD: 'CAD_CORRA',
+}
+
+// A swaption ticket's normal vol in bp: { bp, typed, source }. The number typed in the field when there is one;
+// otherwise the one the desk's market gives for the option's expiry and tenor (state.volDefault, what
+// GET /api/price/swaption/vol answered: the nearest point of the currency's ATM swaption grid, or the desk default
+// with no surface), and null until that has arrived, which the pricing request sends as "no vol" so the engine reads
+// the same market itself. Until 0.57.0 an untouched field was 86.5 bp whatever the expiry, the tenor or the day.
+export function swaptionVol(state = {}) {
+  const raw = String(state.volBp ?? '').trim()
+  const typed = raw !== '' && Number.isFinite(parseFloat(raw)) && parseFloat(raw) > 0
+  if (typed) return { bp: parseFloat(raw), typed: true, source: null }
+  const d = state.volDefault
+  return { bp: d && Number.isFinite(Number(d.vol_bp)) ? Number(d.vol_bp) : null, typed: false, source: d || null }
+}
+// The few words under the field that say where an untouched vol comes from.
+export function volSourceWords(d) {
+  if (!d) return 'from the swaption surface'
+  if (d.tier === 'DEFAULT') return `desk default · no ${d.currency || ''} swaption surface`.replace('  ', ' ')
+  const point = String(d.point || '').replace('x', '×')
+  return `${d.tier === 'QUOTED' ? 'surface' : 'nearest point'} ${point}${d.asof ? ' · ' + d.asof : ''}`
 }
 
 // RATES_CAP / RATES_FLOOR / RATES_COLLAR: the cap-like bodies. Strikes in %.

@@ -25,7 +25,7 @@
 \titleformat{\section}{\large\bfseries\color{ink}}{\thesection}{0.8em}{}
 \titleformat{\subsection}{\normalsize\bfseries\color{ink}}{\thesubsection}{0.8em}{}
 \pagestyle{fancy}\fancyhf{}
-\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.39 · November 2026}
+\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.40 · November 2026}
 \fancyfoot[C]{\small\color{dim}\thepage}
 \renewcommand{\headrulewidth}{0.2pt}
 % breaks at / _ . in text (url's \path); literal typewriter inside maths
@@ -45,7 +45,7 @@
 \begin{center}
 {\LARGE\bfseries Rijeka Methodology}\\[4pt]
 {\large Curve construction, pricing, market and counterparty risk, XVA, FX and digital-asset derivatives, on-chain confirmation}\\[6pt]
-{\color{dim} Version 1.39 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
+{\color{dim} Version 1.40 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
 \end{center}
 
 \vspace{4pt}
@@ -56,6 +56,7 @@
 \section*{Version history}
 {\small
 \begin{itemize}[leftmargin=1.4em, itemsep=4pt]
+\item \textbf{1.40 (18 November 2026).} The volatility of a swaption on a ticket (\S\ref{sec:swpn-vol}); the value of every swaption ticket on which no volatility is typed changes. An untouched ticket priced at $86.5$bp whatever its expiry, its tenor or the day's surface; it now reads the desk's at-the-money swaption grid at the nearest point, the rule a booked option was already revalued on, and says which point and which day. At the money the price is proportional to the volatility, so the change is the ratio of the two: on the reference market of the tests, $94.9$bp at one year into five, $+9.7\,\%$. A currency with no surface takes the desk default of $85$bp, $-1.7\,\%$. A typed volatility is unchanged.
 \item \textbf{1.39 (18 November 2026).} The expiry of a swaption on a ticket (\S\ref{sec:swpn-expiry}); a European swaption's ticket value changes where its tenor is not a whole number of 365-day years, and the swap it delivers ends on the right day. A tenor (now one month to ten years) is that many calendar months from the valuation date, or the expiry is a date typed in. The option's time is the days to that date over 365, the convention the booked option was already revalued on; a ticket priced a tenor at its nominal fraction of a year, so a three-month option struck on 18 November 2026 ran $0.25$ where the calendar gives $92/365$, a price $0.41\,\%$ lower at the money. The swap delivered ended a day short whenever a leap day fell inside it. Nothing changes for a booked trade's dates.
 \item \textbf{1.38 (18 November 2026).} The hosted demo's interest-rate curves are synthetic (\S\ref{sec:mr}); every rates figure of the demo changes with them. Until now each curve was built from a published overnight fixing and government yields with a stated spread. The firm holds no licence for any benchmark, and some need one to build a curve from or to value with, so the demo no longer reads any: one stated generator makes every curve, every past day's curve and every overnight fixing. A self-hosted desk connects its own market data and none of this applies to it.
 \item \textbf{1.37 (17 November 2026).} Wording only; no figure changes. The licensed margin methodology the engine does not compute is named once, in \S\ref{sec:exposure}, where the initial margin is described; elsewhere the margin is called what it is, the desk's amount or the engine's own estimate.
@@ -212,8 +213,10 @@ The ticket's date rule has no reference comparison and no workbook: it is covere
 
 A Bermudan (\S\ref{sec:berm}) takes a tenor only and whole years for its time, on a new ticket and on a booked one: its tree steps in twelfths of a year, while its expiry date and the swap's dates are the calendar's, a day or three apart from the tree's at the last exercise.
 
-\subsection{Volatility tiers}
-The volatility used is tagged \code{QUOTED} (an at-the-money surface point at the trade's expiry and tenor), \code{SABR} (an off-the-money strike read from the calibrated smile), \code{INTERPOLATED} (between grid points), or \code{MANUAL} (user supplied). The tier travels with the price so that a valuation can be challenged.
+\subsection{Volatility tiers}\label{sec:swpn-vol}
+A swaption is priced at the volatility in its request or, when the request carries none, at the one the desk's market gives: the point of the currency's at-the-money grid nearest the option, nearest in $|\ln(T_e/T_e')|+|\ln(\tau/\tau')|$ over the grid's expiries $T_e'$ and swap tenors $\tau'$. There is no interpolation between points, and beyond the grid's edges the edge stands: a three-month expiry reads the one-year row. The same rule revalues the booked option for P\&L, VaR and the ladder (\S\ref{sec:mr}) and gives the market volatility reported beside an exposure run (\S\ref{sec:ccr}), so the ticket's untouched volatility is the one its booking is next valued at. A ticket shows that number in its volatility field before it is priced, with the point and the surface's date under it; a volatility typed over it is the request's.
+
+The volatility used is tagged: \code{MANUAL} (the request's own), \code{QUOTED} (read from the grid, the option on a grid point), \code{NEAREST} (read from the grid's nearest point, the option off it), \code{DEFAULT} (the currency has no surface: the desk default of $85$bp), \code{SABR} or \code{INTERPOLATED} (a strike away from the money, read from the calibrated smile or between its fitted points). The tier travels with the price, with the point and the surface's date, so that a valuation can be challenged. Only the dollar has a surface in the hosted demo, and it is synthetic (\S\ref{sec:mr}); a swaption in another currency is priced at the default unless a volatility is typed, and the ticket says so. Until version 1.40 a ticket with no volatility typed was priced at $86.5$bp whatever the expiry, the tenor or the day.
 
 \subsection{$\beta=0$ normal SABR}
 The smile at each expiry--tenor point is the normal SABR of Hagan et al.\ (2002) with backbone $\beta=0$:

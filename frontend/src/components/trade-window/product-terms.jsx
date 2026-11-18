@@ -32,18 +32,15 @@ import React, { useEffect, useRef } from 'react'
 import LegEmbeddedOptions from './LegEmbeddedOptions'
 import { useFieldLabel } from '../../lib/a11y'
 import { getSessionMaybe } from '../../lib/session'
-import { SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS, EXPIRY_TENORS, EXPIRY_DATE, addDays, swaptionExpiry, swaptionUnderlying } from './product-defaults'
+import { SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS, EXPIRY_TENORS, EXPIRY_DATE, TENOR_Y, CCY_CURVE, addDays, swaptionExpiry, swaptionUnderlying, swaptionVol, volSourceWords } from './product-defaults'
+import DefaultedInput from './DefaultedInput'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
 // Constants mirror legacy TradeBookingWindow.jsx. Intentionally duplicated
 // from rates.js during Sprint 10 migration; future cleanup patch will
 // consolidate these into a shared constants file.
-const CCY_CURVE = {
-  USD: 'USD_SOFR', EUR: 'EUR_ESTR', GBP: 'GBP_SONIA',
-  JPY: 'JPY_TONAR', CHF: 'CHF_SARON', AUD: 'AUD_AONIA',
-  CAD: 'CAD_CORRA',
-}
+// (CCY_CURVE is the shared one of product-defaults.js since 0.57.0.)
 
 const CCY_INDICES = {
   USD: ['SOFR','TERM SOFR 1M','TERM SOFR 3M','TERM SOFR 6M','EFFR'],
@@ -517,11 +514,36 @@ export function SwapTermsBody({ state, update }) {
 // SWAPTION_DEFAULTS, which the pricer and the booking apply to an untouched field too. The expiry's date, the
 // option's time and the underlying's dates all come from product-defaults.swaptionExpiry, as the request and the
 // booking read them.
+// The vol the desk's market gives the option on the ticket, asked for whenever its currency, expiry, tenor or
+// valuation date changes (GET /api/price/swaption/vol). It is the field's default, not a typed vol: the request sends
+// it as the ticket shows it. A booked trade keeps the vol it was booked at; a Bermudan is priced at the model's own.
+function useSwaptionVolDefault(state, update, years) {
+  const { ccy = 'USD', tenor, valDate, readOnly } = state
+  const tenorY = TENOR_Y[tenor] || 5
+  const y = Math.round(years * 1e6) / 1e6
+  useEffect(() => {
+    if (readOnly || !valDate || !(y > 0)) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const session = await getSession()
+        if (!session || cancelled) return
+        const q = new URLSearchParams({ curve_id: CCY_CURVE[ccy] || 'USD_SOFR', expiry_y: String(y), tenor_y: String(tenorY), valuation_date: valDate })
+        const res = await fetch(`${API}/api/price/swaption/vol?${q}`, { headers: { Authorization: 'Bearer ' + session.access_token } })
+        if (cancelled) return
+        update({ volDefault: res.ok ? await res.json() : null })
+      } catch { if (!cancelled) update({ volDefault: null }) }
+    })()
+    return () => { cancelled = true }
+  }, [ccy, tenorY, y, valDate, readOnly])     // eslint-disable-line react-hooks/exhaustive-deps
+}
+
 export function SwaptionTermsBody({ state, update }) {
-  const volBp  = state.volBp  ?? SWAPTION_DEFAULTS.volBp
   const strike = state.strike ?? SWAPTION_DEFAULTS.strike
   const ex = swaptionExpiry(state)
   const bermudan = state.structure === 'BERMUDAN'
+  useSwaptionVolDefault(state, update, ex.problem ? 0 : ex.years)        // nothing is asked for an expiry the ticket refuses
+  const vol = swaptionVol(state)
   const locked = !!state.readOnly
   const { start: starts, end: ends } = swaptionUnderlying(state)
   return (
@@ -545,8 +567,10 @@ export function SwaptionTermsBody({ state, update }) {
           {ex.problem && <div className="tbw-fx-limit" data-testid="swaption-expiry-problem" style={{ color: 'var(--amber)' }}>not after the valuation date</div>}
         </Field>
         <Field label="NORMAL VOL (bp)">
-          <input className="tbw-mono tbw-blue" value={volBp}
-                 onChange={e => update({ volBp: e.target.value })} />
+          {/* the surface's vol for this expiry and tenor until one is typed; the words under it say which point and day */}
+          <DefaultedInput testId="swaption-vol" value={state.volBp ?? ''} onChange={v => update({ volBp: v })}
+                          fallback={vol.typed ? null : vol.bp} format={x => String(+Number(x).toFixed(2))}
+                          tag={bermudan ? 'the tree prices at the model\'s σ' : volSourceWords(state.volDefault)} />
         </Field>
         <Field label="STRIKE (%) blank=ATM">
           <input className="tbw-mono tbw-blue" value={strike} placeholder="ATM forward"

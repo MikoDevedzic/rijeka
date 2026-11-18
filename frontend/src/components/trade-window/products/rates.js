@@ -19,7 +19,7 @@ import { SwapTermsBody, SwaptionTermsBody, CapTermsBody,
          FloorTermsBody, CollarTermsBody } from '../product-terms'
 import { toRateSchedule, toNotionalSchedule, toSpreadSchedule } from '../schedule_translator'
 import { TENOR_Y as TENOR_Y_MAP, FREQ_PER_YEAR, SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS,
-         swaptionExpiry, swaptionUnderlying } from '../product-defaults'
+         CCY_CURVE, swaptionExpiry, swaptionUnderlying, swaptionVol } from '../product-defaults'
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
 
@@ -71,11 +71,6 @@ const metricPct = (label, value) => ({
 
 // ── Pricing constants (mirror legacy TradeBookingWindow.jsx) ─────────────
 
-const CCY_CURVE = {
-  USD: 'USD_SOFR', EUR: 'EUR_ESTR', GBP: 'GBP_SONIA',
-  JPY: 'JPY_TONAR', CHF: 'CHF_SARON', AUD: 'AUD_AONIA',
-  CAD: 'CAD_CORRA',
-}
 
 const INDEX_CURVE = {
   'SOFR':'USD_SOFR','TERM SOFR 1M':'USD_TSOFR_1M','TERM SOFR 3M':'USD_TSOFR_3M',
@@ -434,7 +429,7 @@ registerProduct({
       const under = swaptionUnderlying(state)
       const strikeRaw = String(state.strike ?? SWAPTION_DEFAULTS.strike).trim()
       const strike   = strikeRaw !== '' && isFinite(parseFloat(strikeRaw)) ? parseFloat(strikeRaw) / 100 : null
-      const volBp    = parseFloat(String(state.volBp ?? SWAPTION_DEFAULTS.volBp))
+      const vol      = swaptionVol(state)           // typed, or the surface's for this expiry and tenor; null = the engine reads it
       // ── Sprint 13B: Bermudan dispatch ────────────────────────────────────
       // When structure === 'BERMUDAN', send a default annual exercise
       // schedule from year 1 through expiry_y (inclusive): "annual European
@@ -465,7 +460,7 @@ registerProduct({
         expiry_y,
         tenor_y:             TENOR_Y_MAP[state.tenor] || 5,
         strike,
-        vol_bp:              isFinite(volBp) ? volBp : 86.5,
+        vol_bp:              vol.bp,
         is_payer:            state.direction === 'PAY',
         pay_freq_y:          1.0,
         valuation_date:      state.valDate,

@@ -94,6 +94,13 @@ describe('IR_SWAPTION', () => {
     expect(body).toMatchObject({ effective_date: '2026-11-04', maturity_date: '2031-11-04' })       // the trade's own dates stay the spot-start swap's
   })
 
+  it('with no vol typed it books the vol the price was struck at, else the surface\'s as the ticket showed it', () => {
+    const untouched = { ...swaptionState, volBp: '', volDefault: { vol_bp: 94.9, tier: 'QUOTED', point: '1Yx5Y' } }
+    expect(buildBookingBody(untouched, 'PAY', { ...extras, priced: { ...(extras.priced || {}), vol_bp: 93.1 } }).terms.vol_bp).toBe(93.1)
+    expect(buildBookingBody(untouched, 'PAY', extras).terms.vol_bp).toBe(extras.priced?.vol_bp ?? 94.9)
+    expect(buildBookingBody({ ...untouched, volBp: '80' }, 'PAY', extras).terms.vol_bp).toBe(80)
+  })
+
   it('an expiry that is not after the valuation date is not booked, and the reason is the ticket\'s own words', () => {
     expect(() => buildBookingBody({ ...swaptionState, expiry: 'DATE', expiryDate: '2026-10-01' }, 'PAY', extras)).toThrow(/The expiry 2026-10-01 is not after the valuation date/)
   })

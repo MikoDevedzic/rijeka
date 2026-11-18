@@ -191,3 +191,37 @@ def test_every_route_refuses_a_shift_out_of_bounds(client, auth_a, url, body, ex
 def test_a_shift_out_of_bounds_is_refused(client, auth_a, extra):
     r = client.post("/api/price/cap", json={**CAP, **extra}, headers=auth_a)
     assert r.status_code == 422, r.text[:200]
+
+
+def test_a_swaption_with_no_vol_in_its_request_prices_at_the_surfaces_point_and_says_so(client, auth_a):
+    """0.57.0. Until then an absent vol was 86.5 bp whatever the expiry, the tenor or the day's surface. Now it is the
+    nearest point of the desk's ATM swaption grid (the vol a booked option is revalued at), named in the answer; the
+    ticket shows the same number before PRICE from GET /api/price/swaption/vol. A vol in the request is still the
+    vol, and MANUAL."""
+    from market_data import demo_feed as f
+    bare = {k: v for k, v in SWAPTION.items() if k not in ("vol_bp", "strike")}
+    typed = _post(client, auth_a, "/api/price/swaption", {**bare, "vol_bp": 86.5, "effective_date": EFF, "maturity_date": MAT})
+    assert typed["vol_bp"] == 86.5 and typed["vol_tier"] == "MANUAL" and typed["vol_source"] is None
+
+    read = _post(client, auth_a, "/api/price/swaption", {**bare, "effective_date": EFF, "maturity_date": MAT})
+    grid = f.atm_normal_vol_bp(1, 5)                                         # the stack's surface, on its 1Yx5Y point
+    assert read["vol_bp"] == pytest.approx(grid, abs=1e-9) and read["vol_tier"] == "QUOTED"
+    assert read["vol_source"]["point"] == "1Yx5Y" and read["vol_source"]["asof"] and read["vol_source"]["source"] == "USD_SWVOL_ATM nearest point"
+    assert read["npv"] == pytest.approx(typed["npv"] * grid / 86.5, rel=1e-6)   # at the money the price is proportional to the vol
+
+    r = client.get("/api/price/swaption/vol", params={"curve_id": "USD_SOFR", "expiry_y": 1.0, "tenor_y": 5.0, "valuation_date": ASOF}, headers=auth_a)
+    assert r.status_code == 200, r.text[:200]
+    shown = r.json()
+    assert shown["vol_bp"] == read["vol_bp"] and shown["tier"] == "QUOTED" and shown["point"] == "1Yx5Y" and shown["currency"] == "USD"
+    # off the grid: three months of 92 days on a four-year swap is the nearest point's, and says which
+    off = client.get("/api/price/swaption/vol", params={"curve_id": "USD_SOFR", "expiry_y": 92 / 365, "tenor_y": 4.0, "valuation_date": ASOF}, headers=auth_a).json()
+    assert off["tier"] == "NEAREST" and off["point"] in ("1Yx3Y", "1Yx5Y") and off["vol_bp"] in (f.atm_normal_vol_bp(1, 3), f.atm_normal_vol_bp(1, 5))
+    # a currency with no surface: the desk default, said
+    eur = client.get("/api/price/swaption/vol", params={"curve_id": "EUR_ESTR", "expiry_y": 1.0, "tenor_y": 5.0, "valuation_date": ASOF}, headers=auth_a).json()
+    assert eur["tier"] == "DEFAULT" and eur["vol_bp"] == 85.0 and eur["point"] is None
+    # what is not a curve or not a number of years is refused; nobody without an account is answered
+    assert client.get("/api/price/swaption/vol", params={"curve_id": "NOPE"}, headers=auth_a).status_code == 422
+    assert client.get("/api/price/swaption/vol", params={"expiry_y": 0}, headers=auth_a).status_code == 422
+    assert client.get("/api/price/swaption/vol").status_code in (401, 403)
+    assert client.post("/api/price/swaption", json={**bare, "vol_bp": -1}, headers=auth_a).status_code == 422
+

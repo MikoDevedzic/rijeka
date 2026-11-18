@@ -328,3 +328,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   The unit test passed either way; reading `_value_swaption` found it.
 - A date made by adding a count of days to another date is tried across a 29 February and against the calendar's
   own answer: the swap a swaption delivers ended a day short for years, and a three-month tenor was 91 days.
+- A default a screen shows is an input of the model and has a source that is said: a constant typed into a
+  component (a swaption's 86.5 bp) is found by reading where each field's first value comes from, and a row of a
+  proxy list marked "not checked" is a debt with a date, not a note.
+

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { EXPIRY_DATE, EXPIRY_TENORS, EXPIRY_Y, daysBetween, offWeekend, swaptionExpiry, swaptionUnderlying } from './product-defaults'
+import { EXPIRY_DATE, EXPIRY_TENORS, EXPIRY_Y, daysBetween, offWeekend, swaptionExpiry, swaptionUnderlying, swaptionVol, volSourceWords } from './product-defaults'
 
 // 18 November 2026 is a Wednesday.
 const NEW = { valDate: '2026-11-18', tradeDate: '2026-11-18', structure: 'EUROPEAN' }
@@ -83,3 +83,25 @@ describe('a swaption\'s expiry on the ticket', () => {
     expect(swaptionUnderlying({ ...NEW, expiry: '1Y' })).toEqual({ start: null, end: null })          // the schedule dates have not arrived
   })
 })
+
+describe('a swaption\'s vol on the ticket', () => {
+  const surface = { vol_bp: 94.9, tier: 'QUOTED', point: '1Yx5Y', asof: '2026-11-18', currency: 'USD' }
+  it('is the surface\'s for the option\'s expiry and tenor until one is typed', () => {
+    expect(swaptionVol({ volDefault: surface })).toEqual({ bp: 94.9, typed: false, source: surface })
+    expect(swaptionVol({ volBp: '', volDefault: surface }).bp).toBe(94.9)
+    expect(swaptionVol({ volBp: '80', volDefault: surface })).toEqual({ bp: 80, typed: true, source: null })
+    // not a number, or not above zero, is not a vol: the surface's stands
+    for (const bad of ['abc', '0', '-5']) expect(swaptionVol({ volBp: bad, volDefault: surface })).toMatchObject({ bp: 94.9, typed: false })
+  })
+  it('is nothing until the surface has answered: the request then carries no vol and the engine reads the same market', () => {
+    expect(swaptionVol({})).toEqual({ bp: null, typed: false, source: null })
+    expect(swaptionVol({ volDefault: null }).bp).toBeNull()
+  })
+  it('says in a few words where an untouched vol comes from', () => {
+    expect(volSourceWords(surface)).toBe('surface 1Y×5Y · 2026-11-18')
+    expect(volSourceWords({ ...surface, tier: 'NEAREST', point: '7Yx9Y' })).toBe('nearest point 7Y×9Y · 2026-11-18')
+    expect(volSourceWords({ vol_bp: 85, tier: 'DEFAULT', point: null, asof: null, currency: 'EUR' })).toBe('desk default · no EUR swaption surface')
+    expect(volSourceWords(null)).toBe('from the swaption surface')
+  })
+})
+

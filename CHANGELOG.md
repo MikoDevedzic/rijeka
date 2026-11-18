@@ -1,7 +1,34 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.39). Commits on `main` are the detail.
+methodology document carries its own version (v1.40). Commits on `main` are the detail.
+
+## 0.57.0 · 18 November 2026
+
+**A swaption's vol on the ticket is read from the swaption surface.** The methodology is v1.40. The value of every
+swaption ticket on which no vol is typed changes.
+
+- **What was wrong.** NORMAL VOL on a swaption ticket was 86.5 bp, a number typed into the page: the same for a
+  one-month option and a ten-year one, into any swap, on any day, whatever the desk's surface held. The booked trade
+  was then revalued at the surface's vol, so a ticket and its booking disagreed from the first day.
+- **The vol now.** An untouched field shows the vol the desk's market gives the option: the point of the currency's
+  at-the-money swaption grid nearest its expiry and tenor, the rule the booked option was already revalued on.
+  Under the field: which point and which day ("surface 1Y×5Y · 2026-11-18", or "nearest point" when the option is
+  off the grid). Type a vol and it is the vol, marked as an override, with a control that puts the surface's back.
+- **The engine reads the same market.** `POST /api/price/swaption` takes no vol to mean the surface's, and its
+  answer names the tier (QUOTED, NEAREST, DEFAULT; MANUAL for a vol sent), the point and the surface's date.
+  `GET /api/price/swaption/vol` gives the ticket the number before PRICE. A request that sends a vol is unchanged.
+- **What moves, at the money** (the price is proportional to the vol): on the tests' reference market, 94.9 bp at
+  one year into five against 86.5, +9.7 %. On the hosted demo the figure is whatever its surface holds that day.
+- **What it does not do.** There is no interpolation between grid points, and beyond the grid's edges the edge
+  stands (a three-month expiry reads the one-year row; the grid runs one to seven years into one to nine). Only the
+  dollar has a surface, and it is synthetic: a swaption in another currency is priced at the desk default of 85 bp
+  (it was 86.5, −1.7 %) unless a vol is typed, and the field says "desk default". A Bermudan is priced at the
+  model's own volatility, as before; the field says so.
+- **Booking.** The booked vol is the one typed, else the one the price being booked was struck at.
+- **Tests.** The lookup's tiers; the route with and without a vol and the new read route, on the local stack; the
+  field's default and its words; the booking; a journey of the ticket (the default, its source, another expiry,
+  below the grid, a typed vol).
 
 ## 0.56.0 · 18 November 2026
 
