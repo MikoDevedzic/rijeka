@@ -120,3 +120,18 @@ def test_the_frontends_default_quotes_are_what_the_script_makes():
     text = mod.TARGET.read_text()
     assert mod.make(text) == text
     assert "Every quote in this file is SYNTHETIC" in text and text.count("quote:") > 400
+
+
+def test_the_key_strings_printed_in_the_methodology_are_the_ones_hashed():
+    """The model validator needed four guesses for these (18 November 2026): the words and the day's ordinal as the
+    text now prints them."""
+    day = date(2026, 11, 18)
+    assert day.toordinal() == 739938
+
+    def n(text):
+        h = hashlib.sha256(text.encode()).digest()
+        u1 = (int.from_bytes(h[:8], "big") + 1) / (2 ** 64 + 1)
+        return math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * int.from_bytes(h[8:16], "big") / 2 ** 64)
+    want = math.sqrt(0.5) * n("rijeka synthetic rates 1|all|level|739938") + math.sqrt(0.5) * n("rijeka synthetic rates 1|USD_SOFR|level|739938")
+    assert R.shock("USD_SOFR", "level", day) == pytest.approx(want, abs=1e-15)
+    assert set(R.FACTORS) == {"level", "slope", "curvature"} and set(R.PARAMS) == {"USD_SOFR", "EUR_ESTR", "GBP_SONIA", "CHF_SARON", "JPY_TONAR"}

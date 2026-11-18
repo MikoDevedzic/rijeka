@@ -536,7 +536,8 @@ def sources(db: Session = Depends(get_db)):
                                      "forwards and backwards: F(next day out) = carried_to_next_day * F(day nearer) + daily_shock_bp/100 * scale * e(day out); "
                                      "level is added to b0, slope to b1, curvature to b2. No publisher's fixing or yield is read",
                             "shock": "e(curve, factor, day) = sqrt(shared) * n('all', factor, day) + sqrt(1 - shared) * n(curve, factor, day); n(keys) from "
-                                     "SHA-256 of the text seed|key|key|... with the day as its proleptic Gregorian ordinal: u1 = (first 8 bytes, big-endian, + 1) / "
+                                     "SHA-256 of the text seed|key|key|... where the factor's key is level, slope or curvature, the curve's key is its id (USD_SOFR ...) "
+                                     "and the day is its proleptic Gregorian ordinal, e.g. seed|all|level|739938 and seed|USD_SOFR|level|739938: u1 = (first 8 bytes, big-endian, + 1) / "
                                      "(2^64 + 1), u2 = (next 8 bytes) / 2^64, n = sqrt(-2 ln u1) * cos(2 pi u2)",
                             "seed": synthetic_rates.SEED,
                             "parameters_set_on": synthetic_rates.SET_ON.isoformat(),
