@@ -3,6 +3,28 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.38). Commits on `main` are the detail.
 
+## 0.55.1 · 18 November 2026
+
+**The rates history backfill finishes the job, and says what it did.** No figure of the engine changes.
+
+- **What was wrong.** 0.55.0 made the backfill leave alone any rates curve a desk holds rows of its own for, so a
+  self-hosted desk's imported curves are safe. The hosted demo's template account also holds rows typed in by hand
+  last spring, so on the hosted demo the backfill kept one curve's old history (30 observations where the others had
+  two years) and could not say so: the page read the answer "started" as the result and showed nothing. Rows the old
+  feed wrote before the two-year window, and on weekends, were not remade either.
+- **The backfill now remakes every stored day** of a rates curve it writes, not only the window's business days:
+  a day before the window, and a weekend's (which carries Friday's curve).
+- **The page says which curves hold the desk's own rows** (Configurations → VaR settings, the risk-factor history:
+  a count beside each rates curve) and **shows the result when the run has finished**: rows written by curve, and
+  the curves kept as they are.
+- **Replacing the desk's own rows is an explicit, second action**, in two presses, for the risk or admin role:
+  `POST /api/risk/history/backfill?replace_own=true`. It writes the generator's curve over every stored day of the
+  five rates curves, whoever wrote the row; the entered rows are not kept anywhere. Without it nothing a desk
+  entered is touched, as in 0.55.0. A venue's marks are never replaced, with or without it.
+- **Tests.** Two on the function (kept by default; replaced, with every stored day, when asked), one on a real
+  local database (a desk's row and the old feed's rows, before the window and on a Saturday, through both runs),
+  and a journey of the page (the count, a backfill's result, the two presses, the request each sends).
+
 ## 0.55.0 · 18 November 2026
 
 **The hosted demo's interest-rate market is synthetic.** The methodology is v1.38. Every rates figure of the demo

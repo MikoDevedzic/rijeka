@@ -226,14 +226,14 @@ def put_settings(body: SettingsBody, db: Session = Depends(get_db), user: dict =
 _backfill: dict = {"running": False, "started": None, "finished": None, "result": None, "error": None}
 
 
-def _run_backfill(tpl, years: float, overwrite: bool) -> None:
+def _run_backfill(tpl, years: float, overwrite: bool, replace_own: bool = False) -> None:
     from db.session import SessionLocal
     from risk import history as H
     import datetime as _dt
     _backfill.update(running=True, started=_dt.datetime.now(_dt.timezone.utc).isoformat(), finished=None, result=None, error=None)
     db = SessionLocal()
     try:
-        _backfill["result"] = H.backfill(db, tpl, years=years, overwrite=overwrite)
+        _backfill["result"] = H.backfill(db, tpl, years=years, overwrite=overwrite, replace_own=replace_own)
     except Exception as e:              # noqa: BLE001
         db.rollback(); _backfill["error"] = str(e)[:300]
         log.warning("backfill failed: %s", e)
@@ -269,8 +269,10 @@ def history_status(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] =
 
 
 @router.post("/history/backfill")
-def backfill(years: float = Query(default=2.0), overwrite: bool = Query(default=False), db: Session = Depends(get_db),
-             x_rijeka_cron: Optional[str] = Header(None), user: Optional[dict] = Depends(optional_token)):
+def backfill(years: float = Query(default=2.0), overwrite: bool = Query(default=False), replace_own: bool = Query(default=False),
+             db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(None), user: Optional[dict] = Depends(optional_token)):
+    """`replace_own`: also replace the rates rows this desk entered or imported itself with the synthetic market's.
+    Off by default: a desk's own curve is left as it is, and the result says which were kept."""
     if not _secret_ok(x_rijeka_cron):
         if user is None:
             raise HTTPException(status_code=401, detail="Missing auth")
@@ -285,11 +287,11 @@ def backfill(years: float = Query(default=2.0), overwrite: bool = Query(default=
     from jobs import queue as Q
     years = max(0.1, min(years, 10.0))
     if Q.worker_expected(db):
-        jid = Q.enqueue(db, user["sub"] if user else tpl, "risk_backfill", {"template": str(tpl), "years": years, "overwrite": overwrite})
+        jid = Q.enqueue(db, user["sub"] if user else tpl, "risk_backfill", {"template": str(tpl), "years": years, "overwrite": overwrite, "replace_own": replace_own})
         return {"started": True, "years": years, "job_id": jid, "backfill": _backfill_view(db),
                 "note": "queued for the worker; GET /api/risk/history reports progress and the result"}
     import threading
-    threading.Thread(target=_run_backfill, args=(tpl, years, overwrite), daemon=True).start()
+    threading.Thread(target=_run_backfill, args=(tpl, years, overwrite, replace_own), daemon=True).start()
     return {"started": True, "years": years, "note": "running in the background; GET /api/risk/history reports progress and the result"}
 
 

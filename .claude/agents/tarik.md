@@ -98,6 +98,7 @@ Learned on 16 November 2026 (a link opens what it names)
 Learned on 16 November 2026 (a dialog and the keyboard)
 - A journey that opens a dialog says where the focus is once it is open, where Tab goes from there, what Escape does (also with a sheet open over it), and where the focus is after it closes: the ticket was given a dialog's name and role in 0.47.2 and the focus stayed on the page behind it.
 - A journey that needs the engine to refuse answers for the engine itself (a route fulfilled with the refusal), so that it does not depend on which curves the stack happens to hold.
+- A button that starts a background job has a journey that waits for the job's end and reads what the page then says. BACKFILL TWO YEARS had none: the page read the answer "started" as the result and showed nothing, found on the hosted desk on 18 November 2026 (`backfill.spec.js` since).
 
 Rules
 - Never run journeys against app.rijeka.app or the hosted API. Never enter real credentials anywhere.

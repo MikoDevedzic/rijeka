@@ -117,14 +117,29 @@ def build_days(start: date, end: date) -> dict[str, dict[date, list[dict]]]:
     return out
 
 
+def own_rates_rows(db: Session, user_id) -> dict[str, int]:
+    """{rates curve: rows} this account holds of its own: entered by hand, imported, or snapped from a feed (anything
+    whose source is not the demo's). A desk that has its own curve keeps all of it unless its admin asks otherwise:
+    the synthetic history is never mixed into it (the independent reviewer, 18 November 2026: a self-hosted desk's
+    imported curves would have been replaced by a press of BACKFILL)."""
+    rows = db.execute(text("SELECT curve_id, count(*) FROM market_data_snapshots WHERE user_id = :u AND curve_id = ANY(:ids) "
+                           "AND source NOT LIKE 'DEMO%' GROUP BY curve_id"), {"u": str(user_id), "ids": list(RATE_CURVES)}).all()
+    return {r[0]: int(r[1]) for r in rows}
+
+
 def own_rates_curves(db: Session, user_id) -> set[str]:
-    """The rates curves this account holds rows of its own for: entered by hand, imported, or snapped from a feed
-    (anything whose source is not the demo's). A desk that has its own curve keeps all of it: the synthetic history
-    is never mixed into it (the independent reviewer, 18 November 2026: a self-hosted desk's imported curves would
-    have been replaced by a press of BACKFILL)."""
-    rows = db.execute(text("SELECT DISTINCT curve_id FROM market_data_snapshots WHERE user_id = :u AND curve_id = ANY(:ids) "
-                           "AND source NOT LIKE 'DEMO%'"), {"u": str(user_id), "ids": list(RATE_CURVES)}).all()
-    return {r[0] for r in rows}
+    return set(own_rates_rows(db, user_id))
+
+
+def stored_rates_days(db: Session, user_id) -> dict[str, list[date]]:
+    """{rates curve: every date a row is stored for}. The backfill remakes each of them, also a day before its
+    window and a weekend's (which carries Friday's curve): a row the old feed wrote is not left standing."""
+    rows = db.execute(text("SELECT curve_id, valuation_date FROM market_data_snapshots WHERE user_id = :u AND curve_id = ANY(:ids)"),
+                      {"u": str(user_id), "ids": list(RATE_CURVES)}).all()
+    out: dict[str, list[date]] = {}
+    for r in rows:
+        out.setdefault(r[0], []).append(r[1])
+    return out
 
 
 def store(db: Session, user_id, days: dict[str, dict[date, list[dict]]], overwrite: bool = False, source: str = SOURCE,
@@ -147,16 +162,28 @@ def store(db: Session, user_id, days: dict[str, dict[date, list[dict]]], overwri
     return n
 
 
-def backfill(db: Session, user_id, years: float = 2.0, end: Optional[date] = None, overwrite: bool = False) -> dict[str, Any]:
+def backfill(db: Session, user_id, years: float = 2.0, end: Optional[date] = None, overwrite: bool = False,
+             replace_own: bool = False) -> dict[str, Any]:
+    """Rates: every business day of the window, and every other day a row is already stored for, made again by the
+    generator (the same numbers on a second run). Only over rows the demo wrote, and not at all for a curve the desk
+    holds rows of its own for, unless `replace_own`: then the desk's own rows of the rates curves are replaced too
+    (an admin's explicit choice, on the hosted template whose owner once entered curves by hand). Spots: fetched;
+    a spot's existing days are kept unless `overwrite`."""
     end = end or date.today()
     start = end - timedelta(days=int(365 * years))
     days = build_days(start, end)
-    # a rates curve is the generator's on every date, so its rows are always rewritten (the same numbers on a second
-    # run; the rows built from published fixings before 0.55.0 are replaced); a spot's row is kept unless asked
-    # (only over rows the demo wrote, and not at all for a curve the desk holds rows of its own for)
-    own = own_rates_curves(db, user_id)
-    rates = {c: v for c, v in days.items() if c in RATE_CURVES and c not in own}
-    written = store(db, user_id, rates, overwrite=True, source=RATES_SOURCE, only_over_demo=True)
+    own = own_rates_rows(db, user_id)
+    stored = stored_rates_days(db, user_id)
+    rates: dict[str, dict[date, list[dict]]] = {}
+    for c in RATE_CURVES:
+        if c in own and not replace_own:
+            continue
+        by_day = dict(days.get(c) or {})
+        for d in stored.get(c, []):
+            if d not in by_day and d <= end:
+                by_day[d] = feed.build_rates_curve(c, d)
+        rates[c] = by_day
+    written = store(db, user_id, rates, overwrite=True, source=RATES_SOURCE, only_over_demo=not replace_own)
     written.update(store(db, user_id, {c: v for c, v in days.items() if c not in RATE_CURVES}, overwrite=overwrite))
     # the vol surfaces follow from the stored series (risk/vols.py); synthetic either way, so always rewritten
     from risk import vols
@@ -164,7 +191,8 @@ def backfill(db: Session, user_id, years: float = 2.0, end: Optional[date] = Non
     written.update(store(db, user_id, vdays, overwrite=True, source=vols.SOURCE))
     days.update(vdays)
     return {"start": start.isoformat(), "end": end.isoformat(), "built": {c: len(v) for c, v in days.items()}, "written": written,
-            "kept_own": sorted(own)}
+            "kept_own": {c: n for c, n in sorted(own.items()) if not replace_own},
+            "replaced_own": {c: n for c, n in sorted(own.items()) if replace_own}}
 
 
 # ── reading the series ───────────────────────────────────────────────────────
@@ -208,7 +236,10 @@ def status(db: Session, user_id) -> dict[str, Any]:
                            "WHERE user_id = :u AND (curve_id = ANY(:ids) OR curve_id LIKE '%\\_SPOT' OR curve_id LIKE '%\\_VOL' "
                            "OR curve_id LIKE '%\\_SWVOL\\_ATM') GROUP BY curve_id ORDER BY curve_id"),
                       {"u": str(user_id), "ids": list(RATE_CURVES)}).all()
-    return {r.curve_id: {"observations": int(r.n), "from": r.a.isoformat(), "to": r.b.isoformat()} for r in rows}
+    own = own_rates_rows(db, user_id)
+    # `own`: for a rates curve, how many of its rows are the desk's own and not the demo's (a backfill keeps them)
+    return {r.curve_id: {"observations": int(r.n), "from": r.a.isoformat(), "to": r.b.isoformat(),
+                         **({"own": own.get(r.curve_id, 0)} if r.curve_id in RATE_CURVES else {})} for r in rows}
 
 
 # ── fetch here, store there ───────────────────────────────────────────────────────

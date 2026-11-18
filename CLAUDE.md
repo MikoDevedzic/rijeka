@@ -311,3 +311,10 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   nothing else, and when it returns the tree's status and its dependency folders are looked at before anything is
   run: one left a link inside the worktree's dependencies to the main checkout's, and the next journey run loaded
   two copies of the runner and did not start.
+- A protection added to a writer is tried against the account the release was made for, not only the one it
+  protects: 0.55.0's "leave a desk's own curve alone" was right for a self-hosted desk and also kept the hosted
+  template's hand-entered curve, so the release that made the rates market synthetic left one curve's history as
+  it was. When the hosted data cannot be read, the page must say what was kept; and the owner is told before the
+  deploy what the first press will and will not do.
+- A button that starts a background job shows the job's result, read when the job has ended, and has a journey
+  that waits for it: BACKFILL read the answer "started" as the result and for weeks showed nothing.

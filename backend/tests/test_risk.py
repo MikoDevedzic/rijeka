@@ -454,25 +454,48 @@ def test_the_books_vega_is_two_totals_by_how_its_vol_is_quoted(monkeypatch):
     assert all(is_vol_surface(c) for c in ("USD_SWVOL_ATM", "EURUSD_VOL"))
 
 
+def _backfill_calls(monkeypatch, own, stored=None, **kw):
+    from datetime import date
+    from risk import history as H
+    import risk.vols as V
+    calls = []
+    monkeypatch.setattr(H, "own_rates_rows", lambda db, uid: dict(own))
+    monkeypatch.setattr(H, "stored_rates_days", lambda db, uid: dict(stored or {}))
+    monkeypatch.setattr(H, "fx_history", lambda a, b: {date(2026, 11, 16): {"EURUSD": 1.08}})
+    monkeypatch.setattr(H, "crypto_history", lambda a, b: {})
+    monkeypatch.setattr(H, "store", lambda db, uid, days, overwrite=False, source=H.SOURCE, only_over_demo=False:
+                        calls.append((days, overwrite, source, only_over_demo)) or {c: len(v) for c, v in days.items()})
+    monkeypatch.setattr(V, "history_days", lambda db, uid, a, b: {})
+    return H.backfill(None, "tpl", years=0.05, end=date(2026, 11, 17), **kw), calls
+
+
 def test_a_backfill_leaves_a_desks_own_rates_curve_alone_and_remakes_only_what_the_demo_wrote(monkeypatch):
     """The independent reviewer's case, 18 November 2026: a self-hosted desk holds imported GBP rows. The backfill
     makes the other rates curves again from the generator, over rows the demo wrote and no others, and does not
     write the desk's own curve at all; spots keep their existing days unless asked."""
-    from datetime import date
     from risk import history as H
-    calls = []
-    monkeypatch.setattr(H, "own_rates_curves", lambda db, uid: {"GBP_SONIA"})
-    monkeypatch.setattr(H, "fx_history", lambda a, b: {date(2026, 11, 16): {"EURUSD": 1.08}})
-    monkeypatch.setattr(H, "crypto_history", lambda a, b: {})
-    monkeypatch.setattr(H, "store", lambda db, uid, days, overwrite=False, source=H.SOURCE, only_over_demo=False:
-                        calls.append((sorted(days), overwrite, source, only_over_demo)) or {c: len(v) for c, v in days.items()})
-    import risk.vols as V
-    monkeypatch.setattr(V, "history_days", lambda db, uid, a, b: {})
-    out = H.backfill(None, "tpl", years=0.05, end=date(2026, 11, 17))
+    out, calls = _backfill_calls(monkeypatch, {"GBP_SONIA": 40})
     rates, spots = calls[0], calls[1]
-    assert rates[0] == ["CHF_SARON", "EUR_ESTR", "JPY_TONAR", "USD_SOFR"] and rates[1] is True and rates[2] == H.RATES_SOURCE and rates[3] is True
-    assert spots[0] == ["EURUSD_SPOT"] and spots[1] is False and spots[3] is False
-    assert out["kept_own"] == ["GBP_SONIA"] and "GBP_SONIA" in out["built"]
+    assert sorted(rates[0]) == ["CHF_SARON", "EUR_ESTR", "JPY_TONAR", "USD_SOFR"] and rates[1] is True and rates[2] == H.RATES_SOURCE and rates[3] is True
+    assert sorted(spots[0]) == ["EURUSD_SPOT"] and spots[1] is False and spots[3] is False
+    assert out["kept_own"] == {"GBP_SONIA": 40} and out["replaced_own"] == {} and "GBP_SONIA" in out["built"]
+
+
+def test_an_admin_can_have_the_desks_own_rates_rows_replaced_and_every_stored_day_is_remade(monkeypatch):
+    """The hosted template, 18 November 2026: its owner entered curves by hand in the spring, so a backfill kept CHF
+    as it was (30 observations from April where the others had two years). With replace_own every rates curve is
+    written, over any row that is not a venue's; and a day stored before the window, or on a weekend, is remade too."""
+    from datetime import date
+    from market_data import demo_feed as f
+    from risk import history as H
+    old, sat = date(2026, 4, 6), date(2026, 11, 14)
+    out, calls = _backfill_calls(monkeypatch, {"CHF_SARON": 12, "USD_SOFR": 3}, stored={"CHF_SARON": [old, sat]}, replace_own=True)
+    rates = calls[0]
+    assert sorted(rates[0]) == sorted(H.RATE_CURVES) and rates[1] is True and rates[3] is False          # not only over the demo's rows
+    chf = rates[0]["CHF_SARON"]
+    assert chf[old] == f.build_rates_curve("CHF_SARON", old) and chf[sat] == f.build_rates_curve("CHF_SARON", date(2026, 11, 13))
+    assert old not in rates[0]["USD_SOFR"]                                                               # only days that curve has stored
+    assert out["replaced_own"] == {"CHF_SARON": 12, "USD_SOFR": 3} and out["kept_own"] == {}
 
 
 def test_the_store_replaces_a_rates_row_only_if_the_demo_wrote_it():

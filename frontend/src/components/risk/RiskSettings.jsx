@@ -2,7 +2,7 @@
 //   /configurations/market-risk/limits   the firm's limits on any reported number (risk manager / admin write)
 //   /configurations/market-risk/var      VaR settings and the risk-factor history
 //   /configurations/market-risk/stress   the stress catalogue (read-only)
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getSessionMaybe } from '../../lib/session'
 import { curveRows, otherLimits, standardRows, parseSize, KIND_NAME } from './limits-page'
@@ -170,12 +170,24 @@ function metricHelp(m, meta) {
   return h[m] || ''
 }
 
+function backfillSummary(r) {
+  if (!r) return 'Backfill finished.'
+  const list = (o) => Object.entries(o || {}).map(([k, v]) => `${k} ${v}`).join(', ')
+  const kept = list(r.kept_own), replaced = list(r.replaced_own)
+  return `Backfill finished, ${r.start} to ${r.end}. Rows written: ${list(r.written) || 'none'}.`
+    + (kept ? ` Kept as they are, the desk's own rows: ${kept}.` : '')
+    + (replaced ? ` The desk's own rows replaced: ${replaced}.` : '')
+}
+
 export function VarSettingsPage() {
   const navigate = useNavigate()
   const [s, setS] = useState(null)
   const [hist, setHist] = useState(null)
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [armed, setArmed] = useState(false)          // the second step of REPLACE: nothing is replaced on one press
+  const alive = useRef(true)
+  useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
   const load = () => Promise.all([api('/api/risk/settings'), api('/api/risk/history')]).then(([a, b]) => { setS(a); setHist(b) }).catch(e => setMsg(e.message))
   useEffect(() => { load() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
   const set = (k) => (e) => setS(x => ({ ...x, [k]: e.target.value }))
@@ -184,12 +196,31 @@ export function VarSettingsPage() {
     try { await api('/api/risk/settings', { method: 'PUT', body: JSON.stringify({ confidence: Number(s.confidence), secondary_confidence: Number(s.secondary_confidence), horizon_days: Number(s.horizon_days), window_days: Number(s.window_days), min_observations: Number(s.min_observations), var_method: s.var_method, ccr_sampling: s.ccr_sampling, ccr_paths: Number(s.ccr_paths), ccr_drift: s.ccr_drift }) }); setMsg('Saved for the firm.'); await load() }
     catch (e) { setMsg(e.message) } finally { setBusy(false) }
   }
-  const backfill = async () => {
-    setBusy(true); setMsg('Making two years of rates history from the generator and fetching spots from frankfurter and Coinbase… this takes a minute.')
-    try { const j = await api('/api/risk/history/backfill?years=2', { method: 'POST' }); setMsg(`Backfill done: ${Object.entries(j.written).map(([k, v]) => `${k} ${v}`).join(', ')}`); await load() }
-    catch (e) { setMsg(e.message) } finally { setBusy(false) }
+  // The backfill runs in the background on the server: the page asks every few seconds until it has finished and
+  // then says what was written and what was kept (it used to read the "started" answer as the result, and said nothing).
+  const watch = async (before) => {
+    for (let i = 0; i < 240 && alive.current; i++) {
+      await new Promise(r => setTimeout(r, 3000))
+      const h = await api('/api/risk/history')
+      if (!alive.current) return
+      setHist(h)
+      const b = h.backfill || {}
+      if (!b.running && !b.queued && b.finished && b.finished !== before) { setMsg(b.error ? `Backfill failed: ${b.error}` : backfillSummary(b.result)); return }
+    }
+  }
+  const backfill = async (replaceOwn = false) => {
+    setBusy(true); setArmed(false); setMsg('Making the rates history from the generator and fetching spots from frankfurter and Coinbase… this takes a minute or two. The result appears here.')
+    try {
+      const before = hist?.backfill?.finished || null
+      const j = await api(`/api/risk/history/backfill?years=2${replaceOwn ? '&replace_own=true' : ''}`, { method: 'POST' })
+      if (j.started === false) setMsg(`Not started: ${j.reason || 'a backfill is already running'}.`)
+      else await watch(before)
+    }
+    catch (e) { setMsg(e.message) } finally { if (alive.current) setBusy(false) }
   }
   const series = Object.entries(hist?.series || {})
+  const own = series.filter(([, x]) => x.own > 0)
+  const ownRows = own.reduce((n, [, x]) => n + x.own, 0)
   return (
     <div className="pnl">
       <div className="pnl-bar"><div className="pnl-title">VAR SETTINGS <span className="pnl-sub">historical simulation · the firm's parameters and methods</span></div>
@@ -221,10 +252,17 @@ export function VarSettingsPage() {
         <section className="pnl-panel" style={{ maxWidth: 980 }}>
           <header><span>RISK-FACTOR HISTORY</span><span className="pnl-sub">synthetic rates history and public spots, stored on the template account, extended by the daily rebuild</span></header>
           <div className="rk-rows">
-            {series.map(([cid, x]) => <div key={cid} className="rk-row" style={{ gridTemplateColumns: '12rem 1fr 1fr 1fr' }}><span className="rk-ref">{cid}</span><span className="pnl-tv">{x.observations} obs</span><span className="pnl-tv dim">{x.from}</span><span className="pnl-tv dim">{x.to}</span></div>)}
+            {series.map(([cid, x]) => <div key={cid} className="rk-row" style={{ gridTemplateColumns: '12rem 1fr 1fr 1fr 1.6fr' }}><span className="rk-ref">{cid}</span><span className="pnl-tv">{x.observations} obs</span><span className="pnl-tv dim">{x.from}</span><span className="pnl-tv dim">{x.to}</span><span className="pnl-tv dim" data-own={cid}>{x.own > 0 ? `${x.own} entered by this desk` : ''}</span></div>)}
             {!series.length && <div className="pnl-empty">No history stored yet.</div>}
           </div>
-          <div className="pnl-sign-btns"><button className="pnl-btn" disabled={busy || !s.can_write} onClick={backfill}>BACKFILL TWO YEARS</button><span className="pnl-note">Rates history is made again by the synthetic generator on every run (no publisher's data), except a curve this desk holds rows of its own for, which is left as it is. Spots are fetched from ECB reference FX rates (frankfurter) and Coinbase daily closes; a spot's existing days are kept.</span></div>
+          <div className="pnl-sign-btns"><button className="pnl-btn" disabled={busy || !s.can_write} onClick={() => backfill(false)}>BACKFILL TWO YEARS</button><span className="pnl-note">Every stored day of the rates history is made again by the synthetic generator (no publisher's data), except in a curve this desk has entered rows of its own for, which is left as it is. Spots are fetched from ECB reference FX rates (frankfurter) and Coinbase daily closes; a spot's existing days are kept.</span></div>
+          {ownRows > 0 && (
+            <div className="pnl-sign-btns" data-own-rows>
+              {!armed
+                ? <button className="pnl-btn ghost" disabled={busy || !s.can_write} onClick={() => setArmed(true)}>REPLACE THE DESK'S OWN RATES ROWS…</button>
+                : <><button className="pnl-btn" disabled={busy || !s.can_write} onClick={() => backfill(true)}>REPLACE {ownRows} ROWS WITH THE SYNTHETIC MARKET</button><button className="pnl-btn ghost" disabled={busy} onClick={() => setArmed(false)}>CANCEL</button></>}
+              <span className="pnl-note">{own.map(([cid, x]) => `${cid} ${x.own}`).join(', ')}: rows entered by hand, imported or snapped from a feed. A backfill keeps these curves as they are, so their history is not the synthetic market's. Replacing them writes the generator's curve over every stored day of the five rates curves; the entered rows are not kept anywhere.</span>
+            </div>)}
         </section>
       </>)}
     </div>

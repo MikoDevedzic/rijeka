@@ -40,7 +40,8 @@ def ccr_run(db, job: dict, report: Callable[[dict], None]) -> dict[str, Any]:
 def risk_backfill(db, job: dict, report: Callable[[dict], None]) -> dict[str, Any]:
     from risk import history as H
     p = job.get("params") or {}
-    return H.backfill(db, p["template"], years=float(p.get("years", 2.0)), overwrite=bool(p.get("overwrite", False)))
+    return H.backfill(db, p["template"], years=float(p.get("years", 2.0)), overwrite=bool(p.get("overwrite", False)),
+                      replace_own=bool(p.get("replace_own", False)))
 
 
 def capital_run(db, job: dict, report: Callable[[dict], None]) -> dict[str, Any]:
