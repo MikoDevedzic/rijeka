@@ -117,9 +117,21 @@ def build_days(start: date, end: date) -> dict[str, dict[date, list[dict]]]:
     return out
 
 
-def store(db: Session, user_id, days: dict[str, dict[date, list[dict]]], overwrite: bool = False, source: str = SOURCE) -> dict[str, int]:
+def own_rates_curves(db: Session, user_id) -> set[str]:
+    """The rates curves this account holds rows of its own for: entered by hand, imported, or snapped from a feed
+    (anything whose source is not the demo's). A desk that has its own curve keeps all of it: the synthetic history
+    is never mixed into it (the independent reviewer, 18 November 2026: a self-hosted desk's imported curves would
+    have been replaced by a press of BACKFILL)."""
+    rows = db.execute(text("SELECT DISTINCT curve_id FROM market_data_snapshots WHERE user_id = :u AND curve_id = ANY(:ids) "
+                           "AND source NOT LIKE 'DEMO%'"), {"u": str(user_id), "ids": list(RATE_CURVES)}).all()
+    return {r[0] for r in rows}
+
+
+def store(db: Session, user_id, days: dict[str, dict[date, list[dict]]], overwrite: bool = False, source: str = SOURCE,
+          only_over_demo: bool = False) -> dict[str, int]:
     """Upsert as the template user's snapshots. Existing rows (the daily rebuild's) win unless overwrite; a row
-    read from a venue (market_data/deribit.py) is never replaced by a built one."""
+    read from a venue (market_data/deribit.py) is never replaced by a built one. `only_over_demo`: with overwrite,
+    replace a row only if the demo wrote it (its source begins DEMO), never a desk's own."""
     n: dict[str, int] = {}
     for cid, by_date in days.items():
         for d, quotes in by_date.items():
@@ -127,6 +139,7 @@ def store(db: Session, user_id, days: dict[str, dict[date, list[dict]]], overwri
                 "INSERT INTO market_data_snapshots (curve_id, valuation_date, quotes, source, user_id, created_by) "
                 "VALUES (:c, :d, CAST(:q AS jsonb), :s, :u, :u) ON CONFLICT (user_id, curve_id, valuation_date) "
                 + ("DO UPDATE SET quotes = EXCLUDED.quotes, source = EXCLUDED.source WHERE market_data_snapshots.source NOT LIKE :keep"
+                   + (" AND market_data_snapshots.source LIKE 'DEMO%'" if only_over_demo else "")
                    if overwrite else "DO NOTHING")),
                 {"c": cid, "d": d, "q": json.dumps(quotes), "s": source, "u": str(user_id), **({"keep": MARKET_LIKE} if overwrite else {})})
             n[cid] = n.get(cid, 0) + (res.rowcount or 0)
@@ -140,15 +153,18 @@ def backfill(db: Session, user_id, years: float = 2.0, end: Optional[date] = Non
     days = build_days(start, end)
     # a rates curve is the generator's on every date, so its rows are always rewritten (the same numbers on a second
     # run; the rows built from published fixings before 0.55.0 are replaced); a spot's row is kept unless asked
-    rates = {c: v for c, v in days.items() if c in RATE_CURVES}
-    written = store(db, user_id, rates, overwrite=True, source=RATES_SOURCE)
+    # (only over rows the demo wrote, and not at all for a curve the desk holds rows of its own for)
+    own = own_rates_curves(db, user_id)
+    rates = {c: v for c, v in days.items() if c in RATE_CURVES and c not in own}
+    written = store(db, user_id, rates, overwrite=True, source=RATES_SOURCE, only_over_demo=True)
     written.update(store(db, user_id, {c: v for c, v in days.items() if c not in RATE_CURVES}, overwrite=overwrite))
     # the vol surfaces follow from the stored series (risk/vols.py); synthetic either way, so always rewritten
     from risk import vols
     vdays = vols.history_days(db, user_id, start, end)
     written.update(store(db, user_id, vdays, overwrite=True, source=vols.SOURCE))
     days.update(vdays)
-    return {"start": start.isoformat(), "end": end.isoformat(), "built": {c: len(v) for c, v in days.items()}, "written": written}
+    return {"start": start.isoformat(), "end": end.isoformat(), "built": {c: len(v) for c, v in days.items()}, "written": written,
+            "kept_own": sorted(own)}
 
 
 # ── reading the series ───────────────────────────────────────────────────────

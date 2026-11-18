@@ -168,8 +168,10 @@ def test_sources_is_public_and_lists_assumptions():
     assert set(rates) == set(f.RATE_CURVES) and len(rates) == 5
     assert all(s["kind"] == "synthetic" and s["url"] is None for s in rates.values())
     a = b["assumptions"]
-    assert {"rates", "parameters_set_on", "parameters_long_end_overnight_less_long_end_hump_tau", "daily_shock_bp",
-            "carried_to_next_day", "business_days_carried", "shared_share_of_variance"} <= set(a)
+    assert {"rates", "shock", "seed", "parameters_set_on", "parameters_long_end_overnight_less_long_end_hump_tau", "scale", "daily_shock_bp",
+            "carried_to_next_day", "mean_reversion_a_year", "shared_share_of_variance", "pillars", "overnight_pillar_years",
+            "quotes_rounded_to_decimals"} <= set(a)
+    assert a["seed"] == "rijeka synthetic rates 1" and "SHA-256" in a["shock"] and len(a["pillars"]) == 33
     assert a["parameters_set_on"] == "2026-11-17"
     assert set(a["parameters_long_end_overnight_less_long_end_hump_tau"]) == set(f.RATE_CURVES)
 

@@ -529,10 +529,19 @@ def sources(db: Session = Depends(get_db)):
         venue += [{"curve": f"{deribit.pair(a)}_FIXING", "provider": f"{deribit.delivery_source(a)}, daily at {deribit.DELIVERY_TIME} (public API, unauthenticated)",
                    "kind": "public", "url": deribit.DELIVERY_URL} for a in deribit.ASSETS]
     return {"enabled": enabled(), "sources": demo_feed.SOURCES + venue, "latest": latest,
-            # the whole recipe of the synthetic rates market, so a reader can make the curves again
-            "assumptions": {"rates": "synthetic: a Nelson-Siegel par curve per currency with hand-set parameters, moved each business day "
-                                     "by level, slope and curvature factors drawn from a seeded hash; no publisher's fixing or yield is read",
+            # the whole recipe of the synthetic rates market, so a reader can make any curve again to the digit
+            "assumptions": {"rates": "synthetic: a Nelson-Siegel par curve per currency, y(t) = b0 + b1*f1(t/tau) + b2*f2(t/tau), f1(x) = (1 - exp(-x))/x, "
+                                     "f2(x) = f1(x) - exp(-x), in per cent, t in years. On parameters_set_on the curve is its parameters. On every other "
+                                     "business day (Monday to Friday) three factors, zero on that day, have walked from it one business day at a time, "
+                                     "forwards and backwards: F(next day out) = carried_to_next_day * F(day nearer) + daily_shock_bp/100 * scale * e(day out); "
+                                     "level is added to b0, slope to b1, curvature to b2. No publisher's fixing or yield is read",
+                            "shock": "e(curve, factor, day) = sqrt(shared) * n('all', factor, day) + sqrt(1 - shared) * n(curve, factor, day); n(keys) from "
+                                     "SHA-256 of the text seed|key|key|... with the day as its proleptic Gregorian ordinal: u1 = (first 8 bytes, big-endian, + 1) / "
+                                     "(2^64 + 1), u2 = (next 8 bytes) / 2^64, n = sqrt(-2 ln u1) * cos(2 pi u2)",
+                            "seed": synthetic_rates.SEED,
                             "parameters_set_on": synthetic_rates.SET_ON.isoformat(),
                             "parameters_long_end_overnight_less_long_end_hump_tau": {c: list(v) for c, v in synthetic_rates.PARAMS.items()},
+                            "scale": synthetic_rates.VOL_SCALE,
                             "daily_shock_bp": synthetic_rates.SIGMA_BP, "carried_to_next_day": synthetic_rates.PHI,
-                            "business_days_carried": synthetic_rates.K, "shared_share_of_variance": synthetic_rates.GLOBAL_SHARE}}
+                            "mean_reversion_a_year": synthetic_rates.MEAN_REVERSION, "shared_share_of_variance": synthetic_rates.GLOBAL_SHARE,
+                            "pillars": demo_feed.OIS_TENORS, "overnight_pillar_years": 1.0 / 365.0, "quotes_rounded_to_decimals": 4}}

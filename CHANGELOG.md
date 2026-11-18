@@ -12,10 +12,20 @@ changes once, with the market it is valued on; no formula changes.
   licence for any benchmark, and the administrators of some require one to build a curve from or to value with. So
   the demo reads none: no fixing, no yield, no quote of any publisher, for any currency.
 - **What it prices on now.** One stated generator (`backend/market_data/synthetic_rates.py`): a parametric curve per
-  currency with hand-set levels of 17 November 2026, moved each business day by level, slope and curvature factors
-  drawn from a seeded hash. A curve is a pure function of the currency and the date, so today's quotes, each day's
-  overnight fixing and the history that VaR and the exposure calibration read all come from the one function and
-  agree. The whole recipe is in the methodology and on the public endpoint `GET /api/market-data/demo/sources`.
+  currency with hand-set levels. On 17 November 2026 a curve is its parameters; on every other business day three
+  factors (level, slope, curvature) have walked from that day, reverting at 5 % a year, on shocks drawn from a
+  seeded hash, scaled per currency. A curve is a pure function of the currency and the date, so today's quotes,
+  each day's overnight fixing and the history that VaR and the exposure calibration read all come from the one
+  function and agree. The recipe is in the methodology and on the public endpoint
+  `GET /api/market-data/demo/sources`, to the hash step and the seed: a reader can rebuild any curve to the digit.
+- **What it does, measured.** A ten-year rate moves 3.6 bp a day in USD, 3.1 in EUR, 3.7 in GBP, 2.1 in CHF and 1.8
+  in JPY, with a correlation of 0.50 between USD and EUR. Over twenty years around the set day USD quotes ran from
+  1.5 to 5.9 % and CHF from −1.6 to 1.2 %, and all 2,610 curves sampled bootstrapped.
+- **Two reviews before it shipped changed it.** The model validator found the first version's factors reverted in
+  weeks, so a rate could never leave its hand-set level by more than a fifth of a per cent, and that the text did
+  not give the hash step; both mended. The independent reviewer found that a press of BACKFILL on a self-hosted desk
+  would have replaced curves the desk had imported or typed in: the backfill now remakes only rows the demo wrote
+  and leaves a curve the desk holds rows of its own for entirely alone.
 - **What it says about itself.** The screens, the public sources list, the README and the methodology call the
   rates market synthetic. The curve ids keep the names of the conventions each is bootstrapped with. Tickers beside
   the quotes are labels for a desk that connects its own feed.
@@ -24,14 +34,18 @@ changes once, with the market it is valued on; no formula changes.
   (`backend/scripts/synthetic_rates_defaults.py`, which also checks the file).
 - **What changes for a demo account.** Curves, prices, sensitivities and adjustments on rates move to the new
   market. The stored rates history is replaced by the generator's when the history is next rebuilt (Risk →
-  settings), so past days' values and VaR change once. Rates volatilities were already synthetic. Currency and
+  settings), so past days' values and VaR change once; a day's P&L, a VaR or a backtest pair stored before that
+  was struck on the earlier market and is not comparable with those after. Rates volatilities were already synthetic. Currency and
   digital-asset spots, digital-asset option marks and the Federal Reserve's published projections are unchanged.
-- **The pinned sample book** is valued on the new market: 67 of its 87 figures move (the swap paying 3.75 % is worth
-  54,038 where it was −123,655, because the synthetic five-year rate stands 39 bp higher); the 20 that do not read
+- **The pinned sample book** is valued on the new market: 65 of its 87 figures move (the swap paying 3.75 % is worth
+  18,387 where it was −123,655, because the synthetic five-year rate stands 31 bp higher); the 22 that do not read
   no rates curve.
 
-Not done, and said: the generator's moves are Gaussian with no jumps and no meeting dates, so VaR, the backtest and
-exposure on rates describe the generator and not any market's tail; the implied policy path on the home page is
+Not done, and said: the generator's moves are Gaussian with no jumps and no meeting dates, around hand-set levels of
+one day, so VaR, the backtest and exposure on rates describe the generator and not any market's tail; the Swiss
+franc curve sits near zero and its short end is below zero about as often as above; there is no holiday calendar in
+the generator; nothing outside this code stands behind it (no library has a counterpart): the validator's own
+rebuild of the formula is the second derivation; the implied policy path on the home page is
 read from the synthetic curve; measurements quoted in the methodology before v1.38 were taken on the earlier test
 market and are dated; a self-hosted desk connects its own market data and none of this applies to it.
 

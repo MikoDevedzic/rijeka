@@ -1,8 +1,6 @@
 name: risk-backfill
-# One-off: fetch public risk-factor history into the template account so historical VaR has
-# a window. Treasury, NY Fed, ECB, frankfurter and Coinbase are fetched by the API itself;
-# the Bank of England refuses a cloud provider's address, so its series is fetched on this
-# runner and posted. Dispatch by hand.
+# One-off: build the risk-factor history in the template account so historical VaR has a window. The API does
+# all of it: rates history from the synthetic generator, spots from frankfurter and Coinbase. Dispatch by hand.
 on:
   workflow_dispatch:
     inputs:
@@ -11,7 +9,7 @@ on:
         required: false
         default: "2"
       overwrite:
-        description: "Overwrite rows the daily rebuild already wrote (true/false)"
+        description: "Overwrite spot rows the daily rebuild already wrote (true/false); rates rows the demo wrote are always remade"
         required: false
         default: "false"
 jobs:
@@ -21,19 +19,10 @@ jobs:
       RIJEKA_API_URL: ${{ secrets.RIJEKA_API_URL || 'https://rijeka-api.onrender.com' }}
       RIJEKA_CRON_SECRET: ${{ secrets.RIJEKA_CRON_SECRET }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.11"
-      - name: start the server-side backfill (everything but the BoE)
+      - name: start the server-side backfill
         run: |
           code=$(curl -s -o /tmp/out -w "%{http_code}" -X POST "$RIJEKA_API_URL/api/risk/history/backfill?years=${{ github.event.inputs.years }}&overwrite=${{ github.event.inputs.overwrite }}" -H "X-Rijeka-Cron: $RIJEKA_CRON_SECRET" --max-time 60)
           echo "backfill: $code"; cat /tmp/out; echo; test "$code" = "200"
-      - name: fetch the Bank of England series here and post it
-        working-directory: backend
-        run: |
-          pip install -q httpx sqlalchemy python-dateutil
-          python -m risk.history --curves GBP_SONIA --years ${{ github.event.inputs.years }} --post "$RIJEKA_API_URL" --secret "$RIJEKA_CRON_SECRET" $([ "${{ github.event.inputs.overwrite }}" = "true" ] && echo --overwrite)
       - name: wait for the server-side backfill
         run: |
           body=""

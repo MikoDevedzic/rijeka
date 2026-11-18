@@ -224,7 +224,7 @@ export function VarSettingsPage() {
             {series.map(([cid, x]) => <div key={cid} className="rk-row" style={{ gridTemplateColumns: '12rem 1fr 1fr 1fr' }}><span className="rk-ref">{cid}</span><span className="pnl-tv">{x.observations} obs</span><span className="pnl-tv dim">{x.from}</span><span className="pnl-tv dim">{x.to}</span></div>)}
             {!series.length && <div className="pnl-empty">No history stored yet.</div>}
           </div>
-          <div className="pnl-sign-btns"><button className="pnl-btn" disabled={busy || !s.can_write} onClick={backfill}>BACKFILL TWO YEARS</button><span className="pnl-note">Rates history from the synthetic generator (no publisher's data); spots from ECB reference FX rates (frankfurter) and Coinbase daily closes. Existing days are kept.</span></div>
+          <div className="pnl-sign-btns"><button className="pnl-btn" disabled={busy || !s.can_write} onClick={backfill}>BACKFILL TWO YEARS</button><span className="pnl-note">Rates history is made again by the synthetic generator on every run (no publisher's data), except a curve this desk holds rows of its own for, which is left as it is. Spots are fetched from ECB reference FX rates (frankfurter) and Coinbase daily closes; a spot's existing days are kept.</span></div>
         </section>
       </>)}
     </div>

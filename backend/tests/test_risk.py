@@ -452,3 +452,41 @@ def test_the_books_vega_is_two_totals_by_how_its_vol_is_quoted(monkeypatch):
     # every surface the ladder knows is in exactly one of the two
     from pnl.market import is_vol_surface
     assert all(is_vol_surface(c) for c in ("USD_SWVOL_ATM", "EURUSD_VOL"))
+
+
+def test_a_backfill_leaves_a_desks_own_rates_curve_alone_and_remakes_only_what_the_demo_wrote(monkeypatch):
+    """The independent reviewer's case, 18 November 2026: a self-hosted desk holds imported GBP rows. The backfill
+    makes the other rates curves again from the generator, over rows the demo wrote and no others, and does not
+    write the desk's own curve at all; spots keep their existing days unless asked."""
+    from datetime import date
+    from risk import history as H
+    calls = []
+    monkeypatch.setattr(H, "own_rates_curves", lambda db, uid: {"GBP_SONIA"})
+    monkeypatch.setattr(H, "fx_history", lambda a, b: {date(2026, 11, 16): {"EURUSD": 1.08}})
+    monkeypatch.setattr(H, "crypto_history", lambda a, b: {})
+    monkeypatch.setattr(H, "store", lambda db, uid, days, overwrite=False, source=H.SOURCE, only_over_demo=False:
+                        calls.append((sorted(days), overwrite, source, only_over_demo)) or {c: len(v) for c, v in days.items()})
+    import risk.vols as V
+    monkeypatch.setattr(V, "history_days", lambda db, uid, a, b: {})
+    out = H.backfill(None, "tpl", years=0.05, end=date(2026, 11, 17))
+    rates, spots = calls[0], calls[1]
+    assert rates[0] == ["CHF_SARON", "EUR_ESTR", "JPY_TONAR", "USD_SOFR"] and rates[1] is True and rates[2] == H.RATES_SOURCE and rates[3] is True
+    assert spots[0] == ["EURUSD_SPOT"] and spots[1] is False and spots[3] is False
+    assert out["kept_own"] == ["GBP_SONIA"] and "GBP_SONIA" in out["built"]
+
+
+def test_the_store_replaces_a_rates_row_only_if_the_demo_wrote_it():
+    from datetime import date
+    from risk import history as H
+
+    class DB:
+        def __init__(self): self.sql = []
+        def execute(self, stmt, params=None):
+            self.sql.append(str(stmt))
+            return type("R", (), {"rowcount": 1})()
+        def commit(self): pass
+    db = DB()
+    H.store(db, "u", {"USD_SOFR": {date(2026, 11, 16): [{"tenor": "ON", "rate": 3.8}]}}, overwrite=True, source=H.RATES_SOURCE, only_over_demo=True)
+    assert "source NOT LIKE :keep AND market_data_snapshots.source LIKE 'DEMO%'" in db.sql[-1]
+    H.store(db, "u", {"EURUSD_SPOT": {date(2026, 11, 16): [{"tenor": "SPOT", "rate": 1.08}]}})
+    assert db.sql[-1].rstrip().endswith("DO NOTHING")
