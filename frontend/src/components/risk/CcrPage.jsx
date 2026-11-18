@@ -2,7 +2,7 @@
 // ────────────────────────────────────────────────────────────────────────────────────
 // COUNTERPARTY CREDIT: the book by counterparty. Each netting set is simulated on shared
 // factor paths (one Hull-White factor per currency, one lognormal factor per spot,
-// correlated from the public history), the counterparty's CSA is applied to the netted
+// correlated from the stored history), the counterparty's CSA is applied to the netted
 // value, and the exposure measures are real-world: EE, EPE, PFE at 95 / 97.5 / 99, peak,
 // by tenor bucket. CVA is the risk-neutral run through the XVA waterfall. Limits on any of
 // them. GET /api/ccr/report (stored run) · POST /api/ccr/run (background) · engine backend/ccr.
@@ -140,7 +140,7 @@ export default function CcrPage() {
               </div>
             </section>
             <section className="pnl-panel">
-              <header><span>CALIBRATION · REAL-WORLD</span><span className="pnl-sub">measured from the public history; exposure, not price</span></header>
+              <header><span>CALIBRATION · REAL-WORLD</span><span className="pnl-sub">measured from the stored history; exposure, not price</span></header>
               <Calib c={cur.calibration.real_world} />
               <div className="pnl-foot">The XVA reserves of this netting set (CVA, DVA, FCA, FBA, KVA, MVA) are valuation, not exposure: they live on the P&amp;L page, computed by the same engine under the risk-neutral measure, and net into the signed P&amp;L by the firm's policy.</div>
             </section>
@@ -153,7 +153,7 @@ export default function CcrPage() {
         </section>
 
         <div className="pnl-foot">
-          <b>Method.</b> Every trade of a counterparty is valued on the same simulated paths, so netting is exact. Rates follow a Hull-White factor per currency and spots a lognormal factor. In the historical simulation (the default) every monthly step is a block of observed daily changes from two years of public history, the same block for every factor, so the window's fat tails and co-movements are kept as they were; the Gaussian alternative draws normal shocks correlated by the matrix estimated from the same history. The parameters are real-world: volatilities measured from that history, mean reversion by stated policy, zero drift unless the firm chooses the historical drift. The CSA on the record is applied to the netted value with the margin period of risk, as in the XVA engine. Credit limits are set on peak PFE, PFE by bucket, EPE and current exposure, the way market risk limits are set on VaR. Caps and floors embedded in a leg, and European swaptions, are valued on the paths with Bachelier on the path's own forward and today's ATM normal vol held flat; a swaption past expiry is the swap on the paths where it was in the money. The vol used for each option is listed on the netting set.
+          <b>Method.</b> Every trade of a counterparty is valued on the same simulated paths, so netting is exact. Rates follow a Hull-White factor per currency and spots a lognormal factor. In the historical simulation (the default) every monthly step is a block of observed daily changes from two years of stored history, the same block for every factor, so the window's fat tails and co-movements are kept as they were; the Gaussian alternative draws normal shocks correlated by the matrix estimated from the same history. The parameters are real-world: volatilities measured from that history, mean reversion by stated policy, zero drift unless the firm chooses the historical drift. The CSA on the record is applied to the netted value with the margin period of risk, as in the XVA engine. Credit limits are set on peak PFE, PFE by bucket, EPE and current exposure, the way market risk limits are set on VaR. Caps and floors embedded in a leg, and European swaptions, are valued on the paths with Bachelier on the path's own forward and today's ATM normal vol held flat; a swaption past expiry is the swap on the paths where it was in the money. The vol used for each option is listed on the netting set.
         </div>
       </>)}
     </div>

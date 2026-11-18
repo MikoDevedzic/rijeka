@@ -148,7 +148,7 @@ export default function RiskPage() {
             {(v.missing_factors || []).length > 0 && <div className="pnl-foot"><em>No history for: {v.missing_factors.join(', ')}. Their risk is in the ladder, not in VaR.</em></div>}
             {(v.vol_factors || []).length > 0 && <div className="pnl-foot"><em>Volatility factors: {v.vol_factors.join(', ')} (every quote of the surface, repriced in full).
               {Object.keys(v.partial_factors || {}).length > 0 && <> Shorter history than the window: {Object.entries(v.partial_factors).map(([f, c]) => `${f} ${c.days} of ${c.of} days from ${c.from}`).join('; ')}. On the other days the surface is held still.</>}</em></div>}
-            {!v.enough && <div className="pnl-foot"><em>Too little history for a meaningful VaR. The backfill fetches two years from public sources (Configurations › Market Risk › VaR settings).</em></div>}
+            {!v.enough && <div className="pnl-foot"><em>Too little history for a meaningful VaR. The backfill makes two years of rates history from the synthetic generator and fetches spots from public sources (Configurations › Market Risk › VaR settings).</em></div>}
           </section>
         </div>
 

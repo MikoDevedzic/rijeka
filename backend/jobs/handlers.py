@@ -2,7 +2,7 @@
 callable that merges a progress patch into the row; it returns the result stored on the row.
 
     ccr_run        the counterparty-credit run for one account (api/routes/ccr.py POST /run)
-    risk_backfill  public-source risk-factor history for the template account (POST /api/risk/history/backfill)
+    risk_backfill  risk-factor history (synthetic rates, public spots) for the template account (POST /api/risk/history/backfill)
     capital_run    the book's capital under collateral regimes (POST /api/capital/portfolio)
     ipv_run        the independent price verification run (POST /api/ipv/run)
 

@@ -20,7 +20,7 @@ flowchart LR
     AUTH[Auth<br/>ES256 JWTs]
   end
   CHAIN[(Sepolia<br/>TradeConfirmationRegistry)]
-  PUB[Public data<br/>NY Fed, UST, ECB, BoE, SNB, MoF, news feeds<br/>FX spot via frankfurter.dev, Coinbase spot]
+  PUB[Public data<br/>ECB, SNB, BLS, ONS, Eurostat, Treasury auctions, Fed projections, news feeds<br/>FX spot via frankfurter.dev, Coinbase spot]
   VENUE[Deribit public API<br/>option marks, forwards, daily delivery prices<br/>BTC, ETH, SOL]
   ANTH[Anthropic API<br/>Prometheus, news summaries, book brief]
   TG[Telegram<br/>mirror of trade cards]
@@ -94,7 +94,7 @@ methodology, ops, usage, csp, public). Engines: `pricing/` (curves, every produc
 `risk/` (ladder, VaR, stress, backtest, limits, vol history), `ccr/` (exposure paths, calibration,
 options on the paths), `pnl/` (marks, attribution, XVA P&L), `collateral/` (the firm's instrument list, the schedule per counterparty, the regime and the
 yields derived from them, the ticket's collateral onto a CSA, the book's collateral page; `docs/collateral.md`), `chain/` (canonical record, EIP-712
-signing, attestation, keys, lifecycle guard, Telegram), `settlement/` (the fixings store and the one settlement rule), `market_data/` (public-source demo feed, the venue adapter
+signing, attestation, keys, lifecycle guard, Telegram), `settlement/` (the fixings store and the one settlement rule), `market_data/` (the synthetic rates generator, the demo feed, the venue adapter
 `deribit.py` for digital-asset vols and forwards, policy path, calendar), `news/`, `prometheus/` (read-only assistant and book brief), `methodology/` (Excel
 replications), `activity/` (what each account does, by day; below), `health/` (the problems people hit, kept and told to the operator; below). `scheduler.py` runs the batches in-process (digital-asset marks every 10 minutes; digital-asset fixings, news,
 summaries and spots every 30 minutes; demo market data, end-of-day P&L, market risk and counterparty
@@ -200,7 +200,7 @@ The table describes the template account, the one the feeds write to.
 
 | What | Curve ids | From | How often | When the source is silent |
 |---|---|---|---|---|
-| OIS curves | `USD_SOFR`, `EUR_ESTR`, `GBP_SONIA`, `CHF_SARON`, `JPY_TONAR` | central banks and treasuries, an indicative spread over government par (`market_data/demo_feed.py`) | rebuilt every 2 hours, one row a day | the curve is skipped and keeps its last date. Health (`market_data`) watches `USD_SOFR` only; the others are named in the tick's `failed_sources` |
+| OIS curves | `USD_SOFR`, `EUR_ESTR`, `GBP_SONIA`, `CHF_SARON`, `JPY_TONAR` | `market_data/synthetic_rates.py`: a stated generator, no publisher's data | rebuilt every 2 hours, one row a day | nothing is fetched, so there is no outage to wait out. Health (`market_data`) watches `USD_SOFR` only |
 | FX and digital-asset spot | `{PAIR}_SPOT` | ECB reference rates through `api.frankfurter.dev`; Coinbase | 30 minutes; digital assets also with the marks, every 10 | the last spot stands. Health (`spots`) is green while any spot is being written, so it does not see an FX outage on its own |
 | Digital-asset vols | `BTCUSD_VOL`, `ETHUSD_VOL`, `SOLUSD_VOL` | Deribit option marks, read at 25 and 50 delta per expiry (`market_data/deribit.py`) | 10 minutes | the last good surface stands, its own time in the source. Health (`crypto_marks`) reads that time and is red when the oldest of the three is over two hours old, or when an asset's current surface is not the venue's |
 | Digital-asset forwards | `{PAIR}_FWD` | the same chain: the forward of each expiry over the index | 10 minutes, with the vols | as above. The index is checked against the spot fetched in the same run (5 %), or the last stored one (25 %); with no spot at all it is stored unchecked. A funding rate typed on the ticket wins over the points for that price |
@@ -639,7 +639,7 @@ checklist in `docs/ops/release.md`.
   at the next pass.
 - Job state for background runs (counterparty credit, the risk backfill) is in process memory until the
   stored row lands; a deploy mid-run loses the "running" flag, not the data.
-- The hosted demo prices on public-source market data rebuilt daily and, for digital assets, on a venue's option
+- The hosted demo prices on a synthetic rates market (a stated generator, no publisher's data) and public spots, rebuilt daily and, for digital assets, on a venue's option
   marks refreshed every ten minutes; rates and G10 FX vol surfaces are synthetic, scaled by realised vol, and
   labelled as such. A self-hosted desk loads its own (and switches the feeds off: `docs/ops/environment.md`).
 

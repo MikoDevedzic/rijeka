@@ -9,7 +9,7 @@ export const TERMS = [
     'You must be at least 18 and use the service for professional, educational or research purposes. Keep your credentials to yourself; you are responsible for activity under your account.' ]},
   { h: 'A demonstration, not a production system', p: [
     'The hosted service is a demo. Data may be reset, features may change or be withdrawn, and availability is not guaranteed. Do not rely on it to run a business.',
-    'Market data in the demo is a dated snapshot entered manually or taken from public sources, shown with its date on every screen. It is not live, may be stale, and is not suitable for trading or valuation decisions.' ]},
+    'Market data in the demo is a dated snapshot, shown with its date on every screen. Rates are synthetic, made by a stated generator, and spots are taken from public sources. It is not live, may be stale, and is not suitable for trading or valuation decisions.' ]},
   { h: 'No advice, no venue, no counterparty', p: [
     'Nothing in Rijeka is investment, legal, tax or accounting advice, and no output is a recommendation to enter into any transaction. Rijeka LLC is not a broker, dealer, exchange, trading venue, clearing house or investment adviser, and is not a party to any trade you record.',
     'The demo counterparty ("RIJEKA DEMO BANK AG") is fictional and exists only so that you can exercise the workflow alone.' ]},

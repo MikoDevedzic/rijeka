@@ -5,7 +5,7 @@ now, with nothing that belongs to a user.
     GET /api/public/pulse
 
 Returns the demo template's latest USD SOFR par curve and ATM swaption vol
-grid (public sources only,
+grid (demo snapshots only,
 the same filter demo provisioning applies), how many confirmations carry an
 on-chain hash, the registry and the latest Sepolia block, and the last 24
 hours of Market News. Cached in-process for a minute; every field is
@@ -121,7 +121,7 @@ def build(db: Session) -> dict:
         "headlines": _headlines(db),
         "chain": _chain(),
         "demo": _demo_provisioning(),
-        # Where the demo's numbers come from (public sources, synthetic vols): see market_data/demo_feed.py.
+        # Where the demo's numbers come from (synthetic rates and vols, public spots): see market_data/demo_feed.py.
         "market_data": {"kind": "demo", "providers": [x["provider"] for x in _demo_sources()]},
     }
 

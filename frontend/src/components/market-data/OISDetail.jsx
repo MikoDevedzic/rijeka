@@ -245,7 +245,7 @@ function OISInstruments({ curve }) {
           {/* Header */}
           <div style={thStyle}></div>
           <div style={thStyle}>TENOR</div>
-          <div style={thStyle} title="The identifier a market-data terminal would quote this instrument under. The demo's quotes come from public sources, named in SRC.">IDENTIFIER</div>
+          <div style={thStyle} title="The identifier a market-data terminal would quote this instrument under. The demo's rates quotes are synthetic (a stated generator, no publisher's data); SRC says so.">IDENTIFIER</div>
           <div style={thStyle}>SRC</div>
           <div style={thR}>MID %</div>
           <div style={thR} title="An indication from this quote alone, not the engine's bootstrapped zero">ZERO % ≈</div>
@@ -341,7 +341,7 @@ function OISInstruments({ curve }) {
                   border:'1px solid rgba(192,165,238,0.2)',borderRadius:'2px',
                   padding:'4px 7px',marginBottom:'8px',lineHeight:1.6}}>
                   O/N fixing: <strong>{onInst.ticker}</strong>
-                  {curve.description ? ' — ' + curve.description : ' — demo data from public sources on the hosted desk; self-host to snap your own terminal.'}
+                  {curve.description ? ' — ' + curve.description : ' — a synthetic rates market on the hosted desk (a stated generator, no publisher data); self-host to snap your own terminal.'}
                 </div>
               )
             })()}

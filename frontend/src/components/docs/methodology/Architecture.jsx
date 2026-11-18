@@ -444,7 +444,7 @@ export default function Architecture() {
       <div className="mr-prose">
         <h3>What runs where, plainly</h3>
         <p>There is one API process. Monte Carlo and full-revaluation VaR run inside the request and are rate-limited per account; a larger book moves them to a worker without changing the engines.</p>
-        <p>The hosted demo prices on public-source market data rebuilt daily and, for digital assets, on a venue's option marks refreshed every ten minutes. Rates and G10 FX vol surfaces are synthetic, scaled by realised vol, and labelled as such. A self-hosted desk loads its own data and switches the feeds off.</p>
+        <p>The hosted demo prices on a synthetic rates market (a stated generator, no publisher's data) and spots from public sources, rebuilt daily and, for digital assets, on a venue's option marks refreshed every ten minutes. Rates curves and G10 FX vol surfaces are synthetic and labelled as such. A self-hosted desk loads its own data and switches the feeds off.</p>
         <p>A release reaches production only after the checks pass on the commit that ships, and the app is built from a commit the live API is already on, or one that leaves the API as it is.</p>
       </div>
     </div>

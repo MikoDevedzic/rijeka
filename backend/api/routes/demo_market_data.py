@@ -1,5 +1,5 @@
 """
-demo_market_data.py — the hosted demo's market data, rebuilt daily from public sources.
+demo_market_data.py — the hosted demo's market data, rebuilt daily: a synthetic rates market (a stated generator, no publisher's data), spots and digital-asset marks from public sources.
 
 POST /api/market-data/demo/tick          cron (X-Rijeka-Cron): fetch, build, write, copy
 POST /api/market-data/demo/crypto/tick   cron: digital-asset spot, option vols and forwards (market_data/deribit.py)
@@ -515,7 +515,7 @@ def fixings_tick(count: int = Query(default=3, ge=1, le=deribit.MAX_DELIVERY_ROW
 @router.get("/sources")
 def sources(db: Session = Depends(get_db)):
     """Public on purpose: the provenance of the demo's market data and the latest date per curve is part
-    of the open-data story (the landing page says 'public sources'; this is the list). No account data."""
+    of the open-data story (the landing page names the sources; this is the list). No account data."""
     template = demo._template_user_id(db)
     latest: dict[str, dict] = {}
     if template is not None:

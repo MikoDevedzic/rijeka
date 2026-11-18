@@ -137,7 +137,7 @@ export const STORIES = [
       { k: '6', name: 'VERIFY', pieces: ['land', 'chain'], joins: ['land_chain'],
         say: 'Anyone with the proof can check it. The verifier is a static page: it re-derives the record\'s hash and reads the registry itself. It asks Rijeka\'s servers for nothing.' },
       { k: '7', name: 'THE BATCHES', pieces: ['api', 'pub', 'venue', 'pg', 'ai'], joins: ['api_pub', 'api_venue', 'api_pg', 'api_ai'],
-        say: 'Every two hours the scheduler rebuilds market data from public sources and stores, one row a day, a mark for each trade, the attributed P&L, the risk report and the counterparty-credit run. The venue\'s marks are read every ten minutes; spots, news and digital-asset fixings every thirty. Prometheus reads the same tables through read-only tools.' },
+        say: 'Every two hours the scheduler rebuilds the synthetic rates market and the spots from public sources and stores, one row a day, a mark for each trade, the attributed P&L, the risk report and the counterparty-credit run. The venue\'s marks are read every ten minutes; spots, news and digital-asset fixings every thirty. Prometheus reads the same tables through read-only tools.' },
   ] },
   { id: 'change', name: 'A CHANGE', follow: 'FOLLOW A CHANGE', lede: 'A change to the code on its way to production, and who looks at it on the way.', steps: [
     { k: 'c1', name: 'PROPOSE', pieces: ['patrick', 'hermie', 'branch'], joins: [],

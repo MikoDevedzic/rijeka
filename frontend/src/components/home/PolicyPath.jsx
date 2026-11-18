@@ -1,7 +1,7 @@
 // home/PolicyPath.jsx — what the curve says the overnight rate will be, month
 // by month, for the currency chosen, with the Fed's SEP medians (the dot
 // plot's year-end medians) overlaid for USD. Reads /api/public/policy-path,
-// which is built from the public-source demo curves, so it says "indicative".
+// which is built from the synthetic demo curves, so it says "indicative".
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 const CCYS = ['USD', 'EUR', 'GBP', 'CHF', 'JPY']
@@ -52,7 +52,7 @@ export default function PolicyPath({ onCurves }) {
       <PathChart d={d} loading={loading && !d} />
       <Meetings d={d} />
       <div className="dh-caption">
-        {d?.as_of ? <>From the public-source demo curve of {fmtD(d.as_of)} · indicative, not a forecast</> : 'Indicative, from public-source demo curves'}
+        {d?.as_of ? <>From the synthetic demo curve of {fmtD(d.as_of)} · indicative, not a forecast</> : 'Indicative, from the synthetic demo curves'}
         {d?.dots?.as_of && <> · Fed dots: SEP medians of {fmtD(d.dots.as_of)}</>}
       </div>
     </section>

@@ -83,9 +83,7 @@ fixed quotes written in `seed.py` (the feed's fetchers go to the internet; the b
 
 | Rows | Content |
 |---|---|
-| `market_data_snapshots` `USD_SOFR` | 33 OIS pillars: SOFR 3.88 % overnight, US Treasury par 1M…30Y (3.95 → 4.72 %) less the feed's indicative SOFR-OIS/UST spread schedule (`demo_feed.build_usd_sofr`) |
-| `EUR_ESTR` | €STR 2.41 % + euro-area AAA par 3M…30Y (2.10 → 3.25 %) plus the swap-over-AAA schedule |
-| `GBP_SONIA` | SONIA 3.72 %, gilts 5Y 4.05 / 10Y 4.45 / 20Y 5.10 % less the schedule |
+| `market_data_snapshots` `USD_SOFR`, `EUR_ESTR`, `GBP_SONIA` | 33 OIS pillars each: the synthetic rates market's curve of the seed's date (`market_data/synthetic_rates.py` through `demo_feed.build_rates_curve`); no published fixing or yield |
 | `USD_SWVOL_ATM` | 30 swaption ATM normal vols (expiries 1–7Y × tenors 1–9Y), the synthetic parametric surface |
 | `swaption_vol_skew` + `sabr_params` | 15 skew cells (±25/50/100/200bp) and a β=0 SABR fit per cell, exactly as the daily tick writes them |
 | `cap_vol_surface` | 54 rows: cap tenors 1–10Y × strike spreads −200…+200bp, flat normal vols, ATM strike from the SOFR par curve |

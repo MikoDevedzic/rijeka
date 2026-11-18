@@ -124,7 +124,7 @@ def _price_one(db: Session, user: dict, trade, today: date) -> dict:
 
 
 def _curve_moves(db: Session, ccys: set[str]) -> list[Fact]:
-    """2Y and 10Y change between the two latest public-source snapshots of each currency's curve."""
+    """2Y and 10Y change between the two latest demo snapshots of each currency's curve."""
     from api.routes.demo import _template_user_id
     from market_data.policy_path import CCY
     uid = _template_user_id(db)

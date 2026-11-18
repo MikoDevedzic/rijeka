@@ -8,7 +8,7 @@ own guidance. For USD the Fed's Summary of Economic Projections medians
 (the dot plot's year-end medians) are overlaid; the ECB, BoE, SNB and BoJ do
 not publish dots.
 
-Everything here is computed from the public-source demo curves (see
+Everything here is computed from the synthetic demo curves (see
 demo_feed.py), so it carries the same "indicative" label.
 """
 from __future__ import annotations

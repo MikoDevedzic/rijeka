@@ -68,3 +68,19 @@ def test_a_shock_is_a_standard_normal_and_two_keys_do_not_share_one():
     xs = [R._normal("test", i) for i in range(20_000)]
     assert abs(statistics.fmean(xs)) < 0.03 and 0.97 < statistics.pstdev(xs) < 1.03
     assert R._normal("a", 1) != R._normal("a", 2) and R._normal("a", 1) == R._normal("a", 1)
+
+
+def test_the_frontends_default_quotes_are_what_the_script_makes():
+    """frontend/src/data/ratesCurves.js is written by scripts/synthetic_rates_defaults.py and by nothing else: a quote
+    typed into it by hand, or a change to the recipe without a rerun, fails here."""
+    import importlib.util
+    import pathlib
+    path = pathlib.Path(__file__).resolve().parents[1] / "scripts" / "synthetic_rates_defaults.py"
+    spec = importlib.util.spec_from_file_location("synthetic_rates_defaults", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    if not mod.TARGET.exists():
+        pytest.skip("the frontend is not in this checkout")
+    text = mod.TARGET.read_text()
+    assert mod.make(text) == text
+    assert "Every quote in this file is SYNTHETIC" in text and text.count("quote:") > 400

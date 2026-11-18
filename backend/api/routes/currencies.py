@@ -61,7 +61,7 @@ FX_SPOT_LAG_DEFAULT = 2
 FX_FEED_URL = "https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR,GBP,JPY,CHF,AUD,CAD"
 FX_FEED_NAME = "ECB reference rates (frankfurter.dev, public)"
 # When an account has no OIS curve for a currency (the hosted demo copies only
-# public-source snapshots), discount it flat at a rate the desk can set
+# demo snapshots), discount it flat at a rate the desk can set
 # ({CCY}_FLAT, MANUAL) or, failing that, at the central bank's policy rate.
 # Every response says which one it used; a flat curve is illustrative.
 POLICY_RATE_PCT = {"EUR": 2.50, "GBP": 3.75, "JPY": 1.25, "CHF": 0.00, "AUD": 4.60, "CAD": 2.25, "USD": 4.00}

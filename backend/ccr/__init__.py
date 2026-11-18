@@ -3,7 +3,7 @@ Counterparty credit risk.
 
   calibration.py  the two parameter sets: risk-neutral (swaption-calibrated HW1F, market
                   vols, forward drift) for pricing; real-world (volatilities, mean reversion,
-                  drift and correlations from the public history) for exposure and limits
+                  drift and correlations from the stored history) for exposure and limits
   simulate.py     joint factor paths per netting set: one Hull-White factor per currency, one
                   lognormal factor per spot, correlated Brownian motions
   valuation.py    every trade of a netting set valued on the shared paths (analytic under

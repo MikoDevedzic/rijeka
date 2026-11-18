@@ -128,7 +128,7 @@ PRODUCTS = [
      "formula": "P&L_i = Σ_trade [NPV(M + Δ_i) − NPV(M)]·fx; linear: Σ KR01[c,b]·Δ_i[c,b] + Σ spot01[a]·r_i[a]; VaR_q = empirical loss quantile; ES = mean loss beyond; √h horizon",
      "replication": "doc", "doc": "/docs/market_risk.md"},
     {"id": "ccr", "name": "Counterparty credit: netting, real-world PFE, credit limits", "group": "Counterparty risk", "section": None,
-     "default": "Netting set on shared paths (HW1F per currency, lognormal per spot; monthly steps sampled as blocks of observed daily changes, the same block for every factor, or Gaussian shocks correlated from public history) → CSA on the netted value → EE, EPE, PFE 95/97.5/99 real-world → limits; the XVA reserves of the risk-neutral run go to the P&L",
+     "default": "Netting set on shared paths (HW1F per currency, lognormal per spot; monthly steps sampled as blocks of observed daily changes, the same block for every factor, or Gaussian shocks correlated from the stored history) → CSA on the netted value → EE, EPE, PFE 95/97.5/99 real-world → limits; the XVA reserves of the risk-neutral run go to the P&L",
      "formula": "x_i = x_{i−1}·e^{−aΔt} + Σ_block Δr (historical) or σ√Δt·z (Gaussian); options on the paths: Bachelier on the path's forward, today's ATM vol flat, physical settlement at expiry; E⁺(t) = max(V − C(t−δ) − IM, 0); PFE_q = quantile_q(E⁺); EPE = mean_{t≤1y} EE; real-world: σ from history, a by policy, zero drift",
      "replication": "doc", "doc": "/docs/ccr.md"},
 ]

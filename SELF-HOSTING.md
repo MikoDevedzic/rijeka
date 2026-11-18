@@ -108,7 +108,7 @@ What is not in the compose file:
    ```
    Set `RIJEKA_DEMO_PROVISION=0` unless you want every sign-in to get a sandbox
    workspace the way the hosted demo does. Set `RIJEKA_DEMO_MARKET_DATA=0` to run on your
-   own marks: with it on (the default) and the scheduler running, the public-source curves and
+   own marks: with it on (the default) and the scheduler running, the synthetic rates curves and
    the digital-asset vols, forwards and daily delivery prices (fixings) from Deribit's public API
    (`RIJEKA_DERIBIT`, also on by default) are written to the template account, which is `RIJEKA_DEMO_TEMPLATE_EMAIL` or,
    when that is empty, the earliest admin of a dealer firm, and they replace that account's
@@ -138,7 +138,7 @@ What is not in the compose file:
   policies protect direct Supabase client access. Review `api/routes/*` before exposing it to firms
   that compete.
 - Market data is whatever you load once `RIJEKA_DEMO_MARKET_DATA=0`. The feeds that ship are the demo's:
-  public-source curves rebuilt daily, public spot, and Deribit's public option marks for BTC, ETH and SOL;
+  synthetic rates curves (a stated generator, no publisher's data) rebuilt daily, public spot, and Deribit's public option marks for BTC, ETH and SOL;
   using a venue's data on your own instance is under that venue's terms and your responsibility.
 - The registry contract has not had an external audit.
 

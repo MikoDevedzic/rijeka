@@ -185,7 +185,7 @@ export function VarSettingsPage() {
     catch (e) { setMsg(e.message) } finally { setBusy(false) }
   }
   const backfill = async () => {
-    setBusy(true); setMsg('Fetching two years from the Treasury, NY Fed, ECB, Bank of England, frankfurter and Coinbase… this takes a minute.')
+    setBusy(true); setMsg('Making two years of rates history from the generator and fetching spots from frankfurter and Coinbase… this takes a minute.')
     try { const j = await api('/api/risk/history/backfill?years=2', { method: 'POST' }); setMsg(`Backfill done: ${Object.entries(j.written).map(([k, v]) => `${k} ${v}`).join(', ')}`); await load() }
     catch (e) { setMsg(e.message) } finally { setBusy(false) }
   }
@@ -219,12 +219,12 @@ export function VarSettingsPage() {
           <div className="pnl-foot">VaR is the empirical loss quantile over the window; expected shortfall is the mean loss beyond it; the horizon scales by √t. <b>Full revaluation</b> reprices every live trade on each historical day's shifted market, so convexity and the curve shape inside a bucket are in the number; the ladder VaR is computed alongside as the linear comparison. <b>Ladder</b> applies the day's changes to the key-rate sensitivities: fast, linear in the factors. Exposure sampling drives the counterparty credit run: <b>historical</b> builds each monthly step from a block of observed daily changes, the same block for every factor, keeping the window's fat tails and co-movements; <b>Gaussian</b> draws correlated normal shocks. {!s.tables && <em>Settings need the market risk tables: ask your administrator to apply the latest database migration; the defaults apply until then.</em>}</div>
         </section>
         <section className="pnl-panel" style={{ maxWidth: 980 }}>
-          <header><span>RISK-FACTOR HISTORY</span><span className="pnl-sub">public sources, stored on the template account, extended by the daily rebuild</span></header>
+          <header><span>RISK-FACTOR HISTORY</span><span className="pnl-sub">synthetic rates history and public spots, stored on the template account, extended by the daily rebuild</span></header>
           <div className="rk-rows">
             {series.map(([cid, x]) => <div key={cid} className="rk-row" style={{ gridTemplateColumns: '12rem 1fr 1fr 1fr' }}><span className="rk-ref">{cid}</span><span className="pnl-tv">{x.observations} obs</span><span className="pnl-tv dim">{x.from}</span><span className="pnl-tv dim">{x.to}</span></div>)}
             {!series.length && <div className="pnl-empty">No history stored yet.</div>}
           </div>
-          <div className="pnl-sign-btns"><button className="pnl-btn" disabled={busy || !s.can_write} onClick={backfill}>BACKFILL TWO YEARS</button><span className="pnl-note">Treasury par yields, NY Fed SOFR, ECB €STR and AAA curve, BoE SONIA and gilts, ECB reference FX rates, Coinbase daily closes. Existing days are kept.</span></div>
+          <div className="pnl-sign-btns"><button className="pnl-btn" disabled={busy || !s.can_write} onClick={backfill}>BACKFILL TWO YEARS</button><span className="pnl-note">Rates history from the synthetic generator (no publisher's data); spots from ECB reference FX rates (frankfurter) and Coinbase daily closes. Existing days are kept.</span></div>
         </section>
       </>)}
     </div>

@@ -6,7 +6,7 @@ GET  /api/risk/metrics                  metric keys a limit can be set on, from 
 GET  /api/risk/settings · PUT           the firm's VaR settings (risk manager or admin writes)
 GET  /api/risk/backtest?measure=&days=  yesterday's VaR against today's P&L: exceptions, traffic light, Kupiec
 GET  /api/risk/history                  how much risk-factor history exists
-POST /api/risk/history/backfill         cron or admin: start fetching and storing public history (years=) in the background
+POST /api/risk/history/backfill         cron or admin: start making and storing the risk-factor history (years=) in the background
                                         (a worker job when the jobs table exists and a worker is expected, else a thread here)
 POST /api/risk/daily/tick               cron: compute and store today's report for every account
 """

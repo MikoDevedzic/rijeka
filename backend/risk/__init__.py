@@ -1,7 +1,7 @@
 """
 Market risk.
 
-  history.py        risk-factor history: daily curve quotes and spots, from public sources,
+  history.py        risk-factor history: daily curve quotes (synthetic) and spots (public sources),
                     stored as the template user's snapshots (the daily rebuild extends it)
   sensitivities.py  the ladder: key-rate IR01 by curve and tenor bucket, spot deltas, totals,
                     by bump-and-reprice through the production pricers

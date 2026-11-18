@@ -146,7 +146,7 @@ test('the home\'s snapshot line is whole, old or current: nothing in the strip e
     // as the stack stores it: a snapshot some days old says so
     await app.goto('/')
     const line = app.getByTestId('dh-asof')
-    await expect(line).toContainText('DEMO DATA · PUBLIC SOURCES', { timeout: 30_000 })
+    await expect(line).toContainText('DEMO DATA · SYNTHETIC RATES', { timeout: 30_000 })
     expect(await cut(line), `the line is cut at ${width} wide`).toBeLessThanOrEqual(1)
   }
   // a snapshot of today, as the hosted desk has it every morning, and one a month old: the longest the line gets

@@ -264,7 +264,7 @@ function DeskHome({ demo, navigate }) {
       <span className="dh-strip-k">ATM VOL</span>
       {[['1Y5Y', '1Yx5Y'], ['5Y5Y', '5Yx5Y'], ['5Y9Y', '5Yx9Y']].map(([l, k]) => <span key={k} className={`dh-q${l === '5Y9Y' ? ' dh-q-last' : ''}`}><b>{l}</b>{d.vol?.exists ? `${fmtN(quote(d.vol, k), 1)}bp` : '—'}</span>)}
       <span className="dh-strip-right">
-        {asOf ? <span className={`dh-asof${stale > 7 ? ' stale' : ''}`} data-testid="dh-asof" title={String(d.sofr?.source || '').startsWith('DEMO') ? 'Demo market data, rebuilt from public sources' : undefined}><i className="dh-dot" />SNAPSHOT · {fmtD(asOf)}{stale > 7 ? ` · ${stale}D OLD` : ''}{String(d.sofr?.source || '').startsWith('DEMO') ? ' · DEMO DATA · PUBLIC SOURCES' : ''}</span>
+        {asOf ? <span className={`dh-asof${stale > 7 ? ' stale' : ''}`} data-testid="dh-asof" title={String(d.sofr?.source || '').startsWith('DEMO') ? 'Demo market data: a synthetic rates market (a stated generator, no publisher\'s data), spots from public sources' : undefined}><i className="dh-dot" />SNAPSHOT · {fmtD(asOf)}{stale > 7 ? ` · ${stale}D OLD` : ''}{String(d.sofr?.source || '').startsWith('DEMO') ? ' · DEMO DATA · SYNTHETIC RATES' : ''}</span>
               : d.loading ? <span className="dh-asof">LOADING…</span> : <span className="dh-asof stale">NO CURVES LOADED</span>}
       </span>
     </div>

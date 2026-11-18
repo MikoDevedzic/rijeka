@@ -99,7 +99,7 @@ def make(text: str) -> str:
                 new = f"{bp(curve, t):.1f}"
             line = line[:q.start(2)] + new + line[q.end(2):]
         if "oisRef: {" in line and base:
-            line = re.sub(r"\b(ON|[WMY]\d+): -?[0-9.]+", lambda k: f"{k.group(1)}: {ois(base, key_years(k.group(1))):.3f}", line)
+            line = re.sub(r"\b(ON|[WMY]\d+): -?[0-9.]+", lambda k, base=base: f"{k.group(1)}: {ois(base, key_years(k.group(1))):.3f}", line)
         f = re.search(r"\{ id: '([A-Z]+)',\s+name: .*latest: (-?[0-9.]+) \}", line)
         if f and f.group(1) in FIXING_CURVE:
             line = line[:f.start(2)] + f"{ois(FIXING_CURVE[f.group(1)], 1.0 / 365.0):.3f}" + line[f.end(2):]
