@@ -94,6 +94,10 @@ describe('IR_SWAPTION', () => {
     expect(body).toMatchObject({ effective_date: '2026-11-04', maturity_date: '2031-11-04' })       // the trade's own dates stay the spot-start swap's
   })
 
+  it('an expiry that is not after the valuation date is not booked, and the reason is the ticket\'s own words', () => {
+    expect(() => buildBookingBody({ ...swaptionState, expiry: 'DATE', expiryDate: '2026-10-01' }, 'PAY', extras)).toThrow(/The expiry 2026-10-01 is not after the valuation date/)
+  })
+
   it('books the option terms on the trade and the forward-starting swap as its legs', () => {
     const body = buildBookingBody(swaptionState, 'PAY', extras)
     expect(body).toMatchObject({

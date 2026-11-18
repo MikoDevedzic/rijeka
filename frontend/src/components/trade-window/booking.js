@@ -334,6 +334,7 @@ export function buildSwaptionBookingBody(state, direction, extras = {}) {
   const notional  = Number(state.notional) || 0
   const ccy       = state.ccy || 'USD'
   const ex        = swaptionExpiry(state)
+  if (ex.problem) throw new Error(ex.problem)
   const strike    = swaptionStrike(state, extras)
   const structure = state.structure || 'EUROPEAN'
   const volBp     = parseFloat(String(state.volBp ?? SWAPTION_DEFAULTS.volBp))

@@ -429,7 +429,8 @@ registerProduct({
     // and the swap dates shifted by the expiry (they carry the T+2 spot lag).
     buildPayload: state => {
       // the expiry as a tenor or a typed date, the option's time and the days the underlying starts after spot
-      const { years: expiry_y } = swaptionExpiry(state)
+      const { years: expiry_y, problem } = swaptionExpiry(state)
+      if (problem) throw new Error(problem)                 // said in the footer: nothing is priced on an expiry that has passed
       const under = swaptionUnderlying(state)
       const strikeRaw = String(state.strike ?? SWAPTION_DEFAULTS.strike).trim()
       const strike   = strikeRaw !== '' && isFinite(parseFloat(strikeRaw)) ? parseFloat(strikeRaw) / 100 : null

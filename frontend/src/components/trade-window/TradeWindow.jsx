@@ -47,7 +47,7 @@ import RatesScenario from './RatesScenario'
 // Sprint 12 item 3: CONFIRM tab panel + lifecycle client
 import { ConfirmPanel } from './ConfirmPanel'
 import { executeBooking, buildBookingBody, confirmTrade, cancelTrade, confirmTradeOnChain, bookPackage, confirmPackageOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, partialTerminate, amendTerms, amendable, recordKnock, INDEX_CURVE } from './booking'
-import { TENOR_Y, EXPIRY_Y, EXPIRY_DATE } from './product-defaults'
+import { TENOR_Y, EXPIRY_Y, EXPIRY_DATE, swaptionExpiry } from './product-defaults'
 // Sprint 13 follow-up — lifecycle cache refresh
 import { useTradesStore, shortUti } from '../../store/useTradesStore'
 import { useTabStore }    from '../../store/useTabStore'
@@ -193,6 +193,8 @@ function viewProductState(trade, legs = []) {
       // typed is shown as a date. The date itself is always the booked one (product-defaults.swaptionExpiry).
       expiry: EXPIRY_Y[t.expiry_tenor] ? t.expiry_tenor : (t.expiry_tenor === null && iso(t.expiry_date) ? EXPIRY_DATE : (expiryLabel(iso(trade.trade_date), iso(t.expiry_date)) || '1Y')),
       expiryDate: iso(t.expiry_date) || undefined,
+      // the swap it delivers, as its legs were booked (the option's pricer and the ticket's note read these, not a rule)
+      underStart: iso(fixed?.effective_date) || undefined, underEnd: iso(fixed?.maturity_date) || undefined,
       volBp:  t.vol_bp != null ? String(t.vol_bp) : undefined,
       strike: pctStr(t.strike ?? fixed?.fixed_rate) ?? '',
     })
@@ -761,7 +763,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         const booked = await post('/price', { trade_id: initialTrade.id, valuation_date: state.valDate, curves, states: true })
         if (isCurrency) { setFxQuote(booked); return }
         let data = booked
-        if (productKey === 'IR_SWAPTION' && state.effDate && state.matDate) {
+        // past its expiry a booked swaption is the swap it delivered: the booked legs' value stands, no option is priced
+        if (productKey === 'IR_SWAPTION' && state.effDate && state.matDate && !swaptionExpiry(state).expired) {
           try {
             const opt = await post(product.pricing.endpoint, { ...product.pricing.buildPayload(state), curves })
             data = { ...opt, legs: booked.legs, curve_mode: booked.curve_mode, trade_id: booked.trade_id }

@@ -59,16 +59,20 @@ export function offWeekend(iso) {
 const nearestTenor = (years) => EXPIRY_TENORS.reduce((best, t) => (Math.abs(EXPIRY_Y[t] - years) < Math.abs(EXPIRY_Y[best] - years) ? t : best), SWAPTION_DEFAULTS.expiry)
 
 // A swaption ticket's expiry, for the field, the pricing request and the booking alike:
-//   { tenor, date, custom, rolledFrom, years, shiftDays }
+//   { tenor, date, custom, rolledFrom, rolledWhy, years, shiftDays, expired, problem }
 // - A tenor is that many calendar months from the valuation date, off a weekend (a 3M expiry on 18 November is
 //   18 February, not 91 days on). A typed date (state.expiry === EXPIRY_DATE) is taken as typed.
 // - A booked trade (state.readOnly) keeps the expiry date it was booked with, whatever the rule was that day.
 // - `years` is the option's time: the days from the valuation date to the expiry over 365 (ACT/365), as the booked
 //   option is revalued for P&L, VaR and the ladder (backend pnl/valuation._value_swaption), so a ticket and its
-//   booking agree and a booked option shows the time it has left. A Bermudan keeps the tenor's whole years: its
-//   tree steps in twelfths of a year and takes no other date, so a typed date falls back to the nearest tenor.
-// - `shiftDays` moves the spot-starting swap of PRIMARY ECONOMICS to the swap the option delivers into: the days
-//   from the trade's own date to the expiry.
+//   booking agree and a booked European option shows the time it has left. A Bermudan keeps the tenor's whole
+//   years: its tree steps in twelfths of a year and takes no other date, so a typed date falls back to the nearest
+//   tenor.
+// - `shiftDays`: the days from the valuation date to the expiry (from the trade's own date on a booked trade),
+//   which is how far after the spot-starting swap of PRIMARY ECONOMICS the delivered swap starts.
+// - `expired`: the expiry is not after the valuation date. On a new ticket that is a `problem`, said in words: the
+//   request and the booking refuse it (a date typed in the past priced a one-day option and booked it). A booked
+//   option past its expiry is the swap it delivered: the ticket shows the booked legs' value, not an option's.
 export function swaptionExpiry(state = {}) {
   const val = isIso(state.valDate) ? state.valDate : null
   const anchor = state.readOnly && isIso(state.tradeDate) ? state.tradeDate : val
@@ -80,16 +84,22 @@ export function swaptionExpiry(state = {}) {
   let date = null, rolledFrom = null
   if (booked || typed) date = state.expiryDate
   else if (anchor) { const raw = addMonthsIso(anchor, Math.round(EXPIRY_Y[tenor] * 12)); date = offWeekend(raw); if (date !== raw) rolledFrom = raw }
+  const rolledWhy = rolledFrom ? (new Date(rolledFrom + 'T00:00:00Z').getUTCDay() === 6 ? 'Saturday' : 'Sunday') : null
   const shiftDays = date && anchor ? Math.max(daysBetween(anchor, date), 0) : Math.round(EXPIRY_Y[tenor || SWAPTION_DEFAULTS.expiry] * 365.25)
+  const expired = !!(date && val && daysBetween(val, date) <= 0)
   const left = date && val ? daysBetween(val, date) / 365 : EXPIRY_Y[tenor || SWAPTION_DEFAULTS.expiry]
   const years = bermudan ? EXPIRY_Y[tenor] : Math.max(left, 1 / 365)
-  return { tenor: typed ? null : tenor, date, custom: typed, rolledFrom, years, shiftDays }
+  const problem = expired && !state.readOnly ? `The expiry ${date} is not after the valuation date ${val}: type a later date or choose a tenor.` : null
+  return { tenor: typed ? null : tenor, date, custom: typed, rolledFrom, rolledWhy, years, shiftDays, expired, problem }
 }
 // The swap a swaption delivers into: { start, end }. It starts `shiftDays` after the spot-starting swap of PRIMARY
 // ECONOMICS and runs that swap's tenor by the calendar. (Both dates used to be moved by the same count of days, which
 // made a five-year swap a day short whenever a leap day fell inside it: a 1Y5Y struck on 18 November 2026 ended on
-// 19 November 2032.) A booked trade (state.readOnly) keeps the dates its legs were booked with, by that older rule.
+// 19 November 2032.) A booked trade (state.readOnly) shows the dates its own legs carry (state.underStart and
+// underEnd, read from the fixed leg: TradeWindow.viewProductState), whichever rule booked them; without its legs,
+// the older rule, which every trade booked before 0.56.0 followed.
 export function swaptionUnderlying(state = {}) {
+  if (state.readOnly && isIso(state.underStart) && isIso(state.underEnd)) return { start: state.underStart, end: state.underEnd }
   if (!isIso(state.effDate) || !isIso(state.matDate)) return { start: null, end: null }
   const { shiftDays } = swaptionExpiry(state)
   const start = addDays(state.effDate, shiftDays)

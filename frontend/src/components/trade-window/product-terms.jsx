@@ -537,10 +537,12 @@ export function SwaptionTermsBody({ state, update }) {
         </Field>
         <Field label="EXPIRY DATE">
           {/* a date typed here is the expiry, whatever tenor it is nearest; a Bermudan's tree takes whole tenors only */}
-          <input type="date" className="tbw-mono" value={ex.date || ''} disabled={locked || bermudan} data-testid="swaption-expiry-date"
+          <input type="date" value={ex.date || ''} disabled={locked || bermudan} data-testid="swaption-expiry-date"
                  min={state.valDate ? addDays(state.valDate, 1) : undefined}
                  title={bermudan ? 'A Bermudan is priced on a tree that steps in twelfths of a year: choose a tenor' : undefined}
                  onChange={e => { if (e.target.value) update({ expiry: EXPIRY_DATE, expiryDate: e.target.value }) }} />
+          {ex.rolledFrom && <div className="tbw-fx-limit" data-testid="swaption-expiry-rolled">rolled from {ex.rolledFrom} ({ex.rolledWhy})</div>}
+          {ex.problem && <div className="tbw-fx-limit" data-testid="swaption-expiry-problem" style={{ color: 'var(--amber)' }}>not after the valuation date</div>}
         </Field>
         <Field label="NORMAL VOL (bp)">
           <input className="tbw-mono tbw-blue" value={volBp}
@@ -552,10 +554,9 @@ export function SwaptionTermsBody({ state, update }) {
         </Field>
       </Row>
       {/* what the dates above come to: the swap the option delivers into is not the spot-starting one of PRIMARY ECONOMICS */}
-      {starts && ends && (
-        <div className="tbw-terms-footer" data-testid="swaption-underlying" style={{ marginTop: -4, marginBottom: 10 }}>
-          Exercise into the swap from {starts} to {ends}
-          {ex.rolledFrom ? ` · the expiry is rolled from ${ex.rolledFrom}, a weekend` : ''}
+      {starts && ends && !ex.problem && (
+        <div className="tbw-terms-note" data-testid="swaption-underlying">
+          Exercise into the swap from <span className="tbw-mono">{starts}</span> to <span className="tbw-mono">{ends}</span>
           {bermudan ? ' · Bermudan: a tenor only, exercisable yearly to the expiry' : ''}
         </div>
       )}

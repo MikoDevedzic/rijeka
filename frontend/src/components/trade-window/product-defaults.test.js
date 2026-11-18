@@ -21,7 +21,7 @@ describe('a swaption\'s expiry on the ticket', () => {
 
   it('a tenor that lands on a weekend is rolled, and says from where; the month is not left', () => {
     // 18 December 2027 is a Saturday: the Monday after
-    expect(swaptionExpiry({ ...NEW, valDate: '2026-12-18', expiry: '1Y' })).toMatchObject({ date: '2027-12-20', rolledFrom: '2027-12-18' })
+    expect(swaptionExpiry({ ...NEW, valDate: '2026-12-18', expiry: '1Y' })).toMatchObject({ date: '2027-12-20', rolledFrom: '2027-12-18', rolledWhy: 'Saturday' })
     // 31 July 2027 is a Saturday and the Monday after is in August: the Friday before
     expect(offWeekend('2027-07-31')).toBe('2027-07-30')
     expect(offWeekend('2027-08-01')).toBe('2027-08-02')                // a Sunday
@@ -48,10 +48,21 @@ describe('a swaption\'s expiry on the ticket', () => {
     const seen = swaptionExpiry({ readOnly: true, tradeDate: '2026-11-02', valDate: '2027-05-18', expiry: '1Y', expiryDate: '2027-11-02', structure: 'EUROPEAN' })
     expect(seen).toMatchObject({ tenor: '1Y', date: '2027-11-02', custom: false, shiftDays: 365 })                // the legs stay where they were booked
     expect(seen.years).toBeCloseTo(daysBetween('2027-05-18', '2027-11-02') / 365, 12)                          // 168 days, not a year
-    // past its expiry the time is a day, never zero or less: the request stays one the pricer answers
-    expect(swaptionExpiry({ readOnly: true, tradeDate: '2026-11-02', valDate: '2028-01-10', expiry: '1Y', expiryDate: '2027-11-02' }).years).toBeCloseTo(1 / 365, 12)
+    expect(seen).toMatchObject({ expired: false, problem: null })
+    // past its expiry it is the swap it delivered: flagged, so the ticket prices no option; not a problem to refuse
+    expect(swaptionExpiry({ readOnly: true, tradeDate: '2026-11-02', valDate: '2028-01-10', expiry: '1Y', expiryDate: '2027-11-02' })).toMatchObject({ expired: true, problem: null })
     // booked on a typed date
     expect(swaptionExpiry({ readOnly: true, tradeDate: '2026-11-18', valDate: '2026-11-18', expiry: EXPIRY_DATE, expiryDate: '2027-03-15' })).toMatchObject({ tenor: null, custom: true, date: '2027-03-15', shiftDays: 117 })
+  })
+
+  it('a new ticket refuses an expiry that is not after the valuation date, in words', () => {
+    for (const d of ['2026-10-01', '2026-11-18']) {
+      const ex = swaptionExpiry({ ...NEW, expiry: EXPIRY_DATE, expiryDate: d })
+      expect(ex.expired).toBe(true)
+      expect(ex.problem).toBe(`The expiry ${d} is not after the valuation date 2026-11-18: type a later date or choose a tenor.`)
+    }
+    expect(swaptionExpiry({ ...NEW, expiry: EXPIRY_DATE, expiryDate: '2026-11-19' })).toMatchObject({ expired: false, problem: null })
+    expect(swaptionExpiry({ ...NEW, expiry: '1M' }).problem).toBeNull()
   })
 
   it('with no valuation date yet it answers the tenor\'s own figures and no date', () => {
@@ -63,8 +74,12 @@ describe('a swaption\'s expiry on the ticket', () => {
     // 1Y on 18 November 2026: 365 days on. Both dates moved by 365 days gave an end of 19 November 2032 (a leap day inside)
     expect(swaptionUnderlying({ ...NEW, ...spot, expiry: '1Y' })).toEqual({ start: '2027-11-20', end: '2032-11-20' })
     expect(swaptionUnderlying({ ...NEW, ...spot, expiry: EXPIRY_DATE, expiryDate: '2027-03-15' })).toEqual({ start: '2027-03-17', end: '2032-03-17' })
-    // a booked trade keeps the dates its legs carry, by the rule of its day
-    expect(swaptionUnderlying({ readOnly: true, tradeDate: '2026-11-18', valDate: '2027-01-05', ...spot, expiry: '1Y', expiryDate: '2027-11-18' })).toEqual({ start: '2027-11-20', end: '2032-11-19' })
+    // a booked trade shows the dates its own legs carry, whichever rule booked them
+    const bookedTrade = { readOnly: true, tradeDate: '2026-11-18', valDate: '2027-01-05', ...spot, expiry: '1Y', expiryDate: '2027-11-18' }
+    expect(swaptionUnderlying({ ...bookedTrade, underStart: '2027-11-20', underEnd: '2032-11-20' })).toEqual({ start: '2027-11-20', end: '2032-11-20' })   // booked since 0.56.0
+    expect(swaptionUnderlying({ ...bookedTrade, underStart: '2027-11-20', underEnd: '2032-11-19' })).toEqual({ start: '2027-11-20', end: '2032-11-19' })   // booked before it
+    // its legs not at hand: the older rule, which every earlier booking followed
+    expect(swaptionUnderlying(bookedTrade)).toEqual({ start: '2027-11-20', end: '2032-11-19' })
     expect(swaptionUnderlying({ ...NEW, expiry: '1Y' })).toEqual({ start: null, end: null })          // the schedule dates have not arrived
   })
 })

@@ -235,6 +235,10 @@
   font-weight: 500;
 }
 
+/* a line under a row of terms that says what the row comes to (a swaption's delivered swap): a terms note set close
+   under its row */
+.tbw-terms-note { font-size: 12px; color: var(--text-mute); letter-spacing: 0.05em; margin: -4px 0 10px; }
+
 .tbw-helper-text,
 .tbw-terms-footer,
 .tbw-mut {
