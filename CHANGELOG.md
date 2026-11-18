@@ -1,7 +1,39 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.37). Commits on `main` are the detail.
+methodology document carries its own version (v1.38). Commits on `main` are the detail.
+
+## 0.55.0 · 18 November 2026
+
+**The hosted demo's interest-rate market is synthetic.** The methodology is v1.38. Every rates figure of the demo
+changes once, with the market it is valued on; no formula changes.
+
+- **Why.** The demo built each overnight curve from a published fixing and government yields. The firm holds no
+  licence for any benchmark, and the administrators of some require one to build a curve from or to value with. So
+  the demo reads none: no fixing, no yield, no quote of any publisher, for any currency.
+- **What it prices on now.** One stated generator (`backend/market_data/synthetic_rates.py`): a parametric curve per
+  currency with hand-set levels of 17 November 2026, moved each business day by level, slope and curvature factors
+  drawn from a seeded hash. A curve is a pure function of the currency and the date, so today's quotes, each day's
+  overnight fixing and the history that VaR and the exposure calibration read all come from the one function and
+  agree. The whole recipe is in the methodology and on the public endpoint `GET /api/market-data/demo/sources`.
+- **What it says about itself.** The screens, the public sources list, the README and the methodology call the
+  rates market synthetic. The curve ids keep the names of the conventions each is bootstrapped with. Tickers beside
+  the quotes are labels for a desk that connects its own feed.
+- **The default quotes on the curves page** (about 470, shown before the API answers) were typed in during March
+  and their origin was not written down. They are now made by a script from the same recipe
+  (`backend/scripts/synthetic_rates_defaults.py`, which also checks the file).
+- **What changes for a demo account.** Curves, prices, sensitivities and adjustments on rates move to the new
+  market. The stored rates history is replaced by the generator's when the history is next rebuilt (Risk →
+  settings), so past days' values and VaR change once. Rates volatilities were already synthetic. Currency and
+  digital-asset spots, digital-asset option marks and the Federal Reserve's published projections are unchanged.
+- **The pinned sample book** is valued on the new market: 67 of its 87 figures move (the swap paying 3.75 % is worth
+  54,038 where it was −123,655, because the synthetic five-year rate stands 39 bp higher); the 20 that do not read
+  no rates curve.
+
+Not done, and said: the generator's moves are Gaussian with no jumps and no meeting dates, so VaR, the backtest and
+exposure on rates describe the generator and not any market's tail; the implied policy path on the home page is
+read from the synthetic curve; measurements quoted in the methodology before v1.38 were taken on the earlier test
+market and are dated; a self-hosted desk connects its own market data and none of this applies to it.
 
 ## 0.54.2 · 17 November 2026
 

@@ -162,21 +162,17 @@ The names on screen: `IR01 DISC` is the key `IR01_DISC`; `SPOT01` in the limits 
 
 The home page carries **the week ahead**: central bank decisions and the releases a rates desk waits for (CPI, payrolls, GDP, unemployment) across USD, EUR, GBP, CHF and JPY, plus UST coupon auctions, with the last print and, once out, the actual and the surprise against it. Dates come from the agencies' published schedules (central banks, BLS, BEA, Japan's Statistics Bureau), the ONS API for the UK, and the usual slot, flagged, where a calendar is not machine-readable (euro area, Switzerland); actuals from BLS, ONS, Eurostat and the SNB, all keyless. There is no consensus column, because survey medians are a terminal product. `backend/market_data/calendar.py`, `GET /api/public/calendar`.
 
-The hosted demo prices on **demo market data rebuilt daily from public sources**, never on terminal data (Bloomberg data is licensed to a seat and cannot be redistributed). Every snapshot is stamped with its provenance and the app says so on the home page.
+The hosted demo prices on **demo market data that is made or public, never on terminal data** (a vendor's data is licensed to a seat and cannot be redistributed) **and never on a licensed benchmark**. Every snapshot is stamped with its provenance and the app says so on the home page.
 
-| Curve | Built from | Indicative assumption |
-|-------|-----------|------------------------|
-| USD SOFR OIS | NY Fed SOFR fixing + US Treasury daily par yield curve | SOFR-OIS below Treasuries: −12 bp at 1M to −70 bp at 30Y |
-| EUR €STR OIS | ECB €STR fixing + ECB euro-area AAA government par curve | swaps above AAA: +10 bp at 3M to +35 bp at 20Y+ |
-| GBP SONIA OIS | Bank of England SONIA fixing + gilt par yields (5Y, 10Y, 20Y) | SONIA-OIS below gilts: −15 bp at 1Y to −75 bp at 30Y |
-| CHF SARON | SNB SARON monthly average | flat at the fixing: the SNB's Confederation-bond cubes stopped in mid-2025 and no other free CHF curve exists |
-| JPY TONA OIS | TONA (end of month, via the SNB money-market cube) + Japan MoF daily JGB yields | TONA-OIS below JGBs: −5 bp at 1Y to −45 bp at 30Y |
+| Curve | Built from | Assumption |
+|-------|-----------|------------|
+| USD, EUR, GBP, CHF and JPY overnight curves (`USD_SOFR`, `EUR_ESTR`, `GBP_SONIA`, `CHF_SARON`, `JPY_TONAR`) | **synthetic**: one stated generator, `backend/market_data/synthetic_rates.py`. No published fixing, yield or quote is read | a parametric curve per currency with hand-set levels (17 November 2026), moved each business day by level, slope and curvature factors drawn from a seeded hash; today's curve, each day's overnight fixing and the history all come from the one function. The ids name the conventions each curve is bootstrapped with |
 | BTC, ETH, SOL option vols and forwards | Deribit's public option marks, every 10 minutes: ATM, 25Δ risk reversal and butterfly per tenor; the forward of each listed expiry | read at 25 and 50 forward delta per expiry; ATM variance-linear and the skew time-linear onto ten tenors, flat beyond the last listed expiry; a three-point smile, so strikes outside 25 delta are an extrapolation (2 to 3 vol points low at 10 delta on test smiles) and a listed expiry between tenors can be up to a point off; the time of the marks is on every ticket |
 | BTC, ETH, SOL fixings | Deribit's daily delivery price at 08:00 UTC, stored once a day and never overwritten; a desk's own entry for a licensed benchmark | a cash-settled trade settles on the fixing of the source its record names and on no other; until that fixing is stored its value is on the stored spot and marked provisional |
 | Currency NDF fixings | none stored by a feed: a desk's own entry for the benchmark it is licensed for (Market data, the pair's Fixings tab) | a currency NDF settles on the fixing of the source its record names; until that fixing is stored its amount is on the stored spot of the fixing date and marked provisional |
 | Swaption ATM vols, skew, cap vols, G10 FX vols | **synthetic** parametric surface | not market; shaped like one so SABR, XVA and scenarios work |
 
-The spread schedules live in one place, `backend/market_data/demo_feed.py`, and the tick that rebuilds the set (`POST /api/market-data/demo/tick`) runs from the scheduled workflow. `GET /api/market-data/demo/sources` is public and lists the providers, the assumptions and the latest date per curve. A self-hosted instance turns the tick off with `RIJEKA_DEMO_MARKET_DATA=0` and runs on its own marks or its own Bloomberg seat (`pricing/bloomberg_client.py`, tickers already mapped).
+The generator lives in one place, `backend/market_data/synthetic_rates.py`, and the tick that writes each day's set (`POST /api/market-data/demo/tick`) runs from the scheduler. `GET /api/market-data/demo/sources` is public and lists what the demo prices on, with the generator's whole recipe. A self-hosted desk connects its own market data.
 
 ---
 

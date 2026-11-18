@@ -307,3 +307,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   measurement is not a measurement of this: 0.54.0's first documents said a weekly averaged reading was "0.04 %"
   off (one simulation; the closed form says 0.2 %) and a two-year forward "about 1 %" high (a ticket-against-set
   figure; the closed form says 2.9 %). The model validator's own script found both.
+- A helper given a tree to edit is told which files are its own and that it creates, links, installs or deletes
+  nothing else, and when it returns the tree's status and its dependency folders are looked at before anything is
+  run: one left a link inside the worktree's dependencies to the main checkout's, and the next journey run loaded
+  two copies of the runner and did not start.
