@@ -331,4 +331,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - A default a screen shows is an input of the model and has a source that is said: a constant typed into a
   component (a swaption's 86.5 bp) is found by reading where each field's first value comes from, and a row of a
   proxy list marked "not checked" is a debt with a date, not a note.
+- A screen does not send back as the user's own a number it only displayed: 0.57.0's first ticket sent the vol
+  its field showed, which for a moment after the expiry changed was the previous option's, and the engine took it
+  as typed. What the user did not type is asked of the engine by leaving it out.
 
