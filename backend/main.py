@@ -90,10 +90,14 @@ class _UnhandledToJson:
 
 
 app.add_middleware(_UnhandledToJson)
+# How much one request may send (middleware/body_limit.py): refused before a route reads it. Inside CORS, so the
+# browser reads the refusal; outside the activity count's own work on the body-less answer.
+from middleware.body_limit import BodyLimit  # noqa: E402
 # What each account does, by day (activity/): counted after the response, outside every route. Added after the
 # handler above so that it sees the status that handler answers with; CORS, added next, wraps both.
 from activity.recorder import ActivityRecorder  # noqa: E402
 app.add_middleware(ActivityRecorder)
+app.add_middleware(BodyLimit)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=sorted({
