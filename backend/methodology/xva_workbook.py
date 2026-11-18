@@ -128,6 +128,18 @@ def the_trade(val: date):
     return item, ns.months
 
 
+def waterfall_for(eng: dict, csa_request: dict, **inputs):
+    """(csa, result): the engine's waterfall on the book's paths under any CSA and any of the waterfall's inputs
+    (capital_model, wwr_multiplier, cp_cds_bp, ...), called as the ticket's route calls it. The three presets on the
+    Engine sheet are three of these; scripts/check_workbook.py calls it with typed terms to check the cells a reader
+    can type into."""
+    from dataclasses import replace
+    csa = CSA.from_request(csa_request)
+    params = replace(eng["params"], **inputs) if inputs else eng["params"]
+    return csa, run_waterfall(eng["V"][:, 1:], eng["v0"], eng["p0_grid"], params, csa,
+                              settled=eng["paid"] if csa.collateralised else None, deflator=eng["w"])
+
+
 def engine_runs(mkt, fit: dict, n_paths: int = N_PATHS) -> dict:
     """The ticket's own run (api/routes/xva._trade_paths) on the workbook's trade, and the waterfall under each preset."""
     from ccr import calibration as C
@@ -159,11 +171,9 @@ def engine_runs(mkt, fit: dict, n_paths: int = N_PATHS) -> dict:
     v0 = float(V[:, 0].mean())
     maturity_y = max(years(val, item["maturity"]), dt)
     params = WaterfallParams(notional=NOTIONAL, maturity_y=maturity_y, dt=dt, theta=fit["theta"])
-    runs = {}
-    for preset in PRESETS:
-        csa = CSA.from_request({"preset": preset})
-        runs[preset] = (csa, run_waterfall(V[:, 1:], v0, p0_grid, params, csa, settled=paid if csa.collateralised else None, deflator=w))
-    return {"n": n_paths, "item": item, "p": p, "key": key, "a": a, "sig": sig, "T": T, "dt": dt, "V": V, "v0": v0, "flows": fl, "paid": paid, "w": w,
+    eng = {"V": V, "v0": v0, "p0_grid": p0_grid, "paid": paid, "w": w, "params": params}
+    runs = {preset: waterfall_for(eng, {"preset": preset}) for preset in PRESETS}
+    return {"params": params, "n": n_paths, "item": item, "p": p, "key": key, "a": a, "sig": sig, "T": T, "dt": dt, "V": V, "v0": v0, "flows": fl, "paid": paid, "w": w,
             "z": z, "x": x, "A": account(p, key), "p0_grid": p0_grid, "maturity_y": maturity_y, "runs": runs, "sim": SimpleNamespace(z=z)}
 
 
@@ -207,7 +217,7 @@ def _model_sheet(wb, mkt, fit, eng):
     rows = [("Mean reversion a", eng["a"], "0.000000", True), ("σ (short-rate vol, decimal)", eng["sig"], "0.000000", True),
             ("Δ: the mean step in years (the waterfall's one step length)", f"=C{GRID_R0 + T}/Nsteps", "0.00000000", False),
             ("Steps T (monthly dates to the first on or after the maturity)", T, "0", False), ("Notional", NOTIONAL, "#,##0", True), ("Fixed rate K", FIXED_RATE, "0.0000%", True),
-            ("Side of the fixed leg (PAY = −1, RECEIVE = +1)", -1 if DIRECTION == "PAY" else 1, "0", True), ("Paths", eng["n"], "0", False),
+            ("Paths", eng["n"], "0", False),
             ("Mode (ENGINE: the engine's draws; LIVE: Excel re-rolls)", "ENGINE", "@", True),
             ("σ²/(2a²)", "=HW_sig^2/(2*HW_a^2)", "0.00000000", False), ("σ²/(4a)", "=HW_sig^2/(4*HW_a)", "0.00000000", False),
             ("Maturity in years: (maturity date − valuation date)/365.25", "=(Trade!B5-ValDate)/365.25", "0.000000", False)]
@@ -218,9 +228,9 @@ def _model_sheet(wb, mkt, fit, eng):
             c.fill = W.FILL_IN
         if label.startswith(("Mean reversion", "σ (short")):
             c.fill = W.FILL_RJ
-    W.dropdown(ws, "B12", ["ENGINE", "LIVE"])
+    W.dropdown(ws, "B11", ["ENGINE", "LIVE"])
     _names(wb, {"HW_a": "Model!B4", "HW_sig": "Model!B5", "Dt": "Model!B6", "Nsteps": "Model!B7", "Notl": "Model!B8", "Kfix": "Model!B9",
-                "Sgn": "Model!B10", "Npaths": "Model!B11", "Mode": "Model!B12", "SigA2": "Model!B13", "SigA4": "Model!B14", "Mat": "Model!B15"})
+                "Npaths": "Model!B10", "Mode": "Model!B11", "SigA2": "Model!B12", "SigA4": "Model!B13", "Mat": "Model!B14"})
     ws.cell(row=GRID_R0 - 2, column=1, value="THE GRID").font = W.F_SECTION
     W.header(ws, GRID_R0 - 1, ["k", "date: valuation date + k months (a value)", "t = days/365.25", "Δ_k = t_k − t_(k−1)", "P(0,t) from the curve", "e^(−aΔ_k)",
                                "σ·√((1 − e^(−2aΔ_k))/2a)", "φ(t) = σ²/2a²·(1 − e^(−at))²", "1 − e^(−2at)"])
@@ -246,6 +256,7 @@ def _trade_sheet(wb, eng):
     item, val = eng["item"], eng["p"].grid[0]
     ws = wb.create_sheet("Trade")
     ws["A1"] = "THE TRADE AS A TICKET WOULD BOOK IT"; ws["A1"].font = W.F_TITLE
+    ws["D4"] = "The book is of this trade, pay or receive as column B below says: the Engine sheet's figures are this trade's, so the side is not an input."; ws["D4"].font = W.F_SUB
     ws["A2"] = ("From spot, both legs yearly, ACT/360, modified following; the floating leg pays the overnight rate compounded over each period. The dates are the "
                 "production schedule generator's (values); every amount below them is a formula."); ws["A2"].font = W.F_SUB
     ws["A4"] = "Effective date"; c = ws["B4"]; c.value = item["effective"]; c.number_format = "yyyy-mm-dd"; c.fill = W.FILL_RJ
@@ -581,7 +592,7 @@ def _exposure_sheet(wb, eng, B, nrows):
     dvb = _block(ws, top, n, T, lambda q, j, r, c: (f"={whole(q, c)}-V0" if j == 1 else f"={whole(q, c)}-{whole(q, c - 1)}"), "#,##0",
                  "Δ whole: the step's change in the value with its payments still in it, (V + PAID)(t_k) − (V + PAID)(t_(k−1))")
     top = dvb[1] + 3
-    lagb = _block(ws, top, n, T, lambda q, j, r, c: (f"=IF(Coll=1,{'V0' if j == 1 else whole(q, c - 1)}+Wlag*{L(c)}{dvb[0] + q}+Normals!{L(c)}{n0 + q}*SQRT(Wlag*(1-Wlag)*$C${rs + j})-{PAID(q, c)},{V(q, c)})"),
+    lagb = _block(ws, top, n, T, lambda q, j, r, c: (f"=IF(Coll=1,{'V0' if j == 1 else whole(q, c - 1)}+Wlag*{L(c)}{dvb[0] + q}+IF(Mode=\"ENGINE\",Normals!{L(c)}{n0 + q},NORMSINV(RAND()))*SQRT(Wlag*(1-Wlag)*$C${rs + j})-{PAID(q, c)},{V(q, c)})"),
                   "#,##0", "V(t − δ): lo + w·Δ + N·√(w(1−w)·s²) on the whole value (the Brownian bridge; LIVE mode re-rolls N too), less the cash paid by t")
     top = lagb[1] + 3
     mvb = _block(ws, top, n, T, lambda q, j, r, c: f"={V(q, c)}-{L(c)}{lagb[0] + q}", "#,##0",
@@ -823,7 +834,7 @@ def xva_rates_workbook(mkt, n_paths: int = N_PATHS):
         ("IM₀", f"Waterfall!B{rt + 10}", "#,##0.00", "the margin we post at the first date: the engine's own estimate, not an industry margin model"),
         ("PEAK EE", f"Waterfall!B{rt + 11}", "#,##0.00", ""), ("PEAK PFE 95%", f"Waterfall!B{rt + 12}", "#,##0.00", "")])
     W.ticket(wb, "MODEL AND CSA", [("a", "Model!B4", "0.0000", "mean reversion"), ("σ", "Model!B5", "0.0000%", "short-rate vol"), ("RMSE OF THE FIT", f"Calibration!B{cal['rs'] + 1}", "0.00", "bp"),
-                                   ("CSA PRESET", "Exposure!B4", "@", ""), ("MPoR", "Exposure!B9", "0", "business days"), ("MODE", "Model!B12", "@", "ENGINE or LIVE")])
+                                   ("CSA PRESET", "Exposure!B4", "@", ""), ("MPoR", "Exposure!B9", "0", "business days"), ("MODE", "Model!B11", "@", "ENGINE or LIVE")])
     xb, vb = B["X"], B["V"]
     for sym, notn, ref, note, fmt in [
         ("the grid", "valuation date + k months; t = days/365.25; Δ_k = t_k − t_(k−1)", f"Model!C{GRID_R0 + 1}", "the first date's time", "0.000000"),

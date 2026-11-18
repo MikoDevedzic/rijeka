@@ -18,18 +18,27 @@ methodology document carries its own version (v1.41). Commits on `main` are the 
   ended and unpaid, running with its accrued interest, or not begun); the cash paid; each path's discounting over
   the curve's; the value a margin period back, drawn on the value with its payments still in it; collateral,
   exposure and margin; then CVA, DVA, FCA and FBA on the path-discounted exposure, capital and margin funding.
-- **Two ties, both tested.** The book's cells reproduce the engine's figures on the same draws to better than one
-  part in ten thousand million, under each CSA preset, on five valuation dates (a weekend roll, a month-end, a leap
-  day, a year-end) and a sloped curve: evaluated outside Excel by `backend/scripts/check_workbook.py`. And the
-  engine's figures the book carries are the ticket's: `POST /api/xva/simulate` for the same trade, parameters,
-  paths and seed answers the same CVA, DVA, FCA, FBA, KVA, MVA and exposure at every date, to the cent.
+- **Three ties.** The book's cells against the engine's figures on the same draws, evaluated outside Excel by
+  `backend/scripts/check_workbook.py`: over a hundred comparisons under each CSA preset, on five valuation dates (a
+  weekend's roll, a year-end, a month-end, a leap day among them) and at the book's own 200 paths, the largest
+  relative difference 2e-10. The same with terms typed into the sheet (thresholds, a minimum transfer amount, a
+  margin yield, margin carries, a wrong-way multiplier, each capital model) against the engine under the same
+  terms: the presets have none of these, so nothing compared those cells before. And the engine's figures the book
+  carries against the ticket's route: `POST /api/xva/simulate` for the same trade, parameters, paths and seed
+  answers the same CVA, DVA, FCA, FBA, KVA, MVA and exposure at every date, to the cent.
+- **The model validator recomputed it.** With code of its own and none of the engine's: the value on every path
+  and date, the discounting weights, and CVA, DVA, FCA and FBA, to twelve digits, on four cases.
 - **Found building it.** The first draft passed the settled cash to the waterfall with the wrong sign; its own
   cells agreed with it. The comparison with the ticket's route is what showed it, and is now a test.
-- **What it does not cover.** One trade and its default credit and funding inputs (typed over on the Waterfall
-  sheet). A swaption on the paths, a seasoned trade, fees and wrong-way risk are not in the book. The evaluation
-  outside Excel needs a library the project does not require, so in CI that one test is skipped and the tie to the
-  route runs; it runs on a developer's machine and from the script.
-- **Size.** About 76,000 formula cells at 200 paths, 0.8 MB (the earlier book was about 60,000).
+- **What it does not cover.** One trade (pay fixed). A swaption on the paths, a seasoned trade, fees and wrong-way
+  risk on a path are not in the book; a margin period longer than a grid step is not either, and the sheet says so.
+  The tie to the route is on the book's own inputs: an account whose ticket runs on another day's curve or other
+  parameters is not compared. The evaluation outside Excel needs a library the project does not require, so in CI
+  those tests are skipped and the tie to the route runs; they run on a developer's machine and from the script.
+  The book has not been opened in Excel itself by its builder.
+- **Two reviews before it shipped changed it.** LIVE mode re-rolls the margin-period draws as the sheet said it
+  did; an input on the Model sheet that no formula read is gone; the cells a reader types into have a check.
+- **Size.** About 76,000 formula cells at 200 paths, 0.9 MB (the earlier book was about 60,000).
 
 ## 0.57.1 · 18 November 2026
 

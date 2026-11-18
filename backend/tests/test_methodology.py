@@ -301,7 +301,23 @@ def test_xva_rates_workbook_formulas_reproduce_the_engine_under_every_preset():
         assert len(res) > 90
         bad = [(x["label"], x["rel"]) for x in res if not x["ok"]]
         assert not bad, (preset, bad[:5])
-        assert max(x["rel"] for x in res) < 1e-8, preset
+        # the documents say the cells agree with the engine within 1e-10 (the worst seen is 5e-11): held near there, so a
+        # drift of the kind the Checks sheet's own looser tolerances would let through fails here
+        assert max(x["rel"] for x in res) < 1e-9, preset
+
+
+def test_xva_rates_workbook_cells_a_reader_types_into_follow_the_engine():
+    """The presets have no threshold, no minimum transfer amount, no margin yield or carry, SA-CCR and no wrong-way
+    multiplier: with only them checked, a wrong sign in ColVA and a threshold wired to the wrong party passed every
+    check (the model validator, 18 November 2026). The terms are typed into the sheet and the result is compared
+    with the engine's waterfall under the same terms, for each capital model."""
+    pytest.importorskip("pycel")
+    from scripts.check_workbook import test_market, typed_terms
+    res = typed_terms(test_market(), 12)
+    assert len(res) > 200 and not [(x["label"], x["rel"]) for x in res if not x["ok"]]
+    got = {x["label"]: x["engine"] for x in res}
+    assert abs(got["SA_CCR: ColVA"]) > 1.0                                                   # a carry on the margin: no longer nought against nought
+    assert got["CEM: KVA"] != got["SA_CCR: KVA"] != got["IMM: KVA"]                          # each capital model is its own figure
 
 
 def test_xva_fx_workbooks_carry_the_engine_draws_and_a_live_mode():
