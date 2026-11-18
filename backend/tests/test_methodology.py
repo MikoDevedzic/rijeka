@@ -248,25 +248,60 @@ def test_option_workbooks_carry_a_scenario_chart_and_a_call_put_dropdown():
         assert any(dv.formula1 == '"1,-1"' for dv in wb["European"].data_validations.dataValidation)
 
 
-def test_xva_rates_workbook_carries_the_engine_draws_and_a_live_mode():
-    from methodology.xva_workbook import N_PATHS, engine_runs, hw1f_fit
+def test_xva_rates_workbook_is_the_tickets_own_run_with_the_engine_draws_and_a_live_mode():
+    """0.58.0: the book replicates what a rates ticket's XVA tab runs (the trade's own schedule on the credit engine's
+    paths, the exposure discounted on its path), not the generic swap it ran before 0.52.0."""
+    from methodology.xva_workbook import N_PATHS, engine_runs, hw1f_fit, the_trade
     mkt = _mkt()
     fit = hw1f_fit(mkt)
     assert 0 < fit["a"] < 1 and 5 < fit["sigma_bp"] < 150 and fit["basket"]
-    eng = engine_runs(mkt, fit)
-    assert eng["sim"].z.shape == (N_PATHS, eng["T"]) and abs(eng["sim"].z.mean()) < 0.1
+    # the trade is the ticket's: taken through the booking body and the production schedule generator, with no database
+    item, months = the_trade(mkt.valuation_date)
+    fixed = next(s for lg, s in item["legs"] if lg["leg_type"] == "FIXED")
+    assert item["kind"] == "SWAP" and len(fixed) == 2 and months == 25                       # two yearly coupons from spot; monthly dates past the maturity
+    assert fixed[0][0] == date(2026, 8, 5) and fixed[1][2] == date(2028, 8, 7)                # spot; the last payment rolled off a Saturday
+    eng = engine_runs(mkt, fit, 40)
+    assert eng["z"].shape == (40, eng["T"]) and eng["V"].shape == (40, eng["T"] + 1) and eng["w"].shape == (40, eng["T"])
+    assert eng["w"].mean(axis=0) == pytest.approx(1.0, abs=1e-12)                             # each date's discounting weights average one
     assert set(eng["runs"]) == {"UNCOLLATERALISED", "BILATERAL", "ON_CHAIN"}
+    assert all(wf.discounted_on_path for _, wf in eng["runs"].values())
     assert eng["runs"]["ON_CHAIN"][1].cva > eng["runs"]["UNCOLLATERALISED"][1].cva            # margining cuts the cost (less negative)
+    # what has settled is the cash paid to us by each date: a fixed coupon we paid is in it with a minus (the sign the ticket's route passes)
+    step = next(i for i in range(eng["flows"].shape[1]) if eng["flows"][0, i] != 0)
+    assert eng["paid"][0, step - 1] == pytest.approx(-eng["flows"][0, step])
     data, total = rep.build("xva_rates", mkt)
     wb = load_workbook(io.BytesIO(data))
-    for s_ in ("Model", "Calibration", "Bonds", "Normals", "Paths", "Exposure", "Waterfall", "Engine", "Convergence", "Checks"):
+    for s_ in ("Model", "Trade", "Calibration", "Bonds", "Normals", "Paths", "Exposure", "Waterfall", "Engine", "Convergence", "Checks"):
         assert s_ in wb.sheetnames
     assert any(dv.formula1 == '"ENGINE,LIVE"' for dv in wb["Model"].data_validations.dataValidation)
-    assert wb["Normals"]["B6"].value == pytest.approx(float(eng["sim"].z[0, 0]))                  # the engine's first draw, as a value
-    z = wb["Paths"]["B6"].value
-    assert z.startswith('=IF(Mode="ENGINE",Normals!B6,NORMSINV(RAND()))')
+    full = engine_runs(mkt, fit)
+    assert wb["Normals"]["B6"].value == pytest.approx(float(full["z"][0, 0]))                    # the engine's first draw, as a value
+    assert wb["Paths"]["B6"].value.startswith('=IF(Mode="ENGINE",Normals!B6,NORMSINV(RAND()))')
     assert any("LIVE" in str(c.value) for row in wb["Checks"].iter_rows(min_row=5, min_col=8, max_col=8) for c in row)
-    assert len(wb["Convergence"]._charts) == 1 and total == pytest.approx(eng["runs"]["BILATERAL"][1].xva_total)
+    assert len(wb["Convergence"]._charts) == 1 and total == pytest.approx(full["runs"]["BILATERAL"][1].xva_total)
+    assert full["n"] == N_PATHS
+    # the value's formula on a path names the trade's own coupons and its floating periods, not an annuity of monthly legs
+    v = next(c.value for row in wb["Paths"].iter_rows() for c in row if isinstance(c.value, str) and "Notl*Kfix*Trade!" in c.value)
+    assert "Trade!$F$" in v and "-1)" not in v.split("Kfix")[0]
+
+
+def test_xva_rates_workbook_formulas_reproduce_the_engine_under_every_preset():
+    """Every row of the Checks sheet (the value today, figures on single paths, each EE, ENE and PFE, each charge)
+    evaluated outside Excel, under the three CSA presets, on a small path count. Skipped where pycel is not installed
+    (it is not a requirement of the project): scripts/check_workbook.py is the same check from a shell."""
+    pytest.importorskip("pycel")
+    from methodology import workbook as W
+    from methodology.xva_workbook import PRESETS, xva_rates_workbook
+    from scripts.check_workbook import run_checks, test_market
+    wb, _ = xva_rates_workbook(test_market(), 12)
+    W.finish(wb)
+    bio = io.BytesIO(); wb.save(bio)
+    for preset in PRESETS:
+        res = run_checks(load_workbook(io.BytesIO(bio.getvalue())), "Exposure!B4", preset)
+        assert len(res) > 90
+        bad = [(x["label"], x["rel"]) for x in res if not x["ok"]]
+        assert not bad, (preset, bad[:5])
+        assert max(x["rel"] for x in res) < 1e-8, preset
 
 
 def test_xva_fx_workbooks_carry_the_engine_draws_and_a_live_mode():

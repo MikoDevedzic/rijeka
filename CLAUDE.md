@@ -334,4 +334,8 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - A screen does not send back as the user's own a number it only displayed: 0.57.0's first ticket sent the vol
   its field showed, which for a moment after the expiry changed was the previous option's, and the engine took it
   as typed. What the user did not type is asked of the engine by leaving it out.
+- A replication is tied to the route the user runs, not only to the function it was written beside: 0.58.0's
+  workbook reproduced its own engine side to eleven digits with the settled cash passed in the wrong sign, and
+  only the comparison with `POST /api/xva/simulate` for the same trade showed it. A book that agrees with itself
+  has checked its arithmetic, not its subject.
 

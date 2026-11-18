@@ -1,7 +1,35 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.40). Commits on `main` are the detail.
+methodology document carries its own version (v1.41). Commits on `main` are the detail.
+
+## 0.58.0 · 18 November 2026
+
+**The rates XVA workbook replicates what a ticket's XVA tab runs.** No figure of the engine changes.
+
+- **What was wrong.** Since 0.52.0 a rates ticket values the trade itself on the paths, and since 0.53.0 its
+  charges are on the exposure discounted on its own path. The workbook still rebuilt the earlier run: a generic swap
+  whose two legs settle every month, on today's discounting. Its cells agreed with that older calculation and not
+  with the XVA tab, and the model inventory said so.
+- **The book now.** The trade is a two-year swap from spot, both legs yearly, taken through the ticket's own booking
+  path and the production schedule generator. Cell by cell: the rate factor on monthly dates from the valuation
+  date; the bond over each step and to each of the trade's dates; cash rolled along each path; each floating
+  period's growth; the trade's value by the engine's own cases (a fixed coupon at its bond; a floating period
+  ended and unpaid, running with its accrued interest, or not begun); the cash paid; each path's discounting over
+  the curve's; the value a margin period back, drawn on the value with its payments still in it; collateral,
+  exposure and margin; then CVA, DVA, FCA and FBA on the path-discounted exposure, capital and margin funding.
+- **Two ties, both tested.** The book's cells reproduce the engine's figures on the same draws to better than one
+  part in ten thousand million, under each CSA preset, on five valuation dates (a weekend roll, a month-end, a leap
+  day, a year-end) and a sloped curve: evaluated outside Excel by `backend/scripts/check_workbook.py`. And the
+  engine's figures the book carries are the ticket's: `POST /api/xva/simulate` for the same trade, parameters,
+  paths and seed answers the same CVA, DVA, FCA, FBA, KVA, MVA and exposure at every date, to the cent.
+- **Found building it.** The first draft passed the settled cash to the waterfall with the wrong sign; its own
+  cells agreed with it. The comparison with the ticket's route is what showed it, and is now a test.
+- **What it does not cover.** One trade and its default credit and funding inputs (typed over on the Waterfall
+  sheet). A swaption on the paths, a seasoned trade, fees and wrong-way risk are not in the book. The evaluation
+  outside Excel needs a library the project does not require, so in CI that one test is skipped and the tie to the
+  route runs; it runs on a developer's machine and from the script.
+- **Size.** About 76,000 formula cells at 200 paths, 0.8 MB (the earlier book was about 60,000).
 
 ## 0.57.1 · 18 November 2026
 
