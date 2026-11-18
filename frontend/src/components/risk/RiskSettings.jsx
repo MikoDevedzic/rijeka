@@ -185,6 +185,7 @@ export function VarSettingsPage() {
   const [hist, setHist] = useState(null)
   const [msg, setMsg] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState(null)             // what the backfill says, shown in its own panel beside the buttons
   const [armed, setArmed] = useState(false)          // the second step of REPLACE: nothing is replaced on one press
   const alive = useRef(true)
   useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
@@ -205,18 +206,19 @@ export function VarSettingsPage() {
       if (!alive.current) return
       setHist(h)
       const b = h.backfill || {}
-      if (!b.running && !b.queued && b.finished && b.finished !== before) { setMsg(b.error ? `Backfill failed: ${b.error}` : backfillSummary(b.result)); return }
+      if (!b.running && !b.queued && b.finished && b.finished !== before) { setNote(b.error ? `Backfill failed: ${b.error}` : backfillSummary(b.result)); return }
     }
+    if (alive.current) setNote('The backfill has not reported an end after twelve minutes. It may still be running, or it did not start: open this page again later; the history above shows what is stored.')
   }
   const backfill = async (replaceOwn = false) => {
-    setBusy(true); setArmed(false); setMsg('Making the rates history from the generator and fetching spots from frankfurter and Coinbase… this takes a minute or two. The result appears here.')
+    setBusy(true); setArmed(false); setMsg(null); setNote('Making the rates history from the generator and fetching spots from frankfurter and Coinbase… this takes a minute or two. The result appears here.')
     try {
       const before = hist?.backfill?.finished || null
       const j = await api(`/api/risk/history/backfill?years=2${replaceOwn ? '&replace_own=true' : ''}`, { method: 'POST' })
-      if (j.started === false) setMsg(`Not started: ${j.reason || 'a backfill is already running'}.`)
+      if (j.started === false) setNote(`Not started: ${j.reason || 'a backfill is already running'}.`)
       else await watch(before)
     }
-    catch (e) { setMsg(e.message) } finally { if (alive.current) setBusy(false) }
+    catch (e) { if (alive.current) setNote(e.message) } finally { if (alive.current) setBusy(false) }
   }
   const series = Object.entries(hist?.series || {})
   const own = series.filter(([, x]) => x.own > 0)
@@ -252,17 +254,18 @@ export function VarSettingsPage() {
         <section className="pnl-panel" style={{ maxWidth: 980 }}>
           <header><span>RISK-FACTOR HISTORY</span><span className="pnl-sub">synthetic rates history and public spots, stored on the template account, extended by the daily rebuild</span></header>
           <div className="rk-rows">
-            {series.map(([cid, x]) => <div key={cid} className="rk-row" style={{ gridTemplateColumns: '12rem 1fr 1fr 1fr 1.6fr' }}><span className="rk-ref">{cid}</span><span className="pnl-tv">{x.observations} obs</span><span className="pnl-tv dim">{x.from}</span><span className="pnl-tv dim">{x.to}</span><span className="pnl-tv dim" data-own={cid}>{x.own > 0 ? `${x.own} entered by this desk` : ''}</span></div>)}
+            {series.map(([cid, x]) => <div key={cid} className="rk-row" style={{ gridTemplateColumns: '12rem 1fr 1fr 1fr 1fr' }}><span className="rk-ref">{cid}</span><span className="pnl-tv">{x.observations} obs</span><span className="pnl-tv dim">{x.from}</span><span className="pnl-tv dim">{x.to}</span><span className="pnl-tv dim" data-own={cid}>{x.own > 0 ? `${x.own} own` : ''}</span></div>)}
             {!series.length && <div className="pnl-empty">No history stored yet.</div>}
           </div>
           <div className="pnl-sign-btns"><button className="pnl-btn" disabled={busy || !s.can_write} onClick={() => backfill(false)}>BACKFILL TWO YEARS</button><span className="pnl-note">Every stored day of the rates history is made again by the synthetic generator (no publisher's data), except in a curve this desk has entered rows of its own for, which is left as it is. Spots are fetched from ECB reference FX rates (frankfurter) and Coinbase daily closes; a spot's existing days are kept.</span></div>
           {ownRows > 0 && (
-            <div className="pnl-sign-btns" data-own-rows>
+            <div className="pnl-sign-btns" data-own-rows style={{ marginTop: 12 }}>
               {!armed
-                ? <button className="pnl-btn ghost" disabled={busy || !s.can_write} onClick={() => setArmed(true)}>REPLACE THE DESK'S OWN RATES ROWS…</button>
-                : <><button className="pnl-btn" disabled={busy || !s.can_write} onClick={() => backfill(true)}>REPLACE {ownRows} ROWS WITH THE SYNTHETIC MARKET</button><button className="pnl-btn ghost" disabled={busy} onClick={() => setArmed(false)}>CANCEL</button></>}
-              <span className="pnl-note">{own.map(([cid, x]) => `${cid} ${x.own}`).join(', ')}: rows entered by hand, imported or snapped from a feed. A backfill keeps these curves as they are, so their history is not the synthetic market's. Replacing them writes the generator's curve over every stored day of the five rates curves; the entered rows are not kept anywhere.</span>
+                ? <button className="pnl-btn ghost" disabled={busy || !hist?.can_replace_own} onClick={() => setArmed(true)}>REPLACE THE DESK'S OWN RATES ROWS…</button>
+                : <><button className="pnl-btn" disabled={busy || !hist?.can_replace_own} onClick={() => backfill(true)}>REPLACE {ownRows} ROWS WITH THE SYNTHETIC MARKET</button><button className="pnl-btn ghost" disabled={busy} onClick={() => setArmed(false)}>CANCEL</button></>}
+              <span className="pnl-note">Own rows ({own.map(([cid, x]) => `${cid} ${x.own}`).join(', ')}) were entered by hand, imported or snapped from a feed. A backfill keeps these curves as they are, so their history is not the synthetic market's. Replacing them writes the generator's curve over every stored day of the five rates curves; the desk's rows are not kept anywhere.{hist?.can_replace_own ? '' : ' It needs the risk or admin role.'}</span>
             </div>)}
+          {note && <div className="pnl-toast" data-backfill-note style={{ marginTop: 12 }}>{note}</div>}
         </section>
       </>)}
     </div>

@@ -73,6 +73,13 @@ def _can_write(db: Session, user: dict) -> bool:
     return bool(fm and fm.role == "ADMIN")
 
 
+def _can_replace_own(db: Session, user: Optional[dict]) -> bool:
+    """Replacing the rates rows a desk entered itself: the risk or admin role of the account, and no other way in.
+    Not a firm's admin (the template's history is every demo account's, and a demo account is the admin of its own
+    firm) and not the scheduler's secret (it is a person's decision; the entered rows are not kept)."""
+    return user is not None and _role(db, user) in WRITE_ROLES
+
+
 def _secret_ok(given: Optional[str]) -> bool:
     want = os.environ.get("RIJEKA_CRON_SECRET")
     return bool(want) and given is not None and hmac.compare_digest(given, want)
@@ -265,14 +272,18 @@ def history_status(db: Session = Depends(get_db), x_rijeka_cron: Optional[str] =
     if not _secret_ok(x_rijeka_cron) and user is None:
         raise HTTPException(status_code=401, detail="Missing auth")
     tpl = R.template_uid(db)
-    return {"template": str(tpl) if tpl else None, "series": H.status(db, tpl) if tpl else {}, "backfill": _backfill_view(db)}
+    return {"template": str(tpl) if tpl else None, "series": H.status(db, tpl) if tpl else {}, "backfill": _backfill_view(db),
+            "can_replace_own": _can_replace_own(db, user)}
 
 
 @router.post("/history/backfill")
 def backfill(years: float = Query(default=2.0), overwrite: bool = Query(default=False), replace_own: bool = Query(default=False),
              db: Session = Depends(get_db), x_rijeka_cron: Optional[str] = Header(None), user: Optional[dict] = Depends(optional_token)):
     """`replace_own`: also replace the rates rows this desk entered or imported itself with the synthetic market's.
-    Off by default: a desk's own curve is left as it is, and the result says which were kept."""
+    Off by default: a desk's own curve is left as it is, and the result says which were kept. Asking for it needs
+    the account's own risk or admin role (`_can_replace_own`), a narrower door than the backfill's."""
+    if replace_own and not _can_replace_own(db, user):
+        raise HTTPException(status_code=403, detail="Replacing a desk's own rates rows needs the risk or admin role.")
     if not _secret_ok(x_rijeka_cron):
         if user is None:
             raise HTTPException(status_code=401, detail="Missing auth")

@@ -13,17 +13,24 @@ methodology document carries its own version (v1.38). Commits on `main` are the 
   two years) and could not say so: the page read the answer "started" as the result and showed nothing. Rows the old
   feed wrote before the two-year window, and on weekends, were not remade either.
 - **The backfill now remakes every stored day** of a rates curve it writes, not only the window's business days:
-  a day before the window, and a weekend's (which carries Friday's curve).
+  a day before the window or after it, and a weekend's (which carries Friday's curve). A curve it does not write,
+  because the desk holds rows of its own in it, is still left whole, the old feed's rows in it included: on the
+  hosted demo that curve becomes the generator's only by the second action below.
 - **The page says which curves hold the desk's own rows** (Configurations → VaR settings, the risk-factor history:
-  a count beside each rates curve) and **shows the result when the run has finished**: rows written by curve, and
-  the curves kept as they are.
-- **Replacing the desk's own rows is an explicit, second action**, in two presses, for the risk or admin role:
+  a count beside each rates curve) and **shows the result when the run has finished**, beside the button: rows
+  written by curve, and the curves kept as they are. A run that has not reported an end after twelve minutes is
+  said to be unfinished, not left as "started".
+- **Replacing the desk's own rows is an explicit, second action**, in two presses on the page:
   `POST /api/risk/history/backfill?replace_own=true`. It writes the generator's curve over every stored day of the
-  five rates curves, whoever wrote the row; the entered rows are not kept anywhere. Without it nothing a desk
-  entered is touched, as in 0.55.0. A venue's marks are never replaced, with or without it.
-- **Tests.** Two on the function (kept by default; replaced, with every stored day, when asked), one on a real
-  local database (a desk's row and the old feed's rows, before the window and on a Saturday, through both runs),
-  and a journey of the page (the count, a backfill's result, the two presses, the request each sends).
+  five rates curves, whoever wrote the row; the desk's rows are not kept anywhere. Its door is narrower than the
+  backfill's: the account's own risk or admin role, not a firm's admin and not the scheduler's secret (the
+  independent reviewer: every demo account is the admin of its own firm, and the history is the template's, read
+  by all of them). Without it nothing a desk entered is touched, as in 0.55.0. A venue's marks are never replaced,
+  with or without it.
+- **Tests.** Two on the function (kept by default; replaced, with every stored day, when asked), two on a real
+  local database (a desk's rows and the old feed's, before the window, after it and on a Saturday, through both
+  runs; the refusal to a firm's admin without the role), and a journey of the page (the count, a backfill's result,
+  the role, the two presses, the request each sends).
 
 ## 0.55.0 · 18 November 2026
 

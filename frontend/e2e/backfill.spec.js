@@ -14,6 +14,7 @@ const SERIES = (own) => ({
 test('the risk-factor history: a desk\'s own rates rows are counted, kept by a backfill, and replaced only on a second press', async ({ app, problems }) => {
   const posts = []
   let state = { series: SERIES(30), backfill: { running: false, finished: 't0', result: null, error: null } }
+  let allowed = false                                             // the account's own risk or admin role
   let pending = null                                              // the answer the run will end with, given after one "running"
   await app.route(/\/api\/risk\/settings$/, async r => {
     if (r.request().method() !== 'GET') return r.fallback()
@@ -33,23 +34,31 @@ test('the risk-factor history: a desk\'s own rates rows are counted, kept by a b
     }
     const now = state
     if (pending && state.backfill.running) { state = pending; pending = null }                 // the next read finds it finished
-    return r.fulfill(json({ template: 'tpl', ...now }))
+    return r.fulfill(json({ template: 'tpl', can_replace_own: allowed, ...now }))
   })
 
   await app.goto('/configurations/market-risk/var')
   const panel = app.locator('.pnl-panel', { hasText: 'RISK-FACTOR HISTORY' })
-  await expect(panel.locator('[data-own="CHF_SARON"]')).toHaveText('30 entered by this desk')
+  await expect(panel.locator('[data-own="CHF_SARON"]')).toHaveText('30 own')
   await expect(panel.locator('[data-own="USD_SOFR"]')).toHaveText('')
   await expect(panel.locator('[data-own="EURUSD_SPOT"]')).toHaveText('')
 
   // a backfill keeps them, and the page says so when the run has finished
   await panel.getByRole('button', { name: 'BACKFILL TWO YEARS' }).click()
-  await expect(app.locator('.pnl-toast')).toContainText('Kept as they are, the desk\'s own rows: CHF_SARON 30.', { timeout: 20_000 })
-  await expect(app.locator('.pnl-toast')).toContainText('Rows written: USD_SOFR 529.')
+  const said = panel.locator('[data-backfill-note]')                    // in the panel, beside the button that asked
+  await expect(said).toContainText('Kept as they are, the desk\'s own rows: CHF_SARON 30.', { timeout: 20_000 })
+  await expect(said).toContainText('Rows written: USD_SOFR 529.')
   expect(posts, 'a plain backfill does not ask for the desk\'s rows').toEqual(['?years=2'])
 
-  // one press replaces nothing: it asks, and can be called off
+  // without the risk or admin role the desk's rows are named and cannot be replaced
   const own = panel.locator('[data-own-rows]')
+  await expect(own.getByRole('button', { name: /REPLACE THE DESK'S OWN RATES ROWS/ })).toBeDisabled()
+  await expect(own).toContainText('It needs the risk or admin role.')
+  allowed = true
+  await app.reload()
+  await expect(own.getByRole('button', { name: /REPLACE THE DESK'S OWN RATES ROWS/ })).toBeEnabled()
+
+  // one press replaces nothing: it asks, and can be called off
   await own.getByRole('button', { name: /REPLACE THE DESK'S OWN RATES ROWS/ }).click()
   await expect(own.getByRole('button', { name: 'REPLACE 30 ROWS WITH THE SYNTHETIC MARKET' })).toBeVisible()
   await own.getByRole('button', { name: 'CANCEL' }).click()
@@ -59,7 +68,7 @@ test('the risk-factor history: a desk\'s own rates rows are counted, kept by a b
   // the second press does
   await own.getByRole('button', { name: /REPLACE THE DESK'S OWN RATES ROWS/ }).click()
   await own.getByRole('button', { name: 'REPLACE 30 ROWS WITH THE SYNTHETIC MARKET' }).click()
-  await expect(app.locator('.pnl-toast')).toContainText('The desk\'s own rows replaced: CHF_SARON 30.', { timeout: 20_000 })
+  await expect(said).toContainText('The desk\'s own rows replaced: CHF_SARON 30.', { timeout: 20_000 })
   expect(posts[1]).toBe('?years=2&replace_own=true')
   await expect(panel.locator('[data-own="CHF_SARON"]')).toHaveText('')
   await expect(own, 'with no row of the desk\'s own left, the action is not offered').toHaveCount(0)

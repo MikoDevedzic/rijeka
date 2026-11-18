@@ -11,9 +11,12 @@ from datetime import date
 import pytest
 from sqlalchemy import text
 
+from tests.integration.conftest import USER_A, set_role
+
 pytestmark = pytest.mark.integration
 END = date(2026, 11, 17)
 OLD, SAT, OWN_DAY = date(2025, 3, 3), date(2026, 11, 14), date(2026, 11, 10)      # before a 0.05-year window; a Saturday; inside it
+AHEAD = date(2027, 1, 4)                                                           # a row the desk dated after the run's end
 JUNK = [{"tenor": "1Y", "quote_type": "RATE", "rate": 9.99, "enabled": True}]
 
 
@@ -39,22 +42,23 @@ def test_a_backfill_keeps_a_desks_own_rates_rows_until_it_is_told_to_replace_the
         db.execute(text("INSERT INTO auth.users (id, aud, role, email) VALUES (:u, 'authenticated', 'authenticated', :e)"),
                    {"u": uid, "e": f"backfill-{uid[:8]}@stack.test"})
         _put(db, uid, "CHF_SARON", OWN_DAY, "MANUAL")                      # the desk's own
+        _put(db, uid, "CHF_SARON", AHEAD, "IMPORT")                        # and one it imported, dated ahead
         _put(db, uid, "CHF_SARON", OLD, "DEMO · public sources")           # the old feed's, in a curve the desk also entered
         _put(db, uid, "USD_SOFR", OLD, "DEMO · public sources")            # the old feed's, before the window
         _put(db, uid, "USD_SOFR", SAT, "DEMO · public sources")            # and on a weekend
         db.commit()
-        assert H.status(db, uid)["CHF_SARON"]["own"] == 1 and H.status(db, uid)["USD_SOFR"]["own"] == 0
+        assert H.status(db, uid)["CHF_SARON"]["own"] == 2 and H.status(db, uid)["USD_SOFR"]["own"] == 0
 
         out = H.backfill(db, uid, years=0.05, end=END)
-        assert out["kept_own"] == {"CHF_SARON": 1} and out["replaced_own"] == {} and "CHF_SARON" not in out["written"]
+        assert out["kept_own"] == {"CHF_SARON": 2} and out["replaced_own"] == {} and "CHF_SARON" not in out["written"]
         assert _row(db, uid, "CHF_SARON", OWN_DAY).quotes == JUNK and _row(db, uid, "CHF_SARON", OLD).quotes == JUNK
         for day, of in ((OLD, OLD), (SAT, date(2026, 11, 13)), (END, END)):
             r = _row(db, uid, "USD_SOFR", day)
             assert r.source == H.RATES_SOURCE and r.quotes == feed.build_rates_curve("USD_SOFR", of), day
 
         again = H.backfill(db, uid, years=0.05, end=END, replace_own=True)
-        assert again["replaced_own"] == {"CHF_SARON": 1} and again["kept_own"] == {}
-        for day in (OWN_DAY, OLD):
+        assert again["replaced_own"] == {"CHF_SARON": 2} and again["kept_own"] == {}
+        for day in (OWN_DAY, OLD, AHEAD):                                   # every stored day, whoever wrote it and whenever it is dated
             r = _row(db, uid, "CHF_SARON", day)
             assert r.source == H.RATES_SOURCE and r.quotes == feed.build_rates_curve("CHF_SARON", day), day
         assert H.status(db, uid)["CHF_SARON"]["own"] == 0 and H.own_rates_rows(db, uid) == {}
@@ -63,3 +67,20 @@ def test_a_backfill_keeps_a_desks_own_rates_rows_until_it_is_told_to_replace_the
         db.execute(text("DELETE FROM market_data_snapshots WHERE user_id = :u"), {"u": uid})
         db.execute(text("DELETE FROM auth.users WHERE id = :u"), {"u": uid})          # its profile goes with it
         db.commit(); db.close()
+
+
+def test_replacing_a_desks_own_rows_is_refused_to_a_firms_admin_without_the_risk_or_admin_role(client, auth_a):
+    """The independent reviewer, 18 November 2026: the backfill's door also admits a firm's admin, and every demo
+    account is the admin of its own firm, while the history written is the template's, read by all of them. User A
+    is a trader and her firm's admin: she may not ask for the desk's own rows to be replaced, and the page is told
+    so. With the admin role she may (the page is told; the run is not started here, it would call the spot sources)."""
+    from api.routes import risk
+    r = client.post("/api/risk/history/backfill?years=0.1&replace_own=true", headers=auth_a)
+    assert r.status_code == 403 and "risk or admin role" in r.json()["detail"]
+    assert not risk._backfill.get("running")
+    assert client.get("/api/risk/history", headers=auth_a).json()["can_replace_own"] is False
+    set_role(USER_A, "admin")
+    try:
+        assert client.get("/api/risk/history", headers=auth_a).json()["can_replace_own"] is True
+    finally:
+        set_role(USER_A, "trader")

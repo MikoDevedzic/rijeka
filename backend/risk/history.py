@@ -180,7 +180,7 @@ def backfill(db: Session, user_id, years: float = 2.0, end: Optional[date] = Non
             continue
         by_day = dict(days.get(c) or {})
         for d in stored.get(c, []):
-            if d not in by_day and d <= end:
+            if d not in by_day:                 # also a day after the window's end, if one is stored
                 by_day[d] = feed.build_rates_curve(c, d)
         rates[c] = by_day
     written = store(db, user_id, rates, overwrite=True, source=RATES_SOURCE, only_over_demo=not replace_own)
