@@ -63,6 +63,9 @@ Learned on 16 November 2026 (a date a builder makes)
 - Where two engines value one trade (the pricer, the credit model at the start of its paths), the screen that shows the second says whose value it is and on which day, and the gap is a row in the model inventory until it is reconciled.
 - A check on simulated paths is asked of the product itself, between its cash-flow dates and with its payment lag, and of its spread across paths, not of the bonds and the mean alone. The credit engine's swap stood a whole coupon out between payments behind thirty-one passing rows that tested bonds; a martingale test of a mean passed an accrual read off today's curve; and a bridge over the margin period took a coupon for a market move. Where two engines value one trade, put the same trade through both and lay the figures side by side before reading either's tests.
 
+Learned on 18 November 2026 (0.56.0: a swaption's expiry and the swap it delivers)
+- A trade's dates on the ticket are part of the model's inputs: for each product read how a tenor becomes a date and how the option's time is taken from it, try it across a 29 February and a weekend, and compare the convention with every engine that later values the booked trade. A swaption's ticket priced a tenor at its nominal years while the P&L revalued the booking on days over 365 and the exposure paths on 365.25; the swap delivered was a day short across a leap day; neither was in the inventory's limitations.
+
 Rules
 - You are read-only: never edit files in the repository, never commit, never push, never run anything against production or the network.
 - Public standards and published sources only (Basel, ISDA, the published papers the methodology cites). Nothing from any client engagement enters a formula, a test or a fixture, and no venue's data is committed to the repository.

@@ -25,7 +25,7 @@
 \titleformat{\section}{\large\bfseries\color{ink}}{\thesection}{0.8em}{}
 \titleformat{\subsection}{\normalsize\bfseries\color{ink}}{\thesubsection}{0.8em}{}
 \pagestyle{fancy}\fancyhf{}
-\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.38 · November 2026}
+\fancyhead[L]{\small\color{dim}Rijeka Methodology}\fancyhead[R]{\small\color{dim}v1.39 · November 2026}
 \fancyfoot[C]{\small\color{dim}\thepage}
 \renewcommand{\headrulewidth}{0.2pt}
 % breaks at / _ . in text (url's \path); literal typewriter inside maths
@@ -45,7 +45,7 @@
 \begin{center}
 {\LARGE\bfseries Rijeka Methodology}\\[4pt]
 {\large Curve construction, pricing, market and counterparty risk, XVA, FX and digital-asset derivatives, on-chain confirmation}\\[6pt]
-{\color{dim} Version 1.38 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
+{\color{dim} Version 1.39 · November 2026 · \href{https://github.com/MikoDevedzic/rijeka}{github.com/MikoDevedzic/rijeka} · Apache-2.0}
 \end{center}
 
 \vspace{4pt}
@@ -56,6 +56,7 @@
 \section*{Version history}
 {\small
 \begin{itemize}[leftmargin=1.4em, itemsep=4pt]
+\item \textbf{1.39 (18 November 2026).} The expiry of a swaption on a ticket (\S\ref{sec:swpn-expiry}); a European swaption's ticket value changes where its tenor is not a whole number of 365-day years, and the swap it delivers ends on the right day. A tenor (now one month to ten years) is that many calendar months from the valuation date, or the expiry is a date typed in. The option's time is the days to that date over 365, the convention the booked option was already revalued on; a ticket priced a tenor at its nominal fraction of a year, so a three-month option struck on 18 November 2026 ran $0.25$ where the calendar gives $92/365$, a price $0.41\,\%$ lower at the money. The swap delivered ended a day short whenever a leap day fell inside it. Nothing changes for a booked trade's dates.
 \item \textbf{1.38 (18 November 2026).} The hosted demo's interest-rate curves are synthetic (\S\ref{sec:mr}); every rates figure of the demo changes with them. Until now each curve was built from a published overnight fixing and government yields with a stated spread. The firm holds no licence for any benchmark, and some need one to build a curve from or to value with, so the demo no longer reads any: one stated generator makes every curve, every past day's curve and every overnight fixing. A self-hosted desk connects its own market data and none of this applies to it.
 \item \textbf{1.37 (17 November 2026).} Wording only; no figure changes. The licensed margin methodology the engine does not compute is named once, in \S\ref{sec:exposure}, where the initial margin is described; elsewhere the margin is called what it is, the desk's amount or the engine's own estimate.
 \item \textbf{1.36 (17 November 2026).} Two corrections found by putting one trade through every XVA run (\S\ref{sec:xva}). The counterparty run's capital charge is on each trade's own asset class: it took the interest-rate add-on on the set's gross notional whatever the set held, so the incremental KVA of a currency forward was a seventeenth of its ticket's and a digital-asset forward's was zero. And under a margin agreement a payment takes its collateral with it: a package leg that settled was taken out of the value and not out of the collateral, which left the whole payment owed for half a step (on a margined calendar spread whose near leg pays 1.7 million, a DVA of 49 where it is 0.9).
@@ -200,6 +201,15 @@ V_{\mathrm{receiver}} = N\,A\,v\,\big[-d\,\Phi(-d)+\varphi(d)\big].
 \end{equation}
 Greeks are produced by bump-and-reprice: vega per 1bp of $\sigma_N$, \code{IR01}, theta per calendar day, volga, vanna, dollar gamma, and a delta-hedge notional. A Hull--White cross-check price is reported alongside when the model is calibrated (\S\ref{sec:hw}).
 
+\subsection{The expiry on a ticket}\label{sec:swpn-expiry}
+The expiry is a tenor or a date. A tenor (1M, 3M, 6M, 9M, 1Y, 2Y, 3Y, 4Y, 5Y, 7Y, 10Y) is that many calendar months from the valuation date, on the same day of the month; a date on a Saturday or a Sunday is moved to the Monday after or, where that is in the next month, to the Friday before. The ticket holds no holiday calendar: an expiry that would fall on a holiday is typed as the date wanted. A typed date is taken as typed.
+
+The option's time is $T_e=d/365$ with $d$ the calendar days from the valuation date to the expiry, on a ticket as in the revaluation of the booked option for P\&L, VaR and the ladder (\S\ref{sec:mr}), so a ticket and its booking are one number and a booked option opened later shows the time it has left. Until version 1.39 a ticket priced a tenor at its nominal fraction of a year. At the money the price is proportional to $\sqrt{T_e}$, so the change is $\sqrt{(d/365)/T_{\text{nominal}}}-1$: nothing for a one-year option over 365 days, $+0.41\,\%$ for three months of 92 days, $+0.21\,\%$ for two years of 733 days (a leap day and a weekend's roll), $+0.04\,\%$ for ten years of 3{,}653 days. The exposure paths measure the same option's time in years of 365.25 days (\S\ref{sec:ccr}): $0.07\,\%$ less time, a stated difference between the two engines.
+
+The swap delivered starts as many calendar days after the spot-starting swap of the same tenor as the expiry is after the trade date, which keeps the trade's spot lag after the expiry, and ends its tenor later by the calendar. Until version 1.39 both dates were moved by one count of days, which ended a five-year swap one day short whenever a 29 February fell inside it. A booked trade keeps the dates it was booked with.
+
+A Bermudan (\S\ref{sec:berm}) takes a tenor only and whole years for its time: its tree steps in twelfths of a year.
+
 \subsection{Volatility tiers}
 The volatility used is tagged \code{QUOTED} (an at-the-money surface point at the trade's expiry and tenor), \code{SABR} (an off-the-money strike read from the calibrated smile), \code{INTERPOLATED} (between grid points), or \code{MANUAL} (user supplied). The tier travels with the price so that a valuation can be challenged.
 
@@ -231,7 +241,7 @@ and a floorlet is the corresponding put. The at-the-money strike of a cap is the
 Caplet volatilities are stripped from flat cap volatilities one strike column at a time: the 1Y bucket is solved so that four Bachelier caplets reproduce the 1Y cap price; each later bucket (2Y, 3Y, 3--5Y, 5--7Y, 7--10Y) is solved after subtracting the value of the buckets already priced, piecewise flat within a bucket. A $\beta=0$ SABR smile is then fitted per expiry bucket across strikes.
 
 %--------------------------------------------------------------------
-\section{Bermudan swaptions: Hull--White trinomial tree}
+\section{Bermudan swaptions: Hull--White trinomial tree}\label{sec:berm}
 \label{sec:hw}
 {\raggedright \emph{Module: \code{pricing/bermudan_swaption.py}.}\par}\nopagebreak
 

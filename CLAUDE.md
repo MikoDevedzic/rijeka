@@ -322,3 +322,9 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   account gives itself the risk role (`PUT /api/me/role`) and is the admin of its own firm, so neither closes a
   door on data every account reads: 0.55.1's replace action was first put behind the backfill's door, then behind
   "risk or admin", and only the security reviewer's read made it the account that holds the rows or an administrator.
+- "The convention the engine already uses" is read off the line that computes it, in every engine that values the
+  thing, before a ticket is matched to it or a document says so: 0.56.0's first draft put a swaption's time on
+  days over 365.25 "as the booked trade is revalued"; the P&L revalues on 365 and only the exposure paths on 365.25.
+  The unit test passed either way; reading `_value_swaption` found it.
+- A date made by adding a count of days to another date is tried across a 29 February and against the calendar's
+  own answer: the swap a swaption delivers ended a day short for years, and a three-month tenor was 91 days.

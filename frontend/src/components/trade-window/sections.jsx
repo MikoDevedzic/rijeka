@@ -23,6 +23,10 @@ const isNoteColumn = (c) => /^NOTES?$/i.test(String(c || ''))
 import Roll, { RiskMark } from '../common/Roll'
 import { ASSET_FACTOR, RISK_FACTORS, labelText } from '../../lib/risk-factors'
 import { ariaKey } from '../../lib/shortcuts'
+import { swaptionExpiry } from './product-defaults'
+
+// A swaption's expiry in words: its tenor, or the date when one was typed.
+const expiryWord = (state) => { const ex = swaptionExpiry(state); return ex.tenor || ex.date || '1Y' }
 
 // No CAPITAL tab since 0.39.1: the cost of capital on a trade is the KVA of its XVA tab, and regulatory capital is
 // a calculation over the book, under Risk → CAPITAL (the owner, 15 November 2026)
@@ -695,12 +699,12 @@ function SwapCashflowTables({ result, productKey, state }) {
               border: '1px solid rgba(143,193,230,0.3)',
               color: 'var(--blue)',
             }}>
-              {(state.expiry || '1Y')}{'\u00D7'}{state.tenor || '5Y'}{' \u00B7 Physical Settlement'}
+              {expiryWord(state)}{'\u00D7'}{state.tenor || '5Y'}{' \u00B7 Physical Settlement'}
             </span>
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
             {'On exercise, this swaption delivers into the swap schedule below. '}
-            {'Effective date shifts forward by '}{state.expiry || '1Y'}{' from today. '}
+            {'The swap starts after the expiry, '}{expiryWord(state)}{'. '}
             {'Sum of PV column = forward swap NPV (\u2248 $0 at ATM strike).'}
           </div>
         </div>

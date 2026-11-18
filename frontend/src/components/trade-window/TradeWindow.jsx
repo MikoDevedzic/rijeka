@@ -47,7 +47,7 @@ import RatesScenario from './RatesScenario'
 // Sprint 12 item 3: CONFIRM tab panel + lifecycle client
 import { ConfirmPanel } from './ConfirmPanel'
 import { executeBooking, buildBookingBody, confirmTrade, cancelTrade, confirmTradeOnChain, bookPackage, confirmPackageOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, partialTerminate, amendTerms, amendable, recordKnock, INDEX_CURVE } from './booking'
-import { TENOR_Y, EXPIRY_Y } from './product-defaults'
+import { TENOR_Y, EXPIRY_Y, EXPIRY_DATE } from './product-defaults'
 // Sprint 13 follow-up — lifecycle cache refresh
 import { useTradesStore, shortUti } from '../../store/useTradesStore'
 import { useTabStore }    from '../../store/useTabStore'
@@ -189,7 +189,10 @@ function viewProductState(trade, legs = []) {
   }
   if (productKey === 'IR_SWAPTION') {
     Object.assign(s, premium, {
-      expiry: t.expiry_tenor || expiryLabel(iso(trade.trade_date), iso(t.expiry_date)) || '1Y',
+      // the tenor it was booked on, or the nearest to its date (a row from before the tenor was kept); a date that was
+      // typed is shown as a date. The date itself is always the booked one (product-defaults.swaptionExpiry).
+      expiry: EXPIRY_Y[t.expiry_tenor] ? t.expiry_tenor : (t.expiry_tenor === null && iso(t.expiry_date) ? EXPIRY_DATE : (expiryLabel(iso(trade.trade_date), iso(t.expiry_date)) || '1Y')),
+      expiryDate: iso(t.expiry_date) || undefined,
       volBp:  t.vol_bp != null ? String(t.vol_bp) : undefined,
       strike: pctStr(t.strike ?? fixed?.fixed_rate) ?? '',
     })

@@ -86,6 +86,14 @@ const swaptionState = {
 }
 
 describe('IR_SWAPTION', () => {
+  it('an expiry typed as a date is booked as that date, with no tenor, and the legs start that many days on', () => {
+    const body = buildBookingBody({ ...swaptionState, expiry: 'DATE', expiryDate: '2027-03-15' }, 'PAY', extras)
+    expect(body.terms).toMatchObject({ expiry_date: '2027-03-15', expiry_tenor: null })
+    const fixed = body.legs.find(l => l.leg_type === 'FIXED')
+    expect([fixed.effective_date, fixed.maturity_date]).toEqual(['2027-03-17', '2032-03-17'])        // 133 days after spot, then five years by the calendar (29 February 2032 is inside)
+    expect(body).toMatchObject({ effective_date: '2026-11-04', maturity_date: '2031-11-04' })       // the trade's own dates stay the spot-start swap's
+  })
+
   it('books the option terms on the trade and the forward-starting swap as its legs', () => {
     const body = buildBookingBody(swaptionState, 'PAY', extras)
     expect(body).toMatchObject({
@@ -102,7 +110,7 @@ describe('IR_SWAPTION', () => {
       float_day_count: 'ACT/360', float_bdc: 'MOD_FOLLOWING', float_calendar: null,
       spread: 0, leverage: 1,
       option: 'SWAPTION', side: 'BUY', is_payer: true,
-      expiry_date: '2027-11-02',          // valuation date + round(1 * 365.25) days
+      expiry_date: '2027-11-02',          // a year on from the valuation date, by the calendar
       expiry_tenor: '1Y', exercise_type: 'EUROPEAN',
       strike: 0.04, vol_bp: 86.5,
       premium_amount: 25_000,             // 25bp of 10m
@@ -118,12 +126,12 @@ describe('IR_SWAPTION', () => {
     const [fixed, float] = body.legs
     expect(fixed).toMatchObject({
       leg_ref: 'FIXED-1', leg_type: 'FIXED', direction: 'PAY',
-      effective_date: '2027-11-04', maturity_date: '2032-11-03',   // both shifted by 365 days
+      effective_date: '2027-11-04', maturity_date: '2032-11-04',   // 365 days after spot, then five whole years (both moved by 365 days ended on the 3rd: 2032 has a leap day)
       fixed_rate: 0.04,                                            // the strike, not the par coupon
     })
     expect(float).toMatchObject({
       leg_ref: 'FLOAT-1', leg_type: 'FLOAT', direction: 'RECEIVE',
-      effective_date: '2027-11-04', maturity_date: '2032-11-03',
+      effective_date: '2027-11-04', maturity_date: '2032-11-04',
       forecast_curve_id: 'USD_SOFR', leverage: 1,
     })
   })

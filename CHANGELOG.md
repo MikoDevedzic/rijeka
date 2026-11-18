@@ -1,7 +1,36 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.38). Commits on `main` are the detail.
+methodology document carries its own version (v1.39). Commits on `main` are the detail.
+
+## 0.56.0 · 18 November 2026
+
+**A swaption expires on a tenor out to ten years or on a date typed in.** The methodology is v1.39. A European
+swaption's ticket value changes where its tenor is not a whole number of 365-day years.
+
+- **What was wrong.** OPTION EXPIRY was a list of seven tenors to five years. It took no date and showed none, so a
+  desk could not strike an option expiring on a given day, or beyond five years, and could not see which day a
+  tenor meant.
+- **The field now.** OPTION EXPIRY lists 1M, 3M, 6M, 9M, 1Y, 2Y, 3Y, 4Y, 5Y, 7Y and 10Y, and EXPIRY DATE beside it
+  always shows the date. Type a date and it is the expiry (the list then reads DATE). Under them the ticket says
+  which swap the option delivers: its start and its end.
+- **A tenor is calendar months**, from the valuation date, moved off a weekend. It was a count of days (a year as
+  365.25 of them, rounded), so a three-month expiry struck on 18 November fell on 17 February. The ticket holds no
+  holiday calendar: an expiry that would fall on a holiday is typed as the date wanted.
+- **The option's time is the days to the expiry over 365**, as the booked option was already revalued for P&L, VaR
+  and the ladder; a ticket priced a tenor at its nominal fraction of a year. At the money the price moves by
+  the square root of the ratio: nothing for one year of 365 days, +0.41 % for three months of 92 days, +0.21 % for
+  two years of 733 days, +0.04 % for ten years of 3,653 days (closed form). The exposure paths measure the same
+  option in years of 365.25 days, 0.07 % less time: stated in the methodology, not changed here.
+- **The swap delivered ends on the right day.** Its two dates were both moved by one count of days, which ended a
+  five-year swap a day short whenever a 29 February fell inside it (a 1Y5Y struck on 18 November 2026 ended on
+  19 November 2032). It now starts that many days after spot and runs its tenor by the calendar.
+- **A booked swaption opened from the blotter** keeps the dates it was booked with, and its ticket values the
+  option on the time it has left; it used to value it on its original tenor however long ago it was struck.
+- **A Bermudan** takes a tenor only (its tree steps in twelfths of a year); the date field says so.
+- **Tests.** The expiry helper (tenors, weekends, a typed date, a Bermudan, a booked trade, the delivered swap
+  across a leap day), the booking of a typed date, and a journey of the ticket (the list, ten years priced, a
+  date typed, the request's time and dates, a Bermudan).
 
 ## 0.55.2 · 18 November 2026
 

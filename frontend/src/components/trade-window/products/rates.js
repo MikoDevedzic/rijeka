@@ -19,7 +19,7 @@ import { SwapTermsBody, SwaptionTermsBody, CapTermsBody,
          FloorTermsBody, CollarTermsBody } from '../product-terms'
 import { toRateSchedule, toNotionalSchedule, toSpreadSchedule } from '../schedule_translator'
 import { TENOR_Y as TENOR_Y_MAP, FREQ_PER_YEAR, SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS,
-         addDays, expiryYears, expiryShiftDays } from '../product-defaults'
+         swaptionExpiry, swaptionUnderlying } from '../product-defaults'
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
 
@@ -428,9 +428,9 @@ registerProduct({
     // string), tenor, strike (% or blank = ATM), volBp, ccy, valDate, direction,
     // and the swap dates shifted by the expiry (they carry the T+2 spot lag).
     buildPayload: state => {
-      const expiry   = state.expiry ?? SWAPTION_DEFAULTS.expiry
-      const expiry_y = expiryYears(expiry)
-      const shift    = expiryShiftDays(expiry)
+      // the expiry as a tenor or a typed date, the option's time and the days the underlying starts after spot
+      const { years: expiry_y } = swaptionExpiry(state)
+      const under = swaptionUnderlying(state)
       const strikeRaw = String(state.strike ?? SWAPTION_DEFAULTS.strike).trim()
       const strike   = strikeRaw !== '' && isFinite(parseFloat(strikeRaw)) ? parseFloat(strikeRaw) / 100 : null
       const volBp    = parseFloat(String(state.volBp ?? SWAPTION_DEFAULTS.volBp))
@@ -468,8 +468,8 @@ registerProduct({
         is_payer:            state.direction === 'PAY',
         pay_freq_y:          1.0,
         valuation_date:      state.valDate,
-        effective_date:      state.effDate ? addDays(state.effDate, shift) : null,
-        maturity_date:       state.matDate ? addDays(state.matDate, shift) : null,
+        effective_date:      under.start,
+        maturity_date:       under.end,
         curve_id:            CCY_CURVE[state.ccy] || 'USD_SOFR',
         exercise_type:       state.structure || 'EUROPEAN',
         // Sprint 13B

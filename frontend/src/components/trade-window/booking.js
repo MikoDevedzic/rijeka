@@ -26,7 +26,7 @@
 import { withFees } from './fees'
 import { toRateSchedule, toNotionalSchedule, toSpreadSchedule } from './schedule_translator'
 import { getSessionMaybe } from '../../lib/session'
-import { SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS, addDays, expiryShiftDays } from './product-defaults'
+import { SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS, swaptionExpiry, swaptionUnderlying } from './product-defaults'
 
 // Unified-window product key → the instrument_type the backend stores and the
 // engines match on (ccr/options.py, pnl/valuation.py, pricing/ir_swap.py).
@@ -246,14 +246,14 @@ function swaptionStrike(state, extras) {
 }
 
 function buildSwaptionLegs(state, direction, notional, extras = {}) {
-  const shift  = expiryShiftDays(state.expiry)
+  const under  = swaptionUnderlying(state)
   const strike = swaptionStrike(state, extras)
   // The underlying is the forward-starting swap the option delivers into,
   // struck at the option's strike.
   return buildSwapLegs({ ...state, structure: 'VANILLA' }, direction, notional).map(l => ({
     ...l,
-    effective_date: addDays(state.effDate, shift),
-    maturity_date:  addDays(state.matDate, shift),
+    effective_date: under.start,
+    maturity_date:  under.end,
     ...(l.leg_type === 'FIXED' ? { fixed_rate: strike } : {}),
   }))
 }
@@ -333,8 +333,7 @@ function vanillaTerms(state, direction, fixedRate) {
 export function buildSwaptionBookingBody(state, direction, extras = {}) {
   const notional  = Number(state.notional) || 0
   const ccy       = state.ccy || 'USD'
-  const expiry    = state.expiry ?? SWAPTION_DEFAULTS.expiry
-  const shift     = expiryShiftDays(expiry)
+  const ex        = swaptionExpiry(state)
   const strike    = swaptionStrike(state, extras)
   const structure = state.structure || 'EUROPEAN'
   const volBp     = parseFloat(String(state.volBp ?? SWAPTION_DEFAULTS.volBp))
@@ -343,8 +342,8 @@ export function buildSwaptionBookingBody(state, direction, extras = {}) {
     option: 'SWAPTION',
     side: state.optionSide || SWAPTION_DEFAULTS.optionSide,
     is_payer: direction === 'PAY',
-    expiry_date: addDays(state.valDate, shift),
-    expiry_tenor: expiry,
+    expiry_date: ex.date,
+    expiry_tenor: ex.tenor,              // null when the expiry was typed as a date
     exercise_type: structure,
     ...(structure === 'BERMUDAN' && Array.isArray(state.exerciseScheduleY) && state.exerciseScheduleY.length
       ? { exercise_schedule_y: state.exerciseScheduleY.map(Number).filter(t => Number.isFinite(t) && t > 0).sort((a, b) => a - b) }

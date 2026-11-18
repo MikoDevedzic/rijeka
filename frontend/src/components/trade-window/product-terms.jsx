@@ -32,7 +32,7 @@ import React, { useEffect, useRef } from 'react'
 import LegEmbeddedOptions from './LegEmbeddedOptions'
 import { useFieldLabel } from '../../lib/a11y'
 import { getSessionMaybe } from '../../lib/session'
-import { SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS } from './product-defaults'
+import { SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS, EXPIRY_TENORS, EXPIRY_DATE, addDays, swaptionExpiry, swaptionUnderlying } from './product-defaults'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -512,22 +512,35 @@ export function SwapTermsBody({ state, update }) {
 
 // ── IR_SWAPTION body ───────────────────────────────────────────────────────
 
-// State keys: expiry (tenor string), volBp, strike (% or blank = ATM forward),
-// optionSide; the underlying swap's conventions are SwapTermsBody's keys. The
-// defaults shown are SWAPTION_DEFAULTS, which the pricer and the booking apply
-// to an untouched field too.
+// State keys: expiry (a tenor, or EXPIRY_DATE with expiryDate when the date was typed), volBp, strike (% or blank =
+// ATM forward), optionSide; the underlying swap's conventions are SwapTermsBody's keys. The defaults shown are
+// SWAPTION_DEFAULTS, which the pricer and the booking apply to an untouched field too. The expiry's date, the
+// option's time and the underlying's dates all come from product-defaults.swaptionExpiry, as the request and the
+// booking read them.
 export function SwaptionTermsBody({ state, update }) {
-  const expiry = state.expiry ?? SWAPTION_DEFAULTS.expiry
   const volBp  = state.volBp  ?? SWAPTION_DEFAULTS.volBp
   const strike = state.strike ?? SWAPTION_DEFAULTS.strike
+  const ex = swaptionExpiry(state)
+  const bermudan = state.structure === 'BERMUDAN'
+  const locked = !!state.readOnly
+  const { start: starts, end: ends } = swaptionUnderlying(state)
   return (
     <>
-      <Row cols={4}>
+      <Row cols={5}>
         <SideField state={state} update={update} />
         <Field label="OPTION EXPIRY">
-          <select value={expiry} onChange={e => update({ expiry: e.target.value })}>
-            {['1M','3M','6M','1Y','2Y','3Y','5Y'].map(t => <option key={t}>{t}</option>)}
+          <select value={ex.custom ? EXPIRY_DATE : ex.tenor} disabled={locked} data-testid="swaption-expiry-tenor"
+                  onChange={e => update({ expiry: e.target.value, expiryDate: undefined })}>
+            {EXPIRY_TENORS.map(t => <option key={t}>{t}</option>)}
+            {ex.custom && <option value={EXPIRY_DATE}>DATE</option>}
           </select>
+        </Field>
+        <Field label="EXPIRY DATE">
+          {/* a date typed here is the expiry, whatever tenor it is nearest; a Bermudan's tree takes whole tenors only */}
+          <input type="date" className="tbw-mono" value={ex.date || ''} disabled={locked || bermudan} data-testid="swaption-expiry-date"
+                 min={state.valDate ? addDays(state.valDate, 1) : undefined}
+                 title={bermudan ? 'A Bermudan is priced on a tree that steps in twelfths of a year: choose a tenor' : undefined}
+                 onChange={e => { if (e.target.value) update({ expiry: EXPIRY_DATE, expiryDate: e.target.value }) }} />
         </Field>
         <Field label="NORMAL VOL (bp)">
           <input className="tbw-mono tbw-blue" value={volBp}
@@ -538,6 +551,14 @@ export function SwaptionTermsBody({ state, update }) {
                  onChange={e => update({ strike: e.target.value })} />
         </Field>
       </Row>
+      {/* what the dates above come to: the swap the option delivers into is not the spot-starting one of PRIMARY ECONOMICS */}
+      {starts && ends && (
+        <div className="tbw-terms-footer" data-testid="swaption-underlying" style={{ marginTop: -4, marginBottom: 10 }}>
+          Exercise into the swap from {starts} to {ends}
+          {ex.rolledFrom ? ` · the expiry is rolled from ${ex.rolledFrom}, a weekend` : ''}
+          {bermudan ? ' · Bermudan: a tenor only, exercisable yearly to the expiry' : ''}
+        </div>
+      )}
       {/* Legs inherited from SwapTermsBody — swaption has same underlying swap legs */}
       <SwapTermsBody state={{ ...state, structure: 'VANILLA' }} update={update} />
     </>
