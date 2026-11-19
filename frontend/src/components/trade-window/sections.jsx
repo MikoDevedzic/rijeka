@@ -614,8 +614,8 @@ function CapletTable({ result, ccy }) {
             {groups.flatMap((g, gi) => [
               g.name ? (
                 <tr key={`g${gi}`} data-testid="caplet-group" style={{ borderTop: gi ? '2px solid var(--border)' : undefined, background: 'var(--bg)' }}>
-                  <td colSpan={7} style={{ padding: '5px 8px', fontWeight: 700, color: 'var(--text-dim)', letterSpacing: '0.08em' }}>{g.name}</td>
-                  <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: signColor(g.rows.reduce((a, c) => a + Number(c.pv || 0), 0)) }}>{fmtPnl(g.rows.reduce((a, c) => a + Number(c.pv || 0), 0))}</td>
+                  <td colSpan={7} style={{ padding: '5px 8px', fontWeight: 600, color: 'var(--text-dim)', letterSpacing: '0.08em' }}>{g.name}</td>
+                  <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 600, color: signColor(g.rows.reduce((a, c) => a + Number(c.pv || 0), 0)) }}>{fmtPnl(g.rows.reduce((a, c) => a + Number(c.pv || 0), 0))}</td>
                 </tr>
               ) : null,
               ...g.rows.map((cl, i) => (
@@ -725,7 +725,7 @@ function SwapCashflowTables({ result, productKey, state }) {
             {'On exercise the swaption delivers the swap below: the legs the ticket books, each valued on its own dates. '}
             {result.underlying_error ? <span data-testid="swaption-underlying-error">{`It could not be valued: ${result.underlying_error}. `}</span> : null}
             {fixedLeg && floatLeg && Number.isFinite(Number(fixedLeg.pv) + Number(floatLeg.pv))
-              ? <span data-testid="swaption-underlying-npv">{'The two legs add to '}{fmtPnl(Number(fixedLeg.pv) + Number(floatLeg.pv))}{' today, the value of that swap at the strike: near nothing when the strike is at the money (the option is struck on yearly unadjusted dates, the swap pays after each).'}</span>
+              ? <span data-testid="swaption-underlying-npv">{'The two legs add to '}<span className="tbw-mono">{fmtPnl(Number(fixedLeg.pv) + Number(floatLeg.pv))}</span>{' today, the value of that swap at the strike: near nothing when the strike is at the money (the option is struck on yearly unadjusted dates, the swap pays after each).'}</span>
               : null}
           </div>
         </div>

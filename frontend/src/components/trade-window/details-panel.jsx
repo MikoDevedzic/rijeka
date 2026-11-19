@@ -106,7 +106,7 @@ export default function DetailsPanel({
     return (
       <div className="tbw-sec" data-testid="details-not-open">
         <div className="tbw-lbl">SCHEDULES</div>
-        <div className="tbw-terms-note" style={{ marginTop: 8 }}>
+        <div className="tbw-terms-note after-lbl">
           {productKey === 'IR_SWAPTION'
             ? 'The swap a swaption delivers is priced on its two dates at the strike: a schedule of coupons, spreads or notionals on it is not open on this ticket. Its flows are on CASHFLOWS. A premium paid in instalments is entered as fees on the TRADE tab.'
             : `${NOT_OPEN[productKey]} is one leg at one notional${productKey === 'RATES_COLLAR' ? ' and two strikes' : ' and one strike'}: a schedule of strikes or notionals is not open on this ticket. Its periods, each with its forward, its vol and its value, are on CASHFLOWS.`}

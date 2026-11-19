@@ -634,8 +634,13 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   // Not on mount: the initial state is already the product's (and, in view
   // mode, the stored trade's).
   const firstProductRender = useRef(true)
+  // Counts the prices asked for and the changes of product: an answer is taken only if nothing of either kind came
+  // after its request (a swaption's answer, which takes two requests, landed on the ticket of the product chosen
+  // meanwhile and its flows stood under that product's tabs until the next PRICE).
+  const priceTurn = useRef(0)
   useEffect(() => {
     if (firstProductRender.current) { firstProductRender.current = false; return }
+    priceTurn.current += 1
     setStructure(product.defaultStructure)
     setProductState({})
     setResult(null)
@@ -738,6 +743,8 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     }
     setAwaitingPar(null)
     setPricing(true); setError(''); setResult(null)
+    const turn = ++priceTurn.current
+    const current = () => turn === priceTurn.current
 
     abortRef.current?.abort()
     const ac = new AbortController()
@@ -768,6 +775,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         // swaption's option analytics come from its pricer on the booked
         // terms; the booked legs supply the cashflows.
         const booked = await post('/price', { trade_id: initialTrade.id, valuation_date: state.valDate, curves, states: true })
+        if (!current()) return
         if (isCurrency) { setFxQuote(booked); return }
         let data = booked
         // past its expiry a booked swaption is the swap it delivered: the booked legs' value stands, no option is priced
@@ -777,6 +785,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             data = { ...opt, legs: booked.legs, curve_mode: booked.curve_mode, trade_id: booked.trade_id }
           } catch (e) { console.warn('[tw] swaption revaluation fell back to the booked legs', e) }
         }
+        if (!current()) return
         setPricedPayload({ ...product.pricing.buildPayload(state), curves })
         setResult(product.pricing.parseResponse(data))
         return
@@ -797,9 +806,11 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           data = { ...data, legs: under.legs, underlying_npv: under.npv }
         } catch (e) { data = { ...data, legs: [], underlying_error: e?.message || 'the delivered swap could not be valued' } }
       }
+      if (!current()) return
       setPricedPayload(sent)
       setResult(product.pricing.parseResponse(data))
     } catch (e) {
+      if (!current()) return              // an answer nobody is waiting for, and so is its failure
       if (e?.name === 'AbortError') setError('Pricing request aborted')
       else setError(e.message)
     } finally {

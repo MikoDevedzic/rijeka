@@ -238,6 +238,8 @@
 /* a line under a row of terms that says what the row comes to (a swaption's delivered swap): a terms note set close
    under its row */
 .tbw-terms-note { font-size: 12px; color: var(--text-mute); letter-spacing: 0.05em; margin: -4px 0 10px; }
+/* the note as the whole of a section, straight under the section's label (the DETAILS tab of a product with no schedule to open) */
+.tbw-terms-note.after-lbl { margin-top: 8px; }
 
 .tbw-helper-text,
 .tbw-terms-footer,

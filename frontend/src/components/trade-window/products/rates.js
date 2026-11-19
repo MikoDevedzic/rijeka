@@ -145,7 +145,7 @@ registerProduct({
       metricCurrency('THETA',     r.theta),
       metricPct    ('FWD RATE',   r.fwd_rate),
     ],
-    breakdown: r => r.legs ? {
+    breakdown: r => r.legs?.length ? {      // none (the legs could not be valued) is no table, not an empty one
       kind: 'legs',
       columns: ['LEG','TYPE','DIR','CCY','PV','OPTION PV','VEGA/1bp','IR01','IR01 DISC','GAMMA','THETA'],
       rows: r.legs.map(l => [
@@ -398,7 +398,7 @@ registerProduct({
       }
       return m
     },
-    breakdown: r => r.legs ? {
+    breakdown: r => r.legs?.length ? {      // none (the legs could not be valued) is no table, not an empty one
       kind: 'legs',
       columns: ['LEG','TYPE','DIR','CCY','PV','IR01','IR01 DISC','VEGA','THETA'],
       rows: r.legs.map(l => [

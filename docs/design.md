@@ -125,6 +125,13 @@ read, the line gives way to the problem in a few words, in amber (`tbw-fx-limit 
 in full is what PRICE answers. A figure typed into a field is not coloured by what it is: no blue, no red for a cap
 and green for a floor.
 
+**A figure inside a sentence.** A date or an amount of money that stands in a note, a badge or a line of words is
+set in the figures' face (`tbw-mono`) and takes no colour for its sign: the sentence says what it is.
+
+**A heading inside a table.** Where one table lists two things of a kind in turn (a collar's cap and its floor on
+CASHFLOWS), each begins with a row that names it in the table head's own weight and colour on the head's ground,
+with its subtotal in the column the rows' values stand in.
+
 **A group shown and not open.** Terms a ticket shows because they are priced and booked, and does not let the user
 change (the swap a swaption delivers), sit in the fieldset a stored ticket's terms sit in (`tbw-fieldset`, disabled),
 so they read as that ticket does, with one line above them that says why they are shut. A field the price does not
