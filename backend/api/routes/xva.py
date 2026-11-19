@@ -611,6 +611,12 @@ def _trade_paths(trade, db: Session, user: dict, a: float, sigma: float, curve, 
     return {"paths": V[:, 1:], "v0": float(V[:, 0].mean()), "flows": fl, "T": T, "dt": dt, "p0_grid": p0_grid,
             "notional": abs(float(trade.notional or 0.0)), "maturity_y": max(years(val_date, it["maturity"]), dt), "currency": ccy,
             "kind": it["kind"], "instrument": str(trade.instrument_type or "").upper(), "options": ns.options,
+            # What the run did that the figures alone do not say (0.60.1). A Bermudan swaption is valued on the paths
+            # as its European: exercised at the expiry only. A swap of two floating legs is valued off the one curve of
+            # its currency, so it is worth nothing on every path and only capital is charged.
+            "run_as": "EUROPEAN" if it["kind"] == "SWAPTION" and str(getattr(trade, "structure", "") or "").upper() == "BERMUDAN" else None,
+            "one_curve": bool(it["kind"] == "SWAP" and not it.get("caplets") and len(it["legs"]) >= 2
+                              and all(str(lg.get("leg_type", "")).upper() == "FLOAT" for lg, _s in it["legs"])),
             "grid": [d.isoformat() for d in p.grid[1:]],
             # each path's discounting over the curve's, per grid date: the charges read the exposure discounted on its path
             "deflator": deflator_of(p, key)}
@@ -708,7 +714,11 @@ def simulate(
         anchor_delta = (body.npv - anchor_v0) if body.npv is not None else 0.0
         basis = {"kind": "TRADE", "instrument": tp["instrument"], "valued_as": tp["kind"], "currency": tp["currency"], "options": tp["options"],
                  "grid": "monthly from the valuation date", "first_date": tp["grid"][0] if tp["grid"] else None, "last_date": tp["grid"][-1] if tp["grid"] else None,
-                 "note": None}
+                 "run_as": tp["run_as"], "one_curve": tp["one_curve"],
+                 "note": ("A Bermudan swaption is run on the paths as its European: exercised at the expiry only. The value shown is the tree's; the exposure leaves the earlier exercise dates out."
+                          if tp["run_as"] else
+                          "Both floating legs are forecast off the one curve of the currency: the swap is worth nothing on every path, so the exposure charges are nil and capital's is the only one."
+                          if tp["one_curve"] else None)}
     else:
         # P(0, t) and the instantaneous forward f(0, t) on the simulation grid.
         p0_grid = [_p0(k * DT) for k in range(T + 2)]

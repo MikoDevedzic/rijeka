@@ -227,3 +227,23 @@ def test_an_instrument_the_engine_does_not_know_is_refused_in_its_own_words(clie
     # the last months hold the last yearly coupon and nothing else to move: with the coupon taken out of the margin
     # period's bridge the margined exposure there is a small part of the open one
     assert max(vm["ee"][-6:]) < 0.15 * max(open_["ee"][-6:])
+
+
+def test_the_run_says_what_it_did_that_the_figures_do_not(client, auth_a, ids):
+    """0.60.1. A Bermudan swaption is run on the paths as its European, and a swap of two floating legs is worth nothing
+    on any path (both legs off the one curve of the currency): the answer says each, and a plain swap says neither."""
+    plain = _ticket(client, auth_a, trade=B.swap(ids["a"], "RC-PLAIN"))
+    assert plain["basis"]["run_as"] is None and plain["basis"]["one_curve"] is False and plain["basis"]["note"] is None
+    eu = B.swaption(ids["a"], "RC-EU")
+    berm = dict(eu, structure="BERMUDAN")
+    e, b = _ticket(client, auth_a, trade=eu), _ticket(client, auth_a, trade=berm)
+    assert e["basis"]["run_as"] is None and b["basis"]["run_as"] == "EUROPEAN" and "as its European" in b["basis"]["note"]
+    for k in FOUR:
+        assert b["xva"][k] == e["xva"][k], k                    # which is what "run as its European" means
+    basis = B.swap(ids["a"], "RC-BASIS")
+    basis["structure"] = "BASIS"
+    basis["legs"] = [{**basis["legs"][1], "leg_ref": "FLOAT-1", "leg_seq": 1, "direction": "PAY"}, {**basis["legs"][1], "leg_ref": "FLOAT-2", "leg_seq": 2, "direction": "RECEIVE"}]
+    bs = _ticket(client, auth_a, trade=basis)
+    assert bs["basis"]["one_curve"] is True and "worth nothing on every path" in bs["basis"]["note"]
+    assert all(abs(bs["xva"][k]) < 0.005 for k in FOUR) and bs["xva"]["kva"] < 0
+    assert max(abs(x) for x in bs["ee"] + bs["ene"]) < 0.005

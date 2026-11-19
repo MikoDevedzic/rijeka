@@ -367,7 +367,7 @@ export default function FxXvaPanel({ quote, counterpartyId, counterpartyName, bu
             style={{flex:'0 0 auto',height:XVA_CHART_HEIGHT,border:'none',borderBottom:'1px solid var(--border)',borderRadius:0}}>
             <RunReadout result={res} />
             <ChartReadout result={res} fmt={fmt}
-              model={<>{res?.package ? `${res.legs?.length} legs, one netting set` : res?.params?.style ? String(res.params.style).replace(/_/g, ' ') : 'lognormal forward'} · vol {Number(res?.params?.vol_pct).toFixed(2)}% · {res?.params?.vol_mode && /flat/i.test(res.params.vol_mode) ? 'flat' : /smile/i.test(res?.params?.vol_mode || '') ? 'term + smile' : 'term structure'} · {[res?.steps, stepWord(res?.dt), 'steps'].filter(Boolean).join(' ')} · {ccy}</>} />
+              model={<>{res?.package ? `${res.legs?.length} legs, one netting set` : res?.params?.style ? (String(res.params.style).toUpperCase() === 'AMERICAN' ? 'AMERICAN, run on the paths as its European (a lower bound)' : String(res.params.style).replace(/_/g, ' ')) : 'lognormal forward'} · vol {Number(res?.params?.vol_pct).toFixed(2)}% · {res?.params?.vol_mode && /flat/i.test(res.params.vol_mode) ? 'flat' : /smile/i.test(res?.params?.vol_mode || '') ? 'term + smile' : 'term structure'} · {[res?.steps, stepWord(res?.dt), 'steps'].filter(Boolean).join(' ')} · {ccy}</>} />
           </ExposureCanvas>
 
           <div style={{flexShrink:0,overflowX:'auto'}} data-testid="xva-outputs">

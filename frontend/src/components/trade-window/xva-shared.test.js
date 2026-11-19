@@ -430,6 +430,12 @@ describe('what a rates run valued (basisLine)', () => {
       .toBe("the option to 2027-11-02, then its swap · σ 78.3bp, the paths' own (market 94.9bp)")
     expect(basisLine({ kind: 'TRADE', valued_as: 'SWAPTION', options: [{ expiry: '2027-11-02', vol_bp: 94.94 }] })).toBe('the option to 2027-11-02, then its swap · market σ 94.9bp')
     expect(basisLine({ kind: 'TRADE', valued_as: 'SWAP', options: [{ kind: 'CAP' }] })).toBe("the trade's own schedule, its caps on the paths")
+    // what the run did that the figures do not say (0.60.1)
+    expect(basisLine({ kind: 'TRADE', valued_as: 'SWAPTION', run_as: 'EUROPEAN', options: [{ expiry: '2027-11-19', vol_bp: 94.9, vol_used_bp: 71.46 }] }))
+      .toBe("the option to 2027-11-19, then its swap · σ 71.5bp, the paths' own (market 94.9bp) · a Bermudan, run as its European: exercised at the expiry only")
+    expect(basisLine({ kind: 'TRADE', valued_as: 'SWAP', one_curve: true, options: [] })).toBe("the trade's own schedule · both legs off one curve: no exposure on the paths, capital only")
+    expect(basisLine({ kind: 'TRADE', valued_as: 'SWAP', one_curve: false, run_as: null, options: [] })).toBe("the trade's own schedule")
+    expect(basisLine({ kind: 'TRADE', valued_as: 'SWAP', one_curve: 'yes', options: [] })).toBe("the trade's own schedule")      // only the answer's own true
     // a cap, a floor and a collar on the paths (0.60.0): the model's vol through the ticket's formula, and the ticket's own
     expect(basisLine({ kind: 'TRADE', instrument: 'IR_CAP', valued_as: 'SWAP', options: [{ kind: 'CAP', side: 'LONG', strike: 0.045, vol_bp: 81.48, vol_used_bp: 71.03 }] }))
       .toBe("each period valued on the paths at the model's own variance · cap σ 71.0bp, the paths' own (the ticket prices at 81.5bp)")

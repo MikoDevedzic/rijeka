@@ -3,6 +3,21 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.43). Commits on `main` are the detail.
 
+## 0.60.1 · 19 November 2026
+
+**The XVA tab says what its run did.** From the walk of the XVA tab of every instrument (sixteen runs, each component
+read against the trade's value and side: no wrong figure). Words only; no figure changes.
+
+- **A Bermudan swaption** is run on the paths as its European, exercised at the expiry only: its charges were the
+  European's to the cent, under the tree's value, and the tab did not say so. The line under the chart says it, and
+  the answer carries it (`basis.run_as`).
+- **An American option** on a currency pair or a digital asset is run on the paths as its European, a lower bound:
+  the tab said only AMERICAN.
+- **A basis swap** shows no CVA, DVA, FCA, FBA or MVA and only KVA, because both floating legs are forecast off the
+  one curve of the currency and the swap is worth nothing on every path. The tab says so (`basis.one_curve`).
+- **The swap's XVA workbook** was opened in Excel by the project's owner on 18 November 2026: every row of its
+  Checks sheet read PASS. The documents said it had not been opened in Excel; they now say by whom it has and has not.
+
 ## 0.60.0 · 19 November 2026
 
 **A cap, a floor and a collar have XVA.** Until now the XVA tab of these three tickets refused them in words, and a

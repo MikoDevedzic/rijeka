@@ -560,7 +560,9 @@ export function basisLine(basis) {
     // the vol the option was valued at on the paths is the paths' own model's; the market's quote stands beside it
     const used = bp(opt.vol_used_bp), quoted = bp(opt.vol_bp)
     const vol = used ? ` · σ ${used}, the paths' own${quoted ? ` (market ${quoted})` : ''}` : quoted ? ` · market σ ${quoted}` : ''
-    return `the option to ${opt.expiry}, then its swap${vol}`
+    // a Bermudan is run as its European (0.60.1): the answer says so, and so does the line
+    const as = String(basis.run_as || '').toUpperCase() === 'EUROPEAN' ? ' · a Bermudan, run as its European: exercised at the expiry only' : ''
+    return `the option to ${opt.expiry}, then its swap${vol}${as}`
   }
   const WORDS = { CAP: 'caps', FLOOR: 'floors' }
   const word = opt ? WORDS[String(opt.kind || '').toUpperCase()] : null
@@ -578,6 +580,8 @@ export function basisLine(basis) {
     const own = ['IR_CAP', 'IR_FLOOR', 'IR_COLLAR'].includes(String(basis.instrument || '').toUpperCase())
     return `${own ? "each period valued on the paths at the model's own variance" : `the trade's own schedule, its ${word || 'caps'} on the paths`} · ${said.join(' · ')}`
   }
+  // two floating legs off the one curve of the currency (0.60.1): nothing on any path, which is why only KVA is charged
+  if (basis.one_curve === true) return "the trade's own schedule · both legs off one curve: no exposure on the paths, capital only"
   return `the trade's own schedule${word ? `, its ${word} on the paths` : ''}`
 }
 

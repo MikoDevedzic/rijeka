@@ -92,3 +92,43 @@ test('a cap\'s DETAILS offers no swap schedule; an amortizing swap says where it
   await win.screenshot({ path: `${SHOTS}/ndf-fixes.png` })
   expectClean(problems)
 })
+
+test('the XVA tab says what the run did that the figures do not: a Bermudan as its European, a basis swap with nothing on the paths, an American option as its European', async ({ app, problems }) => {
+  const bank = (win) => win.locator('select').filter({ has: app.locator('option', { hasText: 'RIJEKA DEMO BANK AG' }) }).first().selectOption({ label: 'RIJEKA DEMO BANK AG' })
+  const run = async (win, route) => {
+    await win.getByRole('button', { name: 'XVA', exact: true }).click()
+    const answer = app.waitForResponse(r => r.url() === `${API}${route}` && r.request().method() === 'POST' && r.ok(), { timeout: 120_000 })
+    await win.getByRole('button', { name: /SIMULATE/ }).first().click()
+    return (await answer).json()
+  }
+  // a Bermudan swaption
+  let win = await ticket(app, 'RATES', 'IR SWAPTION')
+  await win.getByRole('button', { name: 'BERMUDAN', exact: true }).first().click()
+  await bank(win)
+  await expect(win.getByTestId('swaption-underlying')).toBeVisible()
+  await price(app, win, '/api/price/swaption')
+  let out = await run(win, '/api/xva/simulate')
+  expect(out.basis.run_as).toBe('EUROPEAN')
+  await expect(win.getByTestId('xva-basis')).toContainText('a Bermudan, run as its European: exercised at the expiry only')
+
+  // a basis swap: two floating legs off one curve
+  win = await ticket(app, 'RATES', 'IR SWAP')
+  await win.getByRole('button', { name: 'BASIS', exact: true }).first().click()
+  await bank(win)
+  await expect(win.locator('input[type=date]').nth(2)).not.toHaveValue('')
+  await price(app, win, '/price/preview')
+  out = await run(win, '/api/xva/simulate')
+  expect(out.basis.one_curve).toBe(true)
+  expect(Math.abs(out.xva.cva) + Math.abs(out.xva.dva)).toBeLessThan(0.01)
+  await expect(win.getByTestId('xva-basis')).toContainText('both legs off one curve: no exposure on the paths, capital only')
+
+  // an American option on a currency pair
+  win = await ticket(app, 'FX', 'FX OPTION')
+  await win.locator('.tbw-chip', { hasText: /^AMERICAN$/ }).first().click()
+  await bank(win)
+  await price(app, win, '/api/currency/option/price')
+  await run(win, '/api/xva/currency-option')
+  await expect(win.getByText('AMERICAN, run on the paths as its European (a lower bound)')).toBeVisible()
+  await win.screenshot({ path: `${SHOTS}/xva-american-words.png` })
+  expectClean(problems)
+})
