@@ -26,7 +26,7 @@
 import { withFees } from './fees'
 import { toRateSchedule, toNotionalSchedule, toSpreadSchedule } from './schedule_translator'
 import { getSessionMaybe } from '../../lib/session'
-import { SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS, swaptionExpiry, swaptionUnderlying, swaptionVol } from './product-defaults'
+import { SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS, swaptionExpiry, swaptionUnderlying, swaptionVol, capStrike, capVol } from './product-defaults'
 
 // Unified-window product key → the instrument_type the backend stores and the
 // engines match on (ccr/options.py, pnl/valuation.py, pricing/ir_swap.py).
@@ -110,7 +110,7 @@ export function buildLegs(state, direction, notional, extras = {}) {
     case 'IR_SWAP':     return buildSwapLegs(state, direction, notional)
     case 'IR_SWAPTION': return buildSwaptionLegs(state, direction, notional, extras)
     case 'RATES_CAP': case 'RATES_FLOOR': case 'RATES_COLLAR':
-      return buildCapFloorLegs(state, direction, notional)
+      return buildCapFloorLegs(state, direction, notional, extras.priced || null)
     default:
       throw new Error(
         'buildLegs: atomic booking supports IR_SWAP, IR_SWAPTION and the cap, ' +
@@ -258,37 +258,37 @@ function buildSwaptionLegs(state, direction, notional, extras = {}) {
   }))
 }
 
-/** The cap-like products' strikes as decimals; null when the product has no
- *  such leg (a cap has no floor_rate). */
-function capFloorRates(state) {
-  const pct = v => { const n = parseFloat(String(v)); return isFinite(n) ? n / 100 : NaN }
+/** The cap-like products' strikes as decimals; null when the product has no such leg (a cap has no floor_rate).
+ *  A cap's or a floor's strike left blank is at the money: the rate the price struck it at (`priced`, the answer of
+ *  the route), so the booking carries the number on the screen. Nothing priced, nothing to take it from. */
+export function capFloorRates(state, priced = null) {
   const hasCap   = state.productKey === 'RATES_CAP'   || state.productKey === 'RATES_COLLAR'
   const hasFloor = state.productKey === 'RATES_FLOOR' || state.productKey === 'RATES_COLLAR'
-  const cap   = hasCap   ? pct(state.capRate   ?? CAPFLOOR_DEFAULTS.capRate)   : null
-  const floor = hasFloor ? pct(state.floorRate ?? CAPFLOOR_DEFAULTS.floorRate) : null
-  if (hasCap   && isNaN(cap))   throw new Error('Cap rate must be a number (percent).')
-  if (hasFloor && isNaN(floor)) throw new Error('Floor rate must be a number (percent).')
+  const collar   = hasCap && hasFloor
+  const one = (raw, name, from) => {
+    const k = capStrike(raw, name)
+    if (k.problem) throw new Error(k.problem)
+    if (!k.blank) return k.dec
+    if (collar) throw new Error(`A collar's ${name} is typed: it has no strike to take from the market.`)
+    const struck = Number(from)
+    if (from == null || !Number.isFinite(struck)) throw new Error(`The ${name} is blank, which is at the money: price the ticket first, so the booking carries the rate it was struck at.`)
+    return struck
+  }
+  const cap   = hasCap   ? one(state.capRate   ?? CAPFLOOR_DEFAULTS.capRate,   'cap rate',   priced?.cap_rate)   : null
+  const floor = hasFloor ? one(state.floorRate ?? CAPFLOOR_DEFAULTS.floorRate, 'floor rate', priced?.floor_rate) : null
   return { cap, floor }
 }
 
-function buildCapFloorLegs(state, direction, notional) {
+/** The floating leg a cap, a floor or a collar is booked as, without its strikes: no participation in the rate
+ *  (leverage 0), the ticket's dates and conventions. The ticket's price is asked for this very leg
+ *  (products/rates.js), so what is priced is what is booked. */
+export function capFloorLeg(state, notional) {
   const ccy        = state.ccy || 'USD'
   const curveId    = CCY_CURVE[ccy] || 'USD_SOFR'
   const index      = state.index || 'SOFR'
   const forecastId = INDEX_CURVE[index] || curveId
   const payLag     = INDEX_PAY_LAG[index] != null ? INDEX_PAY_LAG[index] : 2
-  const side       = state.optionSide || CAPFLOOR_DEFAULTS.optionSide
-  const theirs     = side === 'BUY' ? 'SELL' : 'BUY'
-  const { cap, floor } = capFloorRates(state)
-  const strikeEntry = (type, dir, k) => ({
-    type, direction: dir, default_strike: k,
-    strike_schedule: [{ date: state.effDate, strike: k }],
-  })
-  // BUY: we own the cap (and, in a collar, sold the floor).
-  const embedded = []
-  if (cap   != null) embedded.push(strikeEntry('CAP',   side, cap))
-  if (floor != null) embedded.push(strikeEntry('FLOOR', state.productKey === 'RATES_COLLAR' ? theirs : side, floor))
-  return [{
+  return {
     leg_ref: 'OPT-1', leg_seq: 1, leg_type: 'FLOAT',
     direction: 'RECEIVE', currency: ccy, notional, notional_type: 'BULLET',
     effective_date: state.effDate, maturity_date: state.matDate,
@@ -301,9 +301,22 @@ function buildCapFloorLegs(state, direction, notional) {
     fixed_rate: 0, spread: 0, spread_schedule: null, leverage: 0,
     discount_curve_id: curveId, forecast_curve_id: forecastId,
     ois_compounding: null,
-    embedded_options: embedded,
-    terms: {},
-  }]
+  }
+}
+
+function buildCapFloorLegs(state, direction, notional, priced = null) {
+  const side       = state.optionSide || CAPFLOOR_DEFAULTS.optionSide
+  const theirs     = side === 'BUY' ? 'SELL' : 'BUY'
+  const { cap, floor } = capFloorRates(state, priced)
+  const strikeEntry = (type, dir, k) => ({
+    type, direction: dir, default_strike: k,
+    strike_schedule: [{ date: state.effDate, strike: k }],
+  })
+  // BUY: we own the cap (and, in a collar, sold the floor).
+  const embedded = []
+  if (cap   != null) embedded.push(strikeEntry('CAP',   side, cap))
+  if (floor != null) embedded.push(strikeEntry('FLOOR', state.productKey === 'RATES_COLLAR' ? theirs : side, floor))
+  return [{ ...capFloorLeg(state, notional), embedded_options: embedded, terms: {} }]
 }
 
 /** The vanilla (fixed-for-float) swap terms. Shared by the swap and, with the
@@ -382,11 +395,18 @@ export function buildSwaptionBookingBody(state, direction, extras = {}) {
 export function buildCapFloorBookingBody(state, direction, extras = {}) {
   const notional = Number(state.notional) || 0
   const ccy      = state.ccy || 'USD'
-  const { cap, floor } = capFloorRates(state)
   const priced   = extras.priced || null
-  const volOv    = parseFloat(String(state.volOverride ?? CAPFLOOR_DEFAULTS.volOverride))
+  const { cap, floor } = capFloorRates(state, priced)
+  const typedVol = capVol(state)
+  if (typedVol.problem) throw new Error(typedVol.problem)
+  const volOv    = typedVol.bp ?? NaN
   const pricedVol = priced?.vol_bp ?? priced?.cap_vol_bp ?? null
-  const pricedNpv = priced?.npv ?? priced?.net_npv ?? null
+  // The premium as the bought side sees it, as it always was booked: what a cap or a floor is worth, and a collar's
+  // cap less its floor (negative when the floor is worth more: the buyer is paid). The price carries the side's
+  // sign since 0.59.0 (a sold option's value is negative), so a sold ticket's is turned back.
+  const ours      = priced?.npv ?? priced?.net_npv
+  const pricedNpv = ours != null && Number.isFinite(Number(ours))
+    ? Number(ours) * ((state.optionSide || CAPFLOOR_DEFAULTS.optionSide) === 'SELL' ? -1 : 1) : null
   const terms = {
     option: INSTRUMENT_OF[state.productKey].replace('IR_', ''),
     side: state.optionSide || CAPFLOOR_DEFAULTS.optionSide,

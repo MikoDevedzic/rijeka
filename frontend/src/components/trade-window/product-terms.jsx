@@ -28,12 +28,13 @@
 //     not drive it. Adding a cap/floor no longer switches structure.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useEffect, useRef } from 'react'
+import React, { Fragment, useEffect, useRef } from 'react'
 import LegEmbeddedOptions from './LegEmbeddedOptions'
 import { useFieldLabel } from '../../lib/a11y'
 import { getSessionMaybe } from '../../lib/session'
-import { SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS, EXPIRY_TENORS, EXPIRY_DATE, TENOR_Y, CCY_CURVE, addDays, swaptionExpiry, swaptionUnderlying, swaptionVol, volSourceWords } from './product-defaults'
+import { SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS, EXPIRY_TENORS, EXPIRY_DATE, TENOR_Y, CCY_CURVE, addDays, swaptionExpiry, swaptionUnderlying, swaptionVol, volSourceWords, capStrike, capVol } from './product-defaults'
 import DefaultedInput from './DefaultedInput'
+import { INDEX_CURVE } from './booking'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 
@@ -187,7 +188,11 @@ function useScheduleDates(state, update) {
 
 // ── IR_SWAP body ───────────────────────────────────────────────────────────
 
-export function SwapTermsBody({ state, update }) {
+// `underlying`: the body is the swap a swaption delivers (SwaptionTermsBody). The option's price reads that swap's
+// dates and nothing else of it: the fixed leg is taken as paid annually on ACT/360 against the index flat
+// (pricing/swaption.py). So its conventions are shown as they are priced and booked, and are not open; the coupon is
+// the option's strike and has no field here; a cap or a floor on the leg, which no swaption pricer reads, is not offered.
+export function SwapTermsBody({ state, update, underlying = false }) {
   const {
     ccy = 'USD', effDate, matDate, valDate,
     direction = 'PAY', structure = 'VANILLA',
@@ -238,7 +243,7 @@ export function SwapTermsBody({ state, update }) {
   // ── Effect: par-rate auto-fetch ──────────────────────────────────────────
   // Not on a booked trade: its coupon is struck.
   useEffect(() => {
-    if (state.readOnly) return
+    if (state.readOnly || underlying) return           // a swaption's coupon is its strike: nothing to solve
     if (!effDate || !matDate || !ccy) return
     if (state.rateUserEdited) return
     let cancelled = false
@@ -258,12 +263,14 @@ export function SwapTermsBody({ state, update }) {
           fixed_pay_freq: fixedPayFreq,
           fixed_day_count: fixedDc,
           fixed_bdc: fixedBdc,
+          fixed_calendar: state.fixedCal || null,
           fixed_payment_lag: payLag,
           float_index: index,
           float_reset_freq: floatResetFreq,
           float_pay_freq: floatPayFreq,
           float_day_count: floatDc,
           float_bdc: floatBdc,
+          float_calendar: state.floatCal || null,
           float_payment_lag: payLag,
           spread: (parseFloat(spread) || 0) / 10000,
           leverage: parseFloat(leverage) || 1.0,
@@ -300,7 +307,7 @@ export function SwapTermsBody({ state, update }) {
     // the valuation date or a day count left the old par rate on screen.
   }, [effDate, matDate, ccy, structure, direction, valDate, index,
       fixedPayFreq, fixedDc, fixedBdc, floatResetFreq, floatPayFreq,
-      floatDc, floatBdc, spread, leverage, state.notional, state.rateUserEdited, state.readOnly, state.parNonce])
+      floatDc, floatBdc, state.fixedCal, state.floatCal, spread, leverage, state.notional, state.rateUserEdited, state.readOnly, state.parNonce, underlying])
 
   // ── Sprint 13 Patch 5 ─ structure-sync effect removed ──
   // Per PRODUCT_TAXONOMY §1.11, embedded optionality is a leg-level feature
@@ -337,17 +344,33 @@ export function SwapTermsBody({ state, update }) {
 
   const selStyle = { width: '100%' }
 
+  // an index whose curve is not the currency's overnight curve: the ticket prices on one curve a currency
+  const offCurve = (ix) => INDEX_CURVE[ix] && INDEX_CURVE[ix] !== (CCY_CURVE[ccy] || 'USD_SOFR')
+  const indexNote = (ix, testId) => offCurve(ix) && !underlying && (
+    <div className="tbw-terms-note" data-testid={testId}>
+      {ix} is forecast off the {ccy} overnight curve (<span className="tbw-mono">{CCY_CURVE[ccy] || 'USD_SOFR'}</span>): a ticket prices on one curve a currency, so a basis between two indices of one currency is not valued.
+    </div>
+  )
+  const Legs = underlying ? 'fieldset' : Fragment
+  const legsProps = underlying ? { disabled: true, className: 'tbw-underlying', 'data-testid': 'swaption-underlying-legs' } : {}
+
   return (
     <>
+      {underlying && (
+        <div className="tbw-terms-note" data-testid="swaption-underlying-note">
+          The swap delivered, as the option is priced and booked: its fixed leg at the strike, paid annually on ACT/360, against the index flat. These terms are not open on a swaption.
+        </div>
+      )}
+      <Legs {...legsProps}>
       {!isBasis && (
         <>
           <LegHeader label="FIXED LEG" dirLabel={fixedDirLabel} dirColor={fixedDirColor} />
           <Row cols={7}>
-            <Field label="COUPON (%)">
+            {!underlying && <Field label="COUPON (%)">
               <input className="tbw-mono tbw-amber" value={coupon} placeholder="auto"
                      onChange={e => onCouponChange(e.target.value)} />
-            </Field>
-            <Field label={'\u00A0'}>
+            </Field>}
+            {!underlying && <Field label={'\u00A0'}>
               {/* The chip must reflect reality: lit only when the coupon
                   actually matches the solved par rate (within 0.01bp). It was
                   hardcoded is-on, so it stayed lit on an off-market coupon. */}
@@ -361,7 +384,7 @@ export function SwapTermsBody({ state, update }) {
                       onClick={onParClick}>
                 {isAtPar ? '\u25CF' : '\u25CB'} PAR
               </button>
-            </Field>
+            </Field>}
             <Field label="PAY FREQ">
               <select style={selStyle} value={fixedPayFreq}
                       onChange={e => update({ fixedPayFreq: e.target.value })}>
@@ -392,7 +415,7 @@ export function SwapTermsBody({ state, update }) {
 
       <LegHeader
         label={isBasis ? 'FLOAT LEG 1' : 'FLOATING LEG'}
-        dirLabel={isBasis ? fixedDirLabel : floatDirLabel}
+        dirLabel={isBasis ? (direction === 'PAY' ? '\u2192 PAY FLOAT 1' : '\u2190 RECEIVE FLOAT 1') : floatDirLabel}
         dirColor={isBasis ? fixedDirColor : floatDirColor}
       />
       <Row cols={8}>
@@ -445,7 +468,8 @@ export function SwapTermsBody({ state, update }) {
       {/* Sprint 13 Patch 4 — leg-level embedded optionality (PRODUCT_TAXONOMY §1.11).
           Replaces the Sprint 12 structure-conditional CAPPED_FLOATER / FLOORED_FLOATER
           panel. Mount is always visible on the FLOAT leg; zero entries = vanilla. */}
-      {!isBasis && (
+      {indexNote(index, 'index-note')}
+      {!isBasis && !underlying && (
         <LegEmbeddedOptions
           legLabel="FLOATING LEG"
           entries={state.floatLegEmbeddedOptions || []}
@@ -455,7 +479,7 @@ export function SwapTermsBody({ state, update }) {
 
       {isBasis && (
         <>
-          <LegHeader label="FLOAT LEG 2" dirLabel={floatDirLabel} dirColor={floatDirColor} />
+          <LegHeader label="FLOAT LEG 2" dirLabel={floatDirLabel + ' 2'} dirColor={floatDirColor} />
           <Row cols={8}>
             <Field label="INDEX">
               <select style={selStyle} value={index2}
@@ -501,8 +525,10 @@ export function SwapTermsBody({ state, update }) {
               </select>
             </Field>
           </Row>
+          {indexNote(index2, 'index-note-2')}
         </>
       )}
+      </Legs>
     </>
   )
 }
@@ -591,165 +617,151 @@ export function SwaptionTermsBody({ state, update }) {
         </div>
       )}
       {/* Legs inherited from SwapTermsBody — swaption has same underlying swap legs */}
-      <SwapTermsBody state={{ ...state, structure: 'VANILLA' }} update={update} />
+      <SwapTermsBody state={{ ...state, structure: 'VANILLA' }} update={update} underlying />
     </>
   )
 }
 
-// ── RATES_CAP body ──────────────────────────────────────────────────────────
-// State keys (shared by the three cap-like bodies): capRate / floorRate (%),
-// index, capResetFreq, capPayFreq, capDayCount, volOverride (bp), optionSide.
+// ── RATES_CAP / RATES_FLOOR / RATES_COLLAR bodies ───────────────────────────
+// State keys (shared by the three): capRate / floorRate (%, blank = at the money on a cap or a floor), index,
+// capResetFreq, capPayFreq, capDayCount, volOverride (bp, blank = the cap surface's), optionSide.
 // Defaults are CAPFLOOR_DEFAULTS, applied by the pricer and the booking too.
+// `priced`: the answer of the price on screen, when it is for the terms as they stand (sections.jsx ProductTerms);
+// it fills the line under the fields with what the price struck, read and ran over.
 
-export function CapTermsBody({ state, update }) {
-  useScheduleDates(state, update)
+const TIER_WORDS = { QUOTED: 'quoted', INTERP: 'between quotes', EXTRAP: 'beyond the last quote', FALLBACK: 'desk default · no cap surface for this day', OVERRIDE: 'typed' }
+const tierWords = (t) => TIER_WORDS[t] || String(t || '').toLowerCase()
+const pct4 = (x) => (Number.isFinite(Number(x)) ? `${(+Number(x).toFixed(4))} %` : null)
+
+// The words under a strike or a vol field: a problem with what is typed, or where the blank field's number comes from.
+function FieldNote({ problem, children, testId }) {
+  if (problem) return <div className="tbw-fx-limit" data-testid={testId} style={{ color: 'var(--amber)' }}>{problem}</div>
+  return children ? <div className="tbw-fx-limit" data-testid={testId}>{children}</div> : null
+}
+
+function StrikeField({ label, tone, value, onChange, atm, priced, struck, testId }) {
+  const k = capStrike(value, 'rate')
+  const note = k.problem ? null
+    : k.blank && atm ? (priced && struck != null ? <>at the money · <span className="tbw-mono">{pct4(struck * 100)}</span></> : 'at the money · PRICE strikes it')
+    : !k.blank && priced && priced.atm_forward_pct != null ? <>ATM <span className="tbw-mono">{pct4(priced.atm_forward_pct)}</span></> : null
+  return (
+    <Field label={label}>
+      <input className={`tbw-mono ${tone}`} value={value} placeholder={atm ? 'ATM' : 'type a rate'} data-testid={testId} aria-invalid={k.problem ? true : undefined}
+             onChange={e => onChange(e.target.value)} />
+      <FieldNote problem={k.problem ? 'not a rate in percent' : null} testId={`${testId}-note`}>{note}</FieldNote>
+    </Field>
+  )
+}
+
+function CapVolField({ state, update, priced }) {
+  const v = capVol(state)
+  const typed = String(state.volOverride ?? '').trim() !== ''
+  const note = v.problem ? null
+    : typed ? 'typed · clear the field for the surface\'s'
+    : priced && priced.vol_bp != null ? <><span className="tbw-mono">{(+Number(priced.vol_bp).toFixed(2))} bp</span> · cap surface, {tierWords(priced.vol_tier)}</> : 'cap surface at the strike · PRICE reads it'
+  return (
+    <Field label="NORMAL VOL (bp)">
+      <input className="tbw-mono tbw-blue" placeholder="surface" data-testid="cap-vol" aria-invalid={v.problem ? true : undefined}
+             value={state.volOverride ?? CAPFLOOR_DEFAULTS.volOverride}
+             onChange={e => update({ volOverride: e.target.value })} />
+      <FieldNote problem={v.problem ? 'not a vol: above zero, at most 5,000 bp' : null} testId="cap-vol-note">{note}</FieldNote>
+    </Field>
+  )
+}
+
+// What the price ran over, once there is one for the terms as they stand: the periods are the leg's own, so the
+// dates of PRIMARY ECONOMICS and the conventions above are the ones priced and booked.
+function CapPricedNote({ priced }) {
+  if (!priced?.effective_date) return null
+  return (
+    <div className="tbw-terms-note" data-testid="cap-priced-note">
+      Priced as it is booked: {priced.n_caplets} periods from <span className="tbw-mono">{priced.effective_date}</span> to <span className="tbw-mono">{priced.maturity_date}</span>
+      {' · '}{String(priced.payment_frequency || '').toLowerCase().replace('_', '-')}, {priced.day_count}
+      {priced.index_note ? <> · <span data-testid="cap-index-note" style={{ color: 'var(--amber)' }}>{priced.index_note}</span></> : null}
+    </div>
+  )
+}
+
+function CapConventions({ state, update }) {
   const ccy         = state.ccy         || 'USD'
-  const capRate     = state.capRate     ?? CAPFLOOR_DEFAULTS.capRate
   const index       = state.index       ?? (CCY_INDICES[ccy]?.[0] || 'SOFR')
   const resetFreq   = state.capResetFreq ?? CAPFLOOR_DEFAULTS.capResetFreq
   const payFreq     = state.capPayFreq   ?? CAPFLOOR_DEFAULTS.capPayFreq
   const dayCount    = state.capDayCount  ?? CAPFLOOR_DEFAULTS.capDayCount
-  const volOverride = state.volOverride  ?? CAPFLOOR_DEFAULTS.volOverride
   return (
     <>
-      <Row cols={7}>
-        <SideField state={state} update={update} />
-        <Field label="CAP RATE (%)">
-          <input className="tbw-mono tbw-negative" value={capRate}
-                 onChange={e => update({ capRate: e.target.value })} />
-        </Field>
-        <Field label="INDEX">
-          <select value={index} onChange={e => update({ index: e.target.value })}>
-            {(CCY_INDICES[ccy] || ['SOFR']).map(i => <option key={i}>{i}</option>)}
-          </select>
-        </Field>
-        <Field label="RESET FREQ">
-          <select value={resetFreq}
-                  onChange={e => update({ capResetFreq: e.target.value })}>
-            {RESET_FREQS.map(f => <option key={f}>{f}</option>)}
-          </select>
-        </Field>
-        <Field label="PAY FREQ">
-          <select value={payFreq}
-                  onChange={e => update({ capPayFreq: e.target.value })}>
-            {PAY_FREQS.filter(f => f !== 'ZERO_COUPON').map(f => <option key={f}>{f}</option>)}
-          </select>
-        </Field>
-        <Field label="DAY COUNT">
-          <select value={dayCount}
-                  onChange={e => update({ capDayCount: e.target.value })}>
-            {DAY_COUNTS.map(d => <option key={d}>{d}</option>)}
-          </select>
-        </Field>
-        <Field label="NORMAL VOL (bp)">
-          <input className="tbw-mono tbw-blue" placeholder="\u2014 price to load"
-                 value={volOverride}
-                 onChange={e => update({ volOverride: e.target.value })} />
-        </Field>
-      </Row>
+      <Field label="INDEX">
+        <select value={index} onChange={e => update({ index: e.target.value })}>
+          {(CCY_INDICES[ccy] || ['SOFR']).map(i => <option key={i}>{i}</option>)}
+        </select>
+      </Field>
+      <Field label="RESET FREQ">
+        <select value={resetFreq} onChange={e => update({ capResetFreq: e.target.value })}>
+          {RESET_FREQS.map(f => <option key={f}>{f}</option>)}
+        </select>
+      </Field>
+      <Field label="PAY FREQ">
+        <select value={payFreq} onChange={e => update({ capPayFreq: e.target.value })}>
+          {PAY_FREQS.filter(f => f !== 'ZERO_COUPON').map(f => <option key={f}>{f}</option>)}
+        </select>
+      </Field>
+      <Field label="DAY COUNT">
+        <select value={dayCount} onChange={e => update({ capDayCount: e.target.value })}>
+          {DAY_COUNTS.map(d => <option key={d}>{d}</option>)}
+        </select>
+      </Field>
     </>
   )
 }
 
-// ── RATES_FLOOR body ───────────────────────────────────────────────────────
-
-export function FloorTermsBody({ state, update }) {
+export function CapTermsBody({ state, update, priced = null }) {
   useScheduleDates(state, update)
-  const ccy         = state.ccy         || 'USD'
-  const floorRate   = state.floorRate   ?? CAPFLOOR_DEFAULTS.floorRate
-  const index       = state.index       ?? (CCY_INDICES[ccy]?.[0] || 'SOFR')
-  const resetFreq   = state.capResetFreq ?? CAPFLOOR_DEFAULTS.capResetFreq
-  const payFreq     = state.capPayFreq   ?? CAPFLOOR_DEFAULTS.capPayFreq
-  const dayCount    = state.capDayCount  ?? CAPFLOOR_DEFAULTS.capDayCount
-  const volOverride = state.volOverride  ?? CAPFLOOR_DEFAULTS.volOverride
+  const mine = priced?.instrument === 'IR_CAP' ? priced : null
   return (
     <>
       <Row cols={7}>
         <SideField state={state} update={update} />
-        <Field label="FLOOR RATE (%)">
-          <input className="tbw-mono tbw-positive" value={floorRate}
-                 onChange={e => update({ floorRate: e.target.value })} />
-        </Field>
-        <Field label="INDEX">
-          <select value={index} onChange={e => update({ index: e.target.value })}>
-            {(CCY_INDICES[ccy] || ['SOFR']).map(i => <option key={i}>{i}</option>)}
-          </select>
-        </Field>
-        <Field label="RESET FREQ">
-          <select value={resetFreq}
-                  onChange={e => update({ capResetFreq: e.target.value })}>
-            {RESET_FREQS.map(f => <option key={f}>{f}</option>)}
-          </select>
-        </Field>
-        <Field label="PAY FREQ">
-          <select value={payFreq}
-                  onChange={e => update({ capPayFreq: e.target.value })}>
-            {PAY_FREQS.filter(f => f !== 'ZERO_COUPON').map(f => <option key={f}>{f}</option>)}
-          </select>
-        </Field>
-        <Field label="DAY COUNT">
-          <select value={dayCount}
-                  onChange={e => update({ capDayCount: e.target.value })}>
-            {DAY_COUNTS.map(d => <option key={d}>{d}</option>)}
-          </select>
-        </Field>
-        <Field label="NORMAL VOL (bp)">
-          <input className="tbw-mono tbw-blue" placeholder="\u2014 price to load"
-                 value={volOverride}
-                 onChange={e => update({ volOverride: e.target.value })} />
-        </Field>
+        <StrikeField label="CAP RATE (%) blank=ATM" tone="tbw-negative" atm testId="cap-rate" priced={mine} struck={mine?.cap_rate}
+                     value={state.capRate ?? CAPFLOOR_DEFAULTS.capRate} onChange={v => update({ capRate: v })} />
+        <CapConventions state={state} update={update} />
+        <CapVolField state={state} update={update} priced={mine} />
       </Row>
+      <CapPricedNote priced={mine} />
     </>
   )
 }
 
-// ── RATES_COLLAR body ──────────────────────────────────────────────────────
-
-export function CollarTermsBody({ state, update }) {
+export function FloorTermsBody({ state, update, priced = null }) {
   useScheduleDates(state, update)
-  const ccy         = state.ccy         || 'USD'
-  const capRate     = state.capRate     ?? CAPFLOOR_DEFAULTS.capRate
-  const floorRate   = state.floorRate   ?? CAPFLOOR_DEFAULTS.floorRate
-  const index       = state.index       ?? (CCY_INDICES[ccy]?.[0] || 'SOFR')
-  const resetFreq   = state.capResetFreq ?? CAPFLOOR_DEFAULTS.capResetFreq
-  const payFreq     = state.capPayFreq   ?? CAPFLOOR_DEFAULTS.capPayFreq
-  const dayCount    = state.capDayCount  ?? CAPFLOOR_DEFAULTS.capDayCount
+  const mine = priced?.instrument === 'IR_FLOOR' ? priced : null
   return (
     <>
       <Row cols={7}>
         <SideField state={state} update={update} />
-        <Field label="CAP RATE (%)">
-          <input className="tbw-mono tbw-negative" value={capRate}
-                 onChange={e => update({ capRate: e.target.value })} />
-        </Field>
-        <Field label="FLOOR RATE (%)">
-          <input className="tbw-mono tbw-positive" value={floorRate}
-                 onChange={e => update({ floorRate: e.target.value })} />
-        </Field>
-        <Field label="INDEX">
-          <select value={index} onChange={e => update({ index: e.target.value })}>
-            {(CCY_INDICES[ccy] || ['SOFR']).map(i => <option key={i}>{i}</option>)}
-          </select>
-        </Field>
-        <Field label="RESET FREQ">
-          <select value={resetFreq}
-                  onChange={e => update({ capResetFreq: e.target.value })}>
-            {RESET_FREQS.map(f => <option key={f}>{f}</option>)}
-          </select>
-        </Field>
-        <Field label="PAY FREQ">
-          <select value={payFreq}
-                  onChange={e => update({ capPayFreq: e.target.value })}>
-            {PAY_FREQS.filter(f => f !== 'ZERO_COUPON').map(f => <option key={f}>{f}</option>)}
-          </select>
-        </Field>
-        <Field label="DAY COUNT">
-          <select value={dayCount}
-                  onChange={e => update({ capDayCount: e.target.value })}>
-            {DAY_COUNTS.map(d => <option key={d}>{d}</option>)}
-          </select>
-        </Field>
+        <StrikeField label="FLOOR RATE (%) blank=ATM" tone="tbw-positive" atm testId="floor-rate" priced={mine} struck={mine?.floor_rate}
+                     value={state.floorRate ?? CAPFLOOR_DEFAULTS.floorRate} onChange={v => update({ floorRate: v })} />
+        <CapConventions state={state} update={update} />
+        <CapVolField state={state} update={update} priced={mine} />
       </Row>
+      <CapPricedNote priced={mine} />
+    </>
+  )
+}
+
+export function CollarTermsBody({ state, update, priced = null }) {
+  useScheduleDates(state, update)
+  const mine = priced?.instrument === 'IR_COLLAR' ? priced : null
+  return (
+    <>
+      <Row cols={7}>
+        <SideField state={state} update={update} />
+        <StrikeField label="CAP RATE (%)" tone="tbw-negative" testId="cap-rate" priced={mine}
+                     value={state.capRate ?? CAPFLOOR_DEFAULTS.capRate} onChange={v => update({ capRate: v })} />
+        <StrikeField label="FLOOR RATE (%)" tone="tbw-positive" testId="floor-rate" priced={mine}
+                     value={state.floorRate ?? CAPFLOOR_DEFAULTS.floorRate} onChange={v => update({ floorRate: v })} />
+        <CapConventions state={state} update={update} />
+      </Row>
+      <CapPricedNote priced={mine} />
     </>
   )
 }

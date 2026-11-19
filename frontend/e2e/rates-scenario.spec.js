@@ -16,6 +16,8 @@ async function priced(app, chip, route) {
   await win.waitFor()
   await win.getByRole('button', { name: 'RATES', exact: true }).click()
   if (chip) await win.getByRole('button', { name: chip, exact: true }).click()
+  // a collar has no strike to take from the market: both are typed (a cap's and a floor's left blank are at the money)
+  if (/COLLAR/.test(chip || '')) { await win.getByTestId('cap-rate').fill('4.5'); await win.getByTestId('floor-rate').fill('3.0') }
   await selectDemoBank(app, win)
   const answer = app.waitForResponse(r => r.url().startsWith(API) && r.url().endsWith(route) && r.request().method() === 'POST' && r.status() === 200)
   await win.getByRole('button', { name: '▶ PRICE' }).click()

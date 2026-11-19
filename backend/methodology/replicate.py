@@ -31,7 +31,6 @@ from methodology import workbook as W
 from pricing.curve import Curve
 from pricing.ir_swap import price_swap
 from pricing.swaption import price_swaption
-from pricing.cap_floor import price_cap
 from pricing.fx_option import price_fx_option
 from pricing.currency_forward import price_currency_forward
 from pricing.fx_exotic import ExoticSpec, price_exotic
@@ -361,54 +360,82 @@ def swaption_workbook(mkt: Market):
     return wb, res.npv
 
 
-def cap_workbook(mkt: Market):
+def cap_ticket_leg(val: date, strike: float, vol_bp: float = 85.0) -> dict:
+    """The cap ticket as it opens, as the leg it books (frontend booking.js capFloorLeg): five years from the spot
+    date (two New York business days on), quarterly, ACT/360, modified following, paid two business days after each
+    period, with no participation in the rate and the cap as its embedded option. The vol is handed in, so the
+    replication does not depend on the cap surface."""
+    from dateutil.relativedelta import relativedelta
+    from pricing.calendars import add_business_days
+    eff = add_business_days(val, 2, "NEW_YORK")
+    return {"leg_ref": "OPT-1", "leg_type": "FLOAT", "direction": "RECEIVE", "currency": "USD", "notional": 10_000_000.0,
+            "effective_date": str(eff), "maturity_date": str(eff + relativedelta(years=5)), "day_count": "ACT/360",
+            "payment_frequency": "QUARTERLY", "reset_frequency": "DAILY", "bdc": "MOD_FOLLOWING", "stub_type": "SHORT_FRONT",
+            "payment_lag": 2, "fixed_rate": 0.0, "spread": 0.0, "leverage": 0.0, "discount_curve_id": "USD_SOFR",
+            "forecast_curve_id": "USD_SOFR", "_vol_override_bp": vol_bp,
+            "embedded_options": [{"type": "CAP", "direction": "BUY", "default_strike": strike, "strike_schedule": []}]}
+
+
+def cap_ticket_price(mkt: Market, strike: Optional[float] = None, vol_bp: float = 85.0):
+    """(value, the strip as the pricer answered it, the strike) of the cap ticket's default trade, through the swap
+    pricer on the leg's own periods: the calculation behind POST /api/price/cap and behind a booked cap's value. No
+    strike: at the money, the forward of the leg's periods to eight decimals, as the ticket strikes a blank field."""
     val = mkt.valuation_date
-    res = price_cap(10_000_000, 0.0, 5.0, mkt.curve, val, [], vol_override_bp=85.0)
-    K = res.atm_forward
-    res = price_cap(10_000_000, K, 5.0, mkt.curve, val, [], vol_override_bp=85.0)
+    run = lambda k: price_swap("cap", [cap_ticket_leg(val, k, vol_bp)], {"USD_SOFR": mkt.curve}, val)
+    if strike is None:
+        strike = run(0.0).legs[0].option_strips[0][1].atm_forward
+    res = run(strike)
+    return float(res.npv), res.legs[0].option_strips[0][1], float(strike)
+
+
+def cap_workbook(mkt: Market):
+    npv, strip, K = cap_ticket_price(mkt)
     wb = Workbook()
     _readme(wb, "Interest rate cap", [
-        f"Default trade: USD 10m, 5y quarterly cap on SOFR, strike = ATM forward {K:.4%}, flat normal vol 85bp (override, so the "
-        "replication does not depend on the cap surface).",
-        "Each caplet: forward F = (DF(start)/DF(end) − 1)/τ; price = N·τ·DF(end)·[(F − K)·N(d) + σ√T·n(d)], d = (F − K)/(σ√T), "
+        f"The cap ticket as it opens: USD 10m, 5y from the spot date, quarterly on SOFR, ACT/360, strike at the money ({K:.6%}, the "
+        "forward of the cap's own periods), flat normal vol 85bp (typed, so the replication does not depend on the cap surface).",
+        "The periods are those of the leg the ticket books, and the value is the one the ticket shows and the booked trade carries: "
+        "accruals between unadjusted dates, each paid two business days after its period ends (modified following, New York).",
+        "Each caplet: forward F = (DF(start)/DF(end) − 1)/τ; price = N·τ·DF(pays)·[(F − K)·N(d) + σ√T·n(d)], d = (F − K)/(σ√T), "
         "T = time from the valuation date to the middle of the accrual period on ACT/365F (SOFR fixes in arrears over the period).",
-        f"Rijeka NPV: {res.npv:,.2f} over {res.n_caplets} caplets.",
+        f"Rijeka NPV: {npv:,.2f} over {strip.n_periods} caplets.",
     ], mkt)
     _curve_sheet(wb, mkt)
     ws = wb.create_sheet("Cap", 1)
     ws["A1"] = "Notional"; ws["B1"] = 10_000_000; ws["B1"].fill = IN; ws["B1"].number_format = "#,##0"
-    ws["A2"] = "Strike"; ws["B2"] = K; ws["B2"].fill = IN; ws["B2"].number_format = "0.0000%"
+    ws["A2"] = "Strike"; ws["B2"] = K; ws["B2"].fill = IN; ws["B2"].number_format = "0.000000%"
     ws["A3"] = "Normal vol (bp)"; ws["B3"] = 85.0; ws["B3"].fill = IN
     ws["D1"] = "Cap PV (formulas)"; ws["E1"] = None
-    ws["D2"] = "Cap PV (Rijeka)"; ws["E2"] = res.npv; ws["E2"].fill = RJ; ws["E2"].number_format = "#,##0.00"
+    ws["D2"] = "Cap PV (Rijeka)"; ws["E2"] = npv; ws["E2"].fill = RJ; ws["E2"].number_format = "#,##0.00"
     ws["D3"] = "Difference"; ws["E3"] = "=E1-E2"; ws["E3"].number_format = "#,##0.00"
-    _hdr(ws, 5, ["Start", "End", "τ", "T to mid-period (y)", "DF(start)", "DF(end)", "Forward", "d", "Caplet PV", "Rijeka PV"])
+    _hdr(ws, 5, ["Start", "End", "Pays", "τ", "T to mid-period (y)", "DF(start)", "DF(end)", "DF(pays)", "Forward", "d", "Caplet PV", "Rijeka PV"])
     r0 = 6
-    for k, cp in enumerate(res.caplets):
+    _d = lambda x: x if isinstance(x, date) else date.fromisoformat(str(x)[:10])      # real dates, so YEARFRAC needs no coercion
+    for k, cp in enumerate(strip.caplets):
         r = r0 + k
-        _d = lambda x: x if isinstance(x, date) else date.fromisoformat(str(x)[:10])      # real dates, so YEARFRAC needs no coercion
-        ws.cell(row=r, column=1, value=_d(cp["start_date"])).number_format = "yyyy-mm-dd"
-        ws.cell(row=r, column=2, value=_d(cp["end_date"])).number_format = "yyyy-mm-dd"
-        ws.cell(row=r, column=3, value=f"=YEARFRAC(A{r},B{r},2)")
-        ws.cell(row=r, column=4, value=f"=MAX((A{r}-ValDate)+(B{r}-A{r})/2,0)/365")
-        ws.cell(row=r, column=5, value=f"={DF(f'A{r}')}").number_format = "0.000000"
-        ws.cell(row=r, column=6, value=f"={DF(f'B{r}')}").number_format = "0.000000"
-        ws.cell(row=r, column=7, value=f"=(E{r}/F{r}-1)/C{r}").number_format = "0.0000%"
-        ws.cell(row=r, column=8, value=f"=IF(D{r}>0,(G{r}-$B$2)/($B$3/10000*SQRT(D{r})),0)")
-        ws.cell(row=r, column=9, value=f"=IF(D{r}>0,$B$1*C{r}*F{r}*((G{r}-$B$2)*NORMSDIST(H{r})+$B$3/10000*SQRT(D{r})*NORMDIST(H{r},0,1,FALSE)),$B$1*C{r}*F{r}*MAX(G{r}-$B$2,0))").number_format = "#,##0.00"
-        c = ws.cell(row=r, column=10, value=cp.get("pv", cp.get("npv", 0.0))); c.fill = RJ; c.number_format = "#,##0.00"
-    r1 = r0 + len(res.caplets) - 1
-    ws["E1"] = f"=SUM(I{r0}:I{r1})"; ws["E1"].number_format = "#,##0.00"
-    _widths(ws, [12, 12, 10, 14, 11, 11, 11, 10, 14, 14])
+        for col, key in ((1, "start_date"), (2, "end_date"), (3, "payment_date")):
+            ws.cell(row=r, column=col, value=_d(cp[key])).number_format = "yyyy-mm-dd"
+        ws.cell(row=r, column=4, value=f"=YEARFRAC(A{r},B{r},2)")
+        ws.cell(row=r, column=5, value=f"=MAX((A{r}-ValDate)+(B{r}-A{r})/2,0)/365")
+        ws.cell(row=r, column=6, value=f"={DF(f'A{r}')}").number_format = "0.000000"
+        ws.cell(row=r, column=7, value=f"={DF(f'B{r}')}").number_format = "0.000000"
+        ws.cell(row=r, column=8, value=f"={DF(f'C{r}')}").number_format = "0.000000"
+        ws.cell(row=r, column=9, value=f"=(F{r}/G{r}-1)/D{r}").number_format = "0.0000%"
+        ws.cell(row=r, column=10, value=f"=IF(E{r}>0,(I{r}-$B$2)/($B$3/10000*SQRT(E{r})),0)")
+        ws.cell(row=r, column=11, value=f"=IF(E{r}>0,$B$1*D{r}*H{r}*((I{r}-$B$2)*NORMSDIST(J{r})+$B$3/10000*SQRT(E{r})*NORMDIST(J{r},0,1,FALSE)),$B$1*D{r}*H{r}*MAX(I{r}-$B$2,0))").number_format = "#,##0.00"
+        c = ws.cell(row=r, column=12, value=float(cp["pv"])); c.fill = RJ; c.number_format = "#,##0.00"
+    r1 = r0 + len(strip.caplets) - 1
+    ws["E1"] = f"=SUM(K{r0}:K{r1})"; ws["E1"].number_format = "#,##0.00"
+    _widths(ws, [12, 12, 12, 10, 14, 11, 11, 11, 11, 10, 14, 14])
     W.check(wb, "Cap", "Cap PV (Σ caplets)", "E1", "E2", 1e-6)
-    W.ticket(wb, "ANALYTICS", [("CAP PV", "Cap!E1", "#,##0.00", f"Σ of {res.n_caplets} caplets, USD")])
-    W.ticket(wb, "TERMS", [("NOTIONAL", "Cap!B1", "#,##0", "USD"), ("STRIKE", "Cap!B2", "0.0000%", "the ATM forward"), ("NORMAL VOL", "Cap!B3", "0.0", "bp, flat override")])
-    for sym, notn, ref, note, fmt in [("τ", "YEARFRAC(start, end, ACT/360)", f"Cap!C{r0}", "the first caplet", "0.000000"),
-                                      ("T", "time to the middle of the accrual period, ACT/365F", f"Cap!D{r0}", "SOFR fixes in arrears over the period", "0.000000"),
-                                      ("F", "(DF(start)/DF(end) − 1)/τ", f"Cap!G{r0}", "", "0.0000%"), ("d", "(F − K)/(σ√T)", f"Cap!H{r0}", "", "0.000000"),
-                                      ("caplet", "N·τ·DF(end)·[(F − K)·N(d) + σ√T·n(d)]", f"Cap!I{r0}", "Bachelier call", "#,##0.00"), ("cap", "Σ caplets", "Cap!E1", "", "#,##0.00")]:
+    W.ticket(wb, "ANALYTICS", [("CAP PV", "Cap!E1", "#,##0.00", f"Σ of {strip.n_periods} caplets, USD")])
+    W.ticket(wb, "TERMS", [("NOTIONAL", "Cap!B1", "#,##0", "USD"), ("STRIKE", "Cap!B2", "0.000000%", "at the money: the forward of the cap's periods"), ("NORMAL VOL", "Cap!B3", "0.0", "bp, typed")])
+    for sym, notn, ref, note, fmt in [("τ", "YEARFRAC(start, end, ACT/360)", f"Cap!D{r0}", "the first caplet", "0.000000"),
+                                      ("T", "time to the middle of the accrual period, ACT/365F", f"Cap!E{r0}", "SOFR fixes in arrears over the period", "0.000000"),
+                                      ("F", "(DF(start)/DF(end) − 1)/τ", f"Cap!I{r0}", "", "0.0000%"), ("d", "(F − K)/(σ√T)", f"Cap!J{r0}", "", "0.000000"),
+                                      ("caplet", "N·τ·DF(pays)·[(F − K)·N(d) + σ√T·n(d)]", f"Cap!K{r0}", "Bachelier call, paid two business days after the period", "#,##0.00"), ("cap", "Σ caplets", "Cap!E1", "", "#,##0.00")]:
         W.derive(wb, sym, notn, ref, note, fmt)
-    return wb, res.npv
+    return wb, npv
 
 
 def _crypto_common(wb, mkt: Market, spot_px: float, btc_rate: float, months: int):

@@ -19,7 +19,8 @@ import { SwapTermsBody, SwaptionTermsBody, CapTermsBody,
          FloorTermsBody, CollarTermsBody } from '../product-terms'
 import { toRateSchedule, toNotionalSchedule, toSpreadSchedule } from '../schedule_translator'
 import { TENOR_Y as TENOR_Y_MAP, FREQ_PER_YEAR, SWAPTION_DEFAULTS, CAPFLOOR_DEFAULTS,
-         CCY_CURVE, swaptionExpiry, swaptionUnderlying, swaptionVol } from '../product-defaults'
+         CCY_CURVE, swaptionExpiry, swaptionUnderlying, swaptionVol, capStrike, capVol } from '../product-defaults'
+import { capFloorLeg } from '../booking'
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
 
@@ -225,7 +226,7 @@ registerProduct({
             effective_date: state.effDate, maturity_date: state.matDate,
             day_count: floatDc, payment_frequency: floatPayFreq,
             reset_frequency: floatResetFreq,
-            bdc: floatBdc, payment_lag: payLag,
+            bdc: floatBdc, payment_calendar: state.floatCal || null, payment_lag: payLag,
             fixed_rate: 0, spread: 0, leverage: 1.0,
             discount_curve_id: curveId, forecast_curve_id: forecastId,
             ois_compounding: null,
@@ -237,7 +238,7 @@ registerProduct({
             effective_date: state.effDate, maturity_date: state.matDate,
             day_count: floatDc2, payment_frequency: floatPayFreq2,
             reset_frequency: floatResetFreq2,
-            bdc: floatBdc, payment_lag: payLag,
+            bdc: floatBdc, payment_calendar: state.floatCal || null, payment_lag: payLag,
             fixed_rate: 0, spread, leverage: 1.0,
             discount_curve_id: curveId, forecast_curve_id: forecastId2,
             ois_compounding: null,
@@ -251,7 +252,7 @@ registerProduct({
             direction: dir, currency: ccy, notional,
             effective_date: state.effDate, maturity_date: state.matDate,
             day_count: fixedDc, payment_frequency: fixedPayFreq,
-            bdc: fixedBdc, payment_lag: payLag,
+            bdc: fixedBdc, payment_calendar: state.fixedCal || null, payment_lag: payLag,
             fixed_rate: fixedRate,
             fixed_rate_schedule: toRateSchedule(state.rateSchedule),
             notional_schedule:   toNotionalSchedule(state.notionalSchedule),
@@ -265,7 +266,7 @@ registerProduct({
             effective_date: state.effDate, maturity_date: state.matDate,
             day_count: floatDc, payment_frequency: floatPayFreq,
             reset_frequency: isOIS ? 'DAILY' : floatResetFreq,
-            bdc: floatBdc, payment_lag: payLag,
+            bdc: floatBdc, payment_calendar: state.floatCal || null, payment_lag: payLag,
             spread_schedule:   toSpreadSchedule(state.spreadSchedule),
             notional_schedule: toNotionalSchedule(state.notionalSchedule),
             fixed_rate: 0, spread, leverage,
@@ -462,6 +463,7 @@ registerProduct({
         tenor_y:             TENOR_Y_MAP[state.tenor] || 5,
         strike,
         vol_bp:              state.structure === 'BERMUDAN' ? null : vol.bp,   // a tree prices at the model's own σ
+        side:                state.optionSide || SWAPTION_DEFAULTS.optionSide,   // the answer carries the side's sign
         is_payer:            state.direction === 'PAY',
         pay_freq_y:          1.0,
         valuation_date:      state.valDate,
@@ -480,6 +482,38 @@ registerProduct({
   },
 })
 
+
+// ── The cap, floor and collar tickets' request ──────────────────────────────
+// The leg the ticket books (booking.js capFloorLeg: its dates, frequency, day count, roll, calendar and payment lag),
+// the strikes and the side. The route prices that leg the way a booked one is valued, so the price on the ticket is
+// the value of the trade it books. A cap's or a floor's strike left blank is sent as none: the route strikes it at
+// the money and says where. A vol is sent only when one is typed. Text that is not a rate or a vol is refused here,
+// in words (it used to be priced as 0 %, or as nothing typed).
+export function capLikePayload(state, kind) {
+  const payFreq  = state.capPayFreq || CAPFLOOR_DEFAULTS.capPayFreq
+  const notional = Number(state.notional) || 0
+  const cap   = kind === 'FLOOR' ? null : capStrike(state.capRate   ?? CAPFLOOR_DEFAULTS.capRate,   'cap rate')
+  const floor = kind === 'CAP'   ? null : capStrike(state.floorRate ?? CAPFLOOR_DEFAULTS.floorRate, 'floor rate')
+  for (const k of [cap, floor]) if (k?.problem) throw new Error(k.problem)
+  if (kind === 'COLLAR' && (cap.blank || floor.blank)) throw new Error('Type the cap rate and the floor rate: a collar has no strike to take from the market.')
+  if (kind === 'COLLAR' && cap.dec <= floor.dec) throw new Error('The cap rate must be above the floor rate.')
+  const vol = kind === 'COLLAR' ? { bp: null, problem: null } : capVol(state)
+  if (vol.problem) throw new Error(vol.problem)
+  if (!state.effDate || !state.matDate) throw new Error('The effective and maturity dates are still loading: price again in a moment.')
+  return {
+    notional,
+    tenor_y:  TENOR_Y_MAP[state.tenor] || 5,
+    ...(cap   ? { cap_rate:   cap.dec }   : {}),
+    ...(floor ? { floor_rate: floor.dec } : {}),
+    side: state.optionSide || CAPFLOOR_DEFAULTS.optionSide,
+    freq_per_year: FREQ_PER_YEAR[payFreq] || 4,
+    curve_id: CCY_CURVE[state.ccy] || 'USD_SOFR',
+    valuation_date: state.valDate,
+    leg: capFloorLeg(state, notional),
+    ...(vol.bp != null ? { vol_override_bp: vol.bp } : {}),
+  }
+}
+
 // ── RATES CAP ───────────────────────────────────────────────────────────────
 
 registerProduct({
@@ -490,7 +524,7 @@ registerProduct({
   structures: [],
   defaultStructure: null,
 
-  direction: () => ({ pay: 'PAY FIXED', receive: 'RECEIVE FIXED' }),
+  direction: () => null,      // an option on the rate has a side (BUY / SELL), not a pay or receive of a fixed leg
 
   terms: {
     title: 'CAP TERMS',
@@ -498,7 +532,7 @@ registerProduct({
       text: state.optionSide === 'SELL' ? '↑ SELL CAP · premium received, pay above the strike' : '↑ BUY CAP · protection vs rising rates',
       color: 'var(--red)',
     }),
-    footerText: 'Bachelier (Normal) · vol from cap surface · OIS discounting · SOFR in-arrears',
+    footerText: 'Bachelier (normal) caplets on the periods of the leg above · one strike, one vol, read off the cap surface at K−ATM · OIS discounting · priced as it is booked',
     Component: CapTermsBody,
   },
 
@@ -536,20 +570,7 @@ registerProduct({
 
   pricing: {
     endpoint: '/api/price/cap',
-    buildPayload: state => {
-      const payFreq = state.capPayFreq || CAPFLOOR_DEFAULTS.capPayFreq
-      return {
-        notional: Number(state.notional) || 0,
-        tenor_y:  TENOR_Y_MAP[state.tenor] || 5,
-        cap_rate: (parseFloat(state.capRate ?? CAPFLOOR_DEFAULTS.capRate) || 0) / 100,
-        freq_per_year: FREQ_PER_YEAR[payFreq] || 4,
-        curve_id: CCY_CURVE[state.ccy] || 'USD_SOFR',
-        valuation_date: state.valDate,
-        ...(state.volOverride && state.volOverride !== ''
-          ? { vol_override_bp: parseFloat(state.volOverride) }
-          : {}),
-      }
-    },
+    buildPayload: state => capLikePayload(state, 'CAP'),
     parseResponse: r => r,
     timeoutMs: 30000,
   },
@@ -565,7 +586,7 @@ registerProduct({
   structures: [],
   defaultStructure: null,
 
-  direction: () => ({ pay: 'PAY FIXED', receive: 'RECEIVE FIXED' }),
+  direction: () => null,      // an option on the rate has a side (BUY / SELL), not a pay or receive of a fixed leg
 
   terms: {
     title: 'FLOOR TERMS',
@@ -573,7 +594,7 @@ registerProduct({
       text: state.optionSide === 'SELL' ? '↓ SELL FLOOR · premium received, pay below the strike' : '↓ BUY FLOOR · protection vs falling rates',
       color: 'var(--accent)',
     }),
-    footerText: 'Bachelier (Normal) · one strike, one vol: read at K−ATM, signed · OIS discounting · SOFR in-arrears',
+    footerText: 'Bachelier (normal) floorlets on the periods of the leg above · one strike, one vol, read off the cap surface at K−ATM · OIS discounting · priced as it is booked',
     Component: FloorTermsBody,
   },
 
@@ -611,20 +632,7 @@ registerProduct({
 
   pricing: {
     endpoint: '/api/price/floor',
-    buildPayload: state => {
-      const payFreq = state.capPayFreq || CAPFLOOR_DEFAULTS.capPayFreq
-      return {
-        notional: Number(state.notional) || 0,
-        tenor_y:  TENOR_Y_MAP[state.tenor] || 5,
-        floor_rate: (parseFloat(state.floorRate ?? CAPFLOOR_DEFAULTS.floorRate) || 0) / 100,
-        freq_per_year: FREQ_PER_YEAR[payFreq] || 4,
-        curve_id: CCY_CURVE[state.ccy] || 'USD_SOFR',
-        valuation_date: state.valDate,
-        ...(state.volOverride && state.volOverride !== ''
-          ? { vol_override_bp: parseFloat(state.volOverride) }
-          : {}),
-      }
-    },
+    buildPayload: state => capLikePayload(state, 'FLOOR'),
     parseResponse: r => r,
     timeoutMs: 30000,
   },
@@ -640,7 +648,7 @@ registerProduct({
   structures: [],
   defaultStructure: null,
 
-  direction: () => ({ pay: 'PAY FIXED', receive: 'RECEIVE FIXED' }),
+  direction: () => null,      // an option on the rate has a side (BUY / SELL), not a pay or receive of a fixed leg
 
   terms: {
     title: 'COLLAR TERMS',
@@ -648,7 +656,7 @@ registerProduct({
       text: state.optionSide === 'SELL' ? '↕ SELL COLLAR · sell cap, buy floor' : '↕ BUY COLLAR · buy cap, sell floor',
       color: 'var(--amber)',
     }),
-    footerText: 'Long Cap − Short Floor · Bachelier (Normal) · zero-cost spread = cap − floor',
+    footerText: 'Bought: the cap held, the floor written (sold: the other way) · Bachelier (normal) on the periods of the leg above · each strike its own vol off the cap surface · priced as it is booked',
     Component: CollarTermsBody,
   },
 
@@ -657,7 +665,7 @@ registerProduct({
   analytics: {
     metrics: r => [
       metricCurrency('NET NPV',      r.net_npv),
-      { label: 'ZC SPREAD',   value: r.zero_cost_spread_bp?.toFixed(0) + 'bp', colorBy: 'warning' },
+      { label: 'WIDTH',       value: r.zero_cost_spread_bp?.toFixed(0) + 'bp', colorBy: 'warning' },
       metricCurrency('NET VEGA',     r.net_vega),
       metricCurrency('NET IR01',     r.net_ir01),
       { label: 'CAP/FLR VOL', value: `${r.cap_vol_bp?.toFixed(1)} / ${r.floor_vol_bp?.toFixed(1)}`, colorBy: 'info' },
@@ -666,10 +674,11 @@ registerProduct({
       kind: 'components',
       columns: ['LEG','COMPONENT','NPV','PREMIUM %','VOL(bp)','TIER'],
       rows: [
-        ['LONG',  `CAP @ ${r.cap_rate_pct?.toFixed(2)}%`,   fmtCurrency(r.cap_npv),
-         r.cap_premium_pct?.toFixed(4) + '%',   r.cap_vol_bp?.toFixed(1),   r.cap_vol_tier],
-        ['SHORT', `FLOOR @ ${r.floor_rate_pct?.toFixed(2)}%`, fmtCurrency(-r.floor_npv),
-         '−' + r.floor_premium_pct?.toFixed(4) + '%', r.floor_vol_bp?.toFixed(1), r.floor_vol_tier],
+        // each option as it is held: bought, the cap is ours and the floor written; sold, the other way
+        [r.side === 'SELL' ? 'SHORT' : 'LONG',  `CAP @ ${r.cap_rate_pct?.toFixed(2)}%`,   fmtCurrency(r.side === 'SELL' ? -r.cap_npv : r.cap_npv),
+         (r.side === 'SELL' ? '−' : '') + r.cap_premium_pct?.toFixed(4) + '%',   r.cap_vol_bp?.toFixed(1),   r.cap_vol_tier],
+        [r.side === 'SELL' ? 'LONG' : 'SHORT', `FLOOR @ ${r.floor_rate_pct?.toFixed(2)}%`, fmtCurrency(r.side === 'SELL' ? r.floor_npv : -r.floor_npv),
+         (r.side === 'SELL' ? '' : '−') + r.floor_premium_pct?.toFixed(4) + '%', r.floor_vol_bp?.toFixed(1), r.floor_vol_tier],
         ['NET',   'COLLAR', fmtCurrency(r.net_npv),
          r.net_pct?.toFixed(4) + '%', '—', '—'],
       ],
@@ -681,25 +690,14 @@ registerProduct({
       metricCurrency('NET NPV',   r.net_npv),
       metricCurrency('NET VEGA',  r.net_vega),
       metricCurrency('NET IR01',  r.net_ir01),
-      { label: 'ZC SPREAD', value: r.zero_cost_spread_bp?.toFixed(0) + 'bp', colorBy: 'warning' },
+      { label: 'WIDTH', value: r.zero_cost_spread_bp?.toFixed(0) + 'bp', colorBy: 'warning' },
     ],
     structureLabel: () => 'COLLAR',
   },
 
   pricing: {
     endpoint: '/api/price/collar',
-    buildPayload: state => {
-      const payFreq = state.capPayFreq || CAPFLOOR_DEFAULTS.capPayFreq
-      return {
-        notional: Number(state.notional) || 0,
-        tenor_y:  TENOR_Y_MAP[state.tenor] || 5,
-        cap_rate:   (parseFloat(state.capRate   ?? CAPFLOOR_DEFAULTS.capRate)   || 0) / 100,
-        floor_rate: (parseFloat(state.floorRate ?? CAPFLOOR_DEFAULTS.floorRate) || 0) / 100,
-        freq_per_year: FREQ_PER_YEAR[payFreq] || 4,
-        curve_id: CCY_CURVE[state.ccy] || 'USD_SOFR',
-        valuation_date: state.valDate,
-      }
-    },
+    buildPayload: state => capLikePayload(state, 'COLLAR'),
     parseResponse: r => r,
     timeoutMs: 30000,
   },

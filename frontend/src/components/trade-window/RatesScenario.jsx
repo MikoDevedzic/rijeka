@@ -209,7 +209,8 @@ export default function RatesScenario({ product, productKey, state, result, payl
   const second = !isVol || bermudan ? null : kind === 'swaption' ? swaptionAcross(snaps[swvolId]?.quotes, hz.expiry) : { points: capSmile(result?.surface_rows, hz.expiry), expiry: null }
   // where the trade itself stands on the second chart: a cap's or a floor's strike less the at-the-money rate, a
   // swaption's own swap tenor (a collar has two strikes, and is not marked)
-  const strikeOf = kind === 'cap' ? payload.cap_rate : kind === 'floor' ? payload.floor_rate : null
+  // the strike the price struck (a blank one is at the money: the answer has it, the request does not)
+  const strikeOf = kind === 'cap' ? (result?.cap_rate ?? payload.cap_rate) : kind === 'floor' ? (result?.floor_rate ?? payload.floor_rate) : null
   const own2 = kind === 'swaption' ? { t: hz.tenor, label: 'THE SWAP' }
     : strikeOf != null && Number.isFinite(Number(result?.atm_forward)) ? { t: (Number(strikeOf) - Number(result.atm_forward)) * 1e4, label: 'THE STRIKE' } : null
   const noPoints = <div data-testid="scn-no-points" style={{ padding: isVol && bermudan ? '4px 0 10px' : '36px 0', color: 'var(--text-dim)', fontSize: 12.5, lineHeight: 1.5 }}>{isVol && bermudan ? `A Bermudan is priced on the Hull-White tree. Its vol is the model's σ, one number${tradeVol == null ? '' : ` (${tradeVol.toFixed(1)} bp at the market${volShift ? `, ${(tradeVol + volShift).toFixed(1)} bp under this scenario` : ''})`}: there is no curve of it to draw, and it is shocked flat, on the left. The swaption surface is not moved.` : isVol ? `No vol surface could be read for ${ccy}: the vol the trade priced at is shocked flat.` : `No saved quotes could be read for ${cur.name}: the curve is shocked flat.`}</div>

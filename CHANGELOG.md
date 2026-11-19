@@ -1,7 +1,48 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.41). Commits on `main` are the detail.
+methodology document carries its own version (v1.42). Commits on `main` are the detail.
+
+## 0.59.0 · 19 November 2026
+
+**A cap, a floor and a collar are priced as they are booked.** Found by walking every ticket as a trader would:
+the price on these three tickets and the value of the trade they book were two calculations.
+
+- **What was wrong.** The ticket's price came from a schedule of the route's own: quarterly from two calendar days
+  after the valuation date (a Saturday on the day of the walk), ACT/360 whatever day count the ticket showed, and
+  the effective and maturity dates on the ticket were not read. The booked trade was valued on its leg's periods.
+  And a booked cap read the 85bp desk default whenever its remaining life was not a quoted maturity of the cap
+  surface, which is nearly every day (5.01 years on the trade date, 4.99 the next). On the test market, valued
+  19 November 2026, a five-year 4.5 % cap on ten million read 97,183 on its ticket and 105,015 once booked.
+- **Now.** The three routes price the leg the ticket books, through the swap pricer, which is how a booked one is
+  valued: the stored trade's value is the ticket's price to the cent (a test on the local stack, each product,
+  either side). The cap surface is read between its quoted maturities, on the straight line in maturity, and held
+  flat beyond the ends. That cap is 97,322 on its ticket and in the book. **The value of every cap, floor and collar
+  ticket changes, and the value of every booked one whose remaining life is not a quoted maturity.**
+- **The ticket.** A cap's or a floor's strike left blank is at the money (the forward of its own periods), the
+  price says the rate and the booking carries it; an untouched cap was struck at 4.5 % and a floor at 3.0 % whatever
+  the currency. A collar's strikes are typed. The vol field shows the surface's vol and where it was read once
+  priced (it showed the text of an escape sequence). Text that is not a rate or a vol is refused in words; it was
+  priced as 0 % or as nothing typed. The side signs every figure: a sold cap showed a bought one's value and risk.
+  The ticket has no DIRECTION (pay or receive fixed means nothing on a cap). A line under the terms says the
+  periods the price ran over, and goes when a term changes. A collar's "ZC SPREAD" was the distance between its
+  strikes and is called WIDTH.
+- **Swaption.** A sold swaption carries its sign on the ticket and in its scenario (the booked value and the
+  exposure run already did). The swap it delivers is shown as it is priced and booked (fixed leg annual on ACT/360
+  against the index flat) and is not open: its fields were editable, booked, and never read by the price. No cap or
+  floor is offered on that swap's leg. A strike left at the money is booked only from a price of the terms on
+  screen.
+- **Swap.** Each leg's calendar is sent with the price and the par solve; it was booked and not priced. A basis
+  swap's first leg is no longer labelled PAY FIXED. An index that is not the currency's overnight rate (a term
+  rate, EFFR) says it is forecast off the overnight curve: a ticket prices on one curve a currency, so a basis
+  between two indices of one currency is not valued.
+- **Evidence.** The cap workbook is the ticket's own trade on the leg's periods; its cells are evaluated outside
+  Excel against the engine and its engine figure is held to the route. Methodology v1.42. Three and six periods a
+  year are refused by the three routes (a leg is not scheduled at them). The pinned sample book did not move.
+- **Not done.** A vol typed on a cap prices the ticket; the booked trade is marked off the surface, and the ticket
+  does not say by how much the two differ. The ticket's IR01 holds the vol; the stored trade's reprices the curve.
+  The swaption pricer's own conventions (annual, ACT/360) are stated, not opened. No interpolation of the swaption
+  grid. The new workbook has not been opened in Excel itself.
 
 ## 0.58.0 · 18 November 2026
 

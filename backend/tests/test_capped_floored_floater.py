@@ -876,3 +876,66 @@ class TestOneStrikeOneVolatility:
         alone = price_floor(floor_rate=0.025, **kw)
         assert alone.vol_bp > 85.0, "below the money this surface is above its at-the-money quote: the old reading gave less"
         assert collar["floor"].vol_bp == pytest.approx(alone.vol_bp) and collar["floor"].npv == pytest.approx(alone.npv)
+
+
+class TestTheSurfaceBetweenItsMaturities:
+    """A trade is rarely a quoted maturity from the valuation date: a five-year cap from its spot date is 5.01 years
+    away, and 4.99 a day later. Until 0.59.0 any maturity more than 0.01 of a year from a quoted one fell to the
+    desk default, so a booked cap was marked at 85bp beside a quoted surface. It is read between the two
+    maturities either side, on the straight line in maturity, and held flat beyond the first and the last."""
+
+    ROWS = [{"cap_tenor_y": t, "strike_spread_bp": s, "flat_vol_bp": 70.0 + 4 * t + abs(s) / 20.0, "is_atm": s == 0, "source": "TEST"}
+            for t in (1, 2, 3, 5, 7, 10) for s in (-100, 0, 100)]
+
+    def at(self, tenor, strike=0.04, atm=0.04, rows=None):
+        from pricing.cap_floor import lookup_cap_vol
+        return lookup_cap_vol(strike_rate=strike, atm_forward=atm, cap_tenor_y=tenor, surface_rows=self.ROWS if rows is None else rows)
+
+    def test_a_quoted_maturity_is_read_as_it_always_was(self):
+        for t in (1, 2, 3, 5, 7, 10):
+            assert self.at(t) == (pytest.approx(70.0 + 4 * t), "QUOTED")
+        assert self.at(5.009) == self.at(5.0)                    # within 0.01 of a year: the quoted maturity itself
+
+    def test_between_two_maturities_is_the_line_between_them(self):
+        assert self.at(4.0) == (pytest.approx(86.0), "INTERP")           # halfway between 82 at 3Y and 90 at 5Y
+        assert self.at(5.0115) == (pytest.approx(90.0 + 4 * 0.0115), "INTERP")       # a 5Y cap from its spot date
+        assert self.at(4.6)[0] == pytest.approx(82.0 + 0.8 * 8.0)
+        # the strike's distance from the money is read on each maturity, then the two are joined
+        assert self.at(4.0, strike=0.045)[0] == pytest.approx(86.0 + 50 / 20.0)
+        # continuous across a quoted maturity: no step as a trade ages through it
+        assert abs(self.at(5.011)[0] - self.at(5.009)[0]) < 0.05 and abs(self.at(4.989)[0] - self.at(4.991)[0]) < 0.05
+
+    def test_beyond_the_ends_the_end_is_held(self):
+        assert self.at(0.4) == (pytest.approx(74.0), "INTERP")
+        assert self.at(15.0) == (pytest.approx(110.0), "INTERP")
+
+    def test_no_surface_is_the_desk_default_and_says_so(self):
+        assert self.at(4.0, rows=[]) == (85.0, "FALLBACK")
+        one = [r for r in self.ROWS if r["cap_tenor_y"] == 5]
+        assert self.at(4.0, rows=one) == (pytest.approx(90.0), "INTERP")       # one maturity quoted: held either side of it
+
+
+class TestAStripUnderAScenario:
+    """The strip a booked leg is valued by takes what the cap, floor and collar tickets hand in for a scenario (they
+    price that leg since 0.59.0): a shift of the vol, and the at-the-money forward the strike's place on the smile is
+    held at. Neither set is the strip as it always was, and it says the vol it priced at."""
+
+    def strip(self, **kw):
+        from pricing.cap_floor import price_caplet_strip_over_periods
+        curve = Curve(valuation_date=VAL_DATE, flat_rate=0.04)
+        periods = generate_schedule(effective_date=EFF_DATE, maturity_date=MAT_DATE, frequency="QUARTERLY", day_count="ACT/360",
+                                    notional=NOTIONAL, bdc="MOD_FOLLOWING", payment_lag=2, is_float=True)
+        return price_caplet_strip_over_periods(periods=periods, strike_schedule_obj={"direction": "BUY", "schedule": []}, default_strike=0.045,
+                                               notional_schedule=None, default_notional=10_000_000.0, forecast_curve=curve, discount_curve=curve,
+                                               valuation_date=VAL_DATE, surface_rows=TestTheSurfaceBetweenItsMaturities.ROWS, swap_tenor_y=5.0, **kw)
+
+    def test_no_scenario_is_the_strip_it_was_and_a_shift_is_the_vega(self):
+        base, zero = self.strip(), self.strip(vol_shift_bp=0.0, vol_atm_forward=None)
+        assert (zero.npv, zero.vega, zero.ir01, zero.vol_bp) == (base.npv, base.vega, base.ir01, base.vol_bp)
+        assert base.vol_bp == pytest.approx(base.caplets[0]["vol_bp"], abs=0.006) and base.atm_exact == pytest.approx(base.atm_forward, abs=1e-8)
+        up = self.strip(vol_shift_bp=1.0)
+        assert up.vol_bp == pytest.approx(base.vol_bp + 1.0) and up.npv - base.npv == pytest.approx(base.vega, rel=1e-6)
+        # held where another forward puts the strike: 50bp nearer the money, the vol is the smile's there
+        held = self.strip(vol_atm_forward=base.atm_exact + 0.0025)
+        assert held.vol_bp == pytest.approx(base.vol_bp - 25 / 20.0)
+        assert self.strip(vol_override_bp=100.0, vol_shift_bp=2.0).vol_bp == 102.0

@@ -176,7 +176,8 @@ export function PrimaryEconomics({
             {['USD','EUR','GBP','JPY','CHF','AUD','CAD'].map(c => <option key={c}>{c}</option>)}
           </select>
         </Field>
-        <Field label="DIRECTION">
+        {/* a product with no pay or receive of its own (a cap, a floor, a collar: it has a SIDE) shows no DIRECTION */}
+        {directionLabels && <Field label="DIRECTION">
           <div className="tbw-chip-row" style={{ gap: 4 }}>
             <button className={`tbw-chip tbw-chip-dir-pay ${direction === 'PAY' ? 'is-on' : ''}`}
                     onClick={() => onDirectionChange('PAY')}>
@@ -187,7 +188,7 @@ export function PrimaryEconomics({
               {directionLabels.receive}
             </button>
           </div>
-        </Field>
+        </Field>}
         <Field label="TENOR">
           <select value={state.tenor} onChange={e => onChange({ tenor: e.target.value })}>
             {['1M','3M','6M','1Y','2Y','3Y','5Y','7Y','10Y','15Y','20Y','30Y']
@@ -209,7 +210,10 @@ export function PrimaryEconomics({
 
 // ── ProductTerms (dispatches to descriptor.terms.Component) ─────────────────
 
-export function ProductTerms({ descriptor, state, update }) {
+// `priced`: the answer of the price on screen when it was asked for the terms as they stand (TradeWindow), otherwise
+// null. A body that says what the price struck or read (a cap's at-the-money strike, its vol) says it from here,
+// and says nothing once a term has changed.
+export function ProductTerms({ descriptor, state, update, priced = null }) {
   if (!descriptor?.terms?.Component) return null
   const helper = descriptor.terms.helper ? descriptor.terms.helper(state) : null
   const Body   = descriptor.terms.Component
@@ -224,7 +228,7 @@ export function ProductTerms({ descriptor, state, update }) {
           </span>
         )}
       </div>
-      <Body state={state} update={update} />
+      <Body state={state} update={update} priced={priced} />
       {descriptor.terms.footerText && (
         <div className="tbw-terms-footer">{descriptor.terms.footerText}</div>
       )}

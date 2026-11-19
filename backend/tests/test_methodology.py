@@ -433,3 +433,51 @@ def test_a_digital_assets_workbooks_name_the_basis_as_the_screens_do():
     assert wb["European"]["A16"].value.startswith("IR01 BASE") and wb["European"]["B16"].value.startswith("=Notl")
     wb = load_workbook(io.BytesIO(rep.build("fx_forward", mkt)[0]))
     assert [c.value for c in wb["Inputs"]["A"] if isinstance(c.value, str) and c.value.startswith("IR01 BASE (EUR)")]
+
+
+def test_the_cap_workbook_is_the_cap_ticket_as_it_opens():
+    """The book's trade is the one the ticket opens on, on the periods of the leg it books: from the spot date (two New
+    York business days on), each period paid two business days after it ends, struck at the money. Its green figure
+    is the swap pricer's on that leg, which is what POST /api/price/cap answers (tests/integration/test_cap_ticket.py)
+    and what a booked cap is worth. Until 0.59.0 the book replicated a schedule the ticket did not book: from two
+    calendar days on, weekend or not, discounted at each period's end."""
+    from pricing.calendars import add_business_days
+    mkt = _mkt()
+    data, ref = rep.build("cap", mkt)
+    ws = load_workbook(io.BytesIO(data))["Cap"]
+    npv, strip, strike = rep.cap_ticket_price(mkt)
+    assert ref == pytest.approx(npv) and ws["E2"].value == pytest.approx(npv)
+    assert [c.value for c in ws[5]][:4] == ["Start", "End", "Pays", "τ"]
+    spot = add_business_days(mkt.valuation_date, 2, "NEW_YORK")
+    assert ws["A6"].value.date() == spot and strip.caplets[0]["start_date"] == spot.isoformat()
+    assert all(ws.cell(row=6 + i, column=3).value.date() > ws.cell(row=6 + i, column=2).value.date() for i in range(strip.n_periods)), "paid after the period ends"
+    assert ws["B2"].value == pytest.approx(strike) and strike == pytest.approx(strip.atm_forward)
+    assert "H6" in ws["K6"].value and "G6" not in ws["K6"].value.replace("F6/G6", ""), "a caplet is discounted from its payment date"
+    # the same leg with the strike typed is the same trade
+    assert rep.cap_ticket_price(mkt, strike)[0] == pytest.approx(npv)
+
+
+def test_the_cap_workbooks_cells_reproduce_the_engine():
+    """Every caplet row evaluated outside Excel (the accrual, the time, the three discount factors, the forward and d
+    from the cells; the normal distribution, which the evaluator does not carry, in Python) against the engine's
+    caplet and total. Skipped where pycel is not installed."""
+    pytest.importorskip("pycel")
+    import math
+    import tempfile
+    from pycel import ExcelCompiler
+    from methodology import workbook as W
+    from scripts.check_workbook import evaluation_copy, test_market
+    mkt = test_market()
+    wb, npv = rep.cap_workbook(mkt)
+    W.finish(wb)
+    with tempfile.NamedTemporaryFile(suffix=".xlsx") as f:
+        evaluation_copy(wb).save(f.name)
+        xl = ExcelCompiler(filename=f.name)
+        N, K, vol = xl.evaluate("Cap!B1"), xl.evaluate("Cap!B2"), xl.evaluate("Cap!B3") / 1e4
+        total, r = 0.0, 6
+        while xl.evaluate(f"Cap!A{r}") not in (None, ""):
+            tau, T, df_pay, F, d = (xl.evaluate(f"Cap!{c}{r}") for c in "DEHIJ")
+            pv = N * tau * df_pay * ((F - K) * 0.5 * (1 + math.erf(d / math.sqrt(2))) + vol * math.sqrt(T) * math.exp(-d * d / 2) / math.sqrt(2 * math.pi))
+            assert pv == pytest.approx(xl.evaluate(f"Cap!L{r}"), abs=1e-3), r          # the engine's caplet is written to four decimals
+            total += pv; r += 1
+    assert r - 6 == 20 and total == pytest.approx(npv, abs=1e-3)

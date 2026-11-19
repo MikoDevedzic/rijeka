@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { EXPIRY_DATE, EXPIRY_TENORS, EXPIRY_Y, daysBetween, offWeekend, swaptionExpiry, swaptionUnderlying, swaptionVol, volSourceWords } from './product-defaults'
+import { EXPIRY_DATE, EXPIRY_TENORS, EXPIRY_Y, CAPFLOOR_DEFAULTS, capStrike, capVol, daysBetween, offWeekend, swaptionExpiry, swaptionUnderlying, swaptionVol, volSourceWords } from './product-defaults'
 
 // 18 November 2026 is a Wednesday.
 const NEW = { valDate: '2026-11-18', tradeDate: '2026-11-18', structure: 'EUROPEAN' }
@@ -108,6 +108,33 @@ describe('a swaption\'s vol on the ticket', () => {
     expect(volSourceWords({ ...surface, tier: 'NEAREST', point: '7Yx9Y' })).toBe('nearest point 7Y×9Y · 2026-11-18')
     expect(volSourceWords({ vol_bp: 85, tier: 'DEFAULT', point: null, asof: null, currency: 'EUR' })).toBe('desk default · no EUR swaption surface')
     expect(volSourceWords(null)).toBe('from the swaption surface')
+  })
+})
+
+describe('a cap\'s, a floor\'s and a collar\'s strike and vol on the ticket', () => {
+  it('opens with no strike and no vol of its own: no rate is typed into the ticket for the trader', () => {
+    expect(CAPFLOOR_DEFAULTS).toMatchObject({ capRate: '', floorRate: '', volOverride: '' })
+  })
+  it('a blank strike is none (at the money, the engine\'s to strike); a typed one is that rate as a decimal', () => {
+    expect(capStrike('')).toEqual({ dec: null, blank: true, problem: null })
+    expect(capStrike(undefined).blank).toBe(true)
+    expect(capStrike('4.5').dec).toBeCloseTo(0.045, 12)
+    expect(capStrike(' 3.75% ').dec).toBeCloseTo(0.0375, 12)
+    expect(capStrike('0')).toEqual({ dec: 0, blank: false, problem: null })                 // a 0 % floor is a strike
+    expect(capStrike('-0.25').dec).toBeCloseTo(-0.0025, 12)
+  })
+  it('text that is not a rate is a problem said in words, never 0 %', () => {
+    for (const bad of ['abc', '4,5x', '450', '1e9']) {
+      const k = capStrike(bad, 'cap rate')
+      expect(k, bad).toMatchObject({ dec: null, blank: false })
+      expect(k.problem, bad).toContain('is not a rate in percent')
+      expect(k.problem, bad).toContain('The cap rate')
+    }
+  })
+  it('a typed vol is the vol; blank is the surface\'s; anything else is refused in words', () => {
+    expect(capVol({})).toEqual({ bp: null, problem: null })
+    expect(capVol({ volOverride: ' 1,250.5 ' })).toEqual({ bp: 1250.5, problem: null })
+    for (const bad of ['abc', '0', '-5', '5000.01']) expect(capVol({ volOverride: bad }).problem, bad).toContain('is not a normal vol in basis points')
   })
 })
 

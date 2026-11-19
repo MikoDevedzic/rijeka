@@ -285,7 +285,12 @@ The CURVE SCENARIO tab of a rates ticket (`trade-window/RatesScenario.jsx`, `rat
 routes themselves: the ticket's own request, with the scenario's shifts added (`shift_flat_bp` and `shift_bp` on a
 curve of `/price/preview`; `curve_flat_bp`, `curve_shift_bp` and `vol_shift_bp` on `/api/price/swaption`, `/cap`,
 `/floor` and `/collar`). The server moves the quotes it builds the curve from and the vol it prices at
-(`pricer.py` `_curve_shift`), within bounds, and with none set answers as it always has; a dozen such requests
+(`pricer.py` `_curve_shift`), within bounds, and with none set answers as it always has. Since 0.59.0 the cap, floor
+and collar routes are one function (`_cap_like`) that prices the floating leg the ticket books: the request carries
+that leg (`leg`, the shape `/price/preview` takes), the strikes (none: at the money) and `side`, and the answer is
+the swap pricer's on it, which is how a booked one is valued; with no leg the route makes the ticket's own from the
+tenor. `/api/price/swaption` takes `side` too. `LegPreview` and the par solve take each leg's calendar
+(`payment_calendar`, `fixed_calendar`, `float_calendar`), which was booked and not priced; a dozen such requests
 follow a shock (the market, each shocked curve alone, all together, a ladder), a quarter of a second after the
 last change. No new route, table or setting. A Bermudan swaption's `vol_shift_bp` moves the Hull-White σ its tree
 is built on.

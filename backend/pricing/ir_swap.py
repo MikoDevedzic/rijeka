@@ -139,6 +139,9 @@ class LegResult:
     vega:           Optional[float] = None
     option_vol_tier: Optional[str] = None
     option_errors:  List[str] = field(default_factory=list)
+    # each embedded option as the strip pricer answered it: ("CAP" | "FLOOR", StripResult), in the leg's order. The
+    # cap, floor and collar routes read the vol, the at-the-money forward and the periods from here.
+    option_strips:  List[Any] = field(default_factory=list)
 
 
 @dataclass
@@ -464,6 +467,7 @@ def price_leg(
     option_pv = option_vega = None
     option_tiers: List[str] = []
     option_errors: List[str] = []
+    option_strips: List[Any] = []
     if embedded_opts and not is_float:
         option_errors.append("an embedded cap or floor needs a floating leg; this leg is fixed")
     if is_float and embedded_opts and periods:
@@ -473,6 +477,10 @@ def price_leg(
         )
         vol_surface_rows = leg.get("_vol_surface_rows") or []
         swap_tenor_y = max((mat - valuation_date).days / 365.25, 0.0)
+        # what a ticket may hand in for its own price, never stored on a leg: a vol typed over the surface's, and a
+        # scenario's shift of the vol and the at-the-money forward it holds the strike's place on the smile at
+        _vol_terms = dict(vol_override_bp=leg.get("_vol_override_bp"), vol_shift_bp=float(leg.get("_vol_shift_bp") or 0.0),
+                          vol_atm_forward=leg.get("_vol_atm_forward"))
 
         def _append_strip_cashflows(strip, cf_type):
             """Append the strip's per-caplet pvs into the leg's cashflow stream."""
@@ -530,7 +538,9 @@ def price_leg(
                     valuation_date=valuation_date,
                     surface_rows=vol_surface_rows,
                     swap_tenor_y=swap_tenor_y,
+                    **_vol_terms,
                 )
+                option_strips.append((opt_type, strip))
                 if strip.error is None:
                     leg_pv += strip.npv
                     # None until a strip is priced: an option that failed is not an option worth zero
@@ -551,7 +561,9 @@ def price_leg(
                     valuation_date=valuation_date,
                     surface_rows=vol_surface_rows,
                     swap_tenor_y=swap_tenor_y,
+                    **_vol_terms,
                 )
+                option_strips.append((opt_type, strip))
                 if strip.error is None:
                     leg_pv += strip.npv
                     option_pv = (option_pv or 0.0) + strip.npv; option_vega = (option_vega or 0.0) + strip.vega
@@ -567,7 +579,7 @@ def price_leg(
         pv=leg_pv, cashflows=cashflows,
         option_pv=option_pv, vega=option_vega,
         option_vol_tier=(_worst_option_tier(option_tiers) if option_tiers else None),
-        option_errors=option_errors,
+        option_errors=option_errors, option_strips=option_strips,
     )
 
 

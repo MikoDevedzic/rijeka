@@ -150,10 +150,38 @@ def lookup_cap_vol(
     cap less a floor at one strike worth the swap at that strike, whatever the volatility (put-call parity).
     A surface quoted on one side of the money only is mirrored for a strike on the other side.
     Returns (vol_bp, tier) where tier is 'QUOTED', 'INTERP', or 'FALLBACK'.
+
+    The maturity. The surface is quoted at a few cap maturities (1, 2, 3, 5, 7, 10 years). A trade at one of them
+    (within 0.01 of a year) is read there, as it always was. One between two of them is read at the strike's
+    distance from the money on each and on the straight line between the two in maturity; one shorter than the
+    first or longer than the last takes that end's (held flat). Until 0.59.0 any other maturity fell to the desk
+    default: a five-year cap booked from its spot date is 5.01 years from the valuation date, and a day later
+    4.99, so a booked cap, and a cap or floor on a swap's leg, was marked at 85bp with a quoted surface beside it,
+    except on the days its remaining life happened to be a quoted maturity.
     """
-    # Filter to this tenor
+    tenors = sorted({float(r['cap_tenor_y']) for r in surface_rows})
+    if not tenors:
+        return fallback_vol_bp, 'FALLBACK'
+    args = (strike_rate, atm_forward, surface_rows, fallback_vol_bp)
+    on_grid = next((t for t in tenors if abs(t - cap_tenor_y) < 0.01), None)
+    if on_grid is not None:
+        return _vol_at_quoted_maturity(on_grid, *args)
+    between = lambda tier: 'FALLBACK' if tier == 'FALLBACK' else 'INTERP'
+    if cap_tenor_y < tenors[0] or cap_tenor_y > tenors[-1]:
+        vol, tier = _vol_at_quoted_maturity(tenors[0] if cap_tenor_y < tenors[0] else tenors[-1], *args)
+        return vol, between(tier)
+    lo = max(t for t in tenors if t < cap_tenor_y)
+    hi = min(t for t in tenors if t > cap_tenor_y)
+    (v_lo, tier_lo), (v_hi, tier_hi) = _vol_at_quoted_maturity(lo, *args), _vol_at_quoted_maturity(hi, *args)
+    w = (cap_tenor_y - lo) / (hi - lo)
+    return v_lo + w * (v_hi - v_lo), ('FALLBACK' if 'FALLBACK' in (tier_lo, tier_hi) else 'INTERP')
+
+
+def _vol_at_quoted_maturity(tenor_y: float, strike_rate: float, atm_forward: float, surface_rows: list[dict],
+                            fallback_vol_bp: float) -> tuple[float, str]:
+    """The surface's rows at one quoted maturity, read at the strike's distance from the money (lookup_cap_vol)."""
     tenor_rows = [r for r in surface_rows
-                  if abs(float(r['cap_tenor_y']) - cap_tenor_y) < 0.01]
+                  if abs(float(r['cap_tenor_y']) - tenor_y) < 0.01]
     if not tenor_rows:
         return fallback_vol_bp, 'FALLBACK'
 
@@ -497,6 +525,8 @@ class StripResult:
     direction:    str             # "BUY" or "SELL" (echoed for audit)
     caplets:      list = _field(default_factory=list)   # per-period {start_date, end_date, strike, forward, df, tau, vol_bp, pv}
     error:        Optional[str] = None
+    vol_bp:       Optional[float] = None   # the vol the first live period was priced at (a strip at one strike has one)
+    atm_exact:    Optional[float] = None   # atm_forward before it is rounded: what the surface was read at
 
 
 def _parse_date_safe(v):
@@ -586,10 +616,17 @@ def _price_strip_core(
     is_floor,
     fallback_vol_bp,
     vol_override_bp,
+    vol_shift_bp=0.0,
+    vol_atm_forward=None,
 ):
     """
     Shared core for caplet and floorlet strip pricing.
     Returns StripResult with SIGNED npv/vega/ir01 (direction applied).
+
+    A scenario (the cap, floor and collar tickets' CURVE SCENARIO tab, as price_cap has it): `vol_shift_bp` moves the
+    vol each period is priced at, read or handed in; `vol_atm_forward` is the at-the-money forward the strike's place
+    on the surface is read at (the unmoved curve's), so a moved curve does not move the trade along the smile.
+    Neither set is the strip as it always was.
     """
     # Parse direction from the JSONB object
     if not isinstance(strike_schedule_obj, dict):
@@ -640,6 +677,7 @@ def _price_strip_core(
     npv_ir_up          = 0.0
     caplets_out        = []
     tiers_seen         = []
+    first_vol_bp       = None
     vol_at: dict = {}        # the surface's answer for a strike: the periods of a strip mostly share one, and the
                              # forward, the tenor and the surface are the strip's, so it is asked once a strike
 
@@ -658,13 +696,16 @@ def _price_strip_core(
             if K not in vol_at:
                 vol_at[K] = lookup_cap_vol(
                     strike_rate=K,
-                    atm_forward=atm_forward,
+                    atm_forward=atm_forward if vol_atm_forward is None else vol_atm_forward,
                     cap_tenor_y=swap_tenor_y,
                     surface_rows=surface_rows,
                     fallback_vol_bp=fallback_vol_bp,
                     is_floor=is_floor,
                 )
             vol_bp, vol_tier = vol_at[K]
+        vol_bp = shifted_vol_bp(vol_bp, vol_shift_bp)
+        if i == 0:
+            first_vol_bp = vol_bp
         tiers_seen.append(vol_tier)
         sigma = vol_bp / 10000.0
 
@@ -689,6 +730,7 @@ def _price_strip_core(
             'period_start': p.period_start.isoformat(),
             'start_date':   p.period_start.isoformat(),   # alias for ir_swap.py consumer
             'end_date':     p.period_end.isoformat(),
+            'payment_date': p.payment_date.isoformat(),
             'expiry_y':     round(T, 4),
             'forward':      round(F, 8),
             'strike':       round(K, 8),
@@ -710,6 +752,8 @@ def _price_strip_core(
         n_periods    = len(periods_live),
         direction    = direction,
         caplets      = caplets_out,
+        vol_bp       = first_vol_bp,
+        atm_exact    = atm_forward,
     )
 
 
@@ -726,6 +770,8 @@ def price_caplet_strip_over_periods(
     swap_tenor_y,             # float — tenor for vol surface lookup
     fallback_vol_bp=85.0,
     vol_override_bp=None,
+    vol_shift_bp=0.0,
+    vol_atm_forward=None,
 ):
     """Price a strip of Bachelier call caplets aligned to swap periods.
     Returns StripResult with SIGNED npv (direction from strike_schedule_obj)."""
@@ -737,6 +783,7 @@ def price_caplet_strip_over_periods(
         surface_rows=surface_rows, swap_tenor_y=swap_tenor_y,
         is_floor=False, fallback_vol_bp=fallback_vol_bp,
         vol_override_bp=vol_override_bp,
+        vol_shift_bp=vol_shift_bp, vol_atm_forward=vol_atm_forward,
     )
 
 
@@ -753,6 +800,8 @@ def price_floorlet_strip_over_periods(
     swap_tenor_y,
     fallback_vol_bp=85.0,
     vol_override_bp=None,
+    vol_shift_bp=0.0,
+    vol_atm_forward=None,
 ):
     """Price a strip of Bachelier put floorlets aligned to swap periods.
     The vol is read at the strike's signed distance from the money, where a cap at that strike is (lookup_cap_vol).
@@ -765,4 +814,5 @@ def price_floorlet_strip_over_periods(
         surface_rows=surface_rows, swap_tenor_y=swap_tenor_y,
         is_floor=True, fallback_vol_bp=fallback_vol_bp,
         vol_override_bp=vol_override_bp,
+        vol_shift_bp=vol_shift_bp, vol_atm_forward=vol_atm_forward,
     )

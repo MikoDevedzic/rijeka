@@ -47,7 +47,7 @@ import RatesScenario from './RatesScenario'
 // Sprint 12 item 3: CONFIRM tab panel + lifecycle client
 import { ConfirmPanel } from './ConfirmPanel'
 import { executeBooking, buildBookingBody, confirmTrade, cancelTrade, confirmTradeOnChain, bookPackage, confirmPackageOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, partialTerminate, amendTerms, amendable, recordKnock, INDEX_CURVE } from './booking'
-import { TENOR_Y, EXPIRY_Y, EXPIRY_DATE, swaptionExpiry } from './product-defaults'
+import { TENOR_Y, EXPIRY_Y, EXPIRY_DATE, swaptionExpiry, capStrike } from './product-defaults'
 // Sprint 13 follow-up — lifecycle cache refresh
 import { useTradesStore, shortUti } from '../../store/useTradesStore'
 import { useTabStore }    from '../../store/useTabStore'
@@ -720,6 +720,13 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     const curveId = CCY_CURVE[state.ccy] || 'USD_SOFR'
     return [{ curve_id: curveId, quotes: [], interp_method: curveInterp?.[curveId] || 'LogLinearDiscount' }]
   }, [state.ccy, curveInterp])
+  // Is the price on screen the price of the terms on screen? The request the ticket would send now, against the one
+  // the price answered. A line that says what the price struck or read is shown only while it is; a strike left at
+  // the money is booked only from such a price.
+  const priceIsCurrent = useMemo(() => {
+    if (viewMode || isCurrency || !result || !pricedPayload) return false
+    try { return JSON.stringify({ ...product.pricing.buildPayload(state), curves: pricingCurves }) === JSON.stringify(pricedPayload) } catch { return false }
+  }, [viewMode, isCurrency, result, pricedPayload, product, state, pricingCurves])
   const handlePrice = useCallback(async () => {
     if (pricing) return
     // A fixed leg whose coupon is still blank is waiting for the par solve. Pricing now would strike it at 0 %.
@@ -840,6 +847,14 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       if (!economics.ownEntityId) {
         throw new Error('Select an OWN ENTITY on the TRADE tab before booking.')
       }
+      // A strike left blank is at the money: the booking takes the rate from the price, so the price must be of the
+      // terms as they stand. (A date or a frequency changed after PRICE booked the strike of the terms before.)
+      const atTheMoney = (productKey === 'RATES_CAP' && capStrike(state.capRate ?? '').blank)
+        || (productKey === 'RATES_FLOOR' && capStrike(state.floorRate ?? '').blank)
+        || (productKey === 'IR_SWAPTION' && String(state.strike ?? '').trim() === '')
+      if (atTheMoney && !priceIsCurrent) {
+        throw new Error('The strike is at the money and the terms have changed since the last price: press PRICE, so the booking carries the rate it is struck at.')
+      }
       const r = await executeBooking({
         state, direction,
         extras: {
@@ -865,7 +880,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     } finally {
       setBooking(false)
     }
-  }, [booking, pricing, state, direction, product, productKey, onBook, economics, result, feesOut])
+  }, [booking, pricing, state, direction, product, productKey, onBook, economics, result, feesOut, priceIsCurrent])
 
   const handleBookCurrency = useCallback(async () => {
     if (booking || pricing) return
@@ -1377,6 +1392,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
           descriptor={product}
           state={state}
           update={updateProductState}
+          priced={priceIsCurrent ? result : null}
         />
 
         </>)}
@@ -1388,7 +1404,9 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
             ? (fxQuote?.shape === 'OPTION' && Number.isFinite(Number(fxQuote.npv))
                 ? { amount: Math.abs(Number(fxQuote.npv)), direction: fxQuote.direction === 'SELL' ? 'RECEIVE' : 'PAY', date: fxQuote.valuation_date || '' } : null)
             : (product.optionFee && Number.isFinite(Number(result?.npv ?? result?.net_npv))
-                ? { amount: Math.abs(Number(result?.npv ?? result?.net_npv)), direction: state.optionSide === 'SELL' ? 'RECEIVE' : 'PAY', date: state.effDate || state.valDate || '' } : null)}
+                // who pays the model's premium: a cap's, a floor's or a collar's price carries its sign (a sold one is
+                // negative, and so is a bought collar whose floor is worth more: we are paid); a swaption's is the side's
+                ? { amount: Math.abs(Number(result?.npv ?? result?.net_npv)), direction: (CAP_LIKE.has(productKey) ? Number(result?.npv ?? result?.net_npv) < 0 : state.optionSide === 'SELL') ? 'RECEIVE' : 'PAY', date: state.effDate || state.valDate || '' } : null)}
         />
         </fieldset>
 

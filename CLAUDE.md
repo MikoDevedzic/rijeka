@@ -338,4 +338,12 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   workbook reproduced its own engine side to eleven digits with the settled cash passed in the wrong sign, and
   only the comparison with `POST /api/xva/simulate` for the same trade showed it. A book that agrees with itself
   has checked its arithmetic, not its subject.
-
+- A ticket's price and the booked trade's value are one calculation or they are two numbers: before a product is
+  called done, the figure PRICE shows is compared with the value of the trade BOOK stores, on the product as it
+  opens and with each field changed once. The cap, floor and collar tickets priced a schedule of the route's own
+  and booked a leg valued another way; each had its tests and its reference rows, and nothing compared them until
+  the tickets were walked as a trader would (0.59.0). A field on a ticket that does not reach the price is a
+  defect of the ticket, whatever is booked from it.
+- A lookup on a grid is tried at what a live trade hands it, a day off the grid: the cap surface was read only
+  within 0.01 of a year of a quoted maturity and gave the desk default otherwise, so a booked cap was marked at
+  85 bp on all but a few days of its life, and every test asked for a tenor of exactly 5.0.

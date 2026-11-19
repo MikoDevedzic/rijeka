@@ -181,6 +181,7 @@ class ParRateRequest(BaseModel):
     fixed_pay_freq:    str  = 'ANNUAL'
     fixed_day_count:   str  = 'ACT/360'
     fixed_bdc:         str  = 'MOD_FOLLOWING'
+    fixed_calendar:    Optional[str] = None      # the calendar the fixed leg rolls on; left out, the currency's
     fixed_payment_lag: int  = 2
     direction:         str  = 'PAY'
     float_index:       str  = 'SOFR'
@@ -188,6 +189,7 @@ class ParRateRequest(BaseModel):
     float_pay_freq:    str  = 'ANNUAL'
     float_day_count:   str  = 'ACT/360'
     float_bdc:         str  = 'MOD_FOLLOWING'
+    float_calendar:    Optional[str] = None
     float_payment_lag: int  = 2
     spread:            float = 0.0
     leverage:          float = 1.0
@@ -521,7 +523,7 @@ def compute_par_rate(
         "notional": req.notional, "notional_type": "BULLET",
         "effective_date": req.effective_date, "maturity_date": req.maturity_date,
         "day_count": req.fixed_day_count, "payment_frequency": req.fixed_pay_freq,
-        "bdc": req.fixed_bdc, "stub_type": "SHORT_FRONT",
+        "bdc": req.fixed_bdc, "stub_type": "SHORT_FRONT", "payment_calendar": req.fixed_calendar,
         "payment_lag": req.fixed_payment_lag,
         "fixed_rate": 0.0, "spread": 0.0,
         "discount_curve_id": req.curve_id, "forecast_curve_id": None,
@@ -533,7 +535,7 @@ def compute_par_rate(
         "effective_date": req.effective_date, "maturity_date": req.maturity_date,
         "day_count": req.float_day_count, "payment_frequency": req.float_pay_freq,
         "reset_frequency": req.float_reset_freq,
-        "bdc": req.float_bdc, "stub_type": "SHORT_FRONT",
+        "bdc": req.float_bdc, "stub_type": "SHORT_FRONT", "payment_calendar": req.float_calendar,
         "payment_lag": req.float_payment_lag,
         "fixed_rate": 0.0, "spread": req.spread, "leverage": req.leverage,
         "discount_curve_id": req.curve_id, "forecast_curve_id": req.curve_id,
@@ -783,6 +785,9 @@ class LegPreview(BaseModel):
     payment_frequency:  Optional[str]   = "ANNUAL"
     reset_frequency:    Optional[str]   = None
     bdc:                Optional[str]   = "MOD_FOLLOWING"
+    # the calendar the leg's dates roll on (NEW_YORK, TARGET+LONDON, ...); left out, its currency's. The ticket's
+    # CALENDAR was booked and not sent here until 0.59.0, so a ticket priced on one calendar and booked another.
+    payment_calendar:   Optional[str]   = None
     stub_type:          Optional[str]   = "SHORT_FRONT"
     payment_lag:        Optional[int]   = 2
     fixed_rate:         Optional[float] = 0.0
@@ -870,6 +875,7 @@ def price_preview(
             "payment_frequency": lp.payment_frequency or "ANNUAL",
             "reset_frequency":   lp.reset_frequency,
             "bdc":               lp.bdc or "MOD_FOLLOWING",
+            "payment_calendar":  lp.payment_calendar,
             "stub_type":         lp.stub_type or "SHORT_FRONT",
             "payment_lag":       int(lp.payment_lag) if lp.payment_lag is not None else 2,
             "fixed_rate":        float(lp.fixed_rate) if lp.fixed_rate is not None else 0.0,
@@ -1017,6 +1023,9 @@ class SwaptionRequest(BaseModel):
     # which. Until 0.57.0 an absent vol was a fixed 86.5 bp, whatever the expiry, the tenor or the day's surface.
     vol_bp:         Optional[float] = Field(default=None, gt=0.0, le=5000.0)
     is_payer:       bool          = True       # True = payer swaption
+    # BUY: we hold the option. SELL: we wrote it, and every money figure of the answer carries that sign (until
+    # 0.59.0 the answer was the holder's whichever side the ticket was on, and a sold swaption read as an asset).
+    side:           str           = "BUY"
     pay_freq_y:     float         = 1.0        # coupon frequency (1=annual, 0.5=semi)
     valuation_date: Optional[date] = None
     # Underlying swap dates — carry T+2 spot lag from frontend (the market's convention)
@@ -1105,15 +1114,35 @@ def swaption_vol_route(curve_id: str = "USD_SOFR", expiry_y: float = 1.0, tenor_
             "valuation_date": val_date.isoformat(), **_surface_vol(db, user["sub"], curve_id, expiry_y, tenor_y, val_date)}
 
 
+# the figures of a swaption's answer that are amounts of money or of risk: a written option's are the holder's, negated
+SWAPTION_SIGNED = ("npv", "european_npv", "early_exercise_premium", "vega", "ir01", "theta", "dv01_curve", "volga", "vanna",
+                   "dollar_gamma", "delta_hedge_notl", "hw1f_npv")
+
+
 @router.post("/api/price/swaption")
 def price_swaption_route(
     req: SwaptionRequest,
     db: Session = Depends(get_db),
     user: dict = Depends(verify_token),
 ):
+    """A swaption on the side the ticket is on: the holder's figures (_price_swaption_held), negated for the writer."""
+    side = str(req.side or "BUY").upper()
+    if side not in ("BUY", "SELL"):
+        raise HTTPException(status_code=422, detail="side must be BUY or SELL")
+    answer = _price_swaption_held(req, db, user)
+    if side == "SELL":
+        for k in SWAPTION_SIGNED:
+            if isinstance(answer.get(k), (int, float)) and answer[k] != 0:
+                answer[k] = -answer[k]
+    answer["side"] = side
+    return answer
+
+
+def _price_swaption_held(req: SwaptionRequest, db: Session, user: dict) -> dict:
     """
     Price a European swaption using Black/Bachelier normal vol.
     Optionally cross-checks against HW1F model vol from latest calibration.
+    The figures are the holder's.
     """
     _require_trader(user)
     val_date = req.valuation_date or date.today()
@@ -1518,13 +1547,20 @@ def generate_cashflows(
 class CapFloorRequest(BaseModel):
     notional:       float           = 10_000_000
     tenor_y:        float           = 5.0
-    cap_rate:       Optional[float] = None
-    floor_rate:     Optional[float] = None
-    fallback_vol_bp: float          = 85.0
+    # a strike as a decimal. A cap's or a floor's left out is struck at the money: the forward of its own periods
+    cap_rate:       Optional[float] = Field(default=None, ge=-1.0, le=1.0)
+    floor_rate:     Optional[float] = Field(default=None, ge=-1.0, le=1.0)
     valuation_date: Optional[date]  = None
     curve_id:       str             = "USD_SOFR"
-    freq_per_year:  int             = 4          # the legs' periods a year: a whole number of months each (PERIODS_A_YEAR)
-    vol_override_bp: Optional[float] = None
+    freq_per_year:  int             = 4          # without a leg: the periods a year (PERIODS_A_YEAR)
+    vol_override_bp: Optional[float] = Field(default=None, gt=0.0, le=5000.0)
+    # BUY: we hold the option (a collar: we hold the cap and wrote the floor). SELL is the other side, and every
+    # figure of the answer carries its sign.
+    side:           str             = "BUY"
+    # The leg the ticket books (booking.js buildCapFloorLegs): its dates, frequency, day count, roll, calendar and
+    # payment lag are the option's periods. Its own embedded_options are not read: the strikes and the side are
+    # this request's. Without it the leg is made from the tenor: from the currency's spot date, quarterly ACT/360.
+    leg:            Optional[LegPreview] = None
     # A scenario: the curve as it is saved with every quote moved by `curve_flat_bp` and a tenor's by its own on
     # top, and the vol each leg is priced at moved by `vol_shift_bp`. The vol is read from the surface where the
     # curve as saved puts the trade (a moved curve does not move it along the smile), or is the override. None of
@@ -1534,28 +1570,209 @@ class CapFloorRequest(BaseModel):
     vol_shift_bp:   Optional[float] = Field(default=None, ge=-1000.0, le=1000.0)
 
 
-PERIODS_A_YEAR = (1, 2, 3, 4, 6, 12)      # the schedule steps a whole number of months: any other count is not a schedule
+PERIODS_A_YEAR = {1: "ANNUAL", 2: "SEMI_ANNUAL", 4: "QUARTERLY", 12: "MONTHLY"}      # the frequencies a leg's schedule is made at
 
 
-def _periods_a_year(req) -> int:
-    """The request's payment frequency, or 422. The schedule is built in steps of 12 // n months, so nought divided
-    by nothing, five made periods of two months over fifty, and thirteen or more put every period on one day and
-    priced the trade at nothing: each answered 200 or 500 where the terms were simply not a schedule."""
-    n = req.freq_per_year
-    if n not in PERIODS_A_YEAR:
+def _periods_a_year(req) -> str:
+    """The request's payment frequency as a leg names it, or 422 (nought, five and thirteen each answered 200 or 500
+    where the terms were simply not a schedule; three and six, which the leg's schedule does not make, went with
+    the route's own schedule in 0.59.0)."""
+    if req.freq_per_year not in PERIODS_A_YEAR:
         raise HTTPException(status_code=422, detail=f"freq_per_year must be one of {', '.join(str(x) for x in PERIODS_A_YEAR)} (periods a year)")
-    return n
+    return PERIODS_A_YEAR[req.freq_per_year]
 
 
-def _held_atm_forward(req, val_date, db: Session, user_id: str, freq_per_year: int) -> Optional[float]:
-    """A scenario that moves the curve does not move the trade along the smile: its vol is read where the curve as
-    saved puts it (that curve's ATM forward), then moved by the scenario's vol shift. None when the curve is not
-    moved, and the pricer reads the surface at its own curve as it always has."""
-    if not (req.curve_flat_bp or any((req.curve_shift_bp or {}).values())):
-        return None
-    from pricing.cap_floor import compute_atm_forward
-    saved = _build_curve(CurveInput(curve_id=req.curve_id, quotes=[]), val_date, db, user_id)
-    return compute_atm_forward(saved, val_date, req.tenor_y, freq_per_year)
+def _cap_like_leg(req: CapFloorRequest, val_date: date) -> dict:
+    """The floating leg a cap, floor or collar is booked as, with no participation in the rate (leverage 0): the
+    ticket's own when it sent one, otherwise made from the tenor the way the ticket's dates are (the currency's
+    spot date, the tenor in calendar months, unadjusted)."""
+    lp = req.leg
+    if lp is not None:
+        if str(lp.leg_type or "").upper() != "FLOAT":
+            raise HTTPException(status_code=422, detail="leg.leg_type must be FLOAT: a cap, floor or collar is booked on a floating leg")
+        try:
+            eff, mat = date.fromisoformat(str(lp.effective_date)), date.fromisoformat(str(lp.maturity_date))
+        except Exception:
+            raise HTTPException(status_code=422, detail="leg.effective_date and leg.maturity_date are needed, as YYYY-MM-DD")
+        terms = {"currency": lp.currency, "notional": float(lp.notional), "day_count": lp.day_count or "ACT/360",
+                 "payment_frequency": lp.payment_frequency or "QUARTERLY", "reset_frequency": lp.reset_frequency,
+                 "bdc": lp.bdc or "MOD_FOLLOWING", "stub_type": lp.stub_type or "SHORT_FRONT",
+                 "payment_lag": int(lp.payment_lag) if lp.payment_lag is not None else 2,
+                 "payment_calendar": lp.payment_calendar, "first_period_start": lp.first_period_start,
+                 "last_period_end": lp.last_period_end,
+                 "discount_curve_id": lp.discount_curve_id or req.curve_id, "forecast_curve_id": lp.forecast_curve_id}
+    else:
+        from dateutil.relativedelta import relativedelta
+        from pricing.calendars import add_business_days, ccy_to_calendar
+        from api.routes.schedules import SETTLEMENT_DAYS
+        ccy = (req.curve_id or "USD").split("_")[0].upper()
+        eff = add_business_days(val_date, SETTLEMENT_DAYS.get(ccy, 2), ccy_to_calendar(ccy))
+        mat = eff + relativedelta(months=round(req.tenor_y * 12))
+        terms = {"currency": ccy, "notional": float(req.notional), "day_count": "ACT/360",
+                 "payment_frequency": _periods_a_year(req), "reset_frequency": "DAILY", "bdc": "MOD_FOLLOWING",
+                 "stub_type": "SHORT_FRONT", "payment_lag": 2, "payment_calendar": None,
+                 "first_period_start": None, "last_period_end": None,
+                 "discount_curve_id": req.curve_id, "forecast_curve_id": req.curve_id}
+    if mat <= eff:
+        raise HTTPException(status_code=422, detail=f"The maturity {mat} is not after the effective date {eff}")
+    if terms["notional"] <= 0:
+        raise HTTPException(status_code=422, detail="The notional must be above zero")
+    return {"id": "cap-ticket", "leg_ref": "OPT-1", "leg_seq": 1, "leg_type": "FLOAT", "direction": "RECEIVE",
+            "notional_type": "BULLET", "effective_date": str(eff), "maturity_date": str(mat),
+            "fixed_rate": 0.0, "spread": 0.0, "leverage": 0.0, "ois_compounding": None, **terms}
+
+
+def _cap_like(req: CapFloorRequest, kind: str, db: Session, user: dict) -> dict:
+    """A cap, a floor or a collar (`kind`), priced as the trade the ticket books: one floating leg with no
+    participation in the rate and the strikes as its embedded options, through the swap pricer on the leg's own
+    periods, which is how a booked one is valued (POST /price). So a ticket and its booking are one calculation,
+    and the effective and maturity dates, the day count, the roll and the calendar on the ticket are the ones
+    priced. (Until 0.59.0 this route priced a schedule of its own: from two calendar days after the valuation
+    date, weekend or not, the tenor in whole periods, ACT/360 whatever the ticket said, and the dates typed on the
+    ticket were not read. On the ticket's defaults the two were 0.1 to 0.2 % of the premium apart; with the day
+    count changed, 4 to 6 %.)"""
+    _require_trader(user)
+    side = str(req.side or "BUY").upper()
+    if side not in ("BUY", "SELL"):
+        raise HTTPException(status_code=422, detail="side must be BUY or SELL")
+    cap_k, floor_k = req.cap_rate, req.floor_rate
+    if kind == "COLLAR":
+        if cap_k is None or floor_k is None:
+            raise HTTPException(status_code=422, detail="Both cap_rate and floor_rate required for collar")
+        if cap_k <= floor_k:
+            raise HTTPException(status_code=422, detail="cap_rate must be above floor_rate")
+    val_date = req.valuation_date or date.today()
+    leg = _cap_like_leg(req, val_date)
+    disc_id = leg["discount_curve_id"]
+    moved = bool(req.curve_flat_bp or any((req.curve_shift_bp or {}).values()))
+
+    def curve_of(shifted: bool):
+        ci = CurveInput(curve_id=disc_id, quotes=[], shift_flat_bp=req.curve_flat_bp if shifted else None,
+                        shift_bp=req.curve_shift_bp if shifted else None)
+        try:
+            return _build_curve(ci, val_date, db, user["sub"])
+        except Exception as exc:
+            raise HTTPException(status_code=422, detail=f"Curve error: {exc}")
+
+    curve = curve_of(True)
+    surface_rows = _load_cap_surface(db, val_date.isoformat(), user["sub"])
+    fixing_lookup, _ = _fixings.lookup_for(db, user["sub"], [leg])
+    theirs = "SELL" if side == "BUY" else "BUY"
+
+    def run(on_curve, k_cap, k_floor, held_atm=None, vol_shift=0.0):
+        options = []
+        if kind in ("CAP", "COLLAR"):
+            options.append({"type": "CAP", "direction": side, "default_strike": k_cap, "strike_schedule": []})
+        if kind in ("FLOOR", "COLLAR"):
+            options.append({"type": "FLOOR", "direction": theirs if kind == "COLLAR" else side,
+                            "default_strike": k_floor, "strike_schedule": []})
+        priced_leg = {**leg, "embedded_options": options, "_vol_surface_rows": surface_rows,
+                      "_vol_override_bp": req.vol_override_bp, "_vol_shift_bp": vol_shift, "_vol_atm_forward": held_atm}
+        try:
+            result = price_swap(trade_id="cap", legs=[priced_leg], curves={disc_id: on_curve}, valuation_date=val_date,
+                                fixing_lookup=fixing_lookup)
+        except Exception as exc:
+            raise internal(500, "Pricing error", exc)
+        if result.error or not result.legs:
+            raise HTTPException(status_code=422, detail=f"Pricing error: {result.error or 'the leg was not priced'}")
+        lr = result.legs[0]
+        if lr.option_errors:
+            raise HTTPException(status_code=422, detail="; ".join(lr.option_errors))
+        strips = dict(lr.option_strips)
+        if not strips or any(s.n_periods == 0 for s in strips.values()):
+            raise HTTPException(status_code=422, detail=f"No period of the leg is still to be paid on {val_date}: nothing to price")
+        return result, strips
+
+    # At the money, and a scenario's hold: the forward of the leg's own periods on the curve as it is saved. A cap
+    # or a floor with no strike is struck there; a scenario that moves the curve reads the vol where that forward
+    # puts the strike (the moved curve does not strike the option again or move it along the smile).
+    struck_atm = kind != "COLLAR" and (cap_k if kind == "CAP" else floor_k) is None
+    held_atm = None
+    if struck_atm or moved:
+        _, at_saved = run(curve_of(False) if moved else curve, cap_k if cap_k is not None else 0.0, floor_k if floor_k is not None else 0.0)
+        saved_strip = next(iter(at_saved.values()))
+        atm_saved = saved_strip.atm_forward              # to eight decimals: the strike a blank field is struck at
+        if struck_atm and kind == "CAP":
+            cap_k = atm_saved
+        if struck_atm and kind == "FLOOR":
+            floor_k = atm_saved
+        # unrounded, so a scenario that moves nothing reads the surface exactly where the price without one does
+        held_atm = saved_strip.atm_exact if moved else None
+
+    result, strips = run(curve, cap_k, floor_k, held_atm, req.vol_shift_bp or 0.0)
+    first = next(iter(strips.values()))
+    notional = float(leg["notional"])
+    fore_id = leg.get("forecast_curve_id") or disc_id
+    common = {
+        "valuation_date":  val_date.isoformat(),
+        "notional":        notional,
+        "tenor_y":         req.tenor_y,
+        "side":            side,
+        "effective_date":  leg["effective_date"],
+        "maturity_date":   leg["maturity_date"],
+        "day_count":       leg["day_count"],
+        "payment_frequency": leg["payment_frequency"],
+        "atm_forward":     float(first.atm_forward),
+        "atm_forward_pct": round(float(first.atm_forward) * 100, 6),
+        "n_caplets":       first.n_periods,
+        "discount_curve":  disc_id,
+        # the index is forecast off the discount curve unless its own curve is handed to the pricer, which no
+        # ticket does: the same as the booked trade's valuation
+        "forecast_curve":  disc_id,
+        "index_note":      (f"{fore_id} is not a curve of its own here: the index is forecast off {disc_id}" if fore_id != disc_id else None),
+        "surface_rows":    surface_rows,
+    }
+
+    def periods(strip):
+        return [{"period": i + 1, "start_date": c["start_date"], "end_date": c["end_date"], "payment_date": c["payment_date"],
+                 "expiry_y": float(c["expiry_y"]), "forward": round(float(c["forward"]) * 100, 6), "df": round(float(c["df"]), 6),
+                 "tau": float(c["tau"]), "vol_bp": round(float(c["vol_bp"]), 1), "pv": round(float(c["pv"]), 2)} for i, c in enumerate(strip.caplets)]
+
+    if kind in ("CAP", "FLOOR"):
+        strip = strips[kind]
+        k = cap_k if kind == "CAP" else floor_k
+        rate = "cap_rate" if kind == "CAP" else "floor_rate"
+        return {
+            "instrument":     "IR_CAP" if kind == "CAP" else "IR_FLOOR",
+            **common,
+            rate:             float(k),
+            rate + "_pct":    round(float(k) * 100, 6),
+            "strike_from":    "ATM" if struck_atm else "TYPED",
+            "npv":            round(float(result.npv), 2),
+            "premium_pct":    round(abs(float(result.npv)) / notional * 100, 4),
+            "vega":           round(float(strip.vega), 2),
+            "ir01":           round(float(strip.ir01), 2),
+            "delta":          round(float(strip.ir01) * 10000, 2),
+            "vol_bp":         round(float(strip.vol_bp), 4),
+            "vol_tier":       strip.vol_tier,
+            "caplets":        periods(strip),
+        }
+
+    cap, floor = strips["CAP"], strips["FLOOR"]
+    net = float(result.npv)
+    return {
+        "instrument":          "IR_COLLAR",
+        **common,
+        "cap_rate":            float(cap_k),
+        "cap_rate_pct":        round(float(cap_k) * 100, 6),
+        "floor_rate":          float(floor_k),
+        "floor_rate_pct":      round(float(floor_k) * 100, 6),
+        # the collar, with the side's sign: bought, the cap less the floor
+        "net_npv":             round(net, 2),
+        "net_pct":             round(net / notional * 100, 4),
+        "net_vega":            round(float(cap.vega + floor.vega), 2),
+        "net_ir01":            round(float(cap.ir01 + floor.ir01), 2),
+        "zero_cost_spread_bp": round(float(cap_k - floor_k) * 10000, 1),
+        # each option on its own, as held (unsigned), with the vol it was priced at
+        "cap_npv":             round(abs(float(cap.npv)), 2),
+        "cap_premium_pct":     round(abs(float(cap.npv)) / notional * 100, 4),
+        "cap_vol_bp":          round(float(cap.vol_bp), 4),
+        "cap_vol_tier":        cap.vol_tier,
+        "floor_npv":           round(abs(float(floor.npv)), 2),
+        "floor_premium_pct":   round(abs(float(floor.npv)) / notional * 100, 4),
+        "floor_vol_bp":        round(float(floor.vol_bp), 4),
+        "floor_vol_tier":      floor.vol_tier,
+    }
 
 
 def _load_cap_surface(db: Session, val_date: str, user_id: str) -> list[dict]:
@@ -1601,208 +1818,20 @@ def _read_cap_surface(db: Session, val_date: str, user_id: str) -> list[dict]:
 
 
 @router.post("/api/price/cap")
-def price_cap_route(
-    req: CapFloorRequest,
-    db: Session = Depends(get_db),
-    user: dict = Depends(verify_token),
-):
-    """Price an interest rate cap — sum of Bachelier call caplets."""
-    _require_trader(user)
-
-    if req.cap_rate is None:
-        raise HTTPException(status_code=422, detail="cap_rate required")
-    _periods_a_year(req)
-
-    val_date = req.valuation_date or date.today()
-    ci       = CurveInput(curve_id=req.curve_id, quotes=[], shift_flat_bp=req.curve_flat_bp, shift_bp=req.curve_shift_bp)
-    try:
-        curve = _build_curve(ci, val_date, db, user["sub"])
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Curve error: {exc}")
-
-    surface_rows = _load_cap_surface(db, val_date.isoformat(), user["sub"])
-
-    from pricing.cap_floor import price_cap as _price_cap
-    try:
-        result = _price_cap(
-            notional        = req.notional,
-            cap_rate        = req.cap_rate,
-            tenor_y         = req.tenor_y,
-            discount_curve  = curve,
-            valuation_date  = val_date,
-            surface_rows    = surface_rows,
-            fallback_vol_bp = req.fallback_vol_bp,
-            freq_per_year   = req.freq_per_year,
-            vol_override_bp = req.vol_override_bp,
-            vol_shift_bp    = req.vol_shift_bp or 0.0,
-            vol_atm_forward = _held_atm_forward(req, val_date, db, user["sub"], req.freq_per_year),
-        )
-    except Exception as exc:
-        raise internal(500, "Pricing error", exc)
-
-    return {
-        "instrument":     "IR_CAP",
-        "valuation_date": val_date.isoformat(),
-        "notional":       req.notional,
-        "cap_rate":       req.cap_rate,
-        "cap_rate_pct":   round(req.cap_rate * 100, 4),
-        "tenor_y":        req.tenor_y,
-        "npv":            result.npv,
-        "premium_pct":    result.premium_pct,
-        "vega":           result.vega,
-        "ir01":           result.ir01,
-        "delta":          result.delta,
-        "vol_bp":         result.vol_bp,
-        "vol_tier":       result.vol_tier,
-        "atm_forward":    result.atm_forward,
-        "atm_forward_pct": round(result.atm_forward * 100, 6),
-        "n_caplets":      result.n_caplets,
-        "caplets":        result.caplets,
-        "surface_rows":   surface_rows,
-    }
+def price_cap_route(req: CapFloorRequest, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """An interest rate cap: Bachelier caplets on the periods of the leg it is booked as (_cap_like)."""
+    return _cap_like(req, "CAP", db, user)
 
 
 @router.post("/api/price/floor")
-def price_floor_route(
-    req: CapFloorRequest,
-    db: Session = Depends(get_db),
-    user: dict = Depends(verify_token),
-):
-    """Price an interest rate floor — sum of Bachelier put floorlets."""
-    _require_trader(user)
-
-    if req.floor_rate is None:
-        raise HTTPException(status_code=422, detail="floor_rate required")
-    _periods_a_year(req)
-
-    val_date = req.valuation_date or date.today()
-    ci       = CurveInput(curve_id=req.curve_id, quotes=[], shift_flat_bp=req.curve_flat_bp, shift_bp=req.curve_shift_bp)
-    try:
-        curve = _build_curve(ci, val_date, db, user["sub"])
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Curve error: {exc}")
-
-    surface_rows = _load_cap_surface(db, val_date.isoformat(), user["sub"])
-
-    from pricing.cap_floor import price_floor as _price_floor
-    try:
-        result = _price_floor(
-            notional        = req.notional,
-            floor_rate      = req.floor_rate,
-            tenor_y         = req.tenor_y,
-            discount_curve  = curve,
-            valuation_date  = val_date,
-            surface_rows    = surface_rows,
-            fallback_vol_bp = req.fallback_vol_bp,
-            freq_per_year   = req.freq_per_year,
-            vol_override_bp = req.vol_override_bp,
-            vol_shift_bp    = req.vol_shift_bp or 0.0,
-            vol_atm_forward = _held_atm_forward(req, val_date, db, user["sub"], req.freq_per_year),
-        )
-    except Exception as exc:
-        raise internal(500, "Pricing error", exc)
-
-    return {
-        "instrument":      "IR_FLOOR",
-        "valuation_date":  val_date.isoformat(),
-        "notional":        req.notional,
-        "floor_rate":      req.floor_rate,
-        "floor_rate_pct":  round(req.floor_rate * 100, 4),
-        "tenor_y":         req.tenor_y,
-        "npv":             result.npv,
-        "premium_pct":     result.premium_pct,
-        "vega":            result.vega,
-        "ir01":            result.ir01,
-        "delta":           result.delta,
-        "vol_bp":          result.vol_bp,
-        "vol_tier":        result.vol_tier,
-        "atm_forward":     result.atm_forward,
-        "atm_forward_pct": round(result.atm_forward * 100, 6),
-        "n_caplets":       result.n_caplets,
-        "caplets":         result.caplets,
-        "surface_rows":    surface_rows,
-    }
+def price_floor_route(req: CapFloorRequest, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """An interest rate floor: Bachelier floorlets on the periods of the leg it is booked as (_cap_like)."""
+    return _cap_like(req, "FLOOR", db, user)
 
 
 @router.post("/api/price/collar")
-def price_collar_route(
-    req: CapFloorRequest,
-    db: Session = Depends(get_db),
-    user: dict = Depends(verify_token),
-):
-    """
-    Price an interest rate collar = long cap + short floor.
-    Net NPV = cap premium - floor premium.
-    Zero-cost collar when net NPV = 0.
-    """
-    _require_trader(user)
+def price_collar_route(req: CapFloorRequest, db: Session = Depends(get_db), user: dict = Depends(verify_token)):
+    """A collar: bought, the cap held and the floor written, on one leg (_cap_like)."""
+    return _cap_like(req, "COLLAR", db, user)
 
-    if req.cap_rate is None or req.floor_rate is None:
-        raise HTTPException(status_code=422, detail="Both cap_rate and floor_rate required for collar")
-    if req.cap_rate <= req.floor_rate:
-        raise HTTPException(status_code=422, detail="cap_rate must be above floor_rate")
-    _periods_a_year(req)
 
-    val_date = req.valuation_date or date.today()
-    ci       = CurveInput(curve_id=req.curve_id, quotes=[], shift_flat_bp=req.curve_flat_bp, shift_bp=req.curve_shift_bp)
-    try:
-        curve = _build_curve(ci, val_date, db, user["sub"])
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Curve error: {exc}")
-
-    surface_rows = _load_cap_surface(db, val_date.isoformat(), user["sub"])
-
-    from pricing.cap_floor import price_collar as _price_collar
-    try:
-        result = _price_collar(
-            notional        = req.notional,
-            cap_rate        = req.cap_rate,
-            floor_rate      = req.floor_rate,
-            tenor_y         = req.tenor_y,
-            discount_curve  = curve,
-            valuation_date  = val_date,
-            surface_rows    = surface_rows,
-            fallback_vol_bp = req.fallback_vol_bp,
-            # the legs' periods are the ticket's own, as a cap's and a floor's are (until 0.44.2 this route priced
-            # both legs quarterly whatever the ticket said, so a semi-annual collar was not its cap less its floor)
-            freq_per_year   = req.freq_per_year,
-            vol_shift_bp    = req.vol_shift_bp or 0.0,
-            vol_atm_forward = _held_atm_forward(req, val_date, db, user["sub"], req.freq_per_year),
-        )
-    except Exception as exc:
-        raise internal(500, "Pricing error", exc)
-
-    cap   = result["cap"]
-    floor = result["floor"]
-
-    return {
-        "instrument":          "IR_COLLAR",
-        "valuation_date":      val_date.isoformat(),
-        "notional":            req.notional,
-        "cap_rate":            req.cap_rate,
-        "cap_rate_pct":        round(req.cap_rate * 100, 4),
-        "floor_rate":          req.floor_rate,
-        "floor_rate_pct":      round(req.floor_rate * 100, 4),
-        "tenor_y":             req.tenor_y,
-        # Collar net
-        "net_npv":             result["net_npv"],
-        "net_pct":             result["net_pct"],
-        "net_vega":            result["net_vega"],
-        "net_ir01":            result["net_ir01"],
-        "zero_cost_spread_bp": result["zero_cost_spread_bp"],
-        # Cap leg
-        "cap_npv":             cap.npv,
-        "cap_premium_pct":     cap.premium_pct,
-        "cap_vol_bp":          cap.vol_bp,
-        "cap_vol_tier":        cap.vol_tier,
-        # Floor leg
-        "floor_npv":           floor.npv,
-        "floor_premium_pct":   floor.premium_pct,
-        "floor_vol_bp":        floor.vol_bp,
-        "floor_vol_tier":      floor.vol_tier,
-        # Shared
-        "atm_forward":         cap.atm_forward,
-        "atm_forward_pct":     round(cap.atm_forward * 100, 6),
-        "n_caplets":           cap.n_caplets,
-        "surface_rows":        surface_rows,
-    }

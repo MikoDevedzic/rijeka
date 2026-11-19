@@ -240,14 +240,24 @@ describe('IR_CAP / IR_FLOOR / IR_COLLAR', () => {
     expect(sold.legs[0].embedded_options.map(e => [e.type, e.direction])).toEqual([['CAP', 'SELL'], ['FLOOR', 'BUY']])
   })
 
-  it('books a sold floor, the strike at its default when untouched', () => {
+  it('books a sold floor left at the money at the rate the price struck it, the premium as the buyer pays it', () => {
     const { capRate: _c, floorRate: _f, ...untouched } = capState
-    const body = buildBookingBody({ ...untouched, productKey: 'RATES_FLOOR', optionSide: 'SELL' }, 'PAY', extras)
+    // the price of a sold option carries its sign: the value is negative, the premium is what the buyer pays us
+    const priced = { instrument: 'IR_FLOOR', floor_rate: 0.03121416, vol_bp: 88.4, npv: -41_250.5 }
+    const body = buildBookingBody({ ...untouched, productKey: 'RATES_FLOOR', optionSide: 'SELL' }, 'PAY', { ...extras, priced })
     expect(body.instrument_type).toBe('IR_FLOOR')
-    expect(body.terms).toMatchObject({ option: 'FLOOR', side: 'SELL', cap_rate: null, floor_rate: 0.03, vol_bp: null, premium_amount: null })
+    expect(body.terms).toMatchObject({ option: 'FLOOR', side: 'SELL', cap_rate: null, floor_rate: 0.03121416, vol_bp: 88.4, premium_amount: 41_250.5 })
     expect(body.legs[0].embedded_options).toEqual([
-      { type: 'FLOOR', direction: 'SELL', default_strike: 0.03, strike_schedule: [{ date: '2026-11-04', strike: 0.03 }] },
+      { type: 'FLOOR', direction: 'SELL', default_strike: 0.03121416, strike_schedule: [{ date: '2026-11-04', strike: 0.03121416 }] },
     ])
+  })
+
+  it('refuses a strike it cannot book: blank with nothing priced, blank on a collar, text that is no rate, a vol that is no vol', () => {
+    const { capRate: _c, floorRate: _f, ...untouched } = capState
+    expect(() => buildBookingBody({ ...untouched, productKey: 'RATES_CAP' }, 'PAY', extras)).toThrow(/at the money: price the ticket first/)
+    expect(() => buildBookingBody({ ...untouched, productKey: 'RATES_COLLAR', capRate: '4.5' }, 'PAY', { ...extras, priced: { floor_rate: 0.03 } })).toThrow(/collar's floor rate is typed/)
+    expect(() => buildBookingBody({ ...capState, capRate: 'abc' }, 'PAY', { ...extras, priced: pricedCap })).toThrow(/not a rate in percent/)
+    expect(() => buildBookingBody({ ...capState, volOverride: '-5' }, 'PAY', { ...extras, priced: pricedCap })).toThrow(/not a normal vol/)
   })
 })
 
@@ -256,5 +266,31 @@ describe('executeBooking', () => {
     expect(INSTRUMENT_OF).toEqual({ IR_SWAP: 'IR_SWAP', IR_SWAPTION: 'IR_SWAPTION', RATES_CAP: 'IR_CAP', RATES_FLOOR: 'IR_FLOOR', RATES_COLLAR: 'IR_COLLAR' })
     await expect(executeBooking({ state: { ...swapState, productKey: 'FX_FORWARD' }, direction: 'PAY' })).rejects.toThrow(/FX_FORWARD/)
     await expect(executeBooking({ state: { ...capState, notional: 0 }, direction: 'PAY' })).rejects.toThrow(/Notional/)
+  })
+})
+
+describe('the request a cap, a floor and a collar ticket sends', () => {
+  const state = { productKey: 'RATES_CAP', notional: 10_000_000, ccy: 'USD', tenor: '5Y', valDate: '2026-11-19', effDate: '2026-11-23', matDate: '2031-11-23', capDayCount: '30/360', floatCal: 'LONDON', optionSide: 'SELL' }
+  it('carries the leg the booking stores, without its strikes: what is priced is what is booked', async () => {
+    const { capLikePayload } = await import('./products/rates')
+    const sent = capLikePayload({ ...state, capRate: '4.5' }, 'CAP')
+    const booked = buildBookingBody({ ...state, capRate: '4.5' }, 'PAY', { ownEntityId: 'o', counterpartyId: 'c', priced: { npv: -1 } })
+    const { embedded_options: _e, terms: _t, ...leg } = booked.legs[0]
+    expect(sent.leg).toEqual(leg)
+    expect(sent).toMatchObject({ cap_rate: 0.045, side: 'SELL', curve_id: 'USD_SOFR', valuation_date: '2026-11-19' })
+    expect(sent.leg).toMatchObject({ effective_date: '2026-11-23', maturity_date: '2031-11-23', day_count: '30/360', payment_calendar: 'LONDON', leverage: 0 })
+    expect('vol_override_bp' in sent).toBe(false)
+    expect(capLikePayload({ ...state, capRate: '4.5', volOverride: '100' }, 'CAP').vol_override_bp).toBe(100)
+  })
+  it('sends a blank strike as none, and refuses what cannot be priced in words', async () => {
+    const { capLikePayload } = await import('./products/rates')
+    expect(capLikePayload(state, 'CAP').cap_rate).toBeNull()
+    expect(capLikePayload({ ...state, productKey: 'RATES_FLOOR' }, 'FLOOR')).toMatchObject({ floor_rate: null })
+    expect('cap_rate' in capLikePayload({ ...state, productKey: 'RATES_FLOOR' }, 'FLOOR')).toBe(false)
+    expect(() => capLikePayload({ ...state, capRate: 'abc' }, 'CAP')).toThrow(/not a rate in percent/)
+    expect(() => capLikePayload({ ...state, volOverride: '0' }, 'CAP')).toThrow(/not a normal vol/)
+    expect(() => capLikePayload({ ...state, capRate: '4.5' }, 'COLLAR')).toThrow(/Type the cap rate and the floor rate/)
+    expect(() => capLikePayload({ ...state, capRate: '3', floorRate: '3.5' }, 'COLLAR')).toThrow(/above the floor rate/)
+    expect(() => capLikePayload({ ...state, effDate: '' }, 'CAP')).toThrow(/still loading/)
   })
 })

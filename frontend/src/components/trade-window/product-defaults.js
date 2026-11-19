@@ -71,10 +71,34 @@ export function volSourceWords(d) {
 }
 
 // RATES_CAP / RATES_FLOOR / RATES_COLLAR: the cap-like bodies. Strikes in %.
+// A cap's or a floor's strike left blank is at the money: the forward of the option's own periods, which the price
+// answers and the booking takes from it. (Until 0.59.0 an untouched cap was struck at 4.5 % and a floor at 3.0 %
+// whatever the currency and the curve: on a 2 % curve, a cap 250 bp out of the money.) A collar has no strike it
+// could take from the market: both are typed.
 export const CAPFLOOR_DEFAULTS = {
-  capRate: '4.5', floorRate: '3.0',
+  capRate: '', floorRate: '',
   capResetFreq: 'DAILY', capPayFreq: 'QUARTERLY', capDayCount: 'ACT/360',
   volOverride: '', optionSide: 'BUY',
+}
+// A strike field of a cap-like ticket, in percent: { dec, blank, problem }. `dec` is the decimal the request sends
+// (null when blank). Text that is not a rate between -100 and 100 % is a `problem`, said in words and refused by
+// the request and the booking: it was read as 0 % and priced.
+export function capStrike(raw, name = 'strike') {
+  const t = String(raw ?? '').replace(/,/g, '').trim().replace(/\s*%$/, '')
+  if (t === '') return { dec: null, blank: true, problem: null }
+  const v = Number(t)
+  if (!Number.isFinite(v) || Math.abs(v) > 100) return { dec: null, blank: false, problem: `The ${name} "${t.slice(0, 20)}" is not a rate in percent: type one, such as 3.75.` }
+  return { dec: v / 100, blank: false, problem: null }
+}
+// The vol typed on a cap or a floor, in bp of normal vol: { bp, problem }. Blank is none: the engine reads the cap
+// surface at the strike. Text that is not a vol is refused in words (it was sent as nothing and the surface's vol
+// priced the ticket, as if the field had been left alone).
+export function capVol(state = {}) {
+  const t = String(state.volOverride ?? '').replace(/,/g, '').trim()
+  if (t === '') return { bp: null, problem: null }
+  const v = Number(t)
+  if (!Number.isFinite(v) || v <= 0 || v > MAX_VOL_BP) return { bp: null, problem: `The vol "${t.slice(0, 20)}" is not a normal vol in basis points (above zero, at most ${MAX_VOL_BP.toLocaleString('en-US')}): type one, or clear the field for the surface's.` }
+  return { bp: v, problem: null }
 }
 
 // Calendar-day shift of an ISO date, in UTC so no DST day is lost.

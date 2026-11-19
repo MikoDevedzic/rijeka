@@ -18,7 +18,7 @@ const TICKETS = [
   ['RATES', 'IR SWAPTION', /^OPTION NPV/, /\/api\/price\/swaption/],
   ['RATES', 'INTEREST RATE CAP', /^OPTION NPV/, /\/api\/price\/cap/],
   ['RATES', 'INTEREST RATE FLOOR', /^OPTION NPV/, /\/api\/price\/floor/],
-  ['RATES', 'INTEREST RATE COLLAR', /^NET NPV/, /\/api\/price\/collar/],
+  ['RATES', 'INTEREST RATE COLLAR', /^NET NPV/, /\/api\/price\/collar/, async (win) => { await win.getByTestId('cap-rate').fill('4.5'); await win.getByTestId('floor-rate').fill('3.0') }],   // a collar's strikes are typed
   ['FX', 'FX FORWARD', /^NET NPV/, /\/api\/currency\/forward\/price/],
   ['FX', 'FX OPTION', /^PREMIUM/, /\/api\/currency\/option\/price/],
   ['CRYPTO', 'CRYPTO FORWARD', /^NET NPV/, /\/api\/currency\/forward\/price/],
