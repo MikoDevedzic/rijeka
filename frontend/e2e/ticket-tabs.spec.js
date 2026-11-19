@@ -2,8 +2,8 @@
 // (0.59.1, from the second walk of the tickets). A swaption's CASHFLOWS showed a swap made up in the browser: every
 // accrual exactly one year, no payment lag, and two legs that did not add to nothing at the at-the-money strike as
 // the tab said. A collar's had a table with no rows. DETAILS on a cap, a floor, a collar and a swaption offered a
-// swap's coupon, spread and notional schedules, and a fee schedule, that nothing read. A currency NDF did not show
-// the day its price fixes on.
+// swap's coupon, spread and notional schedules, and a fee schedule, that nothing read. A currency NDF showed the
+// day its price fixes on only on DETAILS.
 import { test, expect, expectClean, API } from './fixtures.js'
 
 const num = (s) => Number(String(s).replace(/[^0-9.−-]/g, '').replace('−', '-'))

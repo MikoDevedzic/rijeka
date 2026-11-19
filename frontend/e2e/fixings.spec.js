@@ -190,7 +190,8 @@ test('currency NDF: the ticket is read at a fixing date before its settlement da
   await win.getByRole('button', { name: 'DETAILS', exact: true }).click()
   // the fixing date is a row of the term sheet, read without hovering
   await expect(win.getByText('FIXING DATE', { exact: true })).toBeVisible()
-  await expect(win.getByText(quote.fixing_date, { exact: true }).first()).toBeVisible()
+  // (the date also stands beside "non-deliverable" on the TRADE tab since 0.59.1, which is not the tab in view: the term sheet's is the one read here)
+  await expect(win.getByText(quote.fixing_date, { exact: true }).filter({ visible: true }).first()).toBeVisible()
   await expect(win).toContainText(`CASH · ${quote.settlement_currency}`)
   await expect(win).toContainText('WM/Reuters 4pm London')
   await win.screenshot({ path: 'e2e/.out/shots/ndf-details.png' })

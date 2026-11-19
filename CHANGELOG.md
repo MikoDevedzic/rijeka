@@ -18,8 +18,8 @@ CASHFLOWS tabs. No price changes.
 - **DETAILS on a cap, a floor, a collar and a swaption** offered a swap's schedules of coupons, spreads and
   notionals, and a swaption's fee schedule, that nothing read. The tab says what is the case and that the periods
   are on CASHFLOWS; a swap keeps its schedules.
-- **A currency NDF** says the day it fixes and the day it settles beside "non-deliverable"; the price used the
-  fixing date and the ticket did not show it.
+- **A currency NDF** says the day it fixes and the day it settles beside "non-deliverable" on the TRADE tab; the
+  fixing date the price uses was shown on DETAILS only.
 - **An amortizing swap** says on the TRADE tab that its notional by period is set on DETAILS, and that with none
   set it is a level notional.
 - **Walked and found sound:** American, digital, barrier, double-barrier and touch options on a currency pair and
