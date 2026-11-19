@@ -370,7 +370,10 @@ export function buildSwaptionBookingBody(state, direction, extras = {}) {
       : {}),
     strike,
     vol_bp: isFinite(volBp) ? volBp : null,
-    premium_amount: premiumAmount(state, notional),
+    // the premium typed; else what the option was priced at, as its buyer pays it (unsigned: the price carries the
+    // side's sign). Until 0.61.0 an untyped premium was booked as none, where a cap's was booked at its price: the
+    // signed record of a swaption states its premium (record v3).
+    premium_amount: premiumAmount(state, notional) ?? (Number.isFinite(Number(extras.priced?.npv)) && extras.priced?.npv != null ? Math.abs(Number(extras.priced.npv)) : null),
     premium_currency: ccy,
     premium_payment_date: state.settleDate || state.effDate,
   }

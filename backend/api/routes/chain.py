@@ -108,11 +108,12 @@ def trade_parts(db: Session, trade: Trade) -> tuple:
     return own, cp, _cp_identity(db, cp), db.query(TradeLeg).filter(TradeLeg.trade_id == trade.id, TradeLeg.user_id == trade.user_id).all()
 
 
-def _canonical_for(db: Session, trade: Trade, version: int = CANONICAL_SCHEMA_VERSION,
+def _canonical_for(db: Session, trade: Trade, version: Optional[int] = None,
                    parts: Optional[tuple] = None) -> tuple[dict, bytes]:
     """
-    The canonical record and its hash under `version`. New confirmations use
-    the current version; re-deriving an existing one must use the version in
+    The canonical record and its hash under `version`. A new confirmation is
+    signed under the version its instrument is signed under (no version given:
+    chain.canonical.signing_version); re-deriving an existing one must use the version in
     its attestation (attested_version), or the hash will not match.
     parts: trade_parts(), when the caller already has them (saves 4 queries).
     """
@@ -411,7 +412,7 @@ def countersign_trade(db: Session, trade: Trade, address: str, signature: str, *
         raise internal(502, "Chain anchoring failed", e)
 
     attestation = {
-        "schema_version": CANONICAL_SCHEMA_VERSION,
+        "schema_version": payload["schema_version"],
         "trade_hash":     _hexb(h),
         "canonical_bytes_len": len(canonical_bytes(payload)),
         "bilateral":      True,
@@ -484,7 +485,7 @@ def confirm_on_chain(
 
     # 4. The signed record (its anchor is added when the chain answers)
     attestation = {
-        "schema_version": CANONICAL_SCHEMA_VERSION,
+        "schema_version": payload["schema_version"],
         "trade_hash":     _hexb(h),
         "canonical_bytes_len": len(canonical_bytes(payload)),
         "parties": {
@@ -632,7 +633,7 @@ def confirm_package_on_chain(
                 f"registry; nothing was recorded here. Tell the operator: package {package_id}, hash {_hexb(H)}."))
         for i, (t, (payload, h)) in enumerate(zip(trades, records), start=1):
             attestation = {
-                "schema_version": CANONICAL_SCHEMA_VERSION,
+                "schema_version": payload["schema_version"],
                 "trade_hash":     _hexb(h),                       # this leg's own record
                 "canonical_bytes_len": len(canonical_bytes(payload)),
                 # what was signed and anchored: the package record, of which this leg is one
@@ -1542,7 +1543,7 @@ def verify_trade(trade_id: str, db: Session = Depends(get_db), user: dict = Depe
     att = ((ev.payload or {}).get("attestation") if ev else None)
 
     # Re-derive under the schema the confirmation was signed with.
-    payload, h = _canonical_for(db, trade, attested_version(att) if att else CANONICAL_SCHEMA_VERSION)
+    payload, h = _canonical_for(db, trade, attested_version(att) if att else None)
     recomputed = _hexb(h)
 
     # A leg of a package: what was signed and anchored is the package record. The leg's own hash, recomputed from

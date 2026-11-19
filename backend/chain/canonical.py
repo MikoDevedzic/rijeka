@@ -24,6 +24,24 @@ version it was signed under.
       vocabulary (settlement price source, valuation date/time, settlement
       currency, cash settlement; buyer and seller by LEI). The IR_SWAP path is
       unchanged and its pinned vector still holds.
+  v3  (2026-11-19) An option on a rate states the option. Under v2 a swaption's
+      record was the swap it delivers and nothing else: no buyer or seller, no
+      expiry, no premium, and each leg's payer read from the ticket's PAY or
+      RECEIVE chip, so a bought and a sold swaption signed the same bytes and
+      the sold one named the wrong payer. v3 adds one `option` block. For
+      IR_SWAPTION: buyer and seller by LEI, the right (PAYER or RECEIVER: what
+      the buyer does with the fixed rate on exercise), the exercise style, the
+      expiry date, a Bermudan's later exercise times as booked, the strike,
+      physical settlement, and the premium (amount, currency, date); the legs
+      are the swap delivered on exercise, each with the payer it will have if
+      the buyer exercises; the trade block leaves out effective and maturity
+      dates (the legs carry the swap's, the option its own). For IR_CAP,
+      IR_FLOOR and IR_COLLAR the record is v2's (the strikes, the buyer and the
+      seller were already on the leg) with the premium: amount, currency,
+      date, who pays it and who receives it. ONLY these four instruments are
+      signed under v3; every other product is still signed under v2 and its
+      bytes are unchanged (signing_version). A confirmation signed under v2
+      is re-derived under v2, as always.
 
 Rules (a verifier in any language must reproduce these exactly):
   * JSON, UTF-8, keys sorted, separators ',' and ':' (no whitespace)
@@ -46,8 +64,10 @@ from typing import Any, Iterable
 
 from eth_utils import keccak
 
-CANONICAL_SCHEMA_VERSION = 2          # what new confirmations are signed under
-SUPPORTED_SCHEMA_VERSIONS = (1, 2)    # what can be re-derived for verification
+CANONICAL_SCHEMA_VERSION = 2          # what a new confirmation is signed under, except an option on a rate (signing_version)
+SUPPORTED_SCHEMA_VERSIONS = (1, 2, 3) # what can be re-derived for verification
+RATES_OPTIONS = ("IR_SWAPTION", "IR_CAP", "IR_FLOOR", "IR_COLLAR")    # signed under v3: the record states the option
+RATES_OPTION_SCHEMA_VERSION = 3
 
 TRADE_FIELDS = (
     "trade_ref", "uti", "asset_class", "instrument_type", "structure",
@@ -115,19 +135,29 @@ def _pick(obj: Any, fields: Iterable[str]) -> dict:
     return {f: normalise(_get(obj, f)) for f in fields}
 
 
+def signing_version(trade: Any) -> int:
+    """The version a NEW confirmation of this trade is signed under: v3 for an option on a rate, v2 for the rest."""
+    return RATES_OPTION_SCHEMA_VERSION if str(_get(trade, "instrument_type") or "").upper() in RATES_OPTIONS else CANONICAL_SCHEMA_VERSION
+
+
 def canonical_payload(trade: Any, legs: Iterable[Any], own_entity: Any, counterparty: Any,
-                      version: int = CANONICAL_SCHEMA_VERSION) -> dict:
+                      version: int | None = None) -> dict:
     """
-    Build the canonical record under `version` (default: current).
+    Build the canonical record under `version` (default: the version a new
+    confirmation of this trade is signed under, signing_version).
 
     trade / legs may be ORM rows or dicts; own_entity / counterparty are
     {lei, name}. A confirmation must be re-derived with the version recorded
     in its attestation, never with whatever is current.
     """
+    if version is None:
+        version = signing_version(trade)
     if version == 1:
         return _canonical_v1(trade, legs, own_entity, counterparty)
     if version == 2:
         return _canonical_v2(trade, legs, own_entity, counterparty)
+    if version == 3:
+        return _canonical_v3(trade, legs, own_entity, counterparty)
     raise ValueError(f"unsupported canonical schema version {version!r}")
 
 
@@ -518,6 +548,102 @@ def _canonical_v2(trade: Any, legs: Iterable[Any], own_entity: Any, counterparty
         "trade": _pick(trade, TRADE_FIELDS_V2),
         "legs": out_legs,
     }
+
+
+# ── Schema v3: an option on a rate states the option ────────────────────────────────────────────
+# The option's terms are read from trade.terms, where the ticket books them and where the valuations read them
+# (ccr.options.swaption_terms, pnl.valuation): side, is_payer, expiry_date, strike, exercise_type, the premium.
+
+TRADE_FIELDS_V3_SWAPTION = ("asset_class", "instrument_type", "structure", "notional", "notional_ccy", "trade_date")
+_BUYS, _SELLS = ("BUY", "LONG"), ("SELL", "SHORT", "WRITE")
+
+
+def _premium_v3(terms: dict) -> dict:
+    """{premium_amount, premium_currency, premium_payment_date}: the amount unsigned, or all three null where none was booked."""
+    amt = terms.get("premium_amount")
+    if amt in (None, ""):
+        return {"premium_amount": None, "premium_currency": None, "premium_payment_date": None}
+    if not terms.get("premium_currency") or not terms.get("premium_payment_date"):
+        raise ValueError("a premium needs its currency and its payment date")
+    return {"premium_amount": _num_str(abs(Decimal(str(amt)))), "premium_currency": str(terms["premium_currency"]).upper(),
+            "premium_payment_date": str(terms["premium_payment_date"])[:10]}
+
+
+def _swaption_option_v3(trade: Any, legs: list, own: str, cp: str) -> dict:
+    terms = dict(_get(trade, "terms") or {})
+    fixed = [l for l in legs if str(_get(l, "leg_type") or "").upper() == "FIXED"]
+    if len(fixed) != 1 or len(legs) != 2:
+        raise ValueError("a swaption's record needs the swap it delivers: one fixed leg and one floating leg")
+    # the side: bought unless the booking says sold (the valuations read it the same way: a booking with no side is long)
+    buyer, seller = _sides(terms.get("side") or "BUY", own, cp, pays=_BUYS, gets=_SELLS)
+    if "is_payer" in terms and terms["is_payer"] is not None:
+        is_payer = bool(terms["is_payer"])
+    elif str(terms.get("direction") or "").upper() in ("PAY", "RECEIVE"):
+        is_payer = str(terms["direction"]).upper() == "PAY"
+    else:
+        raise ValueError("a swaption's record needs its right: payer or receiver")
+    if not terms.get("expiry_date"):
+        raise ValueError("a swaption's record needs its expiry date")
+    expiry = str(terms["expiry_date"])[:10]
+    eff = str(_get(fixed[0], "effective_date") or "")[:10]
+    if eff and eff < expiry:
+        raise ValueError("the swap a swaption delivers cannot start before the option expires")
+    # the strike is the fixed rate of the swap delivered, as the leg holds it (eight decimals); the booking's own copy
+    # of it in the terms must be the same rate
+    strike = _get(fixed[0], "fixed_rate")
+    if strike in (None, ""):
+        raise ValueError("a swaption's record needs its strike")
+    eight = Decimal("0.00000001")
+    if terms.get("strike") not in (None, "") and Decimal(str(terms["strike"])).quantize(eight) != Decimal(str(strike)).quantize(eight):
+        raise ValueError("a swaption's strike is the fixed rate of the swap it delivers: the booking holds two different rates")
+    style = str(terms.get("exercise_type") or _get(trade, "structure") or "EUROPEAN").upper()
+    if style not in ("EUROPEAN", "BERMUDAN"):
+        raise ValueError(f"a swaption is exercised EUROPEAN or BERMUDAN, got {style!r}")
+    times = terms.get("exercise_schedule_y") if style == "BERMUDAN" else None
+    return normalise({
+        "type": "SWAPTION", "buyer": buyer, "seller": seller,
+        "right": "PAYER" if is_payer else "RECEIVER",        # PAYER: on exercise the buyer pays the fixed rate
+        "exercise_style": style, "expiry_date": expiry,
+        # a Bermudan's exercise times as booked, in years from the trade date; null: exercised on the expiry date only
+        "exercise_schedule_y": [_num_str(t) for t in times] if times else None,
+        "strike": strike, "settlement": "PHYSICAL",
+        **_premium_v3(terms),
+    })
+
+
+def _canonical_v3(trade: Any, legs: Iterable[Any], own_entity: Any, counterparty: Any) -> dict:
+    itype = str(_get(trade, "instrument_type") or "").upper()
+    if itype not in RATES_OPTIONS:
+        raise ValueError(f"schema v3 is the record of an option on a rate; {itype or 'this trade'} is signed under v2")
+    legs = list(legs)
+    out = _canonical_v2(trade, legs, own_entity, counterparty)
+    own, cp = _lei(own_entity, "own entity"), _lei(counterparty, "counterparty")
+    out["schema_version"] = 3
+    terms = dict(_get(trade, "terms") or {})
+    if itype == "IR_SWAPTION":
+        option = _swaption_option_v3(trade, legs, own, cp)
+        # the swap delivered on exercise: who pays each leg if the buyer exercises, whichever side booked it
+        fixed_payer, fixed_receiver = (option["buyer"], option["seller"]) if option["right"] == "PAYER" else (option["seller"], option["buyer"])
+        for leg in out["legs"]:
+            if str(leg.get("leg_type") or "").upper() == "FIXED":
+                leg["payer"], leg["receiver"] = fixed_payer, fixed_receiver
+            else:
+                leg["payer"], leg["receiver"] = fixed_receiver, fixed_payer
+        out["legs"].sort(key=_json)
+        out["trade"] = _pick(trade, TRADE_FIELDS_V3_SWAPTION)
+    else:
+        # a cap, a floor, a collar: the strikes and who buys and sells each are on the leg (v2). The premium is booked
+        # as the buyer of the structure sees it: positive paid by that side, negative (a collar whose floor is worth
+        # more) paid to it. The record holds it unsigned, with who pays and who receives.
+        kind = itype.replace("IR_", "")
+        buyer, seller = _sides(terms.get("side") or "BUY", own, cp, pays=_BUYS, gets=_SELLS)
+        premium = _premium_v3(terms)
+        payer = receiver = None
+        if premium["premium_amount"] is not None:
+            payer, receiver = (buyer, seller) if Decimal(str(terms["premium_amount"])) >= 0 else (seller, buyer)
+        option = normalise({"type": kind, "buyer": buyer, "seller": seller, **premium, "premium_payer": payer, "premium_receiver": receiver})
+    out["option"] = option
+    return out
 
 
 # ── A package of trades confirmed as one ────────────────────────────────────────────────────────

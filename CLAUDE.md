@@ -354,3 +354,10 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   already valued on the exposure paths for a swap's leg, and a cap was refused only because its instrument type
   was not on a list. What was there was then read against the product (a rate fixed in advance for one fixed in
   arrears) before being reused.
+- A product is not confirmed correctly because CONFIRM turns green. The signed record and the paper are read
+  beside the ticket for every instrument: a swaption's record held the swap it delivers and nothing of the option
+  from the day swaptions were booked until a walk of CONFIRM on 19 November 2026, because the option's terms were
+  kept in a field the record leaves out and every test read the status, not the record. A new instrument's
+  record is written down field by field before it is signed, and a term that moves its value is in the bytes.
+- A record's format changes only by a new version signed by the instruments that need it; every other record's
+  bytes are pinned before and after, and an old confirmation is re-derived under its own version.

@@ -133,6 +133,34 @@ are signed under v2. A confirmation is always re-derived under the
 unchanged. Both versions have a pinned test vector in
 `backend/tests/test_chain_confirmation.py`.
 
+### Schema v3: an option on a rate states the option (0.61.0)
+
+Under v2 a swaption's record was the swap it delivers and nothing else: the
+option's terms live in the trade-level `terms`, which v2 leaves out. The record
+held no buyer or seller, no expiry and no premium; a bought and a sold swaption
+were the same bytes, and each leg's payer was read from the ticket's PAY or
+RECEIVE, so the sold one named the wrong payer. A cap's record held no premium.
+
+v3 is v2 with one `option` block, and **only** `IR_SWAPTION`, `IR_CAP`,
+`IR_FLOOR` and `IR_COLLAR` are signed under it (`signing_version`); every other
+product is still signed under v2, byte for byte.
+
+- **Swaption**: `buyer`, `seller` (LEIs), `right` (`PAYER` or `RECEIVER`: what the
+  buyer does with the fixed rate on exercise), `exercise_style`, `expiry_date`,
+  `exercise_schedule_y` (a Bermudan's later exercise times as booked, in years
+  from the trade date; null: the expiry date only), `strike`, `settlement`
+  (`PHYSICAL`), `premium_amount`, `premium_currency`, `premium_payment_date`.
+  The legs are the swap delivered on exercise, each with the payer it will have
+  if the buyer exercises. The `trade` block holds no effective or maturity date.
+- **Cap, floor, collar**: the leg is v2's (strikes, buyer and seller of each
+  option); the block holds the premium unsigned, with `premium_payer` and
+  `premium_receiver`.
+
+A v2 confirmation of one of these is re-derived under v2, as always; its paper
+confirmation says what the record does not hold. The counterparty's own booking
+(`trade_cards.book_mirror`) turns `terms.side`; it copied the booker's until
+0.61.0. A v3 swaption vector is pinned in `backend/tests/test_trade_cards.py`.
+
 ## Amend and terminate — the signed record follows the trade
 
 Once a confirmation is anchored, the terms are what both parties signed.

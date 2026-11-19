@@ -37,6 +37,10 @@ Learned on 16 November 2026 (a cache with a key a stranger chooses)
 - A public route's cache is read for what its key is made of. One keyed by a query parameter is no cache against a caller who changes the parameter: the register kept one read per `limit`, and each new `limit` was a read of the database. Ask of every unauthenticated route: what does one request cost, and what stops the next one costing the same.
 - A change that makes a public query heavier (a count turned into a distinct count over a JSON path) is a reason to read that route's cache and limits again, though neither was touched.
 
+Learned on 19 November 2026 (what a signature covers)
+- A signed record is read against the booking for the terms it leaves out: a term that changes the trade's value and is not in the bytes can be changed after signing and VERIFY still says the terms match. A swaption's side, expiry and premium lived in the trade-level `terms`, which record v2 leaves out; found by a walk of CONFIRM, not by a review. For each instrument ask: which stored field, changed alone, changes the valuation, and is it hashed.
+- A flow that writes one party's booking from the other's (the mirror from a countersigned card) is read for every term that names a side, not only the ones called "direction": `side` was copied as booked.
+
 Rules
 - Read-only: never edit, commit, push or run anything against production.
 - Authorized defensive review only. Report severity, the concrete request that exploits it, and the smallest fix.

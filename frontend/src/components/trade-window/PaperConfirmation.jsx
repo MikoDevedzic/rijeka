@@ -73,6 +73,7 @@ export default function PaperConfirmation({ proof, names = {}, onClose }) {
 
         <section className="paper-sec"><p className="cert-caps">Trade</p><Rows rows={p.trade} /></section>
         {p.blocks.map(b => <section key={b.title} className="paper-sec"><p className="cert-caps">{b.title}</p><Rows rows={b.rows} /></section>)}
+        {p.gap && <p className="paper-demo" data-testid="paper-gap">{p.gap}</p>}
 
         <section className="paper-sec"><p className="cert-caps">The record</p>
           <Rows rows={[

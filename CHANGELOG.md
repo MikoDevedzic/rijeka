@@ -1,7 +1,42 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.43). Commits on `main` are the detail.
+methodology document carries its own version (v1.44). Commits on `main` are the detail.
+
+## 0.61.0 · 19 November 2026
+
+**The confirmation of an option on a rate says it is an option.** From a walk of CONFIRM: seventeen tickets priced,
+booked and confirmed on a local chain, and for each the signed record and the paper read beside the ticket. The
+currency and digital-asset records were sound. No figure changes.
+
+- **A swaption's signed record was the swap it delivers and nothing else.** It held no buyer or seller, no expiry and
+  no premium; its trade dates were the ticket's (the swap's as if it started at spot: a 1Y into 5Y option said it ran
+  from spot for five years); and each leg's payer was read from the ticket's PAY or RECEIVE, so a bought and a sold
+  swaption signed the same bytes and the sold one named the wrong payer. The option's side could be changed after
+  signing and VERIFY would still have said the terms matched.
+- **Record schema v3**, for a swaption, a cap, a floor and a collar only. A swaption's record names the buyer and the
+  seller, the right (payer or receiver), the exercise style, the expiry, a Bermudan's exercise times as booked, the
+  strike, physical settlement and the premium; its legs are the swap delivered on exercise, each with the payer it
+  will have if the buyer exercises. A cap's, a floor's and a collar's record gains the premium and who pays it.
+  **Every other product is signed under v2 as before, byte for byte**, and a confirmation signed under v2 is still
+  re-derived and verified under v2.
+- **The counterparty's own booking** of an option on a rate, made from a countersigned trade card, copied the booker's
+  side: both books held the same side of the option, and the counterparty's valued it with the booker's sign. It now
+  holds the opposite side, and the two bookings derive the same record.
+- **The paper confirmation** prints an option as an option. A swaption: who bought it from whom, its right, exercise,
+  expiry, strike, settlement and premium, then the swap delivered on exercise with its own dates. A cap, a floor, a
+  collar: each option with its buyer, seller and strike (it printed the record's JSON under "floating leg, leverage
+  0"), the rate and its periods, the premium. A record signed before v3 is printed as it was signed, and the sheet
+  says what it does not hold. On a currency option an amount is grouped in thousands, a yes is a yes, and a payout
+  names its currency.
+- **The trade card** in a room says "You sell a payer swaption · expiry · strike · premium, you receive" and "You buy
+  the cap · strike 4.5%"; it read "You pay fixed" and "You receive USD SOFR".
+- **A swaption's premium**, when none is typed, is booked at the price the option was priced at, as a cap's always
+  was; it was booked as none.
+
+Not changed, and stated: a Bermudan's exercise times are held as booked, in years from the trade date, not as dates.
+Seen on a local chain: a sold swaption, a Bermudan, a cap, a sold floor, a collar and a swap confirmed, anchored and
+verified, the records and papers read. Methodology v1.44 (§ the canonical record).
 
 ## 0.60.1 · 19 November 2026
 

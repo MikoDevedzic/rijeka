@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useChatStore } from '../../store/useChatStore'
 import { productLabel } from '../../lib/labels'
 import { hasWallet, connect, ensureChain, signTypedData, personalSign, sameAddress, shortAddress, chainName } from '../../lib/wallet'
+import { optionLines, CAP_LIKE } from './trade-card-lines'
 import './TradeCard.css'
 
 // A trade shared into a room for confirmation. Everyone in the room sees the
@@ -19,7 +20,9 @@ function flipSummary(sm) {
   if (!sm) return null
   const flip = { PAY: 'RECEIVE', RECEIVE: 'PAY', BUY: 'SELL', SELL: 'BUY' }
   return { ...sm, you: sm.them, them: sm.you, legs: (sm.legs || []).map(l => ({ ...l, you: flip[l.you] || l.you })),
-           product: sm.product ? { ...sm.product, you: flip[sm.product.you] || sm.product.you } : sm.product }
+           product: sm.product ? { ...sm.product, you: flip[sm.product.you] || sm.product.you } : sm.product,
+           option: sm.option ? { ...sm.option, you: flip[sm.option.you] || sm.option.you, premium: flip[sm.option.premium] || sm.option.premium } : sm.option,
+           embedded: (sm.embedded || []).map(e => ({ ...e, you: flip[e.you] || e.you })) }
 }
 
 // A product record (FX forward, NDF, FX option, digital asset): one block of terms, bought or sold.
@@ -37,8 +40,9 @@ function ProductLines({ p }) {
   )
 }
 
-function LegLine({ l }) {
-  const verb = l.you === 'PAY' ? 'You pay' : 'You receive'
+function LegLine({ l, kind }) {
+  // a swaption's legs are the swap it delivers if it is exercised; a cap's leg is the rate its options are written on
+  const verb = kind === 'CAP' ? 'On' : `${kind === 'SWAPTION' ? 'On exercise you' : 'You'} ${l.you === 'PAY' ? 'pay' : 'receive'}`
   const what = l.leg_type === 'FIXED'
     ? `fixed ${l.rate}`
     : `${(l.index || 'float').replace(/_/g, ' ')}${l.spread_bp ? ` ${l.spread_bp > 0 ? '+' : ''}${l.spread_bp}bp` : ''}`
@@ -79,9 +83,10 @@ export default function TradeCard({ m }) {
             {productLabel(s.instrument)}{s.structure ? ' · ' + s.structure : ''} · <b>{s.ccy} {num(s.notional)}</b>
             {s.them?.name && <span className="tc-sub"> · with {s.them.name}</span>}
           </div>
-          {s.legs?.map((l, i) => <LegLine key={i} l={l} />)}
+          {optionLines(s).map((o, i) => <div className="tc-leg" key={`o${i}`} data-testid="tc-option"><b>{o.lead}</b><span> {o.rest}</span></div>)}
+          {s.legs?.map((l, i) => <LegLine key={i} l={l} kind={s.option?.type === 'SWAPTION' ? 'SWAPTION' : CAP_LIKE.has(s.instrument) ? 'CAP' : null} />)}
           {s.product && <ProductLines p={s.product} />}
-          <div className="tc-dates">Trade {s.trade_date} · Effective {s.effective_date} · Maturity {s.maturity_date}</div>
+          <div className="tc-dates">Trade {s.trade_date}{s.effective_date ? ` · Effective ${s.effective_date}` : ''}{s.maturity_date ? ` · Maturity ${s.maturity_date}` : ''}</div>
         </> : null}
         {s?.uti && <div className="tc-hash" title={`Unique trade identifier, shared by both parties: ${s.uti}`}>UTI {s.uti.slice(0, 8)}…{s.uti.slice(-8)}</div>}
         <div className="tc-hash" title="keccak256 of the agreed record — what both parties sign">

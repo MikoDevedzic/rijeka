@@ -173,6 +173,9 @@ describe('IR_SWAPTION', () => {
   it('a premium entered in currency is booked as entered; none entered books null', () => {
     expect(buildBookingBody({ ...swaptionState, premium: '150000', premiumMode: 'DOLLAR' }, 'PAY', extras).terms.premium_amount).toBe(150_000)
     expect(buildBookingBody({ ...swaptionState, premium: '' }, 'PAY', extras).terms.premium_amount).toBeNull()
+    // priced and no premium typed: what the option was priced at, as its buyer pays it (a sold option's price is negative)
+    expect(buildBookingBody({ ...swaptionState, premium: '', optionSide: 'SELL' }, 'PAY', { ...extras, priced: { npv: -165478.07, strike: 0.04, vol_bp: 86.5 } }).terms.premium_amount).toBe(165478.07)
+    expect(buildBookingBody({ ...swaptionState, premium: '150000', premiumMode: 'DOLLAR' }, 'PAY', { ...extras, priced: { npv: 165478.07, strike: 0.04, vol_bp: 86.5 } }).terms.premium_amount).toBe(150_000)
   })
 })
 

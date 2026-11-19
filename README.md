@@ -31,7 +31,7 @@ Hosted demo at [app.rijeka.app](https://app.rijeka.app); the in-app **ROADMAP** 
 - **Valuation adjustments (XVA).** CVA, DVA, FVA (the funding cost FCA and the funding benefit FBA), ColVA, MVA and KVA under CSA presets with a margin period of risk; initial margin as an amount you set or the engine's own estimate (not an industry margin model).
 - **Counterparty credit.** Netting sets on shared Hull-White and lognormal paths, real-world calibration from the stored history (synthetic for rates, public for spots) with historical block sampling, the CSA on the netted value, EE / EPE / PFE and credit limits.
 - **P&L.** Attribution by sequential full revaluation (carry, cash, curves by bucket, spot, points, vol, residual), day / MTD / YTD, trader and controller sign-off, XVA P&L.
-- **Confirmation on chain.** Canonical record v2 → EIP-712 → registry on Sepolia; amend and terminate; a public verifier that trusts nothing of Rijeka's. Messenger with firms, rooms, trade cards and wallet countersigning; Telegram mirror.
+- **Confirmation on chain.** Canonical record (v2; v3 for options on a rate) → EIP-712 → registry on Sepolia; amend and terminate; a public verifier that trusts nothing of Rijeka's. Messenger with firms, rooms, trade cards and wallet countersigning; Telegram mirror.
 - **Open box.** The methodology names the module for every formula; the Methodology tab exports an Excel replication per product from your own market data, the ticket rebuilt in cells with every number linked to its derivation and a Checks sheet against the engine; the XVA book carries the engine's own Monte Carlo draws.
 - **Prometheus.** A read-only assistant inside the messenger: sees your book and the engine, never changes anything.
 

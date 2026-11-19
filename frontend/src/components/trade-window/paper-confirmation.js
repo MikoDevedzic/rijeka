@@ -34,7 +34,7 @@ const plain = (v) => String(v).replace(/_/g, ' ')
 
 const KIND = {
   IR_SWAP: 'Interest rate swap', IR_SWAPTION: 'Interest rate swaption', INTEREST_RATE_CAP: 'Interest rate cap', INTEREST_RATE_FLOOR: 'Interest rate floor',
-  INTEREST_RATE_COLLAR: 'Interest rate collar', NDF: 'Non-deliverable forward on a digital asset', NDO: 'Non-deliverable option on a digital asset',
+  INTEREST_RATE_COLLAR: 'Interest rate collar', IR_CAP: 'Interest rate cap', IR_FLOOR: 'Interest rate floor', IR_COLLAR: 'Interest rate collar', NDF: 'Non-deliverable forward on a digital asset', NDO: 'Non-deliverable option on a digital asset',
   FX_FORWARD: 'Foreign exchange forward', FX_NDF: 'Non-deliverable foreign exchange forward', FX_SPOT: 'Foreign exchange spot',
   FX_OPTION: 'Foreign exchange option', FX_NDO: 'Non-deliverable foreign exchange option',
 }
@@ -52,10 +52,11 @@ const LABEL = {
 }
 const DATES = /(_date|^first_period_start|^last_period_end)$/
 const RATES = new Set(['fixed_rate', 'spread'])
-const NUMBERS = new Set(['notional', 'notional_amount', 'base_notional', 'quote_notional', 'forward_price', 'forward_rate', 'strike', 'premium'])
+const NUMBERS = new Set(['notional', 'notional_amount', 'base_notional', 'quote_notional', 'forward_price', 'forward_rate', 'strike', 'premium',
+  'premium_amount', 'strike_price', 'payout', 'barrier', 'lower', 'upper', 'rebate'])
 // a choice from a short list, held in capitals: printed as words. Anything else in capitals is a code and stays as it is.
 const CHOICES = new Set(['bdc', 'payment_frequency', 'reset_frequency', 'stub_type', 'notional_type', 'settlement_type', 'option_type', 'fixed_rate_type',
-  'spread_type', 'ois_compounding', 'style', 'exercise_style', 'barrier_type'])
+  'spread_type', 'ois_compounding', 'style', 'exercise_style', 'barrier_type', 'barrier_monitoring', 'touch_type'])
 const CHOICE = { MOD_FOLLOWING: 'Modified following', MOD_PRECEDING: 'Modified preceding', SEMI_ANNUAL: 'Semi-annual', NON_DELIVERABLE: 'Non-deliverable' }
 // said elsewhere on the sheet: who buys and sells and who pays is under Parties and in each leg's heading
 const LEFT_OFF = new Set(['product', 'buyer', 'seller', 'payer', 'receiver', 'leg_type'])
@@ -66,7 +67,8 @@ const PLAIN = { leverage: '1', notional_type: 'BULLET', fixed_rate_type: 'FLAT',
 function shown(k, v) {
   if (v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length)) return null
   if (PLAIN[k] !== undefined && String(v) === PLAIN[k]) return null
-  if (typeof v === 'object') return [JSON.stringify(v), 'fig']             // a schedule or an embedded option: as the record holds it
+  if (typeof v === 'boolean') return [v ? 'Yes' : 'No', 'word']
+  if (typeof v === 'object') return [JSON.stringify(v), 'fig']             // a schedule: as the record holds it
   if (DATES.test(k)) return [longDate(v), 'fig']
   if (RATES.has(k)) return [pct(v), 'fig']
   if (NUMBERS.has(k)) return [grouped(v), 'fig']
@@ -81,21 +83,92 @@ const zero = (v) => v !== null && v !== undefined && v !== '' && Number(v) === 0
 const legRows = (l) => rowsOf(l, new Set([...LEFT_OFF, 'effective_date', 'maturity_date', ...(l.leg_type !== 'FIXED' && zero(l.fixed_rate) ? ['fixed_rate'] : []),
   ...(l.leg_type === 'FIXED' && zero(l.spread) ? ['spread'] : [])]))
 
+// ── An option on a rate ────────────────────────────────────────────────────────────────────────────────────────
+// A cap, a floor and a collar hold their options on a floating leg (kind, strike, buyer and seller: record v2 and
+// v3); record v3 adds one `option` block: a swaption's own terms, and any of the four's premium. Until 0.61.0 the
+// sheet printed a cap's options as the record's JSON under "floating leg, leverage 0", and a swaption as a swap.
+const CAP_LIKE = new Set(['IR_CAP', 'IR_FLOOR', 'IR_COLLAR'])
+const optionWord = (t) => plain(String(t || 'option')).toLowerCase()
+/** The strike of an option written on a leg: one rate, or the rate from each date where the schedule changes it. */
+function strikeRows(o) {
+  const steps = (o.strike_schedule || []).filter(x => x && x.strike !== null && x.strike !== undefined)
+  const rates = new Set(steps.map(x => String(x.strike)))
+  if (steps.length > 1 && rates.size > 1) return steps.map(x => [`Strike from ${longDate(x.date)}`, pct(x.strike), 'fig'])
+  const k = o.default_strike ?? steps[0]?.strike
+  return k === null || k === undefined ? [] : [['Strike', pct(k), 'fig']]
+}
+/** The premium's rows, from a v3 option block: the amount with its currency, the date, who pays whom. */
+function premiumRows(o, letterOf) {
+  if (!o) return []
+  if (o.premium_amount === null || o.premium_amount === undefined || o.premium_amount === '') return [['Premium', 'None in the record', 'word']]
+  const payer = o.premium_payer || o.buyer, receiver = o.premium_receiver || o.seller
+  return [['Premium', `${grouped(o.premium_amount)} ${o.premium_currency || ''}`.trim(), 'fig'],
+    ...(o.premium_payment_date ? [['Premium payment date', longDate(o.premium_payment_date), 'fig']] : []),
+    ...(payer && receiver ? [['Premium paid by', `${letterOf(payer)} to ${letterOf(receiver)}`, 'word']] : [])]
+}
+/** A swaption's own block (record v3). */
+function swaptionRows(o, letterOf) {
+  const times = Array.isArray(o.exercise_schedule_y) && o.exercise_schedule_y.length ? o.exercise_schedule_y : null
+  return [
+    ['Option', o.right === 'RECEIVER' ? 'Receiver swaption: the right to receive the fixed rate' : 'Payer swaption: the right to pay the fixed rate', 'word'],
+    ['Exercise', words(String(o.exercise_style || '').toLowerCase()), 'word'],
+    ['Expiry date', longDate(o.expiry_date), 'fig'],
+    ...(o.exercise_style === 'BERMUDAN' ? [['Exercise times', times ? `${times.join(', ')} years from the trade date` : 'On the expiry date only', times ? 'fig' : 'word']] : []),
+    ['Strike', pct(o.strike), 'fig'],
+    ['Settlement', words(String(o.settlement || '').toLowerCase()), 'word'],
+    ...premiumRows(o, letterOf),
+  ].filter(([, v]) => v)
+}
+
 /** The sheet: {kind, ref, uti, state, demo, parties, trade, blocks, record, signatures, made}. `names` is {LEI: name}. */
 export function paperOf(proof, names = {}) {
   const rec = proof?.canonical || {}, att = proof?.attestation || {}, t = rec.trade || {}, prod = rec.product || null
   const legs = (rec.legs || []).filter(l => l && typeof l === 'object')        // a package's record lists its legs by hash: those are not legs to print
   const anchor = att.anchor || {}, closed = !!att.termination, anchored = !!anchor.anchored
+  const opt = rec.option && typeof rec.option === 'object' ? rec.option : null        // record v3: an option on a rate
+  const capLike = CAP_LIKE.has(t.instrument_type), swaption = opt?.type === 'SWAPTION'
+  const written = legs.flatMap(l => (Array.isArray(l.embedded_options) ? l.embedded_options : []).filter(o => o && typeof o === 'object'))
   const role = {}
   if (prod) { if (prod.buyer) role[prod.buyer] = 'Buyer'; if (prod.seller) role[prod.seller] = 'Seller' }
-  for (const l of legs) if (l.payer && !role[l.payer]) role[l.payer] = `Pays ${legWord(l)}`
+  if (swaption) { role[opt.buyer] = 'Buyer'; role[opt.seller] = 'Seller' }
+  else if (capLike && written.length) {
+    // a cap or a floor has a buyer and a seller; a collar's two sides each buy one option and sell the other
+    for (const lei of rec.parties || []) {
+      const buys = written.filter(o => o.buyer === lei).map(o => optionWord(o.type)), sells = written.filter(o => o.seller === lei).map(o => optionWord(o.type))
+      role[lei] = buys.length && sells.length ? `Buys the ${buys.join(' and the ')}, sells the ${sells.join(' and the ')}` : buys.length ? 'Buyer' : sells.length ? 'Seller' : null
+    }
+  } else for (const l of legs) if (l.payer && !role[l.payer]) role[l.payer] = `Pays ${legWord(l)}`
   const parties = (rec.parties || []).map((lei, i) => ({ letter: 'AB'[i] || String(i + 1), lei, name: names[lei] || null, role: role[lei] || null }))
   const letterOf = (lei) => { const p = parties.find(x => x.lei === lei); return p ? `Party ${p.letter}` : lei }
   const trade = [['Notional', `${grouped(t.notional)} ${t.notional_ccy || ''}`.trim()], ['Trade date', longDate(t.trade_date)],
     ['Effective date', longDate(t.effective_date)], ['Termination date', longDate(t.maturity_date)]].filter(([, v]) => v).map(([k, v]) => [k, v, 'fig'])
   const blocks = []
-  if (prod) blocks.push({ title: 'Terms', rows: rowsOf(prod) })
-  legs.forEach((l, i) => blocks.push({ title: `Leg ${i + 1} · ${legWord(l)} · ${letterOf(l.payer)} pays ${letterOf(l.receiver)}`, rows: legRows(l) }))
+  if (prod) blocks.push({ title: 'Terms', rows: rowsOf(prod).map(r => (r[0] === 'Payout currency' && /^(BASE|QUOTE)$/.test(r[1])
+    ? [r[0], (r[1] === 'BASE' ? prod.base_currency : prod.quote_currency) || r[1], 'fig'] : r)) })
+  if (swaption) blocks.push({ title: `Option · ${letterOf(opt.buyer)} buys from ${letterOf(opt.seller)}`, rows: swaptionRows(opt, letterOf) })
+  // an option written on a leg is printed as an option: its kind, who buys it, its strike
+  const optionBlocks = (l) => (Array.isArray(l.embedded_options) ? l.embedded_options : []).filter(o => o && typeof o === 'object')
+    .map(o => ({ title: `${words(optionWord(o.type))} · ${letterOf(o.buyer)} buys from ${letterOf(o.seller)}`, rows: strikeRows(o) }))
+  legs.forEach((l, i) => {
+    const dates = [['Effective date', longDate(l.effective_date), 'fig'], ['Termination date', longDate(l.maturity_date), 'fig']].filter(([, v]) => v)
+    if (capLike) {
+      // the leg is the rate the options are written on and its periods: nobody pays it (its leverage is nought)
+      blocks.push(...optionBlocks(l))
+      blocks.push({ title: 'The rate and its periods', rows: legRows(l).filter(([k]) => !['Leverage', 'Embedded options'].includes(k) && !(k === 'Spread' && zero(l.spread))) })
+    } else if (swaption) {
+      // the swap delivered if the buyer exercises: its own dates are the leg's (the trade block holds none)
+      blocks.push({ title: `Swap delivered on exercise · ${legWord(l)} leg · ${letterOf(l.payer)} pays ${letterOf(l.receiver)}`,
+        rows: [...dates, ...legRows(l).filter(([k]) => k !== 'Embedded options')] })
+    } else {
+      blocks.push({ title: `Leg ${i + 1} · ${legWord(l)} · ${letterOf(l.payer)} pays ${letterOf(l.receiver)}`, rows: legRows(l).filter(([k]) => k !== 'Embedded options') })
+      blocks.push(...optionBlocks(l).map(b => ({ ...b, title: `Leg ${i + 1} · ${b.title.charAt(0).toLowerCase()}${b.title.slice(1)}` })))
+    }
+  })
+  if (capLike && opt) blocks.push({ title: 'Premium', rows: premiumRows(opt, letterOf) })
+  // a swaption signed before record v3: the record holds the swap it delivers and nothing of the option, and the sheet says so
+  const gap = t.instrument_type === 'IR_SWAPTION' && !opt
+    ? 'This record was signed under record schema v2, which holds the swap a swaption delivers and not the option itself: who bought it, its expiry and its premium are not in the record, and the dates above are not the option\'s.'
+    : capLike && !opt ? 'This record was signed under record schema v2, which does not hold the premium.' : null
   const kindKey = prod?.product || t.instrument_type
   const sig = (p, label) => ({ label, letter: parties.find(x => x.lei === p?.lei)?.letter || null, lei: p?.lei || '', name: names[p?.lei] || null, address: p?.address || '', signature: p?.signature || '',
     key: p?.key_source === 'dev' ? 'a demonstration key held by Rijeka' : p?.key_source === 'registered' ? 'the wallet registered for this LEI' : (p?.key_source || '') })
@@ -104,7 +177,7 @@ export function paperOf(proof, names = {}) {
     ref: proof?.trade_ref || '', uti: rec.uti || '',
     state: closed ? 'closed' : anchored ? 'anchored' : 'signed',
     demo: att.bilateral === false,                       // both signatures were produced by Rijeka: said on the sheet in as many words
-    parties, trade, blocks,
+    parties, trade, blocks, gap,
     record: {
       hash: proof?.trade_hash || att.trade_hash || '', schema: rec.schema_version, form: att.eip712 ? `${att.eip712.name} v${att.eip712.version}` : '',
       chain: anchored ? anchor.chain_id : null, registry: anchored ? anchor.registry : null, block: anchored ? anchor.block_number : null,

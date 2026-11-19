@@ -179,3 +179,159 @@ def test_product_mirror_books_without_legs_and_hashes_to_the_same_record():
     with pytest.raises(ValueError):
         BookingRequest(asset_class="RATES", instrument_type="IR_SWAP", notional=Decimal("1"), trade_date=date(2026, 11, 2),
                        effective_date=date(2026, 11, 2), maturity_date=date(2027, 2, 4), legs=[])
+
+
+# ── An option on a rate: record v3 states the option (0.61.0) ────────────────────────────────────
+# Under v2 a swaption's record was the swap it delivers: a bought and a sold one signed the same bytes, the sold
+# one's legs named the wrong payer, and the counterparty's own booking was made with the booker's side.
+
+import pytest
+
+from api.routes.trade_cards import _mirror_option_terms
+from chain.canonical import signing_version, trade_hash_hex
+
+
+def _swaption(side="SELL", is_payer=True, **terms_over):
+    terms = {"direction": "PAY" if is_payer else "RECEIVE", "float_direction": "RECEIVE" if is_payer else "PAY", "option": "SWAPTION",
+             "side": side, "is_payer": is_payer, "expiry_date": "2027-11-19", "expiry_tenor": "1Y", "exercise_type": "EUROPEAN",
+             "strike": 0.03859304, "vol_bp": 94.9, "premium_amount": 165478.07, "premium_currency": "USD", "premium_payment_date": "2026-11-23"}
+    terms.update(terms_over)
+    return _trade(instrument_type="IR_SWAPTION", structure=terms["exercise_type"], trade_date=date(2026, 11, 19),
+                  effective_date=date(2026, 11, 23), maturity_date=date(2031, 11, 23), terms=terms)
+
+
+def _delivered(is_payer=True, rate="0.03859304"):
+    legs = _legs("PAY" if is_payer else "RECEIVE", rate)
+    for l in legs:
+        l.update(effective_date=date(2027, 11, 23), maturity_date=date(2032, 11, 23))
+    return legs
+
+
+def test_only_an_option_on_a_rate_is_signed_under_v3_and_every_other_record_is_unchanged():
+    assert signing_version(_trade()) == 2
+    assert signing_version(_fxo()) == 2
+    for itype in ("IR_SWAPTION", "IR_CAP", "IR_FLOOR", "IR_COLLAR"):
+        assert signing_version(_trade(instrument_type=itype)) == 3
+    assert canonical_payload(_trade(), _legs(), BOOKER, CP) == canonical_payload(_trade(), _legs(), BOOKER, CP, version=2)
+    with pytest.raises(ValueError, match="signed under v2"):
+        canonical_payload(_trade(), _legs(), BOOKER, CP, version=3)
+    # a swaption signed before v3 is re-derived as it was signed: the swap, the booker's directions, nothing of the option
+    old = canonical_payload(_swaption(), _delivered(), BOOKER, CP, version=2)
+    assert old["schema_version"] == 2 and "option" not in old and old["trade"]["maturity_date"] == "2031-11-23"
+
+
+def test_a_swaption_record_names_who_bought_it_and_a_sold_one_is_not_a_bought_one():
+    sold = canonical_payload(_swaption("SELL"), _delivered(), BOOKER, CP)
+    bought = canonical_payload(_swaption("BUY"), _delivered(), BOOKER, CP)
+    assert sold["schema_version"] == 3
+    o = sold["option"]
+    assert (o["buyer"], o["seller"]) == (CP["lei"], BOOKER["lei"])
+    assert (bought["option"]["buyer"], bought["option"]["seller"]) == (BOOKER["lei"], CP["lei"])
+    assert trade_hash_hex(sold) != trade_hash_hex(bought)
+    assert o == {"type": "SWAPTION", "buyer": CP["lei"], "seller": BOOKER["lei"], "right": "PAYER", "exercise_style": "EUROPEAN",
+                 "expiry_date": "2027-11-19", "exercise_schedule_y": None, "strike": "0.03859304", "settlement": "PHYSICAL",
+                 "premium_amount": "165478.07", "premium_currency": "USD", "premium_payment_date": "2026-11-23"}
+    # the swap delivered: the buyer of a payer swaption pays the fixed rate if it exercises, whoever booked the trade
+    fixed = lambda rec: next(l for l in rec["legs"] if l["leg_type"] == "FIXED")
+    assert (fixed(sold)["payer"], fixed(sold)["receiver"]) == (CP["lei"], BOOKER["lei"])
+    assert (fixed(bought)["payer"], fixed(bought)["receiver"]) == (BOOKER["lei"], CP["lei"])
+    assert fixed(sold)["effective_date"] == "2027-11-23" and fixed(sold)["maturity_date"] == "2032-11-23"
+    # the trade block holds no date of the ticket's that is neither the option's nor the swap's
+    assert set(sold["trade"]) == {"asset_class", "instrument_type", "structure", "notional", "notional_ccy", "trade_date"}
+    # a receiver: the buyer receives the fixed rate
+    rec = canonical_payload(_swaption("BUY", is_payer=False), _delivered(False), BOOKER, CP)
+    assert rec["option"]["right"] == "RECEIVER" and fixed(rec)["payer"] == CP["lei"]
+
+
+KNOWN_SWAPTION_V3_HASH = "0x6f953d132c80423574e00dfba68db5d87609b4830223e133d0e9b600c24eddec"
+
+
+def test_the_swaption_record_is_pinned():
+    assert trade_hash_hex(canonical_payload(_swaption("SELL"), _delivered(), BOOKER, CP)) == KNOWN_SWAPTION_V3_HASH
+
+
+def test_the_counterparty_s_own_booking_of_a_swaption_is_the_same_record_with_the_side_turned():
+    ours_trade, legs = _swaption("SELL"), _delivered()
+    theirs_terms = _mirror_option_terms(ours_trade["terms"], "IR_SWAPTION")
+    assert theirs_terms["side"] == "BUY" and theirs_terms["is_payer"] is True and theirs_terms["direction"] == "PAY"
+    rows = [SimpleNamespace(**{**l, "notional_type": "BULLET", "payment_lag": 2, "fixed_rate_type": "FLAT", "spread_type": "FLAT",
+                               "leverage": Decimal("1")}) for l in legs]
+    kept = [_mirror_leg(r, flip=False).model_dump() for r in rows]
+    assert [m["direction"] for m in kept] == ["PAY", "RECEIVE"]
+    ours = canonical_payload(ours_trade, [vars(r) for r in rows], BOOKER, CP)
+    theirs = canonical_payload({**ours_trade, "trade_ref": "THEIRS", "terms": theirs_terms}, kept, CP, BOOKER)
+    assert ours == theirs
+    assert compare(ours, theirs) == []
+    # booked with the booker's side (as it was until 0.61.0), the two disagree on who bought the option
+    wrong = canonical_payload({**ours_trade, "trade_ref": "THEIRS"}, kept, CP, BOOKER)
+    assert {b["field"] for b in compare(ours, wrong)} >= {"who buys the option", "who sells the option"}
+    # each side reads its own side of the option and of the premium
+    mine, yours = summarise(ours, BOOKER["lei"], NAMES), summarise(ours, CP["lei"], NAMES)
+    assert (mine["option"]["you"], mine["option"]["premium"]) == ("SELL", "RECEIVE")
+    assert (yours["option"]["you"], yours["option"]["premium"]) == ("BUY", "PAY")
+    assert yours["option"]["fields"]["expiry_date"] == "2027-11-19"
+    assert next(l for l in yours["legs"] if l["leg_type"] == "FIXED")["you"] == "PAY"
+
+
+def test_a_swaption_record_is_refused_where_the_booking_does_not_say_what_the_option_is():
+    with pytest.raises(ValueError, match="expiry date"):
+        canonical_payload(_swaption(expiry_date=None), _delivered(), BOOKER, CP)
+    with pytest.raises(ValueError, match="two different rates"):
+        canonical_payload(_swaption(strike=0.04), _delivered(), BOOKER, CP)
+    with pytest.raises(ValueError, match="cannot start before the option expires"):
+        canonical_payload(_swaption(expiry_date="2028-01-10"), _delivered(), BOOKER, CP)
+    with pytest.raises(ValueError, match="one fixed leg and one floating leg"):
+        canonical_payload(_swaption(), _delivered()[:1], BOOKER, CP)
+    with pytest.raises(ValueError, match="currency and its payment date"):
+        canonical_payload(_swaption(premium_payment_date=None), _delivered(), BOOKER, CP)
+    # no premium booked: the record says none, it does not make one up
+    none = canonical_payload(_swaption(premium_amount=None), _delivered(), BOOKER, CP)["option"]
+    assert (none["premium_amount"], none["premium_currency"], none["premium_payment_date"]) == (None, None, None)
+    # a Bermudan's later exercise times, as booked
+    berm = canonical_payload(_swaption(exercise_type="BERMUDAN", exercise_schedule_y=[1, 2, 3.5]), _delivered(), BOOKER, CP)["option"]
+    assert (berm["exercise_style"], berm["exercise_schedule_y"]) == ("BERMUDAN", ["1", "2", "3.5"])
+
+
+def _cap(kind="CAP", side="BUY", premium=97322.39, options=None):
+    terms = {"option": kind, "side": side, "cap_rate": 0.045, "floor_rate": None, "vol_bp": 81.5, "premium_amount": premium,
+             "premium_currency": "USD", "premium_payment_date": "2026-11-23", "direction": "PAY", "float_direction": "RECEIVE"}
+    leg = {"leg_ref": "OPT-1", "leg_seq": 1, "leg_type": "FLOAT", "direction": "RECEIVE", "currency": "USD", "notional": Decimal("10000000"),
+           "day_count": "ACT/360", "payment_frequency": "QUARTERLY", "reset_frequency": "DAILY", "bdc": "MOD_FOLLOWING",
+           "fixed_rate": Decimal("0"), "spread": Decimal("0"), "leverage": Decimal("0"), "forecast_curve_id": "USD_SOFR", "terms": {},
+           "embedded_options": options or [{"type": "CAP", "direction": side, "default_strike": Decimal("0.045"), "strike_schedule": []}]}
+    return _trade(instrument_type=f"IR_{kind}", structure=None, terms=terms), [leg]
+
+
+def test_a_cap_record_carries_its_premium_and_who_pays_it():
+    t, legs = _cap()
+    rec = canonical_payload(t, legs, BOOKER, CP)
+    assert rec["schema_version"] == 3
+    assert rec["option"] == {"type": "CAP", "buyer": BOOKER["lei"], "seller": CP["lei"], "premium_amount": "97322.39", "premium_currency": "USD",
+                             "premium_payment_date": "2026-11-23", "premium_payer": BOOKER["lei"], "premium_receiver": CP["lei"]}
+    # the leg is v2's: the strike, the buyer and the seller were already on it
+    v2 = canonical_payload(t, legs, BOOKER, CP, version=2)
+    assert rec["legs"] == v2["legs"] and rec["trade"] == v2["trade"]
+    assert rec["legs"][0]["embedded_options"][0]["buyer"] == BOOKER["lei"]
+    # a sold floor: the premium is booked as its buyer sees it, and the buyer pays it
+    t, legs = _cap("FLOOR", "SELL", 94717.73, [{"type": "FLOOR", "direction": "SELL", "default_strike": Decimal("0.03"), "strike_schedule": []}])
+    o = canonical_payload(t, legs, BOOKER, CP)["option"]
+    assert (o["buyer"], o["premium_payer"], o["premium_receiver"]) == (CP["lei"], CP["lei"], BOOKER["lei"])
+    # a collar whose floor is worth more than its cap: the side that bought the cap is paid
+    t, legs = _cap("COLLAR", "BUY", -1250.5, [{"type": "CAP", "direction": "BUY", "default_strike": Decimal("0.045"), "strike_schedule": []},
+                                              {"type": "FLOOR", "direction": "SELL", "default_strike": Decimal("0.03"), "strike_schedule": []}])
+    o = canonical_payload(t, legs, BOOKER, CP)["option"]
+    assert (o["premium_amount"], o["premium_payer"], o["premium_receiver"]) == ("1250.5", CP["lei"], BOOKER["lei"])
+
+
+def test_the_counterparty_s_own_booking_of_a_cap_is_the_same_record():
+    t, legs = _cap("CAP", "SELL")
+    rows = [SimpleNamespace(**{**l, "notional_type": "BULLET", "payment_lag": 2, "fixed_rate_type": "FLAT", "spread_type": "FLAT"}) for l in legs]
+    mirrored = [_mirror_leg(r).model_dump() for r in rows]
+    theirs_terms = _mirror_option_terms(t["terms"], "IR_CAP")
+    assert theirs_terms["side"] == "BUY" and mirrored[0]["embedded_options"][0]["direction"] == "BUY"
+    ours = canonical_payload(t, [vars(r) for r in rows], BOOKER, CP)
+    theirs = canonical_payload({**t, "trade_ref": "THEIRS", "terms": theirs_terms}, mirrored, CP, BOOKER)
+    assert ours == theirs and ours["option"]["buyer"] == CP["lei"]
+    # with the side left as the booker's (as it was), the premium would be paid the wrong way
+    wrong = canonical_payload({**t, "trade_ref": "THEIRS", "terms": _mirror_terms(t["terms"])}, mirrored, CP, BOOKER)
+    assert {b["field"] for b in compare(ours, wrong)} >= {"who buys the option", "who pays the premium"}

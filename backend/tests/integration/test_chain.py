@@ -200,3 +200,58 @@ def test_a_single_trade_is_not_a_package(client, auth_a, ids, pairs, booked):
     assert r.status_code in (409, 422), r.text[:300]
     if r.status_code == 422:
         assert "not a leg of a package" in r.text
+
+
+# ── An option on a rate is signed under record v3: the record states the option (0.61.0) ──────────────────────
+def _confirmed(client, auth, body) -> tuple[dict, dict]:
+    r = client.post("/api/book/trade", json=body, headers=auth)
+    assert r.status_code == 201, r.text[:400]
+    tid = r.json()["trade"]["id"]
+    c = client.post(f"/api/chain/confirm/{tid}", headers=auth)
+    assert c.status_code == 201, c.text[:500]
+    att = client.get(f"/api/chain/attestation/{tid}", headers=auth).json()["attestation"]
+    v = client.post(f"/api/chain/verify/{tid}", headers=auth)
+    assert v.status_code == 200, v.text[:300]
+    return att, v.json()
+
+
+def test_a_sold_swaption_is_signed_as_an_option_its_counterparty_bought(client, auth_a, ids):
+    import uuid
+    from tests.integration import bodies as B
+    tag = uuid.uuid4().hex[:6]
+    sold = B.swaption(ids["a"], f"IT-SWPT-SOLD-{tag}"); sold["terms"]["side"] = "SELL"
+    att, v = _confirmed(client, auth_a, sold)
+    assert att["schema_version"] == 3
+    assert v["hash_matches"] is True and v["signatures_valid_for_current_state"] is True
+    rec = v["canonical"]
+    assert rec["schema_version"] == 3
+    booker, cp = att["parties"]["own"]["lei"], att["parties"]["counterparty"]["lei"]
+    o = rec["option"]
+    assert (o["type"], o["buyer"], o["seller"], o["right"]) == ("SWAPTION", cp, booker, "PAYER")
+    assert (o["expiry_date"], o["strike"], o["exercise_style"], o["settlement"]) == ("2027-11-02", "0.04", "EUROPEAN", "PHYSICAL")
+    assert (o["premium_amount"], o["premium_currency"], o["premium_payment_date"]) == ("25000", "USD", "2026-11-04")
+    fixed = next(l for l in rec["legs"] if l["leg_type"] == "FIXED")
+    assert (fixed["payer"], fixed["receiver"]) == (cp, booker), "the buyer of a payer swaption pays the fixed rate if it exercises"
+    assert (fixed["effective_date"], fixed["maturity_date"]) == ("2027-11-04", "2032-11-03")
+    assert "effective_date" not in rec["trade"] and "maturity_date" not in rec["trade"]
+    # the same terms bought: another record, with the sides the other way
+    bought = B.swaption(ids["a"], f"IT-SWPT-BOUGHT-{tag}")
+    att2, v2 = _confirmed(client, auth_a, bought)
+    assert v2["canonical"]["option"]["buyer"] == booker
+    assert next(l for l in v2["canonical"]["legs"] if l["leg_type"] == "FIXED")["payer"] == booker
+    # the proof pack carries the record that was signed, and the paper is printed from it
+    assert v2["hash_matches"] is True and att2["schema_version"] == 3
+
+
+def test_a_cap_is_signed_with_its_premium_and_a_swap_is_signed_as_it_always_was(client, auth_a, ids):
+    import uuid
+    from tests.integration import bodies as B
+    tag = uuid.uuid4().hex[:6]
+    att, v = _confirmed(client, auth_a, B.cap(ids["a"], f"IT-CAP-V3-{tag}"))
+    booker, cp = att["parties"]["own"]["lei"], att["parties"]["counterparty"]["lei"]
+    assert att["schema_version"] == 3 and v["hash_matches"] is True
+    assert v["canonical"]["option"] == {"type": "CAP", "buyer": booker, "seller": cp, "premium_amount": "123456.78", "premium_currency": "USD",
+                                        "premium_payment_date": "2026-11-04", "premium_payer": booker, "premium_receiver": cp}
+    assert v["canonical"]["legs"][0]["embedded_options"][0]["default_strike"] == "0.045"
+    att, v = _confirmed(client, auth_a, B.swap(ids["a"], f"IT-SWAP-V2-{tag}"))
+    assert att["schema_version"] == 2 and v["canonical"]["schema_version"] == 2 and "option" not in v["canonical"] and v["hash_matches"] is True

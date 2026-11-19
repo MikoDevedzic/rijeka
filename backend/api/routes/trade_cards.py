@@ -43,7 +43,7 @@ from api.routes.chain import (
     _canonical_for, _eip712_ctx, _hexb, _latest_confirmed_event, _resolve_parties,
     attested_version, countersign_trade, ensure_uti, registered_signer, trade_parts,
 )
-from chain.canonical import trade_hash as trade_hash_of
+from chain.canonical import RATES_OPTIONS, trade_hash as trade_hash_of
 from chain.signing import confirmation_typed_data, eip712_digest, sign
 from api.routes.booking import BookingRequest, LegInput, book_trade
 from api.routes.trade_events import _apply_lifecycle_transition
@@ -157,11 +157,26 @@ def summarise(payload: dict, viewer_lei: str, names: Optional[dict] = None) -> d
             "reset": l.get("reset_frequency"),
         })
     legs.sort(key=lambda l: (str(l["leg_type"]).upper() != "FIXED"))   # fixed first, for reading; the record orders by content
+    # Options written on a leg (a cap, a floor, a collar, a capped swap): the kind, the strike and who bought each.
+    embedded = []
+    if payload.get("schema_version", 1) >= 2:
+        for l in payload.get("legs") or []:
+            for e in l.get("embedded_options") or []:
+                embedded.append({"type": e.get("type"), "strike": _pct(e.get("default_strike")),
+                                 "you": "BUY" if e.get("buyer") == you.get("lei") else "SELL"})
+    # An option on a rate (record v3): who bought it, and its terms. A swaption's legs are the swap it delivers.
+    option = None
+    O = payload.get("option")
+    if O:
+        you_lei = you.get("lei")
+        option = {"type": O.get("type"), "you": "BUY" if O.get("buyer") == you_lei else "SELL",
+                  "premium": None if O.get("premium_amount") is None else ("PAY" if (O.get("premium_payer") or O.get("buyer")) == you_lei else "RECEIVE"),
+                  "fields": {k: v for k, v in O.items() if k not in ("type", "buyer", "seller", "premium_payer", "premium_receiver") and v is not None and v != ""}}
     return {
         "instrument": t.get("instrument_type"), "structure": t.get("structure"),
         "notional": t.get("notional"), "ccy": t.get("notional_ccy"),
         "trade_date": t.get("trade_date"), "effective_date": t.get("effective_date"),
-        "maturity_date": t.get("maturity_date"), "legs": legs, "product": product,
+        "maturity_date": t.get("maturity_date"), "legs": legs, "product": product, "option": option, "embedded": embedded,
         "you": you, "them": them, "uti": payload.get("uti"),
     }
 
@@ -184,6 +199,12 @@ def compare(shared: dict, theirs: dict) -> list[dict]:
         if sp.get(f) != tp.get(f):
             label = {"buyer": "who buys", "seller": "who sells"}.get(f, f)
             breaks.append({"field": label, "shared": sp.get(f), "yours": tp.get(f)})
+    so, to = shared.get("option") or {}, theirs.get("option") or {}      # an option on a rate (record v3)
+    for f in sorted(set(so) | set(to)):
+        if so.get(f) != to.get(f):
+            label = {"buyer": "who buys the option", "seller": "who sells the option", "premium_payer": "who pays the premium",
+                     "premium_receiver": "who receives the premium"}.get(f, f"option {f}")
+            breaks.append({"field": label, "shared": so.get(f), "yours": to.get(f)})
     key = lambda l: ((l.get("leg_type") or "").upper(), l.get("currency"), l.get("index"))
     mine = {}
     for l in theirs.get("legs") or []:
@@ -228,7 +249,8 @@ def _best_own_booking(db: Session, shared: dict, cp_firm: Firm, booker_firm: Fir
         if t.uti in paired or _cp_lei(db, t) not in booker_leis:
             continue
         try:
-            theirs, h = _canonical_for(db, t)
+            # under the version of the shared record: two bookings are compared as the same kind of record
+            theirs, h = _canonical_for(db, t, shared.get("schema_version"))
         except HTTPException:
             continue
         b = compare(shared, theirs)
@@ -513,8 +535,21 @@ def _mirror_terms(v):
     return v
 
 
-def _mirror_leg(l: TradeLeg) -> LegInput:
+def _mirror_option_terms(terms: dict, itype: str) -> dict:
+    """An option on a rate, from the other side. `side` (BUY or SELL of the option) is the term that turns: the
+    counterparty of a sold option bought it. Until 0.61.0 it was copied as booked, so both books held the same side
+    and the counterparty's valued the option with the booker's sign. A swaption's PAY or RECEIVE is the right the
+    option gives its holder (terms.is_payer), the same from both sides: it does not turn."""
+    out = dict(terms) if itype == "IR_SWAPTION" else _mirror_terms(terms)
+    out["side"] = _FLIP.get(str(terms.get("side") or "BUY").upper(), "SELL")
+    return out
+
+
+def _mirror_leg(l: TradeLeg, flip: bool = True) -> LegInput:
     data = {f: getattr(l, f) for f in LegInput.model_fields if hasattr(l, f)}
+    if not flip:          # a swaption's legs under record v3: the swap delivered, read from the holder's right on both sides
+        data["terms"] = dict(l.terms or {})
+        return LegInput(**{k: v for k, v in data.items() if v is not None or k in ("embedded_options",)})
     data["direction"] = _FLIP[str(l.direction).upper()]
     data["embedded_options"] = [dict(o, direction=_FLIP.get(str(o.get("direction")).upper(), o.get("direction")))
                                 for o in (l.embedded_options or [])]
@@ -588,9 +623,9 @@ def _booking_out(t: Trade, how: str, note: Optional[str] = None) -> dict:
     return {"trade_id": str(t.id), "trade_ref": t.trade_ref, "status": t.status, "how": how, "note": note}
 
 
-def _link_candidate(db: Session, source: Trade, signer: FirmMember):
+def _link_candidate(db: Session, source: Trade, signer: FirmMember, att: Optional[dict] = None):
     """The signer's own earlier booking of this trade, (trade, breaks), matched on terms; or None."""
-    shared, _ = _canonical_for(db, source)
+    shared, _ = _canonical_for(db, source, attested_version(att) if att else None)
     best = _best_own_booking(db, shared, db.get(Firm, signer.firm_id), _firm_of_user(db, source.user_id))
     # Only the signer's own: a colleague's booking stays theirs to link.
     return (best[0], best[1]) if best and best[0].user_id == signer.user_id else None
@@ -604,7 +639,7 @@ def _link_booking(db: Session, t: Trade, source: Trade, att: dict) -> Trade:
     try:
         t.uti = source.uti
         db.flush()
-        _, h = _canonical_for(db, t)
+        _, h = _canonical_for(db, t, attested_version(att))      # as the confirmation was signed
         if _hexb(h) != att.get("trade_hash"):
             raise HTTPException(status_code=409, detail=(f"Your booking {t.trade_ref} would not hash to the confirmed "
                                 "record, so it was not linked."))
@@ -638,7 +673,7 @@ def book_mirror(db: Session, source: Trade, signer: FirmMember) -> dict:
         return _booking_out(existing, "EXISTING")
 
     note = None
-    found = _link_candidate(db, source, signer)
+    found = _link_candidate(db, source, signer, att)
     if found and not found[1]:
         return _booking_out(_link_booking(db, found[0], source, att), "LINKED")
     if found:
@@ -646,6 +681,7 @@ def book_mirror(db: Session, source: Trade, signer: FirmMember) -> dict:
                 f"{len(found[1])} field(s): check it isn't a duplicate.")
 
     own, cp, cp_id, legs = trade_parts(db, source)
+    itype = str(source.instrument_type or "").upper()
     try:
         # the booker's own record of the counterparty, and nothing of another account's: the page can write a link
         # to any entity's id, and its LEI and name are copied into the signer's book below
@@ -664,13 +700,17 @@ def book_mirror(db: Session, source: Trade, signer: FirmMember) -> dict:
             store=source.store or "WORKING", own_legal_entity_id=str(mine.id), counterparty_id=str(their_cp.id),
             notional=source.notional, notional_ccy=source.notional_ccy, trade_date=source.trade_date,
             effective_date=source.effective_date, maturity_date=source.maturity_date,
-            terms=_mirror_terms(source.terms or {}), discount_curve_id=source.discount_curve_id,
+            terms=(_mirror_option_terms(source.terms or {}, itype) if itype in RATES_OPTIONS else _mirror_terms(source.terms or {})),
+            discount_curve_id=source.discount_curve_id,
             forecast_curve_id=source.forecast_curve_id,
-            legs=[_mirror_leg(l) for l in sorted(legs, key=lambda l: l.leg_seq or 0)],
+            # a swaption signed under record v3 keeps its legs as booked (the record names each leg's payer from the
+            # option); one signed under v2 has them turned, as v2 read each leg's payer from its direction
+            legs=[_mirror_leg(l, flip=not (itype == "IR_SWAPTION" and attested_version(att) >= 3))
+                  for l in sorted(legs, key=lambda l: l.leg_seq or 0)],
         )
         res = book_trade(db, signer.user_id, body, commit=False, uti=source.uti)
         mirror = db.get(Trade, uuid.UUID(res["trade"]["id"]))
-        _, h = _canonical_for(db, mirror)
+        _, h = _canonical_for(db, mirror, attested_version(att))      # as the confirmation was signed
         if _hexb(h) != att.get("trade_hash"):
             raise HTTPException(status_code=409, detail="Your booking would not hash to the confirmed record, so it was not saved.")
         _apply_lifecycle_transition(
@@ -721,13 +761,17 @@ def card_state(message_id: str, db: Session = Depends(get_db), user: dict = Depe
     card_version = card.get("schema_version", 1)
     if card_version == payload["schema_version"]:
         then = current
-    else:
+    elif card_version == 1:
         # v1 cards predate UTIs: the record was hashed with uti = null, so compare that way.
         saved, trade.uti = trade.uti, None
         try:
             then = _hexb(_canonical_for(db, trade, card_version, parts=parts)[1])
         finally:
             trade.uti = saved
+    else:
+        # shared under another version than a new record of this trade is signed under today (an option on a rate
+        # shared before v3): compared under the card's own version, with the UTI it was hashed with
+        then = _hexb(_canonical_for(db, trade, card_version, parts=parts)[1])
     names = _party_names(parts)
     cp_lei = parts[2].get("lei")
     viewer_lei = parts[0].lei if side == "BOOKER" else cp_lei
