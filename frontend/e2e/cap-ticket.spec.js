@@ -175,6 +175,9 @@ test('a sold swaption carries its sign; the swap it delivers is shown as it is p
   expect(quote.npv).toBeCloseTo(-held.npv, 2)
   expect(quote.vega).toBeCloseTo(-held.vega, 2)
   await expect(first(win)).toContainText('−')
+  // a blank strike says the rate the price struck, as a cap's does
+  await expect(win.getByTestId('swaption-strike')).toHaveAttribute('placeholder', 'ATM')
+  await expect(win.getByTestId('swaption-strike-note')).toContainText(`at the money · ${+quote.strike_pct.toFixed(4)} %`)
   // the delivered swap: stated, shut, with no coupon of its own and no cap or floor to add
   await expect(win.getByTestId('swaption-underlying-note')).toContainText('paid annually on ACT/360')
   const legs = win.getByTestId('swaption-underlying-legs')

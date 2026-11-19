@@ -964,8 +964,10 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
     [refData.counterparties, economics.counterpartyId, initialTrade])
   const buildRatesTrade = useCallback(() => buildBookingBody(state, direction, {
     ownEntityId: economics.ownEntityId || null, counterpartyId: economics.counterpartyId || null,
-    desk: economics.desk || null, book: economics.book || null, priced: result, fees: feesOut,
-  }), [state, direction, economics, result, feesOut])
+    // a strike left at the money is taken from the price, so only from a price of the terms as they stand (the
+    // booking refuses a stale one in words; the exposure run asks for PRICE the same way)
+    desk: economics.desk || null, book: economics.book || null, priced: priceIsCurrent ? result : null, fees: feesOut,
+  }), [state, direction, economics, result, feesOut, priceIsCurrent])
   const buildCurrencyTrade = useCallback(() => withFees(fxRef.current?.bookBody ? fxRef.current.bookBody() : null, feesOut), [feesOut])
 
   // The package the booked trade is a leg of, from the blotter's trades: { tradeId, structure, n, legs }. `pendingPackage`

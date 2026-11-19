@@ -118,6 +118,18 @@ is not carried). The red light closes the ticket and, there, its window. A light
 yellow one always, the green one in a ticket's own window. On a phone there is one window and neither control.
 What a ticket's window books or confirms, the other windows read again.
 
+**A field's source line.** Under a field whose number the engine supplies when nobody types one (a strike left at
+the money, a vol read off a surface), one muted line (`tbw-fx-limit`) says where the number comes from, and once
+there is a price of the terms on screen, the number itself, in the figures' face. When what is typed cannot be
+read, the line gives way to the problem in a few words, in amber (`tbw-fx-limit is-problem`); the same sentence
+in full is what PRICE answers. A figure typed into a field is not coloured by what it is: no blue, no red for a cap
+and green for a floor.
+
+**A group shown and not open.** Terms a ticket shows because they are priced and booked, and does not let the user
+change (the swap a swaption delivers), sit in the fieldset a stored ticket's terms sit in (`tbw-fieldset`, disabled),
+so they read as that ticket does, with one line above them that says why they are shut. A field the price does not
+read is not drawn as a live one.
+
 ## The name, the top bar, a rail
 
 The logo (`brand/RijekaLogo.jsx`, `.rj-logo`) is a river of simulated paths running into a ringed R, and that R is

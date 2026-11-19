@@ -939,3 +939,29 @@ class TestAStripUnderAScenario:
         held = self.strip(vol_atm_forward=base.atm_exact + 0.0025)
         assert held.vol_bp == pytest.approx(base.vol_bp - 25 / 20.0)
         assert self.strip(vol_override_bp=100.0, vol_shift_bp=2.0).vol_bp == 102.0
+
+
+class TestAWrittenCollar:
+    """A collar on one leg is two options on opposite sides. Bought: the cap held, the floor written. Written: the
+    other way, and every figure is the bought collar's with its sign turned. Held here on the leg itself, apart from
+    the route that reads it (the cap, floor and collar tickets, 0.59.0)."""
+
+    def leg(self, side):
+        theirs = "SELL" if side == "BUY" else "BUY"
+        return {"leg_type": "FLOAT", "direction": "RECEIVE", "currency": "USD", "notional": 10_000_000.0,
+                "effective_date": str(EFF_DATE), "maturity_date": str(MAT_DATE), "payment_frequency": "QUARTERLY", "day_count": "ACT/360",
+                "bdc": "MOD_FOLLOWING", "payment_lag": 2, "leverage": 0.0, "_vol_override_bp": 85.0,
+                "embedded_options": [{"type": "CAP", "direction": side, "default_strike": 0.045, "strike_schedule": []},
+                                     {"type": "FLOOR", "direction": theirs, "default_strike": 0.025, "strike_schedule": []}]}
+
+    def test_each_option_has_its_sides_sign_and_the_written_collar_mirrors_the_bought(self):
+        curve = Curve(valuation_date=VAL_DATE, flat_rate=0.04)
+        bought, written = price_leg(self.leg("BUY"), curve, curve, VAL_DATE), price_leg(self.leg("SELL"), curve, curve, VAL_DATE)
+        b_cap, b_floor, w_cap, w_floor = bought.option_strips[0][1], bought.option_strips[1][1], written.option_strips[0][1], written.option_strips[1][1]
+        assert [k for k, _ in bought.option_strips] == ["CAP", "FLOOR"]
+        assert b_cap.npv > 0 > b_floor.npv and w_cap.npv < 0 < w_floor.npv          # held is an asset, written a liability
+        assert b_cap.vega > 0 > b_floor.vega and b_cap.ir01 > 0 and b_floor.ir01 > 0      # a written floor gains as rates rise
+        for f in ("npv", "vega", "ir01"):
+            assert getattr(w_cap, f) == pytest.approx(-getattr(b_cap, f)) and getattr(w_floor, f) == pytest.approx(-getattr(b_floor, f)), f
+        assert written.pv == pytest.approx(-bought.pv) and bought.pv == pytest.approx(b_cap.npv + b_floor.npv)
+        assert written.vega == pytest.approx(-bought.vega)

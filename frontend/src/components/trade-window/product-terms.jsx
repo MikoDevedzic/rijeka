@@ -352,7 +352,8 @@ export function SwapTermsBody({ state, update, underlying = false }) {
     </div>
   )
   const Legs = underlying ? 'fieldset' : Fragment
-  const legsProps = underlying ? { disabled: true, className: 'tbw-underlying', 'data-testid': 'swaption-underlying-legs' } : {}
+  // the fieldset a stored ticket's terms sit in (styles.css .tbw-fieldset): shut, it reads as that ticket does
+  const legsProps = underlying ? { disabled: true, className: 'tbw-fieldset', 'data-testid': 'swaption-underlying-legs' } : {}
 
   return (
     <>
@@ -567,8 +568,10 @@ function useSwaptionVolDefault(state, update, years) {
   }, [ccy, tenorY, y, valDate, readOnly])     // eslint-disable-line react-hooks/exhaustive-deps
 }
 
-export function SwaptionTermsBody({ state, update }) {
+export function SwaptionTermsBody({ state, update, priced = null }) {
   const strike = state.strike ?? SWAPTION_DEFAULTS.strike
+  // what the price on screen struck, while it is the price of the terms on screen (sections.jsx ProductTerms)
+  const mine = priced?.instrument === 'IR_SWAPTION' && Number.isFinite(Number(priced.strike_pct)) ? priced : null
   const ex = swaptionExpiry(state)
   const bermudan = state.structure === 'BERMUDAN'
   useSwaptionVolDefault(state, update, ex.problem ? 0 : ex.years)        // nothing is asked for an expiry the ticket refuses
@@ -593,7 +596,7 @@ export function SwaptionTermsBody({ state, update }) {
                  title={bermudan ? 'A Bermudan is priced on a tree that steps in twelfths of a year: choose a tenor' : undefined}
                  onChange={e => { if (e.target.value) update({ expiry: EXPIRY_DATE, expiryDate: e.target.value }) }} />
           {ex.rolledFrom && <div className="tbw-fx-limit" data-testid="swaption-expiry-rolled">rolled from {ex.rolledFrom} ({ex.rolledWhy})</div>}
-          {ex.problem && <div className="tbw-fx-limit" data-testid="swaption-expiry-problem" style={{ color: 'var(--amber)' }}>not after the valuation date</div>}
+          {ex.problem && <div className="tbw-fx-limit is-problem" data-testid="swaption-expiry-problem">not after the valuation date</div>}
         </Field>
         <Field label="NORMAL VOL (bp)">
           {/* the surface's vol for this expiry and tenor until one is typed; the words under it say which point and day.
@@ -602,11 +605,17 @@ export function SwaptionTermsBody({ state, update }) {
             ? <><input className="tbw-mono" disabled value="" placeholder="model σ" data-testid="swaption-vol" /><div className="tbw-fx-limit">the tree prices at the model's σ</div></>
             : <DefaultedInput testId="swaption-vol" value={state.volBp ?? ''} onChange={v => update({ volBp: v })}
                               fallback={vol.shown} format={x => String(+Number(x).toFixed(2))} tag={volSourceWords(state.volDefault)} />}
-          {vol.problem && !bermudan && <div className="tbw-fx-limit" data-testid="swaption-vol-problem" style={{ color: 'var(--amber)' }}>not a vol: above zero, at most 5,000 bp</div>}
+          {vol.problem && !bermudan && <div className="tbw-fx-limit is-problem" data-testid="swaption-vol-problem">not a vol: above zero, at most 5,000 bp</div>}
         </Field>
         <Field label="STRIKE (%) blank=ATM">
-          <input className="tbw-mono tbw-blue" value={strike} placeholder="ATM forward"
+          <input className="tbw-mono" value={strike} placeholder="ATM" data-testid="swaption-strike"
                  onChange={e => update({ strike: e.target.value })} />
+          {/* where a blank strike's rate comes from, as a cap's says it; a typed one is shown against the money */}
+          <div className="tbw-fx-limit" data-testid="swaption-strike-note">
+            {String(strike).trim() === ''
+              ? (mine ? <>at the money · <span className="tbw-mono">{pct4(mine.strike_pct)}</span></> : 'at the money · PRICE strikes it')
+              : (mine && Number.isFinite(Number(mine.forward_pct)) ? <>ATM <span className="tbw-mono">{pct4(mine.forward_pct)}</span></> : 'typed')}
+          </div>
         </Field>
       </Row>
       {/* what the dates above come to: the swap the option delivers into is not the spot-starting one of PRIMARY ECONOMICS */}
@@ -629,24 +638,26 @@ export function SwaptionTermsBody({ state, update }) {
 // `priced`: the answer of the price on screen, when it is for the terms as they stand (sections.jsx ProductTerms);
 // it fills the line under the fields with what the price struck, read and ran over.
 
-const TIER_WORDS = { QUOTED: 'quoted', INTERP: 'between quotes', EXTRAP: 'beyond the last quote', FALLBACK: 'desk default · no cap surface for this day', OVERRIDE: 'typed' }
+// the engine's label for where on the surface the vol was read (pricing/cap_floor.py lookup_cap_vol): INTERP is
+// between its quotes, in strike or in maturity, and also an end held flat beyond them
+const TIER_WORDS = { QUOTED: 'at a quote', INTERP: 'read off its quotes', FALLBACK: 'desk default · no cap surface for this day', OVERRIDE: 'typed' }
 const tierWords = (t) => TIER_WORDS[t] || String(t || '').toLowerCase()
 const pct4 = (x) => (Number.isFinite(Number(x)) ? `${(+Number(x).toFixed(4))} %` : null)
 
 // The words under a strike or a vol field: a problem with what is typed, or where the blank field's number comes from.
 function FieldNote({ problem, children, testId }) {
-  if (problem) return <div className="tbw-fx-limit" data-testid={testId} style={{ color: 'var(--amber)' }}>{problem}</div>
+  if (problem) return <div className="tbw-fx-limit is-problem" data-testid={testId}>{problem}</div>
   return children ? <div className="tbw-fx-limit" data-testid={testId}>{children}</div> : null
 }
 
-function StrikeField({ label, tone, value, onChange, atm, priced, struck, testId }) {
+function StrikeField({ label, value, onChange, atm, priced, struck, testId }) {
   const k = capStrike(value, 'rate')
   const note = k.problem ? null
     : k.blank && atm ? (priced && struck != null ? <>at the money · <span className="tbw-mono">{pct4(struck * 100)}</span></> : 'at the money · PRICE strikes it')
     : !k.blank && priced && priced.atm_forward_pct != null ? <>ATM <span className="tbw-mono">{pct4(priced.atm_forward_pct)}</span></> : null
   return (
     <Field label={label}>
-      <input className={`tbw-mono ${tone}`} value={value} placeholder={atm ? 'ATM' : 'type a rate'} data-testid={testId} aria-invalid={k.problem ? true : undefined}
+      <input className="tbw-mono" value={value} placeholder={atm ? 'ATM' : 'type a rate'} data-testid={testId} aria-invalid={k.problem ? true : undefined}
              onChange={e => onChange(e.target.value)} />
       <FieldNote problem={k.problem ? 'not a rate in percent' : null} testId={`${testId}-note`}>{note}</FieldNote>
     </Field>
@@ -661,7 +672,7 @@ function CapVolField({ state, update, priced }) {
     : priced && priced.vol_bp != null ? <><span className="tbw-mono">{(+Number(priced.vol_bp).toFixed(2))} bp</span> · cap surface, {tierWords(priced.vol_tier)}</> : 'cap surface at the strike · PRICE reads it'
   return (
     <Field label="NORMAL VOL (bp)">
-      <input className="tbw-mono tbw-blue" placeholder="surface" data-testid="cap-vol" aria-invalid={v.problem ? true : undefined}
+      <input className="tbw-mono" placeholder="surface" data-testid="cap-vol" aria-invalid={v.problem ? true : undefined}
              value={state.volOverride ?? CAPFLOOR_DEFAULTS.volOverride}
              onChange={e => update({ volOverride: e.target.value })} />
       <FieldNote problem={v.problem ? 'not a vol: above zero, at most 5,000 bp' : null} testId="cap-vol-note">{note}</FieldNote>
@@ -677,7 +688,7 @@ function CapPricedNote({ priced }) {
     <div className="tbw-terms-note" data-testid="cap-priced-note">
       Priced as it is booked: {priced.n_caplets} periods from <span className="tbw-mono">{priced.effective_date}</span> to <span className="tbw-mono">{priced.maturity_date}</span>
       {' · '}{String(priced.payment_frequency || '').toLowerCase().replace('_', '-')}, {priced.day_count}
-      {priced.index_note ? <> · <span data-testid="cap-index-note" style={{ color: 'var(--amber)' }}>{priced.index_note}</span></> : null}
+      {priced.index_note ? <> · <span data-testid="cap-index-note">{priced.index_note}</span></> : null}
     </div>
   )
 }
@@ -721,7 +732,7 @@ export function CapTermsBody({ state, update, priced = null }) {
     <>
       <Row cols={7}>
         <SideField state={state} update={update} />
-        <StrikeField label="CAP RATE (%) blank=ATM" tone="tbw-negative" atm testId="cap-rate" priced={mine} struck={mine?.cap_rate}
+        <StrikeField label="CAP RATE (%) blank=ATM" atm testId="cap-rate" priced={mine} struck={mine?.cap_rate}
                      value={state.capRate ?? CAPFLOOR_DEFAULTS.capRate} onChange={v => update({ capRate: v })} />
         <CapConventions state={state} update={update} />
         <CapVolField state={state} update={update} priced={mine} />
@@ -738,7 +749,7 @@ export function FloorTermsBody({ state, update, priced = null }) {
     <>
       <Row cols={7}>
         <SideField state={state} update={update} />
-        <StrikeField label="FLOOR RATE (%) blank=ATM" tone="tbw-positive" atm testId="floor-rate" priced={mine} struck={mine?.floor_rate}
+        <StrikeField label="FLOOR RATE (%) blank=ATM" atm testId="floor-rate" priced={mine} struck={mine?.floor_rate}
                      value={state.floorRate ?? CAPFLOOR_DEFAULTS.floorRate} onChange={v => update({ floorRate: v })} />
         <CapConventions state={state} update={update} />
         <CapVolField state={state} update={update} priced={mine} />
@@ -755,9 +766,9 @@ export function CollarTermsBody({ state, update, priced = null }) {
     <>
       <Row cols={7}>
         <SideField state={state} update={update} />
-        <StrikeField label="CAP RATE (%)" tone="tbw-negative" testId="cap-rate" priced={mine}
+        <StrikeField label="CAP RATE (%)" testId="cap-rate" priced={mine}
                      value={state.capRate ?? CAPFLOOR_DEFAULTS.capRate} onChange={v => update({ capRate: v })} />
-        <StrikeField label="FLOOR RATE (%)" tone="tbw-positive" testId="floor-rate" priced={mine}
+        <StrikeField label="FLOOR RATE (%)" testId="floor-rate" priced={mine}
                      value={state.floorRate ?? CAPFLOOR_DEFAULTS.floorRate} onChange={v => update({ floorRate: v })} />
         <CapConventions state={state} update={update} />
       </Row>

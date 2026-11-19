@@ -61,6 +61,7 @@ Learned on 16 November 2026 (a figure's sign is its currency's; a ticket in a sm
 Learned on 18 November 2026 (where a figure that changes the value is shown)
 - An input that changes what a trade is worth (a fee, a premium) is followed to the place the value is read, on every instrument's ticket, pictured side by side: the fees' value and the net of fees stood at the right of the FEES block and the footer showed the value before fees on all nine instruments from 0.25.0 until the owner asked why his premium changed nothing (0.55.2: value, PV OF FEES, NET OF FEES, then the sensitivities; `footer-fees.spec.js`).
 - A strip that gains a figure is pictured at its longest (a swap with an option on a leg, a currency option) and at 1280 by 720: two more figures wrapped every name onto two lines there.
+- Two fields of one kind on two tickets are read side by side in their classes, not only in the picture: the cap's NORMAL VOL kept a `tbw-blue` the swaption's had lost, and a cap's strike was red and a floor's green, colour by product on a typed figure, for as long as nobody compared the cap ticket with the swaption's (19 November 2026). A ticket rewritten is compared with the ticket that shows the same field done the accepted way.
 
 Rules
 - Read-only on the working tree unless you are asked to fix: never `git checkout`, `switch`, `stash` or `reset` in the shared checkout.

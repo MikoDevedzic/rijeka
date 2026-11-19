@@ -238,9 +238,6 @@
 /* a line under a row of terms that says what the row comes to (a swaption's delivered swap): a terms note set close
    under its row */
 .tbw-terms-note { font-size: 12px; color: var(--text-mute); letter-spacing: 0.05em; margin: -4px 0 10px; }
-/* The swap a swaption delivers: terms shown as they are priced and booked, not open (product-terms.jsx). A group with
-   no frame of its own; its fields read as the read-only ticket's do. */
-.tbw-underlying { border: 0; padding: 0; margin: 0; min-width: 0; }
 
 .tbw-helper-text,
 .tbw-terms-footer,
@@ -710,6 +707,8 @@
 
 /* Said once, under the date, when a typed date was brought back to the last one a digital asset prices to. */
 .tbw-fx-limit { margin-top: 3px; font-size: 11px; line-height: 1.35; letter-spacing: 0.04em; color: var(--text-mute); }
+/* the line under a field when what is typed in it cannot be read: it takes the place of the field's source line */
+.tbw-fx-limit.is-problem { color: var(--amber); }
 
 /* The valuation: "pricing…" sits over the top right of the analytics block (no line is added or taken away as it
    comes and goes); why there is no price is a line of its own above the block. */

@@ -1571,6 +1571,8 @@ class CapFloorRequest(BaseModel):
 
 
 PERIODS_A_YEAR = {1: "ANNUAL", 2: "SEMI_ANNUAL", 4: "QUARTERLY", 12: "MONTHLY"}      # the frequencies a leg's schedule is made at
+CAP_LEG_ROLLS = ("MOD_FOLLOWING", "FOLLOWING", "PRECEDING", "UNADJUSTED")
+CAP_LEG_MAX_YEARS = 60                # the longest leg the cap, floor and collar routes take
 
 
 def _periods_a_year(req) -> str:
@@ -1617,6 +1619,20 @@ def _cap_like_leg(req: CapFloorRequest, val_date: date) -> dict:
         raise HTTPException(status_code=422, detail=f"The maturity {mat} is not after the effective date {eff}")
     if terms["notional"] <= 0:
         raise HTTPException(status_code=422, detail="The notional must be above zero")
+    # The leg is the caller's: what the schedule cannot make is refused as terms here (an unknown frequency raised
+    # inside the pricer and answered 500; a maturity in the year 9999 made a hundred thousand caplets).
+    from pricing.day_count import _REGISTRY as _DAY_COUNTS
+    norm = lambda v: str(v or "").upper().replace("-", "_").replace(" ", "_")
+    if norm(terms["payment_frequency"]) not in PERIODS_A_YEAR.values():
+        raise HTTPException(status_code=422, detail=f"leg.payment_frequency must be one of {', '.join(PERIODS_A_YEAR.values())}")
+    if str(terms["day_count"]).upper().strip() not in _DAY_COUNTS:
+        raise HTTPException(status_code=422, detail=f"leg.day_count must be one of {', '.join(sorted(_DAY_COUNTS))}")
+    if norm(terms["bdc"]) not in CAP_LEG_ROLLS:
+        raise HTTPException(status_code=422, detail=f"leg.bdc must be one of {', '.join(CAP_LEG_ROLLS)}")
+    if not 0 <= terms["payment_lag"] <= 10:
+        raise HTTPException(status_code=422, detail="leg.payment_lag must be between 0 and 10 business days")
+    if (mat - eff).days > CAP_LEG_MAX_YEARS * 366:
+        raise HTTPException(status_code=422, detail=f"The leg runs more than {CAP_LEG_MAX_YEARS} years: not a cap this route prices")
     return {"id": "cap-ticket", "leg_ref": "OPT-1", "leg_seq": 1, "leg_type": "FLOAT", "direction": "RECEIVE",
             "notional_type": "BULLET", "effective_date": str(eff), "maturity_date": str(mat),
             "fixed_rate": 0.0, "spread": 0.0, "leverage": 0.0, "ois_compounding": None, **terms}

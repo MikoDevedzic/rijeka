@@ -238,7 +238,9 @@ function swaptionStrike(state, extras) {
     if (!isFinite(k)) throw new Error('Strike must be a number (percent) or blank for ATM.')
     return k / 100
   }
-  const fwd = extras.priced?.forward_rate
+  // the rate the price struck (a Bermudan's answer names its strike and no forward: a blank-strike Bermudan could
+  // not be booked, priced or not), else the forward a European's is struck at
+  const fwd = extras.priced?.strike ?? extras.priced?.forward_rate
   if (fwd == null || !isFinite(Number(fwd))) {
     throw new Error('Strike is blank (ATM): price the swaption first so the ATM forward is known.')
   }

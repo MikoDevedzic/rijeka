@@ -155,9 +155,16 @@ def lookup_cap_vol(
     (within 0.01 of a year) is read there, as it always was. One between two of them is read at the strike's
     distance from the money on each and on the straight line between the two in maturity; one shorter than the
     first or longer than the last takes that end's (held flat). Until 0.59.0 any other maturity fell to the desk
-    default: a five-year cap booked from its spot date is 5.01 years from the valuation date, and a day later
-    4.99, so a booked cap, and a cap or floor on a swap's leg, was marked at 85bp with a quoted surface beside it,
-    except on the days its remaining life happened to be a quoted maturity.
+    default: a five-year cap booked from its spot date is 5.0103 years from the valuation date (outside the
+    hundredth), inside it for the week after, and outside it from then until its life comes within four days of
+    the next quoted maturity; so a booked cap, and a cap or floor on a swap's leg, was marked at 85bp with a
+    quoted surface beside it on all but a few days of its life.
+
+    The label. Between two maturities and beyond the ends the tier is INTERP (there is no label of its own for an
+    end held flat); FALLBACK only where a maturity it reads has no rows. A maturity with no at-the-money row takes
+    the default at the money and is labelled by its distances as before. At the edge of the hundredth the two
+    readings meet to within a two-hundredth of the step between the neighbouring maturities (0.01 of a year over
+    two years): a few thousandths of a basis point, not smoothed.
     """
     tenors = sorted({float(r['cap_tenor_y']) for r in surface_rows})
     if not tenors:

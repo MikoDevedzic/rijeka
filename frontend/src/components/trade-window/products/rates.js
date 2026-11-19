@@ -532,7 +532,7 @@ registerProduct({
       text: state.optionSide === 'SELL' ? '↑ SELL CAP · premium received, pay above the strike' : '↑ BUY CAP · protection vs rising rates',
       color: 'var(--red)',
     }),
-    footerText: 'Bachelier (normal) caplets on the periods of the leg above · one strike, one vol, read off the cap surface at K−ATM · OIS discounting · priced as it is booked',
+    footerText: 'Bachelier (normal) · one strike, one vol off the cap surface at K−ATM · OIS discounting',
     Component: CapTermsBody,
   },
 
@@ -594,7 +594,7 @@ registerProduct({
       text: state.optionSide === 'SELL' ? '↓ SELL FLOOR · premium received, pay below the strike' : '↓ BUY FLOOR · protection vs falling rates',
       color: 'var(--accent)',
     }),
-    footerText: 'Bachelier (normal) floorlets on the periods of the leg above · one strike, one vol, read off the cap surface at K−ATM · OIS discounting · priced as it is booked',
+    footerText: 'Bachelier (normal) · one strike, one vol off the cap surface at K−ATM · OIS discounting',
     Component: FloorTermsBody,
   },
 
@@ -656,7 +656,7 @@ registerProduct({
       text: state.optionSide === 'SELL' ? '↕ SELL COLLAR · sell cap, buy floor' : '↕ BUY COLLAR · buy cap, sell floor',
       color: 'var(--amber)',
     }),
-    footerText: 'Bought: the cap held, the floor written (sold: the other way) · Bachelier (normal) on the periods of the leg above · each strike its own vol off the cap surface · priced as it is booked',
+    footerText: 'Bought: the cap held, the floor written; sold: the other way · Bachelier (normal) · each strike its own vol off the cap surface',
     Component: CollarTermsBody,
   },
 

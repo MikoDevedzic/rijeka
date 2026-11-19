@@ -141,3 +141,17 @@ def test_the_cap_workbook_runs_what_the_tickets_route_runs(client, auth_a):
     # and the route's own leg, made from the tenor, is that leg
     plain = _post(client, auth_a, "/api/price/cap", {**body, "tenor_y": 5, "freq_per_year": 4})
     assert plain["npv"] == with_leg["npv"] and plain["effective_date"] == leg["effective_date"] and plain["maturity_date"] == leg["maturity_date"]
+
+
+def test_a_callers_leg_the_schedule_cannot_make_is_refused_as_terms(client, auth_a, booked):
+    """A frequency, a day count or a roll that is none answered 500 from inside the pricer; a maturity centuries on
+    made as many caplets as it had quarters."""
+    base = _ticket(booked["IR_CAP"])
+    for change, said in (({"payment_frequency": "FORTNIGHTLY"}, "payment_frequency"), ({"day_count": "ACT/364"}, "day_count"), ({"bdc": "NEAREST"}, "bdc"),
+                         ({"payment_lag": 400}, "payment_lag"), ({"maturity_date": "2999-11-04"}, "more than 60 years")):
+        r = client.post("/api/price/cap", json={**base, "leg": {**base["leg"], **change}}, headers=auth_a)
+        assert r.status_code == 422 and said in r.text, (change, r.status_code, r.text[:200])
+    # the spellings a leg already takes are still taken
+    for change in ({"payment_frequency": "semi-annual"}, {"day_count": "act/365f"}, {"bdc": "following"}):
+        r = client.post("/api/price/cap", json={**base, "leg": {**base["leg"], **change}}, headers=auth_a)
+        assert r.status_code == 200, (change, r.status_code, r.text[:200])

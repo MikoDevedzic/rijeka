@@ -12,13 +12,16 @@ the price on these three tickets and the value of the trade they book were two c
   after the valuation date (a Saturday on the day of the walk), ACT/360 whatever day count the ticket showed, and
   the effective and maturity dates on the ticket were not read. The booked trade was valued on its leg's periods.
   And a booked cap read the 85bp desk default whenever its remaining life was not a quoted maturity of the cap
-  surface, which is nearly every day (5.01 years on the trade date, 4.99 the next). On the test market, valued
-  19 November 2026, a five-year 4.5 % cap on ten million read 97,183 on its ticket and 105,015 once booked.
+  surface, which is all but a few days of its life (5.0103 years on the trade date, just outside the hundredth
+  of a year the surface was read within). On the local stack's market, valued 19 November 2026, a five-year
+  4.5 % cap on ten million read 97,183 on its ticket and 105,015 once booked.
 - **Now.** The three routes price the leg the ticket books, through the swap pricer, which is how a booked one is
   valued: the stored trade's value is the ticket's price to the cent (a test on the local stack, each product,
   either side). The cap surface is read between its quoted maturities, on the straight line in maturity, and held
   flat beyond the ends. That cap is 97,322 on its ticket and in the book. **The value of every cap, floor and collar
-  ticket changes, and the value of every booked one whose remaining life is not a quoted maturity.**
+  ticket changes, and the value of every booked one whose remaining life is not a quoted maturity.** A booked
+  cap, floor or collar, and a cap or floor on a swap's leg, steps in value on the day of the deploy; a cap's vol
+  has no step in the P&L explain, so that day's step is in the residual.
 - **The ticket.** A cap's or a floor's strike left blank is at the money (the forward of its own periods), the
   price says the rate and the booking carries it; an untouched cap was struck at 4.5 % and a floor at 3.0 % whatever
   the currency. A collar's strikes are typed. The vol field shows the surface's vol and where it was read once

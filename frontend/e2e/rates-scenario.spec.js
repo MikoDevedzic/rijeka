@@ -194,7 +194,7 @@ test('terms changed after the price: the scenario is of the terms as priced, and
   const { win, quote } = await priced(app, 'INTEREST RATE CAP', '/api/price/cap')
   await expect(win.getByTestId('scn-stale')).toHaveCount(0)
   await win.getByRole('button', { name: 'TRADE', exact: true }).click()
-  const strike = win.locator('input.tbw-negative').first()                 // the cap rate
+  const strike = win.getByTestId('cap-rate')
   await strike.fill('4.75'); await strike.blur()
   await win.getByRole('button', { name: 'CURVE SCENARIO', exact: true }).click()
   await expect(win.getByTestId('scn-stale')).toContainText('The terms have changed since the ticket was priced')
