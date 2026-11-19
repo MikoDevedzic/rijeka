@@ -111,15 +111,37 @@ def summarise(req: dict) -> None:
               "trade_date", "effective_date", "maturity_date"):
         if t.get(k) is not None:
             print(f"  {k:<{w}} {t[k]}")
+    # An option on a rate (record v3): its own terms, before the legs. A swaption's legs are the swap delivered if
+    # the buyer exercises, not payments that are owed.
+    opt = c.get("option") if isinstance(c.get("option"), dict) else None
+    swaption = bool(opt) and opt.get("type") == "SWAPTION"
+    if opt:
+        role = lambda lei: "you" if lei == me else "the other party"      # noqa: E731
+        print(f"\n  ── OPTION ({opt.get('type')}) ───────────────────────────────")
+        print(f"  {'buyer':<{w}} {opt.get('buyer')}   ({role(opt.get('buyer'))})")
+        print(f"  {'seller':<{w}} {opt.get('seller')}   ({role(opt.get('seller'))})")
+        for k in ("right", "exercise_style", "expiry_date", "exercise_schedule_y", "strike", "settlement"):
+            if opt.get(k) not in (None, ""):
+                print(f"  {k:<{w}} {opt[k]}")
+        if opt.get("premium_amount") in (None, ""):
+            print(f"  {'premium':<{w}} none in the record")
+        else:
+            payer = opt.get("premium_payer") or opt.get("buyer")
+            print(f"  {'premium':<{w}} {opt['premium_amount']} {opt.get('premium_currency') or ''} on {opt.get('premium_payment_date')}   (paid by {role(payer)})")
     for leg in c.get("legs", []):
-        print(f"\n  ── LEG {leg.get('leg_ref') or ''} ({leg.get('leg_type')}) ─────────────────────")
+        print(f"\n  ── LEG {leg.get('leg_ref') or ''} ({leg.get('leg_type')}){' · delivered if the buyer exercises' if swaption else ''} ─────────────────────")
         if "payer" in leg:
-            you = "you pay" if leg["payer"] == me else "you receive" if leg["receiver"] == me else "you are not a party"
+            verb = ("you would pay", "you would receive") if swaption else ("you pay", "you receive")
+            you = verb[0] if leg["payer"] == me else verb[1] if leg["receiver"] == me else "you are not a party"
             print(f"  {'payer -> receiver':<{w}} {leg['payer']} -> {leg['receiver']}   ({you})")
-        for k in ("direction", "currency", "notional", "fixed_rate", "spread", "index",
+        for k in ("direction", "currency", "notional", "effective_date", "maturity_date", "fixed_rate", "spread", "index", "leverage",
                   "day_count", "payment_frequency", "reset_frequency", "bdc"):
             if leg.get(k) not in (None, ""):
                 print(f"  {k:<{w}} {leg[k]}")
+        for o in leg.get("embedded_options") or []:
+            if isinstance(o, dict):
+                you = "you buy" if o.get("buyer") == me else "you sell" if o.get("seller") == me else ""
+                print(f"  {'option on this leg':<{w}} {o.get('type')} strike {o.get('default_strike')}   ({you})")
     print("\n  ── PARTIES ───────────────────────────────────────────")
     frm, to = req.get("from") or {}, req.get("to") or {}
     print(f"  {'requesting':<{w}} {frm.get('name')}  [{frm.get('lei')}]")

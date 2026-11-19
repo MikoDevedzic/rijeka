@@ -47,7 +47,7 @@ from api.routes.trade_events import (
     _check_write_role, _validate_idempotency_header, _lookup_idempotent,
     _parse_trade_uuid, _load_pending_trade, _apply_lifecycle_transition,
 )
-from chain.canonical import (canonical_payload, canonical_bytes, trade_hash, CANONICAL_SCHEMA_VERSION,
+from chain.canonical import (canonical_payload, canonical_bytes, trade_hash, CANONICAL_SCHEMA_VERSION, RATES_OPTION_SCHEMA_VERSION,
                              package_payload, package_hash, PACKAGE_SCHEMA_VERSION)
 from chain.signing import (confirmation_typed_data, amendment_typed_data, termination_typed_data,
                            sign, recover, eip712_digest)
@@ -257,6 +257,7 @@ def chain_status(user: dict = Depends(verify_token)):
         "chain_id":       be.chain_id,
         "registry":       be.registry,
         "schema_version": CANONICAL_SCHEMA_VERSION,
+        "schema_versions": {"default": CANONICAL_SCHEMA_VERSION, "rates_options": RATES_OPTION_SCHEMA_VERSION},
         "backend":        type(be).__name__,
     }
 

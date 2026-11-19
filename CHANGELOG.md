@@ -7,7 +7,7 @@ methodology document carries its own version (v1.44). Commits on `main` are the 
 
 **The confirmation of an option on a rate says it is an option.** From a walk of CONFIRM: seventeen tickets priced,
 booked and confirmed on a local chain, and for each the signed record and the paper read beside the ticket. The
-currency and digital-asset records were sound. No figure changes.
+currency and digital-asset records were sound. No price, risk or XVA figure of a ticket changes.
 
 - **A swaption's signed record was the swap it delivers and nothing else.** It held no buyer or seller, no expiry and
   no premium; its trade dates were the ticket's (the swap's as if it started at spot: a 1Y into 5Y option said it ran
@@ -31,10 +31,25 @@ currency and digital-asset records were sound. No figure changes.
   names its currency.
 - **The trade card** in a room says "You sell a payer swaption · expiry · strike · premium, you receive" and "You buy
   the cap · strike 4.5%"; it read "You pay fixed" and "You receive USD SOFR".
-- **A swaption's premium**, when none is typed, is booked at the price the option was priced at, as a cap's always
-  was; it was booked as none.
+- **A premium is entered, never filled in.** A cap, a floor and a collar with no premium entered were booked with
+  the model's value as their premium; a swaption with none. Now none of the four books a premium unless the desk
+  enters one (typed, or with MODEL PREMIUM in the fees block), and the record, the paper and the card say "none in
+  the record" where none was. The model's value is a mid: a premium is that with the charges on top. A cap booked
+  from now on and opened again therefore shows no premium among its fees unless one was entered.
+- **A booking that cannot be stated without a guess is refused a record**, with the reason: a swaption with no
+  expiry date, an empty strike or one that is not the delivered swap's rate, no payer-or-receiver, legs booked
+  against the option's right, a swap that starts before the expiry; a cap, floor or collar with no option on its
+  leg, or whose side disagrees with it; a premium that is not a number of a size money has, without a three-letter
+  currency or a date. A swaption booked before the ticket stored its expiry date is booked again to be confirmed.
+- **A trade card of a trade already confirmed** shows the record it was signed under, not a newer version's hash.
+- **The command-line countersigner** (`chain/tools/countersign.py`) prints the option's terms before it signs, and
+  a swaption's legs as what would be delivered.
+- **The cap's XVA workbook** (`xva_cap`) was opened in Excel by the project's owner on 19 November 2026: every row
+  of its Checks sheet read PASS. The documents now say so.
 
 Not changed, and stated: a Bermudan's exercise times are held as booked, in years from the trade date, not as dates.
+After its expiry a swaption is still valued as the swap it delivers from the booked legs, whoever sold it and
+whether or not it would have been exercised: exercise is not yet an event a trade records.
 Seen on a local chain: a sold swaption, a Bermudan, a cap, a sold floor, a collar and a swap confirmed, anchored and
 verified, the records and papers read. Methodology v1.44 (§ the canonical record).
 
@@ -49,7 +64,9 @@ read against the trade's value and side: no wrong figure). Words only; no figure
 - **An American option** on a currency pair or a digital asset is run on the paths as its European, a lower bound:
   the tab said only AMERICAN.
 - **A basis swap** shows no CVA, DVA, FCA, FBA or MVA and only KVA, because both floating legs are forecast off the
-  one curve of the currency and the swap is worth nothing on every path. The tab says so (`basis.one_curve`).
+  one curve of the currency and the swap is worth nothing on every path. The tab says so (`basis.one_curve`), and
+  only where the two legs do cancel: paid opposite ways on the same notional and dates, at a leverage of one, with
+  no spread. Any other swap of two floating legs has exposure, and is not told it has none.
 - **The swap's XVA workbook** was opened in Excel by the project's owner on 18 November 2026: every row of its
   Checks sheet read PASS. The documents said it had not been opened in Excel; they now say by whom it has and has not.
 

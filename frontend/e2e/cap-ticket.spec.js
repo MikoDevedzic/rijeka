@@ -68,7 +68,7 @@ test('a cap left alone is struck at the money, says what it read, and is worth w
   const body = res.request().postDataJSON()
   expect(body.terms.cap_rate, 'the booking carries the rate the price struck').toBe(quote.cap_rate)
   expect(body.legs[0].embedded_options[0]).toMatchObject({ type: 'CAP', direction: 'BUY', default_strike: quote.cap_rate })
-  expect(body.terms.premium_amount).toBeCloseTo(quote.npv, 2)
+  expect(body.terms.premium_amount, 'no premium entered: none booked (the price is not put in its place)').toBeNull()
   const value = (await (await stored).json()).npv
   expect(Math.abs(value - quote.npv), 'the stored trade\'s value is the ticket\'s price').toBeLessThanOrEqual(0.01)
   expectClean(problems)

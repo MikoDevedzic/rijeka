@@ -101,7 +101,7 @@ describe('a signed record as a sheet of paper', () => {
     expect(p.blocks.map(b => b.title)).toEqual(['Option · Party B buys from Party A',
       'Swap delivered on exercise · fixed leg · Party B pays Party A', 'Swap delivered on exercise · floating leg · Party A pays Party B'])
     expect(rows(p.blocks[0])).toEqual({ Option: 'Payer swaption: the right to pay the fixed rate', Exercise: 'European', 'Expiry date': '19 November 2027',
-      Strike: '3.859304 %', Settlement: 'Physical', Premium: '165,478.07 USD', 'Premium payment date': '23 November 2026', 'Premium paid by': 'Party B to Party A' })
+      Strike: '3.859304 %', Settlement: 'Physical', Premium: '165,478.07 USD', 'Premium payment date': '23 November 2026', 'Premium paid': 'By Party B to Party A' })
     const fixed = rows(p.blocks[1])
     expect(fixed['Effective date']).toBe('23 November 2027'); expect(fixed['Termination date']).toBe('23 November 2032'); expect(fixed['Fixed rate']).toBe('3.859304 %')
     expect(p.gap).toBeNull()
@@ -129,7 +129,8 @@ describe('a signed record as a sheet of paper', () => {
     const period = rows(p.blocks[1])
     expect(period['Floating rate']).toBe('USD SOFR'); expect(period['Payments']).toBe('Quarterly')
     for (const k of ['Leverage', 'Spread', 'Embedded options']) expect(period, k).not.toHaveProperty(k)
-    expect(rows(p.blocks[2])).toEqual({ Premium: '97,322.39 USD', 'Premium payment date': '23 November 2026', 'Premium paid by': 'Party A to Party B' })
+    expect(rows(p.blocks[2])).toEqual({ Premium: '97,322.39 USD', 'Premium payment date': '23 November 2026', 'Premium paid': 'By Party A to Party B' })
+    for (const k of ['Currency', 'Notional']) expect(period, k).not.toHaveProperty(k)        // the trade's, said once above
     expect(p.blocks.flatMap(b => b.rows.map(([, v]) => v)).join(' ')).not.toMatch(/[{["]/)   // nothing of the record's JSON on the sheet
   })
   it('a collar: each side buys one option and sells the other; a strike that steps is printed by date; a v2 cap says its record has no premium', () => {
@@ -141,7 +142,10 @@ describe('a signed record as a sheet of paper', () => {
     expect(p.blocks.map(b => b.title)).toEqual(['Cap · Party A buys from Party B', 'Floor · Party B buys from Party A', 'The rate and its periods', 'Premium'])
     expect(rows(p.blocks[0])).toEqual({ 'Strike from 23 November 2026': '4.5 %', 'Strike from 23 November 2028': '5 %' })
     expect(rows(p.blocks[1])).toEqual({ Strike: '3 %' })
-    expect(rows(p.blocks[3])['Premium paid by']).toBe('Party B to Party A')
+    expect(rows(p.blocks[3])['Premium paid']).toBe('By Party B to Party A')
+    // no premium entered: the sheet says the record holds none
+    const none = paperOf(cap('IR_CAP', [{ type: 'CAP', default_strike: '0.045', strike_schedule: [], buyer: A, seller: B }], { type: 'CAP', buyer: A, seller: B, premium_amount: null, premium_currency: null, premium_payment_date: null, premium_payer: null, premium_receiver: null }))
+    expect(rows(none.blocks[2])).toEqual({ Premium: 'None in the record' })
     const old = paperOf(cap('IR_FLOOR', [{ type: 'FLOOR', default_strike: '0.03', strike_schedule: [], buyer: B, seller: A }], null))
     expect(old.parties.map(x => x.role)).toEqual(['Seller', 'Buyer'])
     expect(old.blocks.map(b => b.title)).toEqual(['Floor · Party B buys from Party A', 'The rate and its periods'])

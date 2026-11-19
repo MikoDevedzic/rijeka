@@ -378,6 +378,13 @@ class ShareBody(BaseModel):
     trade_id: str
 
 
+def _signed_version(db: Session, trade: Trade) -> Optional[int]:
+    """The version a confirmed trade was signed under, or None for one not yet confirmed (signed under today's)."""
+    ev = _latest_confirmed_event(db, trade.id)
+    att = (ev.payload or {}).get("attestation") if ev else None
+    return attested_version(att) if att else None
+
+
 def _existing_card(db: Session, room_id, trade_id) -> Optional[ChatMessage]:
     return (db.query(ChatMessage)
               .filter(ChatMessage.room_id == room_id, ChatMessage.card["type"].astext == "trade",
@@ -394,7 +401,8 @@ def _post_card(db: Session, room: ChatRoom, me: FirmMember, my_firm: Firm, other
     # hash, so the hash they review is the one they will sign.
     ensure_uti(db, trade)
     parts = trade_parts(db, trade)
-    payload, h = _canonical_for(db, trade, parts=parts)
+    # a trade already confirmed is shared as it was signed: its record under the version of its attestation
+    payload, h = _canonical_for(db, trade, _signed_version(db, trade), parts=parts)
     card = {
         "type": "trade", "trade_id": str(trade.id), "trade_ref": trade.trade_ref,
         "booker_firm_id": str(my_firm.id), "booker_firm": my_firm.name,
@@ -756,7 +764,10 @@ def card_state(message_id: str, db: Session = Depends(get_db), user: dict = Depe
         ensure_uti(db, trade)
         db.commit()
     parts = trade_parts(db, trade)          # parties + legs, once for this whole request
-    payload, h = _canonical_for(db, trade, parts=parts)
+    ev = _latest_confirmed_event(db, trade.id)
+    att = (ev.payload or {}).get("attestation") if ev else None
+    # a confirmed trade is read as it was signed (its attestation's version); a pending one as it will be signed
+    payload, h = _canonical_for(db, trade, attested_version(att) if att else None, parts=parts)
     current = _hexb(h)
     card_version = card.get("schema_version", 1)
     if card_version == payload["schema_version"]:
@@ -784,14 +795,12 @@ def card_state(message_id: str, db: Session = Depends(get_db), user: dict = Depe
         "summary": summarise(payload, viewer_lei, names),
         "can_act": access == "JOINED",
     }
-    ev = _latest_confirmed_event(db, trade.id)
-    att = (ev.payload or {}).get("attestation") if ev else None
     if side == "COUNTERPARTY":
         mine = own_booking(db, trade.uti, me.user_id)
         out["your_booking"] = {"trade_id": str(mine.id), "trade_ref": mine.trade_ref, "status": mine.status} if mine else None
         out["can_book"] = bool(att) and attested_version(att) >= 2 and mine is None and access == "JOINED"
         if out["can_book"]:
-            found = _link_candidate(db, trade, me)
+            found = _link_candidate(db, trade, me, att)
             out["will_link"] = found[0].trade_ref if found and not found[1] and found[0].status == "PENDING" else None
         if att and attested_version(att) < 2 and mine is None:
             out["book_note"] = "Confirmed under record v1, before bookings could be created from a confirmation; book it manually."

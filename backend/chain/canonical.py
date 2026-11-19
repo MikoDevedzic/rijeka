@@ -58,6 +58,7 @@ Rules (a verifier in any language must reproduce these exactly):
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any, Iterable
@@ -558,15 +559,47 @@ TRADE_FIELDS_V3_SWAPTION = ("asset_class", "instrument_type", "structure", "noti
 _BUYS, _SELLS = ("BUY", "LONG"), ("SELL", "SHORT", "WRITE")
 
 
-def _premium_v3(terms: dict) -> dict:
-    """{premium_amount, premium_currency, premium_payment_date}: the amount unsigned, or all three null where none was booked."""
+_AMOUNT_MAX = Decimal("1e15")
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}")
+_CCY = re.compile(r"^[A-Z]{3}$")
+
+
+def _amount(x: Any, what: str) -> Decimal:
+    """A number from the booking's free-form terms: finite and of a size money has. The terms are a JSON blob the
+    booker writes; what is read from it into a record both parties sign is checked here, not trusted."""
+    if isinstance(x, bool) or not isinstance(x, (int, float, Decimal, str)):
+        raise ValueError(f"{what} is not a number")
+    try:
+        d = Decimal(str(x).strip())
+    except ArithmeticError:
+        raise ValueError(f"{what} is not a number")
+    if not d.is_finite() or abs(d) >= _AMOUNT_MAX:
+        raise ValueError(f"{what} is not a number a trade can carry")
+    return d
+
+
+def _iso_date(x: Any, what: str) -> str:
+    s = x.isoformat() if isinstance(x, (date, datetime)) else str(x or "")
+    if not _ISO_DATE.match(s):
+        raise ValueError(f"{what} is not a date")
+    try:
+        return date.fromisoformat(s[:10]).isoformat()
+    except ValueError:
+        raise ValueError(f"{what} is not a date")
+
+
+def _premium_v3(terms: dict) -> tuple[dict, Decimal | None]:
+    """({premium_amount, premium_currency, premium_payment_date}, the amount as booked with its sign): the record's
+    amount is unsigned; all three are null where none was booked."""
     amt = terms.get("premium_amount")
     if amt in (None, ""):
-        return {"premium_amount": None, "premium_currency": None, "premium_payment_date": None}
-    if not terms.get("premium_currency") or not terms.get("premium_payment_date"):
-        raise ValueError("a premium needs its currency and its payment date")
-    return {"premium_amount": _num_str(abs(Decimal(str(amt)))), "premium_currency": str(terms["premium_currency"]).upper(),
-            "premium_payment_date": str(terms["premium_payment_date"])[:10]}
+        return {"premium_amount": None, "premium_currency": None, "premium_payment_date": None}, None
+    d = _amount(amt, "the premium")
+    ccy = str(terms.get("premium_currency") or "").upper()
+    if not _CCY.match(ccy) or not terms.get("premium_payment_date"):
+        raise ValueError("a premium needs its currency (three letters) and its payment date")
+    return {"premium_amount": _num_str(abs(d)), "premium_currency": ccy,
+            "premium_payment_date": _iso_date(terms["premium_payment_date"], "the premium's payment date")}, d
 
 
 def _swaption_option_v3(trade: Any, legs: list, own: str, cp: str) -> dict:
@@ -576,17 +609,28 @@ def _swaption_option_v3(trade: Any, legs: list, own: str, cp: str) -> dict:
         raise ValueError("a swaption's record needs the swap it delivers: one fixed leg and one floating leg")
     # the side: bought unless the booking says sold (the valuations read it the same way: a booking with no side is long)
     buyer, seller = _sides(terms.get("side") or "BUY", own, cp, pays=_BUYS, gets=_SELLS)
-    if "is_payer" in terms and terms["is_payer"] is not None:
-        is_payer = bool(terms["is_payer"])
+    # the right, read as the valuations read it (terms.is_payer where the booking has it, else the ticket's PAY or
+    # RECEIVE); a booking that holds the key and no answer is refused, since the valuations would read it as a receiver
+    if "is_payer" in terms:
+        if not isinstance(terms["is_payer"], bool):
+            raise ValueError("a swaption's record needs its right: payer or receiver")
+        is_payer = terms["is_payer"]
     elif str(terms.get("direction") or "").upper() in ("PAY", "RECEIVE"):
         is_payer = str(terms["direction"]).upper() == "PAY"
     else:
         raise ValueError("a swaption's record needs its right: payer or receiver")
+    # the legs are booked as the holder's swap (the fixed leg paid by a payer swaption's holder), on both sides: a
+    # booking whose legs say otherwise is not signed, and one changed after signing no longer re-derives
+    if str(_get(fixed[0], "direction") or "").upper() != ("PAY" if is_payer else "RECEIVE"):
+        raise ValueError("a swaption's legs are booked as its holder's swap: the fixed leg's direction disagrees with the option's right")
     if not terms.get("expiry_date"):
-        raise ValueError("a swaption's record needs its expiry date")
-    expiry = str(terms["expiry_date"])[:10]
-    eff = str(_get(fixed[0], "effective_date") or "")[:10]
-    if eff and eff < expiry:
+        raise ValueError("a swaption's record needs its expiry date, which this booking does not hold: book it again from the ticket")
+    expiry = _iso_date(terms["expiry_date"], "the expiry date")
+    for l in legs:
+        if not _get(l, "effective_date") or not _get(l, "maturity_date"):
+            raise ValueError("the swap a swaption delivers needs its effective and termination dates on each leg")
+    eff = _iso_date(_get(fixed[0], "effective_date"), "the delivered swap's effective date")
+    if eff < expiry:
         raise ValueError("the swap a swaption delivers cannot start before the option expires")
     # the strike is the fixed rate of the swap delivered, as the leg holds it (eight decimals); the booking's own copy
     # of it in the terms must be the same rate
@@ -594,12 +638,20 @@ def _swaption_option_v3(trade: Any, legs: list, own: str, cp: str) -> dict:
     if strike in (None, ""):
         raise ValueError("a swaption's record needs its strike")
     eight = Decimal("0.00000001")
-    if terms.get("strike") not in (None, "") and Decimal(str(terms["strike"])).quantize(eight) != Decimal(str(strike)).quantize(eight):
+    # the valuations read terms.strike where the booking has one (an empty one as nought): it must be the leg's rate
+    if terms.get("strike") is not None and _amount(terms["strike"], "the strike").quantize(eight) != _amount(strike, "the strike").quantize(eight):
         raise ValueError("a swaption's strike is the fixed rate of the swap it delivers: the booking holds two different rates")
     style = str(terms.get("exercise_type") or _get(trade, "structure") or "EUROPEAN").upper()
     if style not in ("EUROPEAN", "BERMUDAN"):
-        raise ValueError(f"a swaption is exercised EUROPEAN or BERMUDAN, got {style!r}")
+        raise ValueError("a swaption is exercised EUROPEAN or BERMUDAN")
     times = terms.get("exercise_schedule_y") if style == "BERMUDAN" else None
+    if times is not None:
+        if not isinstance(times, (list, tuple)) or len(times) > 120:
+            raise ValueError("a Bermudan's exercise times are a list of years")
+        for t in times:
+            if not (0 < _amount(t, "an exercise time") <= 100):
+                raise ValueError("an exercise time is a number of years from the trade date, up to a hundred")
+    premium, _signed = _premium_v3(terms)
     return normalise({
         "type": "SWAPTION", "buyer": buyer, "seller": seller,
         "right": "PAYER" if is_payer else "RECEIVER",        # PAYER: on exercise the buyer pays the fixed rate
@@ -607,7 +659,7 @@ def _swaption_option_v3(trade: Any, legs: list, own: str, cp: str) -> dict:
         # a Bermudan's exercise times as booked, in years from the trade date; null: exercised on the expiry date only
         "exercise_schedule_y": [_num_str(t) for t in times] if times else None,
         "strike": strike, "settlement": "PHYSICAL",
-        **_premium_v3(terms),
+        **premium,
     })
 
 
@@ -636,11 +688,25 @@ def _canonical_v3(trade: Any, legs: Iterable[Any], own_entity: Any, counterparty
         # as the buyer of the structure sees it: positive paid by that side, negative (a collar whose floor is worth
         # more) paid to it. The record holds it unsigned, with who pays and who receives.
         kind = itype.replace("IR_", "")
-        buyer, seller = _sides(terms.get("side") or "BUY", own, cp, pays=_BUYS, gets=_SELLS)
-        premium = _premium_v3(terms)
+        # who bought the structure is read from the options on the leg, which the record already holds and the
+        # valuations read: the buyer of the cap (a cap, a collar) or of the floor (a floor). The booking's own
+        # terms.side must say the same, and a collar is a cap bought from the side that buys the floor.
+        written = [o for l in out["legs"] for o in (l.get("embedded_options") or [])]
+        of = lambda t: [o for o in written if str(o.get("type") or "").upper() == t]      # noqa: E731
+        caps, floors = of("CAP"), of("FLOOR")
+        want = {"CAP": (1, 0), "FLOOR": (0, 1), "COLLAR": (1, 1)}[kind]
+        if (len(caps), len(floors)) != want or len(written) != sum(want):
+            raise ValueError(f"the record of a {kind.lower()} needs its option on the leg, with its strike: this booking's leg does not hold it")
+        lead = (caps or floors)[0]
+        buyer, seller = lead["buyer"], lead["seller"]
+        if kind == "COLLAR" and (floors[0]["buyer"], floors[0]["seller"]) != (seller, buyer):
+            raise ValueError("a collar is a cap bought from the side that buys the floor: this booking's two options are bought by the same side")
+        if terms.get("side") not in (None, "") and _sides(terms["side"], own, cp, pays=_BUYS, gets=_SELLS) != (buyer, seller):
+            raise ValueError(f"the booking says one side bought the {kind.lower()} and the option on its leg says the other")
+        premium, signed = _premium_v3(terms)
         payer = receiver = None
-        if premium["premium_amount"] is not None:
-            payer, receiver = (buyer, seller) if Decimal(str(terms["premium_amount"])) >= 0 else (seller, buyer)
+        if signed is not None:
+            payer, receiver = (buyer, seller) if signed >= 0 else (seller, buyer)
         option = normalise({"type": kind, "buyer": buyer, "seller": seller, **premium, "premium_payer": payer, "premium_receiver": receiver})
     out["option"] = option
     return out

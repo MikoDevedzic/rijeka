@@ -104,7 +104,7 @@ function premiumRows(o, letterOf) {
   const payer = o.premium_payer || o.buyer, receiver = o.premium_receiver || o.seller
   return [['Premium', `${grouped(o.premium_amount)} ${o.premium_currency || ''}`.trim(), 'fig'],
     ...(o.premium_payment_date ? [['Premium payment date', longDate(o.premium_payment_date), 'fig']] : []),
-    ...(payer && receiver ? [['Premium paid by', `${letterOf(payer)} to ${letterOf(receiver)}`, 'word']] : [])]
+    ...(payer && receiver ? [['Premium paid', `By ${letterOf(payer)} to ${letterOf(receiver)}`, 'word']] : [])]
 }
 /** A swaption's own block (record v3). */
 function swaptionRows(o, letterOf) {
@@ -113,7 +113,7 @@ function swaptionRows(o, letterOf) {
     ['Option', o.right === 'RECEIVER' ? 'Receiver swaption: the right to receive the fixed rate' : 'Payer swaption: the right to pay the fixed rate', 'word'],
     ['Exercise', words(String(o.exercise_style || '').toLowerCase()), 'word'],
     ['Expiry date', longDate(o.expiry_date), 'fig'],
-    ...(o.exercise_style === 'BERMUDAN' ? [['Exercise times', times ? `${times.join(', ')} years from the trade date` : 'On the expiry date only', times ? 'fig' : 'word']] : []),
+    ...(o.exercise_style === 'BERMUDAN' ? [['Exercise times', times ? `${times.join(', ')} years from the trade date` : 'On the expiry date only', 'word']] : []),
     ['Strike', pct(o.strike), 'fig'],
     ['Settlement', words(String(o.settlement || '').toLowerCase()), 'word'],
     ...premiumRows(o, letterOf),
@@ -154,7 +154,9 @@ export function paperOf(proof, names = {}) {
     if (capLike) {
       // the leg is the rate the options are written on and its periods: nobody pays it (its leverage is nought)
       blocks.push(...optionBlocks(l))
-      blocks.push({ title: 'The rate and its periods', rows: legRows(l).filter(([k]) => !['Leverage', 'Embedded options'].includes(k) && !(k === 'Spread' && zero(l.spread))) })
+      // (its currency and its notional are the trade's, said once above; a leg that holds another is printed)
+      blocks.push({ title: 'The rate and its periods', rows: legRows(l).filter(([k]) => !['Leverage', 'Embedded options'].includes(k) && !(k === 'Spread' && zero(l.spread))
+        && !(k === 'Currency' && l.currency === t.notional_ccy) && !(k === 'Notional' && String(l.notional) === String(t.notional))) })
     } else if (swaption) {
       // the swap delivered if the buyer exercises: its own dates are the leg's (the trade block holds none)
       blocks.push({ title: `Swap delivered on exercise · ${legWord(l)} leg · ${letterOf(l.payer)} pays ${letterOf(l.receiver)}`,

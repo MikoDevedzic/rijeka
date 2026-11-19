@@ -14,12 +14,13 @@ export function optionLines(s) {
     : null
   if (o?.type === 'SWAPTION') {
     const pct = Number.isFinite(Number(f.strike)) ? `${(Number(f.strike) * 100).toFixed(6).replace(/\.?0+$/, '')}%` : f.strike
-    out.push({ lead: `${o.you === 'BUY' ? 'You buy' : 'You sell'} a ${f.right === 'RECEIVER' ? 'receiver' : 'payer'} swaption`,
-      rest: [`${String(f.exercise_style || '').toLowerCase()}`, `expiry ${f.expiry_date}`, `strike ${pct}`, premium || 'no premium in the record'].filter(Boolean).join(' · ') })
+    const style = String(f.exercise_style || '').toLowerCase()
+    out.push({ lead: `${o.you === 'BUY' ? 'You buy' : 'You sell'} a ${style ? `${style.charAt(0).toUpperCase()}${style.slice(1)} ` : ''}${f.right === 'RECEIVER' ? 'receiver' : 'payer'} swaption`,
+      rest: [`expiry ${f.expiry_date}`, `strike ${pct}`, premium || 'no premium in the record'].filter(Boolean).join(' · ') })
   }
   for (const e of s?.embedded || []) {
-    out.push({ lead: `${e.you === 'BUY' ? 'You buy' : 'You sell'} the ${String(e.type || 'option').toLowerCase()}`, rest: e.strike ? `strike ${e.strike}` : '' })
+    out.push({ lead: `${e.you === 'BUY' ? 'You buy' : 'You sell'} the ${String(e.type || 'option').toLowerCase()}${e.strike ? `, strike ${e.strike}` : ''}`, rest: '' })
   }
-  if (o && o.type !== 'SWAPTION' && premium) out.push({ lead: 'Premium', rest: premium.replace(/^premium /, '') })
+  if (o && o.type !== 'SWAPTION') out.push({ lead: 'Premium', rest: premium ? premium.replace(/^premium /, '') : 'none in the record' })
   return out
 }

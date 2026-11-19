@@ -543,6 +543,23 @@ def _own_trade(body, db: Session, user: dict):
     return None
 
 
+def _two_floats_that_cancel(it: dict) -> bool:
+    """A swap of two floating legs that is worth nothing on every path: both forecast off the one curve of their
+    currency, paid opposite ways, on the same notional, at a leverage of one and with no spread. Any other swap of
+    two floating legs (a basis spread, unequal notionals) has exposure, and the run does not say it has none."""
+    if it.get("kind") != "SWAP" or it.get("caplets") or len(it.get("legs") or []) != 2:
+        return False
+    a, b = (lg for lg, _s in it["legs"])
+    num = lambda lg, k, d: float(lg.get(k) if lg.get(k) not in (None, "") else d)      # noqa: E731
+    return bool(all(str(lg.get("leg_type", "")).upper() == "FLOAT" for lg in (a, b))
+                and {str(a.get("direction", "")).upper(), str(b.get("direction", "")).upper()} == {"PAY", "RECEIVE"}
+                and str(a.get("currency", "")).upper() == str(b.get("currency", "")).upper()
+                and str(a.get("effective_date"))[:10] == str(b.get("effective_date"))[:10]
+                and str(a.get("maturity_date"))[:10] == str(b.get("maturity_date"))[:10]
+                and abs(num(a, "notional", 0) - num(b, "notional", 0)) < 1e-6
+                and all(abs(num(lg, "leverage", 1) - 1.0) < 1e-12 and abs(num(lg, "spread", 0)) < 1e-12 for lg in (a, b))
+                and not any(lg.get("notional_schedule") or lg.get("spread_schedule") for lg in (a, b)))
+
 def _trade_paths(trade, db: Session, user: dict, a: float, sigma: float, curve, val_date: date, n_paths: int, seed: int) -> dict:
     """The trade's own value on Hull-White paths, in its own currency: (paths × months) from the first month after
     the valuation date, by the credit engine's valuation of the trade's legs on their own dates (ccr/valuation.py:
@@ -615,8 +632,7 @@ def _trade_paths(trade, db: Session, user: dict, a: float, sigma: float, curve, 
             # as its European: exercised at the expiry only. A swap of two floating legs is valued off the one curve of
             # its currency, so it is worth nothing on every path and only capital is charged.
             "run_as": "EUROPEAN" if it["kind"] == "SWAPTION" and str(getattr(trade, "structure", "") or "").upper() == "BERMUDAN" else None,
-            "one_curve": bool(it["kind"] == "SWAP" and not it.get("caplets") and len(it["legs"]) >= 2
-                              and all(str(lg.get("leg_type", "")).upper() == "FLOAT" for lg, _s in it["legs"])),
+            "one_curve": _two_floats_that_cancel(it),
             "grid": [d.isoformat() for d in p.grid[1:]],
             # each path's discounting over the curve's, per grid date: the charges read the exposure discounted on its path
             "deflator": deflator_of(p, key)}

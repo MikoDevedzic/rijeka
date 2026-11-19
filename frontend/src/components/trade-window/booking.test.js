@@ -173,8 +173,8 @@ describe('IR_SWAPTION', () => {
   it('a premium entered in currency is booked as entered; none entered books null', () => {
     expect(buildBookingBody({ ...swaptionState, premium: '150000', premiumMode: 'DOLLAR' }, 'PAY', extras).terms.premium_amount).toBe(150_000)
     expect(buildBookingBody({ ...swaptionState, premium: '' }, 'PAY', extras).terms.premium_amount).toBeNull()
-    // priced and no premium typed: what the option was priced at, as its buyer pays it (a sold option's price is negative)
-    expect(buildBookingBody({ ...swaptionState, premium: '', optionSide: 'SELL' }, 'PAY', { ...extras, priced: { npv: -165478.07, strike: 0.04, vol_bp: 86.5 } }).terms.premium_amount).toBe(165478.07)
+    // a premium is entered, never the model's value in its place: priced, and none typed, books none
+    expect(buildBookingBody({ ...swaptionState, premium: '', optionSide: 'SELL' }, 'PAY', { ...extras, priced: { npv: -165478.07, strike: 0.04, vol_bp: 86.5 } }).terms.premium_amount).toBeNull()
     expect(buildBookingBody({ ...swaptionState, premium: '150000', premiumMode: 'DOLLAR' }, 'PAY', { ...extras, priced: { npv: 165478.07, strike: 0.04, vol_bp: 86.5 } }).terms.premium_amount).toBe(150_000)
   })
 })
@@ -197,7 +197,7 @@ describe('IR_CAP / IR_FLOOR / IR_COLLAR', () => {
       option: 'CAP', side: 'BUY',
       cap_rate: 0.045, floor_rate: null,
       vol_bp: 91.2,                       // the priced vol when no override was typed
-      premium_amount: 123_456.78,         // the priced NPV when no premium was typed
+      premium_amount: null,               // none typed: none booked (the price is not put in its place)
       premium_currency: 'USD', premium_payment_date: '2026-11-04',
       direction: 'PAY', float_direction: 'RECEIVE',
       float_index: 'SOFR', float_reset_freq: 'DAILY', float_pay_freq: 'QUARTERLY',
@@ -230,7 +230,7 @@ describe('IR_CAP / IR_FLOOR / IR_COLLAR', () => {
     const body = buildBookingBody({ ...capState, productKey: 'RATES_COLLAR', floorRate: '3.0' }, 'PAY',
                                   { ...extras, priced: { net_npv: -2_500, cap_vol_bp: 90.1 } })
     expect(body.instrument_type).toBe('IR_COLLAR')
-    expect(body.terms).toMatchObject({ option: 'COLLAR', side: 'BUY', cap_rate: 0.045, floor_rate: 0.03, vol_bp: 90.1, premium_amount: -2_500 })
+    expect(body.terms).toMatchObject({ option: 'COLLAR', side: 'BUY', cap_rate: 0.045, floor_rate: 0.03, vol_bp: 90.1, premium_amount: null })
     expect(body.legs).toHaveLength(1)
     expect(body.legs[0].leg_ref).toBe('OPT-1')
     expect(body.legs[0].embedded_options).toEqual([
@@ -243,13 +243,13 @@ describe('IR_CAP / IR_FLOOR / IR_COLLAR', () => {
     expect(sold.legs[0].embedded_options.map(e => [e.type, e.direction])).toEqual([['CAP', 'SELL'], ['FLOOR', 'BUY']])
   })
 
-  it('books a sold floor left at the money at the rate the price struck it, the premium as the buyer pays it', () => {
+  it('books a sold floor left at the money at the rate the price struck it, and no premium where none is entered', () => {
     const { capRate: _c, floorRate: _f, ...untouched } = capState
-    // the price of a sold option carries its sign: the value is negative, the premium is what the buyer pays us
+    // the price of a sold option carries its sign; it is not booked as the premium (a premium is entered)
     const priced = { instrument: 'IR_FLOOR', floor_rate: 0.03121416, vol_bp: 88.4, npv: -41_250.5 }
     const body = buildBookingBody({ ...untouched, productKey: 'RATES_FLOOR', optionSide: 'SELL' }, 'PAY', { ...extras, priced })
     expect(body.instrument_type).toBe('IR_FLOOR')
-    expect(body.terms).toMatchObject({ option: 'FLOOR', side: 'SELL', cap_rate: null, floor_rate: 0.03121416, vol_bp: 88.4, premium_amount: 41_250.5 })
+    expect(body.terms).toMatchObject({ option: 'FLOOR', side: 'SELL', cap_rate: null, floor_rate: 0.03121416, vol_bp: 88.4, premium_amount: null })
     expect(body.legs[0].embedded_options).toEqual([
       { type: 'FLOOR', direction: 'SELL', default_strike: 0.03121416, strike_schedule: [{ date: '2026-11-04', strike: 0.03121416 }] },
     ])

@@ -370,10 +370,9 @@ export function buildSwaptionBookingBody(state, direction, extras = {}) {
       : {}),
     strike,
     vol_bp: isFinite(volBp) ? volBp : null,
-    // the premium typed; else what the option was priced at, as its buyer pays it (unsigned: the price carries the
-    // side's sign). Until 0.61.0 an untyped premium was booked as none, where a cap's was booked at its price: the
-    // signed record of a swaption states its premium (record v3).
-    premium_amount: premiumAmount(state, notional) ?? (Number.isFinite(Number(extras.priced?.npv)) && extras.priced?.npv != null ? Math.abs(Number(extras.priced.npv)) : null),
+    // the premium is what the desk enters (typed here, or a PREMIUM fee: fees.withFees), never the model's value put
+    // in its place: the model's value is a mid, and a premium is that with the charges on top
+    premium_amount: premiumAmount(state, notional),
     premium_currency: ccy,
     premium_payment_date: state.settleDate || state.effDate,
   }
@@ -406,18 +405,14 @@ export function buildCapFloorBookingBody(state, direction, extras = {}) {
   if (typedVol.problem) throw new Error(typedVol.problem)
   const volOv    = typedVol.bp ?? NaN
   const pricedVol = priced?.vol_bp ?? priced?.cap_vol_bp ?? null
-  // The premium as the bought side sees it, as it always was booked: what a cap or a floor is worth, and a collar's
-  // cap less its floor (negative when the floor is worth more: the buyer is paid). The price carries the side's
-  // sign since 0.59.0 (a sold option's value is negative), so a sold ticket's is turned back.
-  const ours      = priced?.npv ?? priced?.net_npv
-  const pricedNpv = ours != null && Number.isFinite(Number(ours))
-    ? Number(ours) * ((state.optionSide || CAPFLOOR_DEFAULTS.optionSide) === 'SELL' ? -1 : 1) : null
   const terms = {
     option: INSTRUMENT_OF[state.productKey].replace('IR_', ''),
     side: state.optionSide || CAPFLOOR_DEFAULTS.optionSide,
     cap_rate: cap, floor_rate: floor,
     vol_bp: isFinite(volOv) ? volOv : pricedVol,
-    premium_amount: premiumAmount(state, notional) ?? pricedNpv,
+    // the premium is what the desk enters (typed, or a PREMIUM fee), never the model's value in its place. Until
+    // 0.61.0 a cap, a floor and a collar with no premium entered were booked with the price as their premium.
+    premium_amount: premiumAmount(state, notional),
     premium_currency: ccy,
     premium_payment_date: state.settleDate || state.effDate,
     direction, float_direction: 'RECEIVE',

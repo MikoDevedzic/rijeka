@@ -153,8 +153,15 @@ product is still signed under v2, byte for byte.
   The legs are the swap delivered on exercise, each with the payer it will have
   if the buyer exercises. The `trade` block holds no effective or maturity date.
 - **Cap, floor, collar**: the leg is v2's (strikes, buyer and seller of each
-  option); the block holds the premium unsigned, with `premium_payer` and
-  `premium_receiver`.
+  option); the block names the buyer and seller of the structure, read from the
+  option on the leg (a collar's from its cap), and holds the premium unsigned,
+  with `premium_payer` and `premium_receiver`.
+
+A premium is in the record only where the desk entered one; the model's value is
+not put in its place. A booking the record cannot state without a guess is
+refused, with the reason (no expiry date, a strike that is not the delivered
+swap's rate, legs booked against the option's right, no option on a cap's leg, a
+premium that is not a bounded number with a currency and a date).
 
 A v2 confirmation of one of these is re-derived under v2, as always; its paper
 confirmation says what the record does not hold. The counterparty's own booking

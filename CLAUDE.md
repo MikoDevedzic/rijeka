@@ -361,3 +361,12 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   record is written down field by field before it is signed, and a term that moves its value is in the bytes.
 - A record's format changes only by a new version signed by the instruments that need it; every other record's
   bytes are pinned before and after, and an old confirmation is re-derived under its own version.
+- A sentence the screen says about a kind of trade is true of every trade the code gives it to: "both legs off
+  one curve: no exposure on the paths" was set for any swap of two floating legs, and is true only where they
+  cancel (same notional and dates, no spread). The condition in the code is the sentence's condition.
+- When a record's shape changes, every reader of the record is found by searching for its keys, not by following
+  the routes: the command-line countersigner prints the record to a signer and was not in the change until a
+  review found it. And a trade already confirmed is always read under its attestation's version, in every place
+  that builds its record, not only where it is verified.
+- A value the system can compute is not a term the parties agreed: a premium is entered, never filled in with the
+  model's value, which is a mid.

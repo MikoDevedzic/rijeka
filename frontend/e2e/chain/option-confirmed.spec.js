@@ -6,7 +6,7 @@
 import { test, expect, expectClean, expectNoHorizontalOverflow, API } from '../fixtures.js'
 
 const SHOTS = 'e2e/.out/shots'
-async function confirmed(app, product, route, setup) {
+async function confirmed(app, product, route, setup, afterPrice = async () => {}) {
   await app.goto('/blotter')
   await app.getByText('+ NEW TRADE').first().click()
   const win = app.locator('.tbw-window')
@@ -18,6 +18,7 @@ async function confirmed(app, product, route, setup) {
   const priced = app.waitForResponse(r => r.url() === `${API}${route}` && r.request().method() === 'POST' && r.ok(), { timeout: 90_000 })
   await win.getByRole('button', { name: '▶ PRICE' }).click()
   const quote = await (await priced).json()
+  await afterPrice(win)
   const booking = app.waitForResponse(r => r.url().includes('/api/book/trade') && r.request().method() === 'POST', { timeout: 60_000 })
   await win.getByRole('button', { name: /BOOK TRADE/ }).click()
   const sent = (await booking).request().postDataJSON()
@@ -41,9 +42,14 @@ test('a sold swaption confirmed on a chain: the record names who bought it, its 
   const { quote, sent, att, verify, sheet } = await confirmed(app, 'IR SWAPTION', '/api/price/swaption', async (win) => {
     await win.getByRole('button', { name: 'SELL', exact: true }).first().click()
     await expect(win.getByTestId('swaption-underlying')).toBeVisible()
+  }, async (win) => {
+    // the premium is entered by the desk: here the model's value, taken with the button that offers it
+    const block = win.getByTestId('fees-block')
+    await block.scrollIntoViewIfNeeded()
+    await block.getByRole('button', { name: /MODEL PREMIUM/ }).click()
   })
   expect(quote.npv, 'a sold option is worth less than nothing to its seller').toBeLessThan(0)
-  expect(sent.terms.premium_amount, 'no premium typed: booked at the price, as its buyer pays it').toBeCloseTo(-quote.npv, 2)
+  expect(sent.terms.premium_amount, 'the premium entered, as its buyer pays it').toBeCloseTo(-quote.npv, 0)
   expect(att.schema_version).toBe(3)
   expect(att.anchor.anchored).toBe(true)
   expect(verify.hash_matches).toBe(true); expect(verify.on_chain_confirmed).toBe(true)
@@ -51,7 +57,7 @@ test('a sold swaption confirmed on a chain: the record names who bought it, its 
   expect(rec.option).toMatchObject({ type: 'SWAPTION', buyer: bank, seller: booker, right: 'PAYER', exercise_style: 'EUROPEAN', settlement: 'PHYSICAL',
     expiry_date: sent.terms.expiry_date, premium_currency: 'USD' })
   expect(Number(rec.option.strike)).toBeCloseTo(quote.strike, 8)
-  expect(Number(rec.option.premium_amount)).toBeCloseTo(-quote.npv, 2)
+  expect(Number(rec.option.premium_amount)).toBeCloseTo(-quote.npv, 0)
   const fixed = rec.legs.find(l => l.leg_type === 'FIXED')
   expect(fixed.payer, 'if the buyer exercises a payer swaption, the buyer pays the fixed rate').toBe(bank)
   expect(fixed.effective_date > rec.option.expiry_date, 'the swap delivered starts after the option expires').toBe(true)
@@ -61,7 +67,7 @@ test('a sold swaption confirmed on a chain: the record names who bought it, its 
   await expect(sheet).toContainText('Interest rate swaption')
   const parties = sheet.locator('.paper-party .cert-caps')
   await expect(parties.nth(0)).toContainText('Party A · Seller'); await expect(parties.nth(2)).toContainText('Party B · Buyer')
-  for (const words of ['Option · Party B buys from Party A', 'Payer swaption: the right to pay the fixed rate', 'Expiry date', 'Premium paid by', 'Party B to Party A',
+  for (const words of ['Option · Party B buys from Party A', 'Payer swaption: the right to pay the fixed rate', 'Expiry date', 'Premium paid', 'By Party B to Party A',
     'Swap delivered on exercise · fixed leg · Party B pays Party A', 'record schema v3']) await expect(sheet).toContainText(words)
   await expect(sheet).not.toContainText('Pays fixed')
   await expect(app.getByTestId('paper-gap')).toHaveCount(0)
@@ -78,14 +84,14 @@ test('a collar confirmed on a chain: each option with its buyer and strike, the 
   expect(att.schema_version).toBe(3)
   expect(verify.hash_matches).toBe(true); expect(verify.on_chain_confirmed).toBe(true)
   const rec = verify.canonical, booker = att.parties.own.lei, bank = att.parties.counterparty.lei
-  const net = quote.net_npv
-  expect(rec.option).toMatchObject({ type: 'COLLAR', buyer: booker, seller: bank, premium_payer: net >= 0 ? booker : bank, premium_receiver: net >= 0 ? bank : booker })
-  expect(Number(rec.option.premium_amount)).toBeCloseTo(Math.abs(net), 2)
+  expect(Number.isFinite(quote.net_npv)).toBe(true)
+  // no premium was entered on this ticket: the record holds none, and does not put the price in its place
+  expect(rec.option).toEqual({ type: 'COLLAR', buyer: booker, seller: bank, premium_amount: null, premium_currency: null, premium_payment_date: null, premium_payer: null, premium_receiver: null })
   const options = rec.legs[0].embedded_options
   expect(options.find(o => o.type === 'CAP')).toMatchObject({ default_strike: '0.045', buyer: booker, seller: bank })
   expect(options.find(o => o.type === 'FLOOR')).toMatchObject({ default_strike: '0.03', buyer: bank, seller: booker })
   await expect(sheet).toContainText('Interest rate collar')
-  for (const words of ['Party A · Buys the cap, sells the floor', 'Cap · Party A buys from Party B', 'Floor · Party B buys from Party A', 'The rate and its periods', 'Premium paid by'])
+  for (const words of ['Party A · Buys the cap, sells the floor', 'Cap · Party A buys from Party B', 'Floor · Party B buys from Party A', 'The rate and its periods', 'None in the record'])
     await expect(sheet).toContainText(words)
   const text = await sheet.innerText()
   expect(text, 'a strike is a percentage on the sheet').toMatch(/Strike\s+4\.5 %/)

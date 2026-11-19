@@ -282,8 +282,24 @@ def test_a_swaption_record_is_refused_where_the_booking_does_not_say_what_the_op
         canonical_payload(_swaption(expiry_date="2028-01-10"), _delivered(), BOOKER, CP)
     with pytest.raises(ValueError, match="one fixed leg and one floating leg"):
         canonical_payload(_swaption(), _delivered()[:1], BOOKER, CP)
-    with pytest.raises(ValueError, match="currency and its payment date"):
+    with pytest.raises(ValueError, match="its payment date"):
         canonical_payload(_swaption(premium_payment_date=None), _delivered(), BOOKER, CP)
+    # the terms are a blob the booker writes: what the valuations would read another way than the record is refused
+    for bad, why in (({"strike": ""}, "not a number"), ({"is_payer": None}, "payer or receiver"), ({"premium_amount": "abc"}, "not a number"),
+                     ({"premium_amount": "1E+999000"}, "a trade can carry"), ({"premium_amount": "NaN"}, "a trade can carry"),
+                     ({"premium_currency": "DOLLARS"}, "three letters"), ({"premium_payment_date": "soon"}, "not a date"),
+                     ({"expiry_date": "2027-13-45"}, "not a date"), ({"exercise_type": "X" * 500}, "EUROPEAN or BERMUDAN$"),
+                     ({"exercise_type": "BERMUDAN", "exercise_schedule_y": [1, "x"]}, "not a number"),
+                     ({"exercise_type": "BERMUDAN", "exercise_schedule_y": [1, 500]}, "up to a hundred"),
+                     ({"exercise_type": "BERMUDAN", "exercise_schedule_y": list(range(1, 200))}, "a list of years")):
+        with pytest.raises(ValueError, match=why):
+            canonical_payload(_swaption(**bad), _delivered(), BOOKER, CP)
+    # legs turned after signing (or booked the other way round) do not re-derive: the fixed leg is the holder's
+    with pytest.raises(ValueError, match="disagrees with the option's right"):
+        canonical_payload(_swaption(), _delivered(False), BOOKER, CP)
+    undated = _delivered(); undated[1]["maturity_date"] = None
+    with pytest.raises(ValueError, match="effective and termination dates"):
+        canonical_payload(_swaption(), undated, BOOKER, CP)
     # no premium booked: the record says none, it does not make one up
     none = canonical_payload(_swaption(premium_amount=None), _delivered(), BOOKER, CP)["option"]
     assert (none["premium_amount"], none["premium_currency"], none["premium_payment_date"]) == (None, None, None)
@@ -332,6 +348,23 @@ def test_the_counterparty_s_own_booking_of_a_cap_is_the_same_record():
     ours = canonical_payload(t, [vars(r) for r in rows], BOOKER, CP)
     theirs = canonical_payload({**t, "trade_ref": "THEIRS", "terms": theirs_terms}, mirrored, CP, BOOKER)
     assert ours == theirs and ours["option"]["buyer"] == CP["lei"]
-    # with the side left as the booker's (as it was), the premium would be paid the wrong way
-    wrong = canonical_payload({**t, "trade_ref": "THEIRS", "terms": _mirror_terms(t["terms"])}, mirrored, CP, BOOKER)
-    assert {b["field"] for b in compare(ours, wrong)} >= {"who buys the option", "who pays the premium"}
+    # with the side left as the booker's (as it was), the booking disagrees with the option on its own leg: no record
+    with pytest.raises(ValueError, match="says one side bought the cap and the option on its leg says the other"):
+        canonical_payload({**t, "trade_ref": "THEIRS", "terms": _mirror_terms(t["terms"])}, mirrored, CP, BOOKER)
+
+
+def test_a_cap_s_buyer_is_read_from_the_option_on_its_leg_and_a_leg_without_one_is_refused():
+    t, legs = _cap("CAP", "SELL")
+    del t["terms"]["side"]                                  # an API booking with no side: the leg says who sold
+    o = canonical_payload(t, legs, BOOKER, CP)["option"]
+    assert (o["buyer"], o["seller"], o["premium_payer"]) == (CP["lei"], BOOKER["lei"], CP["lei"])
+    t, legs = _cap("CAP", "BUY"); legs[0]["embedded_options"] = []
+    with pytest.raises(ValueError, match="needs its option on the leg"):
+        canonical_payload(t, legs, BOOKER, CP)
+    t, legs = _cap("FLOOR", "BUY")                           # a floor whose leg holds a cap
+    with pytest.raises(ValueError, match="needs its option on the leg"):
+        canonical_payload(t, legs, BOOKER, CP)
+    t, legs = _cap("COLLAR", "BUY", 100, [{"type": "CAP", "direction": "BUY", "default_strike": Decimal("0.045"), "strike_schedule": []},
+                                          {"type": "FLOOR", "direction": "BUY", "default_strike": Decimal("0.03"), "strike_schedule": []}])
+    with pytest.raises(ValueError, match="bought by the same side"):
+        canonical_payload(t, legs, BOOKER, CP)
