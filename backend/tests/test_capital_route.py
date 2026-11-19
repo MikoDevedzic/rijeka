@@ -141,3 +141,46 @@ def test_route_needs_a_trade(monkeypatch):
     with pytest.raises(HTTPException) as e:
         capital_trade(CapitalTradeRequest(), db=None, user={"sub": "u"})
     assert e.value.status_code == 422
+
+
+def test_saccr_mapping_of_a_cap_a_floor_and_a_collar_is_of_options_with_their_own_side():
+    """0.60.0: the three are in a netting set, valued as their leg is (kind SWAP). Their capital rows are not a swap's:
+    a cap is a call on the rate and a floor a put (CRE52.40), each with its side. As a swap with no fixed leg a sold
+    cap or a bought floor would have been δ = +1 and added to a hedging set it offsets (found in review)."""
+    import math
+    asof = date(2026, 11, 2)
+
+    def trade(kind, options, ref):
+        leg = {"leg_ref": "OPT-1", "leg_seq": 1, "leg_type": "FLOAT", "direction": "RECEIVE", "currency": "USD", "notional": 1e7, "payment_frequency": "QUARTERLY",
+               "day_count": "ACT/360", "bdc": "MOD_FOLLOWING", "payment_lag": 2, "leverage": 0, "spread": 0, "embedded_options": options}
+        t = hypothetical_trade({"instrument_type": kind, "notional": 1e7, "notional_ccy": "USD", "trade_date": "2026-11-02", "effective_date": "2026-11-04",
+                                "maturity_date": "2031-11-04", "terms": {}, "legs": [leg]}, None, "u")
+        t.trade_ref = ref
+        return t
+    cap = lambda side: [{"type": "CAP", "direction": side, "default_strike": 0.045}]
+    floor = lambda side: [{"type": "FLOOR", "direction": side, "default_strike": 0.03}]
+    df = lambda t: math.exp(-0.0375 * t)
+    ns = NettingSet(None, {"sub": "u"}, [trade("IR_CAP", cap("BUY"), "C+"), trade("IR_CAP", cap("SELL"), "C-"), trade("IR_FLOOR", floor("BUY"), "F+"),
+                                         trade("IR_FLOOR", floor("SELL"), "F-"), trade("IR_COLLAR", cap("BUY") + floor("SELL"), "K")], asof)
+    assert len(ns.items) == 5 and not ns.skipped
+    rows, notes = from_netting_set(ns, None, {"USD": 1.0}, asof, {"USD": df})
+    by = {}
+    for r in rows:
+        by.setdefault(r.trade_ref, []).append(r)
+    assert all(r.asset_class == "IR" and r.hedging_set == "USD" and r.notional == 1e7 and r.end_y == pytest.approx(5.0, abs=0.02) for r in rows)
+    c_plus, c_minus, f_plus, f_minus = by["C+"][0].delta, by["C-"][0].delta, by["F+"][0].delta, by["F-"][0].delta
+    assert 0 < c_plus < 1 and c_minus == pytest.approx(-c_plus)                 # a bought cap is long the rate, a sold one short it
+    assert -1 < f_plus < 0 and f_minus == pytest.approx(-f_plus)                # a bought floor is short the rate
+    assert [round(r.delta, 9) for r in by["K"]] == [round(c_plus, 9), round(f_minus, 9)]     # a bought collar: the cap held, the floor written, both long the rate
+    # the standard's delta, by hand: Φ(d), d = (ln(P/K) + σ²T/2)/(σ√T), σ = 50 %, P the strip's forward, T its last period's start
+    periods = ns.items[0]["caplets"][0]["periods"]
+    yrs = lambda d: (d - asof).days / 365.25
+    num = sum((df(yrs(ps)) / df(yrs(pe)) - 1.0) * df(yrs(pay)) for (ps, pe, pay, tau) in periods)
+    P = num / sum(tau * df(yrs(pay)) for (_ps, _pe, pay, tau) in periods)
+    T = yrs(periods[-1][0])
+    d = (math.log(P / 0.045) + 0.125 * T) / (0.5 * math.sqrt(T))
+    assert c_plus == pytest.approx(0.5 * (1 + math.erf(d / math.sqrt(2))), rel=1e-9)
+    assert sum("enters as one option on its strip's forward rate" in n for n in notes) == 6 and not any("two floating legs" in n for n in notes)
+    # with no curve the delta is at the money, and says so
+    _rows, notes0 = from_netting_set(NettingSet(None, {"sub": "u"}, [trade("IR_CAP", cap("BUY"), "C0")], asof), None, {"USD": 1.0}, asof, None)
+    assert any("taken at the money" in n for n in notes0) and _rows[0].delta == pytest.approx(0.5 * (1 + math.erf((0.125 * T) / (0.5 * math.sqrt(T)) / math.sqrt(2))), rel=1e-9)

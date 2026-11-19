@@ -571,8 +571,13 @@ def _trade_paths(trade, db: Session, user: dict, a: float, sigma: float, curve, 
     ccy = it["ccy"]
     # what one run may cost: the trade is valued on every path at every monthly date (a 50-year quarterly swap at
     # 10,000 paths took 6 s when this was written, 17 November 2026); beyond that the answer is how many paths fit
-    if ns.months * n_paths > RATES_RUN_MAX_WORK:
-        fits = max(200, int(RATES_RUN_MAX_WORK / ns.months // 100 * 100))
+    # A cap's or a floor's period is a formula of its own at every date while a coupon is a product: a 30-year
+    # quarterly cap took 2.2 s at 1,000 paths where the swap of that length takes a tenth of it (the independent
+    # reviewer, 19 November 2026), so the count of its periods weighs on what fits.
+    strips = sum(len(c["periods"]) for c in it.get("caplets") or [])
+    weight = 1.0 + strips / 30.0
+    if ns.months * n_paths * weight > RATES_RUN_MAX_WORK:
+        fits = max(200, int(RATES_RUN_MAX_WORK / (ns.months * weight) // 100 * 100))
         raise HTTPException(status_code=422, detail=f"this trade runs {ns.months} monthly dates; at {n_paths} paths that is more than one run takes: {fits} paths fit")
     key = f"RATES:{C.CURVE_OF.get(ccy, ccy + '_OIS')}"
     calib = C.Calibration("RISK_NEUTRAL", {key: C.Factor(key, "RATES", a=float(a), sigma=float(sigma), source="the run's Hull-White parameters")},

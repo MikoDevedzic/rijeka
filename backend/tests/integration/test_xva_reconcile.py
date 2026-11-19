@@ -166,6 +166,20 @@ def test_a_cap_a_floor_and_a_collar_are_valued_on_the_paths(client, auth_a, ids,
     m = client.post("/api/xva/simulate", json={"paths": 1000, "seed": 7, "trade": cap, "valuation_date": net["asof"], "csa": {"preset": "BILATERAL"}}, headers=auth_a)
     assert m.status_code == 200, m.text[:300]
     assert abs(m.json()["xva"]["cva"]) < abs(tk["xva"]["cva"])
+    # what one run may cost counts a cap's periods: a thirty-year quarterly cap at ten thousand paths is told how many fit
+    long = B.cap(ids["a"], "RC-CAP-30")
+    for part in (long, *long["legs"]):
+        part["maturity_date"] = "2056-11-04"
+    _free()
+    r = client.post("/api/xva/simulate", json={"paths": 10000, "trade": long, "valuation_date": net["asof"]}, headers=auth_a)
+    assert r.status_code == 422 and "paths fit" in r.text, (r.status_code, r.text[:200])
+    fits = int(r.text.split("one run takes: ")[1].split(" paths fit")[0])
+    assert 200 <= fits < 4000, fits
+    same_swap = B.swap(ids["a"], "RC-SWAP-30")
+    for part in (same_swap, *same_swap["legs"]):
+        part["maturity_date"] = "2056-11-04"
+    _free()
+    assert client.post("/api/xva/simulate", json={"paths": 10000, "trade": same_swap, "valuation_date": net["asof"]}, headers=auth_a).status_code == 200, "a swap of that length still fits"
 
 
 def test_an_instrument_the_engine_does_not_know_is_refused_in_its_own_words(client, auth_a, ids):

@@ -324,5 +324,8 @@ def netted_paths(ns: NettingSet, paths: Paths, fx_to_usd: dict[str, float], flat
                 v = value_forward(it, paths, i, fx_to_usd, flat_base)
             V[:, i] += v
             if i == 0:
-                today.append({"trade_ref": it["trade"].trade_ref, "kind": it["kind"], "mtm_usd": float(v.mean()), "maturity": it["maturity"].isoformat()})
+                # a cap, a floor and a collar are valued as their leg is (kind SWAP) and named as what they are
+                itype = str(getattr(it["trade"], "instrument_type", "") or "").upper()
+                named = {"IR_CAP": "CAP", "INTEREST_RATE_CAP": "CAP", "IR_FLOOR": "FLOOR", "INTEREST_RATE_FLOOR": "FLOOR", "IR_COLLAR": "COLLAR", "INTEREST_RATE_COLLAR": "COLLAR"}.get(itype, it["kind"])
+                today.append({"trade_ref": it["trade"].trade_ref, "kind": named, "mtm_usd": float(v.mean()), "maturity": it["maturity"].isoformat()})
     return V, today

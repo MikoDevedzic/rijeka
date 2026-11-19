@@ -213,6 +213,16 @@ def black_on_growth(M: np.ndarray, X: float, v: float, call: bool) -> np.ndarray
     return M * norm.cdf(d1) - X * norm.cdf(d2) if call else X * norm.cdf(-d2) - M * norm.cdf(-d1)
 
 
+def period_growth(paths: Paths, key: str, Ts: float, Te: float) -> np.ndarray:
+    """What a unit grows to over a whole period, on every path: asked at every date after the period's end and again
+    for what it pays, so it is worked out once for a path set and kept on it."""
+    kept = paths.__dict__.setdefault("_period_growth", {})
+    k = (key, round(Ts, 9), round(Te, 9))
+    if k not in kept:
+        kept[k] = growth(paths, key, Ts, Te)
+    return kept[k]
+
+
 def _caplet_periods(item: dict, paths: Paths, i: int):
     """Each period of each caplet strip still to be paid at grid date i: (strip, start, end, pay in years, τ, state),
     state 'ENDED' (its amount is known on the path, waiting for its payment date) or 'OPEN'."""
@@ -236,18 +246,20 @@ def value_caplets(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float])
     key = f"RATES:{CURVE_OF.get(item['ccy'], item['ccy'] + '_OIS')}"
     t_i = float(paths.t[i])
     v = np.zeros(paths.n_paths)
-    seen = item.setdefault("_growth_var", {})
+    # kept on the path set itself, which owns the model's parameters and the grid: it goes when the paths go (kept
+    # on the item under the paths' id, another path set given that id later would have read this one's figure)
+    seen = paths.__dict__.setdefault("_growth_var", {})
     for c, Ts, Te, Tp, tau, state in _caplet_periods(item, paths, i):
         call = c["type"] == "CAP"
         X = 1.0 + tau * c["K"]
         dfp = bond(paths, key, i, Tp)
         if state == "ENDED":
-            G = growth(paths, key, Ts, Te)
+            G = period_growth(paths, key, Ts, Te)
             unit = np.maximum(G - X, 0.0) if call else np.maximum(X - G, 0.0)
         else:
             begun = Ts <= t_i + 1e-9
             M = (growth(paths, key, Ts, t_i) if begun else bond(paths, key, i, Ts)) / bond(paths, key, i, Te)
-            k = (id(paths), i, round(Ts, 9), round(Te, 9))
+            k = (key, i, round(Ts, 9), round(Te, 9))
             if k not in seen:
                 seen[k] = math.sqrt(growth_variance(paths, key, i, max(Ts, t_i), Te))
             unit = black_on_growth(M, X, seen[k], call)
@@ -273,7 +285,7 @@ def caplet_flows(item: dict, paths: Paths, fx_to_usd: dict[str, float]) -> np.nd
             step = next((i for i in range(1, len(paths.t)) if float(paths.t[i - 1]) < tp <= float(paths.t[i]) + 1e-9), None)
             if step is None:
                 continue
-            G = growth(paths, key, _years(asof, ps), _years(asof, pe))
+            G = period_growth(paths, key, _years(asof, ps), _years(asof, pe))
             X = 1.0 + tau * c["K"]
             out[:, step] -= c["sign"] * c["N"] * (np.maximum(G - X, 0.0) if call else np.maximum(X - G, 0.0)) * k
     return out
@@ -317,10 +329,16 @@ def cap_market_vol_bp(db, uid: str, asof: date, c: dict, p0, tenor_y: float) -> 
     it). Reported beside the model's; the paths do not use it."""
     from pricing.cap_floor import lookup_cap_vol
     try:
-        from api.routes.pricer import _load_cap_surface
-        rows = _load_cap_surface(db, asof.isoformat(), str(uid))
+        # the read itself, not the cached one that swallows a failure: a statement that fails leaves the session's
+        # transaction aborted, and the run goes on to use that session, so it is rolled back here as cap_vol_bp does
+        from api.routes.pricer import _read_cap_surface
+        rows = [dict(r) for r in _read_cap_surface(db, asof.isoformat(), str(uid))]
     except Exception as e:              # noqa: BLE001
         log.debug("cap surface: %s", e)
+        try:
+            db.rollback()
+        except Exception:
+            pass
         rows = []
     num = den = 0.0
     for (ps, pe, pay, tau) in c["periods"]:

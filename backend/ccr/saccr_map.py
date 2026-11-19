@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Callable, Optional
 
+from ccr import options as O
 from ccr.valuation import NettingSet, years
 from pricing.sa_ccr import SUPERVISORY, SaccrTrade, supervisory_delta
 
@@ -44,7 +45,38 @@ def from_netting_set(ns: NettingSet, mkt, fx_to_usd: dict[str, float], asof: dat
         ref = str(getattr(t, "trade_ref", "") or "")
         kind = it["kind"]
         try:
-            if kind == "SWAP":
+            if kind == "SWAP" and str(getattr(t, "instrument_type", "") or "").upper() in O.CAPS:
+                # A cap, a floor or a collar (in the set since 0.60.0): one row per option on its leg, as an option
+                # on the rate with the supervisory delta of CRE52.40 and its own side: a cap is a call on the rate, a
+                # floor a put; bought, the cap is long the rate and the floor short it. P is the forward of the
+                # strip's own periods, T the start of its last period (its latest exercise). The option is one row,
+                # not a row per caplet. (It reached this function as a swap with no fixed leg and would have been
+                # given δ = +1 whichever way it faced: a sold cap or a bought floor would have added to a hedging
+                # set it offsets. Found in review before it shipped.)
+                ccy = it["ccy"]
+                k = fx_to_usd.get(ccy, 1.0) or 1.0
+                E = max(years(asof, it["maturity"]), 0.0)
+                df = dfs[ccy] if dfs and ccy in dfs else None
+                for c in it.get("caplets") or []:
+                    live = [(ps, pe, pay, tau) for (ps, pe, pay, tau) in c["periods"] if years(asof, pay) > 0 and tau > 0]
+                    if not live:
+                        continue
+                    K = float(c["K"])
+                    P = None
+                    if df is not None:
+                        ahead = [(ps, pe, pay, tau) for (ps, pe, pay, tau) in live if years(asof, ps) >= 0]
+                        den = sum(tau * df(years(asof, pay)) for (_ps, _pe, pay, tau) in ahead)
+                        if den > 0:
+                            P = sum((df(years(asof, ps)) / df(years(asof, pe)) - 1.0) * df(years(asof, pay)) for (ps, pe, pay, _tau) in ahead) / den
+                    if P is None:
+                        P = K
+                        notes.append(f"{ref}: no curve for the strip's forward rate; the option delta is taken at the money")
+                    S_ = max(years(asof, live[0][0]), 0.0)
+                    T_e = max(years(asof, live[-1][0]), 1.0 / 365.0)
+                    delta = supervisory_delta("CALL" if c["type"] == "CAP" else "PUT", float(c["sign"]) > 0, P, K, T_e, SUPERVISORY["IR"]["vol"], _ir_shift(P, K))
+                    rows.append(SaccrTrade("IR", ccy, float(c["N"]) * k, S_, E, E, delta, trade_ref=ref))
+                    notes.append(f"{ref}: a {c['type'].lower()} enters as one option on its strip's forward rate, exercised at its last period's start (not a row per caplet)")
+            elif kind == "SWAP":
                 ccy = it["ccy"]
                 k = fx_to_usd.get(ccy, 1.0) or 1.0
                 legs = it["legs"]
