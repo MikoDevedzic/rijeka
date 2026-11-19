@@ -3,6 +3,29 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.42). Commits on `main` are the detail.
 
+## 0.59.1 · 19 November 2026
+
+**The other tabs of a rates option ticket.** The second half of the walk of the tickets: the option styles on
+currency and digital-asset tickets, spot, the NDF, the amortizing swap, and each rates option's DETAILS and
+CASHFLOWS tabs. No price changes.
+
+- **A swaption's CASHFLOWS** showed a swap made up in the browser from the option pricer's annuity: every accrual
+  exactly one year, no payment lag, and two legs 24,929 apart on ten million at the at-the-money strike, under a
+  line that said they add to about nothing. The tab now shows the legs the ticket books, valued by the leg pricer
+  on their own dates (as a stored swaption's are): they add to 4. The browser's own table is removed.
+- **A collar's CASHFLOWS** had a table with no rows. It lists the cap's periods and the floor's, each signed as it
+  is held, with each option's vol; they add to the net.
+- **DETAILS on a cap, a floor, a collar and a swaption** offered a swap's schedules of coupons, spreads and
+  notionals, and a swaption's fee schedule, that nothing read. The tab says what is the case and that the periods
+  are on CASHFLOWS; a swap keeps its schedules.
+- **A currency NDF** says the day it fixes and the day it settles beside "non-deliverable"; the price used the
+  fixing date and the ticket did not show it.
+- **An amortizing swap** says on the TRADE tab that its notional by period is set on DETAILS, and that with none
+  set it is a level notional.
+- **Walked and found sound:** American, digital, barrier, double-barrier and touch options on a currency pair and
+  on a digital asset (each prices on its first press, names its method, its vol's source and its levels), spot,
+  the NDF's value against its forward's.
+
 ## 0.59.0 · 19 November 2026
 
 **A cap, a floor and a collar are priced as they are booked.** Found by walking every ticket as a trader would:

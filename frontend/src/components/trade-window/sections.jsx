@@ -553,6 +553,13 @@ function CashflowSummaryCard({ label, value, colorKey }) {
 function CapletTable({ result, ccy }) {
   const ticketCcy = useContext(TicketCcy); const fmtPnl = (v) => inCcy(fmtPnlUsd(v), ticketCcy)
   const caplets = result.caplets || result.cap?.caplets || []
+  // a collar is two options on one leg: the cap's periods, then the floor's, each signed as it is held
+  const pct2 = (x) => (Number.isFinite(Number(x)) ? Number(x).toFixed(2) : '\u2014')
+  const groups = Array.isArray(result.floorlets)
+    ? [{ name: `CAP @ ${pct2(result.cap_rate_pct)}% \u00B7 ${result.side === 'SELL' ? 'written' : 'held'} \u00B7 vol ${Number(result.cap_vol_bp).toFixed(1)}bp`, rows: caplets },
+       { name: `FLOOR @ ${pct2(result.floor_rate_pct)}% \u00B7 ${result.side === 'SELL' ? 'held' : 'written'} \u00B7 vol ${Number(result.floor_vol_bp).toFixed(1)}bp`, rows: result.floorlets }]
+    : [{ name: null, rows: caplets }]
+  const collar  = groups.length > 1
   const npv     = result.npv != null ? result.npv : result.net_npv
   const premiumPct = result.premium_pct != null ? result.premium_pct : result.net_pct
   const nCaps   = result.n_caplets || result.cap?.n_caplets || caplets.length
@@ -568,7 +575,7 @@ function CapletTable({ result, ccy }) {
         gap: 6,
         marginBottom: 10,
       }}>
-        <CashflowSummaryCard label="OPTION NPV"
+        <CashflowSummaryCard label={collar ? 'NET NPV' : 'OPTION NPV'}
           value={fmtPnl(npv)}
           colorKey={signKey(npv)} />
         <CashflowSummaryCard label="PREMIUM %"
@@ -578,7 +585,7 @@ function CapletTable({ result, ccy }) {
           value={nCaps + (volTier ? '' : '')}
           colorKey="blue" />
         <CashflowSummaryCard label="VOL (bp)"
-          value={volBp.toFixed(1) + 'bp' + (volTier ? ' (' + volTier + ')' : '')}
+          value={collar ? `${Number(result.cap_vol_bp).toFixed(1)} / ${Number(result.floor_vol_bp).toFixed(1)}bp` : volBp.toFixed(1) + 'bp' + (volTier ? ' (' + volTier + ')' : '')}
           colorKey="amber" />
       </div>
       <div style={{ overflowX: 'auto' }}>
@@ -603,9 +610,16 @@ function CapletTable({ result, ccy }) {
               ))}
             </tr>
           </thead>
-          <tbody>
-            {caplets.map((cl, i) => (
-              <tr key={i} style={{
+          <tbody data-testid="caplet-rows">
+            {groups.flatMap((g, gi) => [
+              g.name ? (
+                <tr key={`g${gi}`} data-testid="caplet-group" style={{ borderTop: gi ? '2px solid var(--border)' : undefined, background: 'var(--bg)' }}>
+                  <td colSpan={7} style={{ padding: '5px 8px', fontWeight: 700, color: 'var(--text-dim)', letterSpacing: '0.08em' }}>{g.name}</td>
+                  <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 700, color: signColor(g.rows.reduce((a, c) => a + Number(c.pv || 0), 0)) }}>{fmtPnl(g.rows.reduce((a, c) => a + Number(c.pv || 0), 0))}</td>
+                </tr>
+              ) : null,
+              ...g.rows.map((cl, i) => (
+              <tr key={`${gi}-${i}`} style={{
                 borderBottom: '1px solid rgba(255,255,255,0.04)',
                 background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)',
               }}>
@@ -635,7 +649,8 @@ function CapletTable({ result, ccy }) {
                   fontWeight: 600,
                 }}>{fmtPnl(cl.pv)}</td>
               </tr>
-            ))}
+              )),
+            ])}
             <tr style={{
               borderTop: '2px solid var(--border)',
               background: 'rgba(255,255,255,0.02)',
@@ -707,9 +722,11 @@ function SwapCashflowTables({ result, productKey, state }) {
             </span>
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-dim)' }}>
-            {'On exercise, this swaption delivers into the swap schedule below. '}
-            {'The swap starts after the expiry, '}{expiryWord(state)}{'. '}
-            {'Sum of PV column = forward swap NPV (\u2248 $0 at ATM strike).'}
+            {'On exercise the swaption delivers the swap below: the legs the ticket books, each valued on its own dates. '}
+            {result.underlying_error ? <span data-testid="swaption-underlying-error">{`It could not be valued: ${result.underlying_error}. `}</span> : null}
+            {fixedLeg && floatLeg && Number.isFinite(Number(fixedLeg.pv) + Number(floatLeg.pv))
+              ? <span data-testid="swaption-underlying-npv">{'The two legs add to '}{fmtPnl(Number(fixedLeg.pv) + Number(floatLeg.pv))}{' today, the value of that swap at the strike: near nothing when the strike is at the money (the option is struck on yearly unadjusted dates, the swap pays after each).'}</span>
+              : null}
           </div>
         </div>
       )}
@@ -876,87 +893,6 @@ function SwapCashflowTables({ result, productKey, state }) {
 // Synthesize forward-swap cashflow rows from the /api/price/swaption response
 // (Patch 19d). The backend already returns forward_rate, payment_dates, and
 // coupon_dfs — we build the displayed legs directly from that.
-function synthesizeSwaptionLegs(result, state) {
-  const debug = result._debug || {}
-  const paymentDates = debug.payment_dates || []
-  const couponDfs    = debug.coupon_dfs    || []
-  const pStart       = debug.P_start       || 1
-  const fwdRate      = debug.forward_rate  != null ? debug.forward_rate
-                     : (result.forward_rate || 0)
-  const notional     = debug.notional      || Number(state.notional) || 10000000
-  const isPayer      = debug.is_payer      != null ? debug.is_payer
-                     : (state.direction === 'PAY')
-  const payFreqY     = debug.pay_freq_y    || 1.0
-
-  if (!paymentDates.length || !couponDfs.length) return []
-
-  // Forward effective = day before first coupon's period start; approximate
-  // by shifting first payment back by payFreqY years.
-  const startDate = (() => {
-    if (debug.start_date) return debug.start_date
-    const d = new Date(paymentDates[0])
-    d.setDate(d.getDate() - Math.round(payFreqY * 365.25))
-    return d.toISOString().slice(0, 10)
-  })()
-
-  // Fixed leg: coupon at forward rate for each period. Direction follows
-  // the swaption's is_payer flag (payer pays fixed).
-  const fixedDir = isPayer ? 'PAY' : 'RECEIVE'
-  const floatDir = isPayer ? 'RECEIVE' : 'PAY'
-
-  const fixedCashflows = paymentDates.map((payDate, i) => {
-    const periodStart = i === 0 ? startDate : paymentDates[i - 1]
-    const periodEnd   = payDate
-    const dcf         = payFreqY
-    const amount      = notional * fwdRate * dcf
-    const df          = couponDfs[i] || 1
-    const pv          = amount * df * (fixedDir === 'PAY' ? -1 : 1)
-    return {
-      period_start: periodStart,
-      period_end:   periodEnd,
-      payment_date: payDate,
-      dcf, notional,
-      rate: fwdRate,
-      amount, df, pv,
-      zero_rate: null,
-    }
-  })
-
-  const fixedTotalPv = fixedCashflows.reduce((s, cf) => s + cf.pv, 0)
-
-  // Float leg: PV mirrors fixed leg (at ATM, |FIXED PV| = |FLOAT PV|).
-  // Per-period forward rate is implied by coupon_dfs ratios.
-  const floatCashflows = paymentDates.map((payDate, i) => {
-    const periodStart = i === 0 ? startDate : paymentDates[i - 1]
-    const periodEnd   = payDate
-    const df          = couponDfs[i] || 1
-    const dfPrev      = i === 0 ? pStart : (couponDfs[i - 1] || pStart)
-    const dcf         = payFreqY
-    const rate        = (dfPrev / df - 1) / dcf
-    const amount      = notional * rate * dcf
-    const pv          = amount * df * (floatDir === 'PAY' ? -1 : 1)
-    return {
-      period_start: periodStart,
-      period_end:   periodEnd,
-      payment_date: payDate,
-      dcf, notional,
-      rate,
-      amount, df, pv,
-      zero_rate: null,
-    }
-  })
-
-  const floatTotalPv = floatCashflows.reduce((s, cf) => s + cf.pv, 0)
-
-  return [
-    { leg_ref: 'FIXED-1', leg_seq: 1, leg_type: 'FIXED',
-      direction: fixedDir, currency: state.ccy || 'USD',
-      notional, pv: fixedTotalPv, cashflows: fixedCashflows },
-    { leg_ref: 'FLOAT-1', leg_seq: 2, leg_type: 'FLOAT',
-      direction: floatDir, currency: state.ccy || 'USD',
-      notional, pv: floatTotalPv, cashflows: floatCashflows },
-  ]
-}
 
 export function CashflowsPanel({ result, productKey, state }) {
   if (!result) {
@@ -982,11 +918,9 @@ export function CashflowsPanel({ result, productKey, state }) {
     (productKey === 'RATES_CAP' || productKey === 'RATES_FLOOR' || productKey === 'RATES_COLLAR')
     && !(result.legs && result.legs.length))
 
-  // Swaption: synthesize legs from the response if backend didn't return any.
-  const effectiveResult =
-    (productKey === 'IR_SWAPTION' && !(result.legs && result.legs.length))
-      ? { ...result, legs: synthesizeSwaptionLegs(result, state) }
-      : result
+  // A swaption's legs are the swap it delivers, valued by the leg pricer (TradeWindow handlePrice; a stored one's
+  // from its record). With none there is nothing to show: no table is made up here.
+  const effectiveResult = result
 
   return (
     <div style={{ padding: '12px 16px' }}>

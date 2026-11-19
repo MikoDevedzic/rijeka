@@ -46,7 +46,7 @@ import XvaPanel      from './xva-panel'
 import RatesScenario from './RatesScenario'
 // Sprint 12 item 3: CONFIRM tab panel + lifecycle client
 import { ConfirmPanel } from './ConfirmPanel'
-import { executeBooking, buildBookingBody, confirmTrade, cancelTrade, confirmTradeOnChain, bookPackage, confirmPackageOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, partialTerminate, amendTerms, amendable, recordKnock, INDEX_CURVE } from './booking'
+import { executeBooking, buildBookingBody, buildLegs, confirmTrade, cancelTrade, confirmTradeOnChain, bookPackage, confirmPackageOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, partialTerminate, amendTerms, amendable, recordKnock, INDEX_CURVE } from './booking'
 import { TENOR_Y, EXPIRY_Y, EXPIRY_DATE, swaptionExpiry, capStrike } from './product-defaults'
 // Sprint 13 follow-up — lifecycle cache refresh
 import { useTradesStore, shortUti } from '../../store/useTradesStore'
@@ -785,7 +785,18 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       const endpoint = typeof product.pricing.endpoint === 'function'
         ? product.pricing.endpoint(state) : product.pricing.endpoint
       const sent = { ...product.pricing.buildPayload(state), curves }
-      const data = await post(endpoint, sent)
+      let data = await post(endpoint, sent)
+      // A swaption's CASHFLOWS tab shows the swap it delivers: the legs the ticket books, valued by the leg pricer
+      // on their own dates, as a stored swaption's are (the view above). Until 0.59.1 the tab made that table up in
+      // the browser from the option pricer's annuity: an accrual of exactly one year, no payment lag, and two legs
+      // that did not add to nothing at the at-the-money strike as the tab said they did.
+      if (productKey === 'IR_SWAPTION') {
+        try {
+          const legs = buildLegs(state, direction, Number(state.notional) || 0, { priced: data })
+          const under = await post('/price/preview', { legs, valuation_date: state.valDate, curves })
+          data = { ...data, legs: under.legs, underlying_npv: under.npv }
+        } catch (e) { data = { ...data, legs: [], underlying_error: e?.message || 'the delivered swap could not be valued' } }
+      }
       setPricedPayload(sent)
       setResult(product.pricing.parseResponse(data))
     } catch (e) {
@@ -795,7 +806,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
       clearTimeout(abortTimer)
       setPricing(false)
     }
-  }, [pricing, product, productKey, state, viewMode, isCurrency, initialTrade, pricingCurves])
+  }, [pricing, product, productKey, state, direction, viewMode, isCurrency, initialTrade, pricingCurves])
 
   // PRICE was held for the par solve: price the moment the coupon is there; give up with the reason if the solve
   // fails or does not answer in ten seconds.

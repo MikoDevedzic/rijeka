@@ -1788,6 +1788,9 @@ def _cap_like(req: CapFloorRequest, kind: str, db: Session, user: dict) -> dict:
         "floor_premium_pct":   round(abs(float(floor.npv)) / notional * 100, 4),
         "floor_vol_bp":        round(float(floor.vol_bp), 4),
         "floor_vol_tier":      floor.vol_tier,
+        # each option's periods, signed as it is held (a bought collar: the cap's positive, the floor's negative)
+        "caplets":             periods(cap),
+        "floorlets":           periods(floor),
     }
 
 

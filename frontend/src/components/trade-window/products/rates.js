@@ -123,7 +123,9 @@ registerProduct({
     helper: state => ({
       text: state.structure === 'BASIS'
         ? '↔ floating-for-floating basis swap'
-        : '→ fixed-for-float · OIS discounting',
+        : state.structure === 'AMORTIZING'
+          ? '→ fixed-for-float · the notional by period is set on DETAILS (none set: a level notional)'
+          : '→ fixed-for-float · OIS discounting',
       color: state.structure === 'BASIS' ? 'var(--amber)' : 'var(--blue)',
     }),
     footerText: 'Full revaluation · log-linear DF interp · OIS discounting',

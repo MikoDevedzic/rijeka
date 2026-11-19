@@ -873,7 +873,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
       <div className="tbw-sec" style={option ? { display: 'none' } : undefined}>
         <div className="tbw-terms-header">
           <span className="tbw-lbl">FORWARD TERMS</span>
-          <span className="tbw-helper-badge">→ {crypto ? `cash-settled in ${qc} · ${quoted ? `forward from ${cur.forward_curve.label || 'quoted points'}` : 'the implied rate is a desk input'}` : ndf ? `non-deliverable · cash-settled in ${qc}` : shape === 'SPOT' ? `spot · ${spotLagLabel({ cur, crypto })} delivery` : 'deliverable · both principals exchange'}</span>
+          <span className="tbw-helper-badge">→ {crypto ? `cash-settled in ${qc} · ${quoted ? `forward from ${cur.forward_curve.label || 'quoted points'}` : 'the implied rate is a desk input'}` : ndf ? `non-deliverable · cash-settled in ${qc}${quote?.fixing_date ? ` · fixes ${quote.fixing_date}, settles ${quote.settlement_date}` : ''}` : shape === 'SPOT' ? `spot · ${spotLagLabel({ cur, crypto })} delivery` : 'deliverable · both principals exchange'}</span>
         </div>
         {/* five cells on the six columns the rows above use, so the columns of the ticket line up */}
         <div className="tbw-fx-row tbw-fx-grid-6" data-fx-row="forward-terms">

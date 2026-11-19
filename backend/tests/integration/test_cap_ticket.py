@@ -155,3 +155,14 @@ def test_a_callers_leg_the_schedule_cannot_make_is_refused_as_terms(client, auth
     for change in ({"payment_frequency": "semi-annual"}, {"day_count": "act/365f"}, {"bdc": "following"}):
         r = client.post("/api/price/cap", json={**base, "leg": {**base["leg"], **change}}, headers=auth_a)
         assert r.status_code == 200, (change, r.status_code, r.text[:200])
+
+
+def test_a_collars_answer_carries_each_options_periods(client, auth_a, booked):
+    """The collar ticket's CASHFLOWS tab had a table with no rows: the answer carried no periods."""
+    for side, sign in (("BUY", 1.0), ("SELL", -1.0)):
+        c = _post(client, auth_a, "/api/price/collar", _ticket(booked["IR_COLLAR"], side=side))
+        assert len(c["caplets"]) == len(c["floorlets"]) == c["n_caplets"] > 0
+        cap, floor = sum(p["pv"] for p in c["caplets"]), sum(p["pv"] for p in c["floorlets"])
+        assert cap == pytest.approx(sign * c["cap_npv"], abs=0.11) and floor == pytest.approx(-sign * c["floor_npv"], abs=0.11)     # each period is rounded to the cent
+        assert cap + floor == pytest.approx(c["net_npv"], abs=0.21)
+        assert c["caplets"][0]["start_date"] == c["effective_date"] and c["floorlets"][-1]["end_date"] == c["maturity_date"]
