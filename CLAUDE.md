@@ -347,3 +347,10 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - A lookup on a grid is tried at what a live trade hands it, a day off the grid: the cap surface was read only
   within 0.01 of a year of a quoted maturity and gave the desk default otherwise, so a booked cap was marked at
   85 bp on all but a few days of its life, and every test asked for a tenor of exactly 5.0.
+- Before writing that a screen does not show a thing, every tab of that screen is looked at: 0.59.1's changelog said
+  a currency NDF did not show its fixing date, and it did, on DETAILS; an older journey that read it there failed
+  on the new copy and CI stopped the release.
+- A product the engine "does not value yet" is looked for in the engine before it is called new work: caplets were
+  already valued on the exposure paths for a swap's leg, and a cap was refused only because its instrument type
+  was not on a list. What was there was then read against the product (a rate fixed in advance for one fixed in
+  arrears) before being reused.

@@ -4,6 +4,7 @@ from datetime import date
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from ccr import calibration as C
 from ccr import options as O
@@ -138,3 +139,124 @@ def test_the_vol_a_swaption_reads_says_where_it_came_from():
     # the pair the engines already read is the same answer
     assert O.swaption_vol_bp(M(), "USD", 2.0, 5.0) == (80.0, "USD_SWVOL_ATM nearest point")
 
+
+
+# ── a cap, a floor and a collar on the paths (0.60.0) ────────────────────────────────────────────────────────────
+
+def _rn_paths(months=40, n=20000, seed=3):
+    f = {"RATES:USD_SOFR": C.Factor("RATES:USD_SOFR", "RATES", a=0.03, sigma=0.008)}
+    calib = C.Calibration("RISK_NEUTRAL", f, np.eye(1), list(f), drift_mode="forward")
+    return simulate(calib, {"RATES:USD_SOFR": Curve(valuation_date=ASOF, flat_rate=0.0375)}, {}, {}, ASOF, months, n_paths=n, seed=seed)
+
+
+def _cap_trade(kind="IR_CAP", options=None, ref="CAP-1"):
+    from types import SimpleNamespace
+    eff = date(2026, 11, 2)
+    leg = {"leg_ref": "OPT-1", "leg_type": "FLOAT", "direction": "RECEIVE", "currency": "USD", "notional": 10e6, "effective_date": str(eff),
+           "maturity_date": str(eff.replace(year=eff.year + 3)), "payment_frequency": "QUARTERLY", "day_count": "ACT/360", "bdc": "MOD_FOLLOWING",
+           "payment_lag": 2, "leverage": 0.0, "spread": 0.0, "embedded_options": options or [{"type": "CAP", "direction": "BUY", "default_strike": 0.04}]}
+    return SimpleNamespace(instrument_type=kind, trade_ref=ref, notional=10e6, notional_ccy="USD", effective_date=eff,
+                           maturity_date=eff.replace(year=eff.year + 3), terms={}, _legs=[leg])
+
+
+class _NoDb:
+    def execute(self, *a, **k):
+        raise RuntimeError("no database in a unit test")
+
+    def rollback(self):
+        pass
+
+
+def _set(*trades):
+    from ccr.valuation import NettingSet
+    return NettingSet(_NoDb(), {"sub": "u"}, list(trades), ASOF, mkt=None)
+
+
+def test_the_variance_of_a_periods_growth_is_the_one_the_paths_show():
+    """The closed form the caplet is valued with, against the paths themselves: the sample variance of the logarithm
+    of what a unit grows to over a period, seen from today and from a grid date on the way."""
+    from ccr.simulate import growth
+    p = _rn_paths()
+    key = "RATES:USD_SOFR"
+    for (a_t, b_t) in ((1.0, 1.25), (0.52, 0.77), (2.5, 2.75), (0.3, 0.3 + 1 / 12)):
+        sample = float(np.log(growth(p, key, a_t, b_t)).var())
+        assert O.growth_variance(p, key, 0, a_t, b_t) == pytest.approx(sample, rel=0.04), (a_t, b_t)
+    # seen from a later date the part already known is gone: less variance, and none once the period's last grid date has come
+    assert O.growth_variance(p, key, 6, 1.0, 1.25) < O.growth_variance(p, key, 0, 1.0, 1.25)
+    last = int(np.searchsorted(p.t, 1.25 - 1e-9))
+    assert O.growth_variance(p, key, last, max(1.0, float(p.t[last])), 1.25) == 0.0
+
+
+def test_a_cap_is_taken_by_the_credit_engine_and_its_discounted_value_is_a_martingale():
+    from ccr.simulate import account, growth
+    from ccr.valuation import flows_per_step, netted_paths
+    ns = _set(_cap_trade())
+    assert len(ns.items) == 1 and not ns.skipped and ns.items[0]["kind"] == "SWAP" and len(ns.items[0]["caplets"]) == 1
+    assert [(o["kind"], o["side"], o["strike"]) for o in ns.options] == [("CAP", "LONG", 0.04)]
+    p = _rn_paths()
+    fx = {"USD": 1.0}
+    V, today = netted_paths(ns, p, fx, {})
+    v0 = float(V[:, 0].mean())
+    assert v0 > 0 and float(V.min()) >= -1e-6                         # a bought cap is never a liability
+    # what has been paid by a date, discounted on the path, plus the discounted value then, averages to today's value
+    key = "RATES:USD_SOFR"
+    A = account(p, key)
+    it = ns.items[0]
+    yrs = lambda d: (d - ASOF).days / 365.25
+    for i in (6, 15, 24, 33, 39):
+        paid = np.zeros(p.n_paths)
+        for (ps, pe, pay, tau) in it["caplets"][0]["periods"]:
+            if yrs(pay) <= float(p.t[i]) + 1e-9:
+                paid += 10e6 * np.maximum(growth(p, key, yrs(ps), yrs(pe)) - 1.0 - tau * 0.04, 0.0) / growth(p, key, 0.0, yrs(pay))
+        x = V[:, i] / A[:, i] + paid
+        assert abs(x.mean() - v0) < 4.0 * x.std() / np.sqrt(len(x)), (i, x.mean(), v0)
+    assert np.all(V[:, -1] == 0.0)                                    # everything has paid by the last grid date
+    # its payments are in the flows a margined run reads: paid to us, so negative, and in total what the paths paid
+    fl = flows_per_step(ns, p, fx)
+    assert float(fl.max()) <= 0.0 and float(fl.sum()) < 0.0
+    total = sum(10e6 * np.maximum(growth(p, key, yrs(ps), yrs(pe)) - 1.0 - tau * 0.04, 0.0) for (ps, pe, pay, tau) in it["caplets"][0]["periods"])
+    assert -fl.sum(axis=1) == pytest.approx(total, rel=1e-12, abs=1e-6)
+
+
+def test_a_sold_cap_mirrors_a_bought_one_and_a_collar_is_its_cap_less_its_floor_on_every_path():
+    from ccr.valuation import flows_per_step, netted_paths
+    p = _rn_paths(n=3000)
+    fx = {"USD": 1.0}
+    cap = [{"type": "CAP", "direction": "BUY", "default_strike": 0.045}]
+    floor = [{"type": "FLOOR", "direction": "BUY", "default_strike": 0.03}]
+    V = lambda t: netted_paths(_set(t), p, fx, {})[0]
+    F = lambda t: flows_per_step(_set(t), p, fx)
+    bought, held_floor = _cap_trade("IR_CAP", cap), _cap_trade("IR_FLOOR", floor)
+    sold = _cap_trade("IR_CAP", [{**cap[0], "direction": "SELL"}])
+    collar = _cap_trade("IR_COLLAR", [cap[0], {**floor[0], "direction": "SELL"}])
+    assert V(sold) == pytest.approx(-V(bought), abs=1e-9) and F(sold) == pytest.approx(-F(bought), abs=1e-9)
+    assert V(collar) == pytest.approx(V(bought) - V(held_floor), abs=1e-6) and F(collar) == pytest.approx(F(bought) - F(held_floor), abs=1e-6)
+    assert float(V(held_floor)[:, 0].mean()) > 0
+    # at one strike a cap less a floor is the swap's floating coupons less the strike's, on every path and date
+    k = [{"type": "CAP", "direction": "BUY", "default_strike": 0.0375}, {"type": "FLOOR", "direction": "SELL", "default_strike": 0.0375}]
+    parity = V(_cap_trade("IR_COLLAR", k))
+    from types import SimpleNamespace
+    leg = _cap_trade()._legs[0]
+    swap = SimpleNamespace(instrument_type="IR_SWAP", trade_ref="S", notional=10e6, notional_ccy="USD", effective_date=None, maturity_date=None, terms={},
+                           _legs=[{**leg, "leverage": 1.0, "embedded_options": []},
+                                  {**leg, "leg_type": "FIXED", "direction": "PAY", "fixed_rate": 0.0375, "embedded_options": []}])
+    assert parity == pytest.approx(V(swap), abs=10e6 * 1e-9)
+
+
+def test_the_models_vol_for_a_cap_is_one_number_the_tickets_pricer_would_take():
+    p = _rn_paths(n=10)
+    ns = _set(_cap_trade())
+    c = ns.items[0]["caplets"][0]
+    vol = O.model_cap_vol_bp(c, p, "USD")
+    assert 60.0 < vol < 85.0                                            # a short rate of 80bp a year, mean-reverting at 3 %
+    # that vol through the ticket's formula is the model's value today
+    from ccr.valuation import netted_paths
+    v0 = float(netted_paths(ns, p, {"USD": 1.0}, {})[0][:, 0].mean())
+    p0 = p.p0["RATES:USD_SOFR"]
+    yrs = lambda d: (d - ASOF).days / 365.25
+    strip = 0.0
+    for (ps, pe, pay, tau) in c["periods"]:
+        F = (p0(yrs(ps)) / p0(yrs(pe)) - 1.0) / tau
+        T = ((ps - ASOF).days + 0.5 * (pe - ps).days) / 365.0
+        strip += 10e6 * tau * p0(yrs(pay)) * float(O.bachelier(np.array([F]), 0.04, T, vol / 1e4, True)[0])
+    assert strip == pytest.approx(v0, rel=1e-6)

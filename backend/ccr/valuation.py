@@ -59,7 +59,7 @@ class NettingSet:
         for t in trades:
             itype = str(t.instrument_type or "").upper()
             try:
-                if itype in SWAPS or itype in O.SWAPTIONS:
+                if itype in SWAPS or itype in O.SWAPTIONS or itype in O.CAPS:
                     # a hypothetical trade (the ticket's incremental XVA) carries its legs; a stored one has them in the table
                     own = getattr(t, "_legs", None)
                     legs = [dict(l) for l in own] if own is not None else \
@@ -81,12 +81,19 @@ class NettingSet:
                         has = (lg.get("embedded_options") or lg.get("cap_rate") is not None or lg.get("floor_rate") is not None)
                         if not has:
                             continue
+                        # The market's vol for each strip is the one its ticket prices at (the surface at the strike and
+                        # the remaining life), reported beside the vol the paths' model implies; the strip is valued on
+                        # the paths at the model's own variance (ccr/options.py value_caplets), not at either.
+                        # (Here: the at-the-money vol of the nearest quoted maturity, a label for the set's report. A
+                        # ticket's own run sets the strike's vol as its price reads it: api/routes/xva.py _trade_paths.)
                         tenor_y = max(0.25, years(sched[0][0], sched[-1][1]))
                         vol, src = O.cap_vol_bp(db, uid, tenor_y)
                         cps = O.caplets_of(lg, sched, 1.0, vol, src)
-                        item["caplets"].extend(cps)
                         for c in cps:
-                            self.options.append({"trade_ref": t.trade_ref, "kind": c["type"], "strike": c["K"], "vol_bp": vol, "vol_source": src, "side": "LONG" if c["sign"] > 0 else "SHORT"})
+                            opt = {"trade_ref": t.trade_ref, "kind": c["type"], "strike": c["K"], "vol_bp": vol, "vol_source": src, "side": "LONG" if c["sign"] > 0 else "SHORT"}
+                            c["_reported"] = opt
+                            self.options.append(opt)
+                        item["caplets"].extend(cps)
                     self.items.append(item)
                     self.currencies.add(ccy)
                 elif itype in FORWARDS:
@@ -291,6 +298,9 @@ def flows_per_step(ns: NettingSet, paths: Paths, fx_to_usd: dict[str, float]) ->
                 else:
                     amt = lev * N * (growth(paths, key, years(asof, ps), years(asof, pe)) - 1.0) + N * float(lg.get("spread") or 0.0) * tau
                 out[:, step] += pay_sign * amt * k * weight
+        # what the leg's caps and floors pay, on the path (a cap, a floor, a collar; a capped leg of a swap)
+        if it["kind"] == "SWAP" and it.get("caplets"):
+            out += O.caplet_flows(it, paths, fx_to_usd)
     return out
 
 

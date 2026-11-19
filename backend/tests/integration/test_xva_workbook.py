@@ -35,3 +35,31 @@ def test_the_rates_xva_workbook_runs_what_the_tickets_route_runs(client, auth_a)
         # and the profiles, date by date
         assert out["ee"] == pytest.approx([round(v, 2) for v in wf.ee], abs=0.0051), preset
         assert out["ene"] == pytest.approx([round(v, 2) for v in wf.ene], abs=0.0051), preset
+
+
+def test_the_cap_xva_workbook_runs_what_the_cap_tickets_route_runs(client, auth_a):
+    """0.60.0. The cap book's engine side (which its cells reproduce: tests/test_methodology.py) against POST
+    /api/xva/simulate for the same cap, parameters, paths and seed, under each CSA preset: to the cent."""
+    from api.routes.methodology import market_for
+    from db.session import SessionLocal
+    from methodology.xva_workbook import PRESETS, engine_runs, hw1f_fit, trade_body
+    db = SessionLocal()
+    try:
+        mkt = market_for(db, USER_A)
+    finally:
+        db.close()
+    fit = hw1f_fit(mkt)
+    n = 300
+    eng = engine_runs(mkt, fit, n, "cap")
+    body = {"paths": n, "seed": 42, "valuation_date": mkt.valuation_date.isoformat(), "curve_id": "USD_SOFR",
+            "a": fit["a"], "sigma_bp": fit["sigma_bp"], "theta": fit["theta"], "trade": trade_body(mkt.valuation_date, "cap")}
+    for preset in PRESETS:
+        r = client.post("/api/xva/simulate", json={**body, "csa": {"preset": preset}}, headers=auth_a)
+        assert r.status_code == 200, (preset, r.text[:300])
+        out = r.json()
+        assert out["basis"]["instrument"] == "IR_CAP" and out["basis"]["exposure_discounting"] == "ON_PATH", out["basis"]
+        wf = eng["runs"][preset][1]
+        for k in ("cva", "dva", "fca", "fba", "kva", "mva", "colva", "xva_total"):
+            assert out["xva"][k] == pytest.approx(getattr(wf, k), abs=0.0051), (preset, k)
+        assert out["ee"] == pytest.approx([round(v, 2) for v in wf.ee], abs=0.0051), preset
+        assert out["ene"] == pytest.approx([round(v, 2) for v in wf.ene], abs=0.0051), preset

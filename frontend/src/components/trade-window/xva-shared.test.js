@@ -430,6 +430,14 @@ describe('what a rates run valued (basisLine)', () => {
       .toBe("the option to 2027-11-02, then its swap · σ 78.3bp, the paths' own (market 94.9bp)")
     expect(basisLine({ kind: 'TRADE', valued_as: 'SWAPTION', options: [{ expiry: '2027-11-02', vol_bp: 94.94 }] })).toBe('the option to 2027-11-02, then its swap · market σ 94.9bp')
     expect(basisLine({ kind: 'TRADE', valued_as: 'SWAP', options: [{ kind: 'CAP' }] })).toBe("the trade's own schedule, its caps on the paths")
+    // a cap, a floor and a collar on the paths (0.60.0): the model's vol through the ticket's formula, and the ticket's own
+    expect(basisLine({ kind: 'TRADE', instrument: 'IR_CAP', valued_as: 'SWAP', options: [{ kind: 'CAP', side: 'LONG', strike: 0.045, vol_bp: 81.48, vol_used_bp: 71.03 }] }))
+      .toBe("each period valued on the paths at the model's own variance · cap σ 71.0bp, the paths' own (the ticket prices at 81.5bp)")
+    expect(basisLine({ kind: 'TRADE', instrument: 'IR_COLLAR', valued_as: 'SWAP', options: [{ kind: 'CAP', vol_bp: 81.48, vol_used_bp: 71.03 }, { kind: 'FLOOR', vol_bp: 81.28, vol_used_bp: 71.04 }] }))
+      .toBe("each period valued on the paths at the model's own variance · cap σ 71.0bp, the paths' own (the ticket prices at 81.5bp) · floor σ 71.0bp, the paths' own (the ticket prices at 81.3bp)")
+    expect(basisLine({ kind: 'TRADE', instrument: 'IR_SWAP', valued_as: 'SWAP', options: [{ kind: 'CAP', vol_bp: 85, vol_used_bp: 70 }] }))
+      .toBe("the trade's own schedule, its caps on the paths · cap σ 70.0bp, the paths' own (the ticket prices at 85.0bp)")
+    expect(basisLine({ kind: 'TRADE', instrument: 'IR_CAP', valued_as: 'SWAP', options: [{ kind: 'CAP', vol_bp: 85 }] })).toBe("each period valued on the paths at the model's own variance · cap market σ 85.0bp")
     expect(basisLine({ kind: 'TRADE', valued_as: 'SWAP', options: [{ kind: 'IR_<b>' }] })).toBe("the trade's own schedule")     // a kind it does not know is not echoed
   })
 

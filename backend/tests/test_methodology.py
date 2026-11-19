@@ -481,3 +481,50 @@ def test_the_cap_workbooks_cells_reproduce_the_engine():
             assert pv == pytest.approx(xl.evaluate(f"Cap!L{r}"), abs=1e-3), r          # the engine's caplet is written to four decimals
             total += pv; r += 1
     assert r - 6 == 20 and total == pytest.approx(npv, abs=1e-3)
+
+
+def test_xva_cap_workbook_is_the_cap_tickets_own_run():
+    """0.60.0. The cap's XVA book: the trade is a bought cap as the cap ticket books it (one leg with no participation in
+    the rate and the cap on it), its periods valued on the engine's paths; it has a Variance sheet (the model's variance
+    of each period's growth, in cells) and, per period, the growth the path expects and the caplet per unit."""
+    from methodology.xva_workbook import engine_runs, hw1f_fit, the_trade, trade_body, xva_cap_workbook
+    from scripts.check_workbook import test_market
+    mkt = test_market()
+    body = trade_body(mkt.valuation_date, "cap")
+    assert body["instrument_type"] == "IR_CAP" and body["legs"][0]["leverage"] == 0 and body["legs"][0]["embedded_options"][0]["type"] == "CAP"
+    item, _ = the_trade(mkt.valuation_date, "cap")
+    assert len(item["caplets"]) == 1 and len(item["caplets"][0]["periods"]) == 8 and item["caplets"][0]["sign"] == 1.0
+    wb, total = xva_cap_workbook(mkt, 12)
+    assert {"Model", "Trade", "Variance", "Bonds", "Normals", "Paths", "Exposure", "Waterfall", "Engine"} <= set(wb.sheetnames)
+    assert wb["Model"]["A9"].value == "Cap strike K" and isinstance(total, float)
+    paths = [c.value for row in wb["Paths"].iter_rows() for c in row if isinstance(c.value, str)]
+    assert any("NORMSDIST(" in f and "Variance!" in f for f in paths), "the caplet is Black on the growth at the Variance sheet's figure"
+    assert any("Notl*MAX(" in f and "Trade!$L$" in f for f in paths), "what a period pays is the payoff of its growth, N·max(G − X, 0)"
+    assert not any("Kfix*Trade!$F$" in f for f in paths), "no fixed coupon: the leg pays nothing but the cap"
+    # the engine side is a bought cap: never a liability, and worth something today
+    eng = engine_runs(mkt, hw1f_fit(mkt), 12, "cap")
+    assert eng["v0"] > 0 and float(eng["V"].min()) >= -1e-6 and float(eng["paid"].min()) >= 0.0
+    # the swap's book is the swap's still
+    sw, _ = rep.build("xva_rates", mkt)
+    assert "Variance" not in load_workbook(io.BytesIO(sw)).sheetnames
+
+
+def test_xva_cap_workbook_formulas_reproduce_the_engine_under_every_preset():
+    """Every row of the cap book's Checks sheet evaluated outside Excel under the three presets: the value today, the
+    variance of a period's growth, the caplet per unit on a path, figures on single paths, each EE, ENE and PFE, each
+    charge. Skipped where pycel is not installed: scripts/check_workbook.py xva_cap is the same check from a shell
+    (on five valuation dates, with typed CSA terms: the largest relative difference seen 5e-11)."""
+    pytest.importorskip("pycel")
+    from methodology import workbook as W
+    from methodology.xva_workbook import PRESETS, xva_cap_workbook
+    from scripts.check_workbook import run_checks, test_market
+    wb, _ = xva_cap_workbook(test_market(), 12)
+    W.finish(wb)
+    bio = io.BytesIO(); wb.save(bio)
+    for preset in PRESETS:
+        res = run_checks(load_workbook(io.BytesIO(bio.getvalue())), "Exposure!B4", preset)
+        assert len(res) > 100
+        assert any("variance" in x["label"] for x in res) and any(x["label"].startswith("U (the caplet") for x in res)
+        bad = [(x["label"], x["rel"]) for x in res if not x["ok"]]
+        assert not bad, (preset, bad[:5])
+        assert max(x["rel"] for x in res) < 1e-9, preset

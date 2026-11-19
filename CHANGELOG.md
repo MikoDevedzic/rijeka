@@ -1,7 +1,38 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.42). Commits on `main` are the detail.
+methodology document carries its own version (v1.43). Commits on `main` are the detail.
+
+## 0.60.0 · 19 November 2026
+
+**A cap, a floor and a collar have XVA.** Until now the XVA tab of these three tickets refused them in words, and a
+counterparty's netting set left a booked one out of its exposure.
+
+- **How it is valued.** A period of a cap pays what one unit grows to over the period, less one and the strike's
+  share, when that is positive. On the exposure paths that growth is a product of the paths' own bonds, so its
+  logarithm is normal with a variance known in closed form; each period is Black's formula on the growth at that
+  variance. It is exact on the paths: the value before a period, during it and at its end are one formula, the
+  value discounted along the path is a martingale, and expected exposure does not step when a period fixes. What a
+  period pays is in the cash a margined run sets against the margin period's move.
+- **A cap or a floor on a swap's leg is valued the same way now.** It was a caplet on a rate fixed at the period's
+  start, at the market's at-the-money cap vol, with its payment in no cash flow. **Every capped or floored leg's
+  exposure changes**, in the counterparty reports and the incremental charge.
+- **What the figure is of.** The variance is the model's, calibrated to swaptions, not the vol the ticket prices the
+  cap at. The tab prints both: for a five-year 4.5 % cap on the local stack's market, 71.0 bp through the ticket's
+  formula against the ticket's 81.5 bp, so the paths start about a fifth below the ticket's price. A swaption has
+  the same limit; it is stated in the methodology with the numbers.
+- **Figures.** That cap, bought, ten million, uncollateralised, valued 19 November 2026, 5,000 paths over three
+  seeds: CVA −2,157 to −2,129, FCA about −1,396, no DVA or FBA (a bought cap is never owed by us), KVA −10,917.
+  Sold, it is the mirror: no CVA, DVA about +1,066.
+- **Evidence.** Nineteen reference rows (the formula against the payoff simulated on the paths; the martingale; the
+  continuous Hull-White price, which is 0.7 to 3.9 % higher by the variance a monthly grid leaves out). The ticket's
+  run against a netting set of the cap alone, within 0.2 %. A workbook, `xva_cap`, rebuilds the run in cells: its
+  checks pass under each margin preset and with typed terms on five valuation dates (largest relative difference
+  5e-11), and its engine side equals the ticket's route to the cent. Methodology v1.43, whose table of QuantLib
+  comparisons is printed again from the suite (84 lines where it had 70).
+- **Not done.** The capital add-on is on the cap's whole notional, with no adjustment for the option's delta, as a
+  swaption's. The payment lag's convexity is not in the value. The workbook is one bought cap and has not been
+  opened in Excel itself. The charges have no outside figure, as for a swap.
 
 ## 0.59.1 · 19 November 2026
 

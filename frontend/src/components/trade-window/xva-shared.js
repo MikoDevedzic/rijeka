@@ -564,6 +564,20 @@ export function basisLine(basis) {
   }
   const WORDS = { CAP: 'caps', FLOOR: 'floors' }
   const word = opt ? WORDS[String(opt.kind || '').toUpperCase()] : null
+  // A cap or a floor (0.60.0): each period is valued on the paths at the variance the paths' own model gives its
+  // compounded rate. Beside it, per option: the one vol at which the ticket's formula would give the model's value
+  // today, and the vol the ticket prices at. The two differ, and so the paths start away from the ticket's price.
+  const NAMES = { CAP: 'cap', FLOOR: 'floor' }
+  const strips = (Array.isArray(basis.options) ? basis.options : []).filter(o => NAMES[String(o?.kind || '').toUpperCase()])
+  const said = strips.map(o => {
+    const used = bp(o.vol_used_bp), quoted = bp(o.vol_bp)
+    if (!used && !quoted) return null
+    return `${NAMES[String(o.kind).toUpperCase()]} ${used ? `σ ${used}, the paths' own${quoted ? ` (the ticket prices at ${quoted})` : ''}` : `market σ ${quoted}`}`
+  }).filter(Boolean)
+  if (said.length) {
+    const own = ['IR_CAP', 'IR_FLOOR', 'IR_COLLAR'].includes(String(basis.instrument || '').toUpperCase())
+    return `${own ? "each period valued on the paths at the model's own variance" : `the trade's own schedule, its ${word || 'caps'} on the paths`} · ${said.join(' · ')}`
+  }
   return `the trade's own schedule${word ? `, its ${word} on the paths` : ''}`
 }
 

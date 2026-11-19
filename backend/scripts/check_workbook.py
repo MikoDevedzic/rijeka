@@ -1,13 +1,13 @@
 """Evaluate a replication workbook's Checks sheet outside Excel: every formula against the engine's value.
 
-    python -m scripts.check_workbook xva_rates [--paths 12] [--presets UNCOLLATERALISED BILATERAL ON_CHAIN] [--dates 2026-08-03 ...]
+    python -m scripts.check_workbook xva_rates|xva_cap [--paths 12] [--presets UNCOLLATERALISED BILATERAL ON_CHAIN] [--dates 2026-08-03 ...]
 
 The book is built on a stated test market (a sloped curve, the demo's parametric swaption grid) on five valuation
 dates, not on an account's: nothing is read from a database. For the XVA book it also types non-zero CSA terms into the
 sheet and compares the result with the engine under the same terms (typed_terms). It needs `pycel`, which is not among the project's requirements (pip install pycel in a scratch
 environment); tests/test_methodology.py runs the same check where pycel is installed and skips where it is not.
 
-pycel does not read this openpyxl's defined names, nor ROWS, PERCENTILE, VARP, STDEV, SUMSQ, NORMSINV or RAND. So the
+pycel does not read this openpyxl's defined names, nor ROWS, PERCENTILE, VARP, STDEV, SUMSQ, NORMSDIST, NORMSINV or RAND. So the
 copy it evaluates has the names written out as their cells, ROWS(range) as its count and the LIVE draw as zero
 (ENGINE mode never reads it), and the missing functions are given here by Excel's own definitions."""
 from __future__ import annotations
@@ -53,6 +53,10 @@ def varp(*args):
 def stdev(*args):
     v = _flat(*args)
     return float(np.std(v, ddof=1)) if len(v) > 1 else 0.0
+
+
+def normsdist(x):
+    return 0.5 * (1.0 + math.erf(float(x) / math.sqrt(2.0)))             # the standard normal distribution function, as Excel's NORMSDIST
 
 
 # ── the test market and the evaluation ────────────────────────────────────────────────────────────────────────
@@ -116,7 +120,7 @@ TYPED_WWR = 1.25
 DATES = ("2026-08-03", "2026-11-18", "2026-12-30", "2027-03-29", "2028-02-27")     # a weekend's roll, a year-end, a month-end, a leap day among them
 
 
-def typed_terms(mkt, n_paths: int = 12) -> list[dict]:
+def typed_terms(mkt, n_paths: int = 12, product: str = "swap") -> list[dict]:
     """The cells a reader can type into, checked against the engine: the book's Checks compare the three presets,
     whose thresholds, minimum transfer amount, margin yield and margin carries are all zero and whose capital model
     is SA-CCR, so a wrong sign in ColVA or a threshold wired to the wrong party passed every one of them (the model
@@ -126,9 +130,9 @@ def typed_terms(mkt, n_paths: int = 12) -> list[dict]:
     from pycel import ExcelCompiler
     from methodology import workbook as W
     from methodology.xva_workbook import engine_runs, hw1f_fit, waterfall_for, xva_rates_workbook
-    wb, _ = xva_rates_workbook(mkt, n_paths)
+    wb, _ = xva_rates_workbook(mkt, n_paths, product=product)
     W.finish(wb)
-    eng = engine_runs(mkt, hw1f_fit(mkt), n_paths)
+    eng = engine_runs(mkt, hw1f_fit(mkt), n_paths, product)
     wb = evaluation_copy(wb)
     T = eng["T"]
     ex, wf_ws = wb["Exposure"], wb["Waterfall"]
@@ -169,14 +173,15 @@ def main(argv: list[str]) -> int:
     bad = 0
     for d in (a.dates or DATES):
         mkt = test_market(date.fromisoformat(d))
-        if a.product == "xva_rates":
+        if a.product in ("xva_rates", "xva_cap"):
             from methodology.xva_workbook import PRESETS, xva_rates_workbook
-            wb, _ = xva_rates_workbook(mkt, a.paths)
+            product = "cap" if a.product == "xva_cap" else "swap"
+            wb, _ = xva_rates_workbook(mkt, a.paths, product=product)
             W.finish(wb)
             bio = io.BytesIO(); wb.save(bio)
             runs = [(p, lambda p=p, raw=bio.getvalue(): run_checks(load_workbook(io.BytesIO(raw)), "Exposure!B4", p)) for p in (a.presets or PRESETS)]
             if not a.presets:
-                runs.append(("typed CSA terms, each capital model", lambda mkt=mkt: typed_terms(mkt, a.paths)))
+                runs.append(("typed CSA terms, each capital model", lambda mkt=mkt, product=product: typed_terms(mkt, a.paths, product)))
         else:
             data, _ = rep.build(a.product, mkt)
             runs = [("", lambda data=data: run_checks(load_workbook(io.BytesIO(data))))]

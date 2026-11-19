@@ -24,12 +24,15 @@ from typing import Any, Optional
 import numpy as np
 
 from ccr.calibration import CURVE_OF
-from ccr.simulate import Paths, bond
+from ccr.simulate import Paths, bond, growth
 
 log = logging.getLogger("rijeka.ccr")
 DEFAULT_VOL_BP = 85.0
 ON_POINT = 0.02            # swaption_vol_point: how near a grid point, in |ln expiry| + |ln tenor|, is "on" it
 SWAPTIONS = ("IR_SWAPTION", "SWAPTION")
+# a cap, a floor and a collar: one floating leg with no participation in the rate and the options on it (valued as
+# that leg is: its caplets and floorlets, value_caplets)
+CAPS = ("IR_CAP", "IR_FLOOR", "IR_COLLAR", "INTEREST_RATE_CAP", "INTEREST_RATE_FLOOR", "INTEREST_RATE_COLLAR")
 
 
 def _years(asof: date, d: date) -> float:
@@ -147,29 +150,189 @@ def caplets_of(leg: dict, sched: list, trade_direction_sign: float, vol_bp: floa
     return out
 
 
-def value_caplets(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float]) -> np.ndarray:
+# A caplet on a compounded overnight rate pays N·max(G − 1 − τK, 0) after its period, G being what one unit placed at
+# the period's start has grown to by its end. On the paths that growth is a product of the grid's own bonds
+# (ccr.simulate.growth), each an exponential of the factor at its grid date, so the logarithm of G is a sum of the
+# factor's values at grid dates and, seen from an earlier grid date, is normal. Its mean under the measure of the
+# period's end is fixed by the bonds on the path; its variance is known in closed form. The caplet is therefore the
+# Black formula on the growth factor, exact in the paths' own model: the value before a period, during it and at its
+# end are one calculation, the value discounted along the path is a martingale, and expected exposure does not step
+# when a period fixes. (Until 0.60.0 a caplet was Bachelier on the path's forward at the market's at-the-money cap vol
+# until the period's START, and from then the payoff of that forward: a rate fixed in advance, where the product
+# fixes in arrears, and a vol that was not the paths' own, so the value stepped at each fixing by the ratio of the two
+# vols. A cap, a floor and a collar were not valued on the paths at all.)
+
+def _growth_weights(paths: Paths, key: str, a_t: float, b_t: float) -> dict[int, float]:
+    """ln G(a, b) = constant + Σ_k w_k·x_k over grid dates k: the weights, as ccr.simulate.growth builds the growth
+    (from a to the next grid date and from the last grid date to b at the bond seen on the grid date before; whole
+    steps on the account)."""
+    f = paths.calib.factors[key]
+    a = max(f.a, 1e-4)
+    B = lambda tau: (1.0 - math.exp(-a * max(tau, 0.0))) / a
+    t = paths.t
+    last = len(t) - 1
+    ja = min(int(np.searchsorted(t, a_t + 1e-12, side="right") - 1), last)
+    jb = min(int(np.searchsorted(t, b_t + 1e-12, side="right") - 1), last)
+    if ja == jb:
+        return {ja: B(b_t - float(t[ja])) - B(a_t - float(t[ja]))}
+    w = {ja: B(float(t[ja + 1]) - float(t[ja])) - B(a_t - float(t[ja]))}
+    for k in range(ja + 1, jb):
+        w[k] = B(float(t[k + 1]) - float(t[k]))
+    if b_t > float(t[jb]) + 1e-12:
+        w[jb] = w.get(jb, 0.0) + B(b_t - float(t[jb]))
+    return w
+
+
+def growth_variance(paths: Paths, key: str, i: int, a_t: float, b_t: float) -> float:
+    """The variance of ln G(a, b), seen from grid date i (a ≥ t_i): Σ_j Σ_k w_j·w_k·Cov(x_j, x_k | x_i) over the grid
+    dates after i, with Cov(x_j, x_k | x_i) = σ²/(2a)·e^(−a(t_k − t_j))·(1 − e^(−2a(t_j − t_i))) for i < j ≤ k: the factor
+    is stepped exactly (ccr.simulate), so this is the model's own figure, not an approximation of it."""
+    f = paths.calib.factors[key]
+    a, sig = max(f.a, 1e-4), max(f.sigma, 1e-6)
+    t = paths.t
+    t_i = float(t[i])
+    w = {k: v for k, v in _growth_weights(paths, key, a_t, b_t).items() if k > i}
+    ks = sorted(w)
+    var = 0.0
+    for j in ks:
+        vj = sig * sig / (2.0 * a) * (1.0 - math.exp(-2.0 * a * (float(t[j]) - t_i)))
+        tail = sum(w[k] * math.exp(-a * (float(t[k]) - float(t[j]))) for k in ks if k > j)
+        var += vj * w[j] * (w[j] + 2.0 * tail)
+    return max(var, 0.0)
+
+
+def black_on_growth(M: np.ndarray, X: float, v: float, call: bool) -> np.ndarray:
+    """E[max(G − X, 0)] (a call) or E[max(X − G, 0)] for a lognormal G of mean M and log-variance v², per unit, on
+    every path. With no variance left it is the payoff of M."""
+    M = np.maximum(np.asarray(M, dtype=float), 1e-12)
+    if v < 1e-10:
+        return np.maximum(M - X, 0.0) if call else np.maximum(X - M, 0.0)
+    from scipy.stats import norm
+    d1 = (np.log(M / X) + 0.5 * v * v) / v
+    d2 = d1 - v
+    return M * norm.cdf(d1) - X * norm.cdf(d2) if call else X * norm.cdf(-d2) - M * norm.cdf(-d1)
+
+
+def _caplet_periods(item: dict, paths: Paths, i: int):
+    """Each period of each caplet strip still to be paid at grid date i: (strip, start, end, pay in years, τ, state),
+    state 'ENDED' (its amount is known on the path, waiting for its payment date) or 'OPEN'."""
     asof = paths.grid[0]; t_i = float(paths.t[i])
-    key = f"RATES:{CURVE_OF.get(item['ccy'], item['ccy'] + '_OIS')}"
-    v = np.zeros(paths.n_paths)
     for c in item.get("caplets") or []:
-        call = c["type"] == "CAP"
         for (ps, pe, pay, tau) in c["periods"]:
             Tp = _years(asof, pay)
             if Tp <= t_i + 1e-9 or tau <= 0:
                 continue
             Ts, Te = _years(asof, ps), _years(asof, pe)
-            dfp = bond(paths, key, i, Tp)
-            if Ts > t_i + 1e-9:
-                # not fixed yet: Bachelier on the path's forward for the period
-                f = (bond(paths, key, i, Ts) / bond(paths, key, i, Te) - 1.0) / tau
-                v = v + c["sign"] * c["N"] * tau * dfp * bachelier(f, c["K"], Ts - t_i, c["vol"], call)
-            else:
-                # fixed: the rate the path showed at the last grid point on or before the fixing
-                i_fix = max(j for j in range(len(paths.t)) if float(paths.t[j]) <= Ts + 1e-9)
-                f = (bond(paths, key, i_fix, Ts) / bond(paths, key, i_fix, Te) - 1.0) / tau
-                pay_off = np.maximum(f - c["K"], 0.0) if call else np.maximum(c["K"] - f, 0.0)
-                v = v + c["sign"] * c["N"] * tau * dfp * pay_off
+            yield c, Ts, Te, Tp, tau, ("ENDED" if Te <= t_i + 1e-9 else "OPEN")
+
+
+def value_caplets(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float]) -> np.ndarray:
+    """The item's caps and floors at grid date i, from our side, in USD: every period not yet paid.
+      ended, waiting for its payment date   N·max(G(s, e) − X, 0)·P(t, p), the growth the path has realised
+      running                               N·P(t, p)·Black(G(s, t)/P(t, e), X, v), v² the variance of ln G(t, e)
+      not begun                             N·P(t, p)·Black(P(t, s)/P(t, e), X, v), v² the variance of ln G(s, e)
+    with X = 1 + τK, and a floor the put. A payment after the period's end is discounted to its date as a swap's
+    floating coupon is (value_swap): the two days' convexity is not in it."""
+    key = f"RATES:{CURVE_OF.get(item['ccy'], item['ccy'] + '_OIS')}"
+    t_i = float(paths.t[i])
+    v = np.zeros(paths.n_paths)
+    seen = item.setdefault("_growth_var", {})
+    for c, Ts, Te, Tp, tau, state in _caplet_periods(item, paths, i):
+        call = c["type"] == "CAP"
+        X = 1.0 + tau * c["K"]
+        dfp = bond(paths, key, i, Tp)
+        if state == "ENDED":
+            G = growth(paths, key, Ts, Te)
+            unit = np.maximum(G - X, 0.0) if call else np.maximum(X - G, 0.0)
+        else:
+            begun = Ts <= t_i + 1e-9
+            M = (growth(paths, key, Ts, t_i) if begun else bond(paths, key, i, Ts)) / bond(paths, key, i, Te)
+            k = (id(paths), i, round(Ts, 9), round(Te, 9))
+            if k not in seen:
+                seen[k] = math.sqrt(growth_variance(paths, key, i, max(Ts, t_i), Te))
+            unit = black_on_growth(M, X, seen[k], call)
+        v = v + c["sign"] * c["N"] * dfp * unit
     return v * fx_to_usd.get(item["ccy"], 1.0)
+
+
+def caplet_flows(item: dict, paths: Paths, fx_to_usd: dict[str, float]) -> np.ndarray:
+    """What the item's caps and floors pay us in (t_{i−1}, t_i] on each path, shape (paths, T+1), with the sign
+    ccr.valuation.flows_per_step keeps: the jump the payment makes in our value, so a caplet we hold that pays us
+    is negative. The amount is the path's own, N·max(G − X, 0). Until 0.60.0 a caplet's payment was in no flow, and a
+    margined run read it as a market move."""
+    asof = paths.grid[0]
+    key = f"RATES:{CURVE_OF.get(item['ccy'], item['ccy'] + '_OIS')}"
+    out = np.zeros((paths.n_paths, len(paths.grid)))
+    k = fx_to_usd.get(item["ccy"], 1.0)
+    for c in item.get("caplets") or []:
+        call = c["type"] == "CAP"
+        for (ps, pe, pay, tau) in c["periods"]:
+            tp = _years(asof, pay)
+            if tp <= 0 or tau <= 0:
+                continue
+            step = next((i for i in range(1, len(paths.t)) if float(paths.t[i - 1]) < tp <= float(paths.t[i]) + 1e-9), None)
+            if step is None:
+                continue
+            G = growth(paths, key, _years(asof, ps), _years(asof, pe))
+            X = 1.0 + tau * c["K"]
+            out[:, step] -= c["sign"] * c["N"] * (np.maximum(G - X, 0.0) if call else np.maximum(X - G, 0.0)) * k
+    return out
+
+
+def model_cap_vol_bp(c: dict, paths: Paths, ccy: str) -> Optional[float]:
+    """The one normal vol, in bp, at which the ticket's pricer (Bachelier on each period's forward, time to the middle
+    of the period on ACT/365, discounted from the payment date: pricing/cap_floor.py) gives the value the paths' own
+    model gives this strip today. It is what the market's quote is set beside: the strip is valued on the paths at
+    the model's variance, not at this number. None when it cannot be found (a strip with no time value)."""
+    from scipy.optimize import brentq
+    asof = paths.grid[0]
+    key = f"RATES:{CURVE_OF.get(ccy, ccy + '_OIS')}"
+    p0 = paths.p0[key]
+    call = c["type"] == "CAP"
+    rows, model = [], 0.0
+    for (ps, pe, pay, tau) in c["periods"]:
+        Ts, Te, Tp = _years(asof, ps), _years(asof, pe), _years(asof, pay)
+        if Ts < -1e-9 or tau <= 0 or Tp <= 0:
+            continue                                             # a period under way has no forward on today's curve alone
+        F = (p0(Ts) / p0(Te) - 1.0) / tau
+        T_mid = max((ps - asof).days + 0.5 * (pe - ps).days, 0.0) / 365.0
+        rows.append((F, tau, p0(Tp), T_mid))
+        v = math.sqrt(growth_variance(paths, key, 0, Ts, Te))
+        model += float(black_on_growth(np.array([p0(Ts) / p0(Te)]), 1.0 + tau * c["K"], v, call)[0]) * p0(Tp)
+    if not rows:
+        return None
+    strip = lambda s: sum(tau * df * float(bachelier(np.array([F]), c["K"], T, s, call)[0]) for (F, tau, df, T) in rows)
+    try:
+        if model <= strip(1e-7) + 1e-14:
+            return None
+        return float(brentq(lambda s: strip(s) - model, 1e-7, 0.10, xtol=1e-10)) * 1e4
+    except Exception as e:              # noqa: BLE001
+        log.debug("ccr: model cap vol: %s", e)
+        return None
+
+
+def cap_market_vol_bp(db, uid: str, asof: date, c: dict, p0, tenor_y: float) -> tuple[float, str]:
+    """The vol the cap ticket prices this strip at: the cap surface at the strike's distance from the strip's own
+    at-the-money forward and at its remaining life (pricing.cap_floor.lookup_cap_vol, as POST /api/price/cap reads
+    it). Reported beside the model's; the paths do not use it."""
+    from pricing.cap_floor import lookup_cap_vol
+    try:
+        from api.routes.pricer import _load_cap_surface
+        rows = _load_cap_surface(db, asof.isoformat(), str(uid))
+    except Exception as e:              # noqa: BLE001
+        log.debug("cap surface: %s", e)
+        rows = []
+    num = den = 0.0
+    for (ps, pe, pay, tau) in c["periods"]:
+        Ts, Te, Tp = _years(asof, ps), _years(asof, pe), _years(asof, pay)
+        if Tp <= 0 or tau <= 0 or Ts < 0:
+            continue
+        F = (p0(Ts) / p0(Te) - 1.0) / tau
+        num += F * tau * p0(Tp); den += tau * p0(Tp)
+    atm = num / den if den > 1e-12 else c["K"]
+    vol, tier = lookup_cap_vol(strike_rate=c["K"], atm_forward=atm, cap_tenor_y=tenor_y, surface_rows=rows, is_floor=c["type"] == "FLOOR")
+    words = {"QUOTED": "cap surface, at a quote", "INTERP": "cap surface, read off its quotes", "FALLBACK": "desk default (no cap vol surface)"}
+    return float(vol), words.get(tier, f"cap surface ({tier})")
 
 
 # ── European swaptions ───────────────────────────────────────────────────────

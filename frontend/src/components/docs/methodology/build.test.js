@@ -34,8 +34,10 @@ describe('the methodology in the app', () => {
     expect(tags(9)).toEqual(expect.arrayContaining([13, 14, 15]))
     // v1.31: the first-to-default display in §10 is (22) and moves every later one up by one (read off the PDF: §10 is
     // (18) to (24), wrong-way risk now (23) and (24); §12 is (25) to (31))
-    expect(tags(10)).toEqual([18, 19, 20, 21, 22, 23, 24])
-    expect(tags(12)).toEqual([25, 26, 27, 28, 29, 30, 31])
+    // v1.43: two displays in §9 (the variance of a period's growth on the paths, the caplet on it) move every later
+    // one up by two (read off the PDF: §10 is (20) to (26), §12 is (27) to (33))
+    expect(tags(10)).toEqual([20, 21, 22, 23, 24, 25, 26])
+    expect(tags(12)).toEqual([27, 28, 29, 30, 31, 32, 33])
     // prose with the maths taken out: no backslash command, no stray brace or dollar
     // the text with each formula taken out whole (a formula's own spans nest: counted, not guessed)
     const strip = (h) => {

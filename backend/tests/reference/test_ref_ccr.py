@@ -12,8 +12,15 @@ must hold, each checked here on 40,000 paths against Monte Carlo standard errors
 2. A European swaption, valued at expiry by the production path functions (physical settlement into
    the underlying swap where it is in the money), discounted and averaged, equals QuantLib's
    JamshidianSwaptionEngine price for the same (a, σ).
-3. A caplet, fixed on the path at its fixing date and paid at the period end, equals QuantLib's
-   HullWhite.discountBondOption price of the equivalent zero-bond put.
+3. A caplet on the compounded rate of its period (0.60.0): the engine values it by Black's formula on the growth of
+   one unit over the period, at the variance the paths' own model gives that growth (ccr/options.value_caplets).
+   Three things are compared: today's value against the payoff itself simulated on the paths and discounted
+   (standard errors), the value at a later date discounted along the path against today's (a martingale), and
+   today's value against the continuous-time Hull-White price of the same payoff, whose variance is integrated
+   here by quadrature and put through QuantLib's Black formula. The last differs by what the monthly grid leaves
+   out (the rate's variance inside a step), which is reported and bounded. QuantLib's zero-bond put, the caplet
+   on a rate fixed at the period's start, is a lower bound and is shown beside it. (Until 0.60.0 the engine valued
+   that forward-looking caplet, at the market's vol before the fixing.)
 
 Before expiry the engine values a swaption with Bachelier at the normal vol its own Hull-White model
 implies (ccr/options.hw_implied_vol), so today's value is the Jamshidian price and expected exposure does
@@ -126,23 +133,52 @@ def swaption_rows(p=None) -> list[Row]:
 
 
 def caplet_rows(p=None) -> list[Row]:
+    from scipy.integrate import quad
+    from ccr.simulate import account, growth
     p = p or _paths()
-    D = _bank(p)
+    Aacc = account(p, KEY)
     set_eval(VAL)
     h = replica_handle(rijeka_curve())
     model = ql.HullWhite(h, A, SIGMA)
+    B = lambda u, T: (1.0 - math.exp(-A * (T - u))) / A
+    yrs = lambda d: (d - VAL).days / 365.25
     rows = []
-    for m_fix, K in ((12, 0.035), (12, 0.040), (36, 0.038)):
+    for m_fix, K, kind in ((12, 0.035, "CAP"), (12, 0.040, "CAP"), (36, 0.038, "CAP"), (24, 0.036, "FLOOR")):
         ps, pe = add_months(VAL, m_fix), add_months(VAL, m_fix + 3)
         tau = (pe - ps).days / 360.0
-        item = {"ccy": "USD", "caplets": [{"type": "CAP", "K": K, "sign": 1.0, "N": N, "periods": [(ps, pe, pe, tau)], "vol": 0.0085}]}
-        i = p.grid.index(pe) - 1                       # after the fixing, before the payment
-        x = D[:, i] * value_caplets(item, p, i, FX)
-        se = x.std() / math.sqrt(len(x))
-        t_fix, t_pay = (ps - VAL).days / 365.0, (pe - VAL).days / 365.0
-        ql_pv = N * (1 + K * tau) * model.discountBondOption(ql.Option.Put, 1 / (1 + K * tau), t_fix, t_pay)
-        rows.append(Row("CCR paths", f"caplet fixing {ps} K={K:.2%}", "E[D·payoff] vs QuantLib HW zero-bond put", x.mean(), ql_pv,
-                        "standard errors", 4.0, scale=1.0 / se))
+        X = 1.0 + K * tau
+        item = {"ccy": "USD", "caplets": [{"type": kind, "K": K, "sign": 1.0, "N": N, "periods": [(ps, pe, pe, tau)], "vol": 0.0085}]}
+        case = f"{kind.lower()}let on the compounded rate {ps} to {pe} K={K:.2%}"
+        v0 = float(value_caplets(item, p, 0, FX).mean())
+        # the payoff itself on each path, discounted on the path to today
+        G = growth(p, KEY, yrs(ps), yrs(pe))
+        pay = N * (np.maximum(G - X, 0.0) if kind == "CAP" else np.maximum(X - G, 0.0)) / growth(p, KEY, 0.0, yrs(pe))
+        rows.append(Row("CCR paths", case, "a caplet's value today vs E[its payoff discounted on the path]", v0, pay.mean(), "standard errors", 4.0,
+                        scale=1.0 / (pay.std() / math.sqrt(len(pay)))))
+        # a martingale: the value half-way to the period, and a month into it, discounted along the path
+        for i in (p.grid.index(ps) // 2, p.grid.index(ps) + 1):
+            x = value_caplets(item, p, i, FX) / Aacc[:, i]
+            rows.append(Row("CCR paths", f"{case}, seen at {p.grid[i]}", "a caplet's value at a later date, discounted on the path, vs today's", x.mean(), v0, "standard errors", 4.0,
+                            scale=1.0 / (x.std() / math.sqrt(len(x)))))
+        # the continuous model's price of the same payoff: variance of ln G by quadrature, Black by QuantLib
+        t_s, t_e = yrs(ps), yrs(pe)
+        var = quad(lambda u, s_=t_s, e_=t_e: SIGMA ** 2 * (B(u, e_) - B(u, s_)) ** 2, 0.0, t_s)[0] + quad(lambda u, e_=t_e: SIGMA ** 2 * B(u, e_) ** 2, t_s, t_e)[0]
+        p0 = p.p0[KEY]
+        typ = ql.Option.Call if kind == "CAP" else ql.Option.Put
+        cont = N * ql.blackFormula(typ, X, p0(t_s) / p0(t_e), math.sqrt(var), p0(t_e))
+        rows.append(Row("CCR paths", case, "a caplet's value today vs the continuous Hull-White price (QuantLib Black, variance by quadrature)", v0, cont,
+                        "% of value", 6.0, scale=100.0 / cont, kind="convention",
+                        cause="the paths carry the rate's variance at their monthly dates only: inside a step the account grows at the rate "
+                              "seen at the step's start, so a quarterly period has a few percent less variance than the continuous model "
+                              "(3.8 % a year out), and the engine values the caplet at the paths' own variance so that it stays a martingale on them"))
+        if kind == "CAP":
+            t_fix, t_pay = (ps - VAL).days / 365.0, (pe - VAL).days / 365.0
+            fwd_looking = N * (1 + K * tau) * model.discountBondOption(ql.Option.Put, 1 / (1 + K * tau), t_fix, t_pay)
+            rows.append(Row("CCR paths", case, "a caplet's value today over QuantLib's caplet on the rate fixed at the period's start (zero-bond put)",
+                            v0, fwd_looking, "% of value", 40.0, scale=100.0 / fwd_looking, kind="convention",
+                            cause="a rate compounded over its period goes on moving through the period; the caplet fixed at the start is worth less, "
+                                  "most for a near period"))
+            assert v0 >= fwd_looking * 0.999, (case, v0, fwd_looking)
     return rows
 
 

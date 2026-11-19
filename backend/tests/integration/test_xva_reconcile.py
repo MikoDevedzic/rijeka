@@ -130,10 +130,45 @@ def test_a_swaption_is_an_option_on_the_paths_and_not_a_swap(client, auth_a, ids
     assert old["xva"]["dva"] > 3 * tk["xva"]["dva"]
 
 
-def test_a_cap_is_refused_in_words_and_a_margined_run_takes_the_coupons_out(client, auth_a, ids):
+def test_a_cap_a_floor_and_a_collar_are_valued_on_the_paths(client, auth_a, ids, empty_cp):
+    """0.60.0. Until then the ticket's run refused the three by name and the netting-set run left them out."""
+    cap = B.cap(ids["a"], "RC-CAP")                          # bought, 5Y quarterly, struck at 4.5 %
+    net = _alone(client, auth_a, cap, empty_cp)
+    tk = _ticket(client, auth_a, trade=cap, valuation_date=net["asof"], cp_cds_bp=net["cp_cds_bp"], lgd=net["lgd"])
+    assert tk["basis"]["kind"] == "TRADE" and tk["basis"]["instrument"] == "IR_CAP" and tk["steps"] == net["months"]
+    opt = tk["basis"]["options"][0]
+    assert opt["kind"] == "CAP" and opt["side"] == "LONG" and opt["strike"] == 0.045
+    # beside the model's own vol the run says the vol the ticket prices the cap at: the price route's, for this leg
+    priced = client.post("/api/price/cap", json={"cap_rate": 0.045, "side": "BUY", "curve_id": "USD_SOFR", "valuation_date": net["asof"],
+                                                 "leg": {k: v for k, v in cap["legs"][0].items() if k not in ("embedded_options", "terms")}}, headers=auth_a).json()
+    assert opt["vol_bp"] == pytest.approx(priced["vol_bp"], abs=0.006) and "cap surface" in opt["vol_source"]
+    assert 40.0 < opt["vol_used_bp"] < 130.0 and opt["vol_used_bp"] != opt["vol_bp"]
+    # the ticket and a netting set of the cap alone are one calculation
+    for k in FOUR:
+        assert tk["xva"][k] == pytest.approx(net["incremental"][k], rel=2e-3, abs=1.0), (k, tk["xva"][k], net["incremental"][k])
+    # a bought cap is never owed by us: no negative exposure, so no DVA and no funding benefit; it is owed to us
+    assert max(tk["ee"]) > 0 and min(tk["ene"]) > -0.5 and tk["xva"]["cva"] < 0 and abs(tk["xva"]["dva"]) < 0.5
+    assert tk["ee"][-1] == pytest.approx(0.0, abs=0.5), "everything has paid by the last date"
+    # sold, it is the mirror: what was owed to us is owed by us
+    sold = dict(cap, terms={**cap["terms"], "side": "SELL"}, legs=[{**cap["legs"][0], "embedded_options": [{**cap["legs"][0]["embedded_options"][0], "direction": "SELL"}]}])
+    ts = _ticket(client, auth_a, trade=sold, valuation_date=net["asof"], cp_cds_bp=net["cp_cds_bp"], lgd=net["lgd"])
+    assert ts["basis"]["options"][0]["side"] == "SHORT"
+    assert ts["ene"] == pytest.approx([-x for x in tk["ee"]], abs=0.02) and max(ts["ee"]) < 0.5
+    assert abs(ts["xva"]["cva"]) < 0.5 and ts["xva"]["dva"] > 0
+    # a floor and a collar run too, and a collar is its cap less its floor: its exposure is no more than the two apart
+    fl = _ticket(client, auth_a, trade=B.floor(ids["a"], "RC-FLOOR"), valuation_date=net["asof"])
+    co = _ticket(client, auth_a, trade=B.collar(ids["a"], "RC-COLLAR"), valuation_date=net["asof"])
+    assert [o["kind"] for o in co["basis"]["options"]] == ["CAP", "FLOOR"] and [o["side"] for o in co["basis"]["options"]] == ["LONG", "SHORT"]
+    assert fl["basis"]["options"][0]["side"] == "SHORT" and max(fl["ee"]) < 0.5            # the booked floor of the test bodies is a sold one
+    assert max(co["ee"]) <= max(tk["ee"]) + 1.0 and min(co["ene"]) < 0
+    # under a margin agreement the cap's payments are taken out of the margin period's move, as a swap's coupons are
     _free()
-    r = client.post("/api/xva/simulate", json={"paths": 500, "trade": B.cap(ids["a"], "RC-CAP")}, headers=auth_a)
-    assert r.status_code == 422 and "XVA is not available for this trade yet: a cap is not valued on the exposure paths" in r.text
+    m = client.post("/api/xva/simulate", json={"paths": 1000, "seed": 7, "trade": cap, "valuation_date": net["asof"], "csa": {"preset": "BILATERAL"}}, headers=auth_a)
+    assert m.status_code == 200, m.text[:300]
+    assert abs(m.json()["xva"]["cva"]) < abs(tk["xva"]["cva"])
+
+
+def test_an_instrument_the_engine_does_not_know_is_refused_in_its_own_words(client, auth_a, ids):
     # a refusal is in the engine's words, never the sender's: an instrument it does not know is not named back
     odd = dict(B.cap(ids["a"], "RC-ODD"), instrument_type="<b>x</b>")
     _free()

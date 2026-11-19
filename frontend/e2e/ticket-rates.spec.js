@@ -333,7 +333,8 @@ test('the XVA of a swaption is of an option: no exposure against us before expir
   expectClean(problems)
 })
 
-test('a cap has no XVA yet, and the tab says so in words', async ({ app, problems }) => {
+test('the XVA of a cap is of its periods on the paths: owed to us only, and the tab says the vol the paths carry beside the ticket\'s', async ({ app, problems }) => {
+  // Until 0.60.0 a cap, a floor and a collar were not valued on the exposure paths: the tab refused them in words.
   await app.goto('/blotter')
   await app.getByText('+ NEW TRADE').first().click()
   const win = app.locator('.tbw-window')
@@ -341,20 +342,30 @@ test('a cap has no XVA yet, and the tab says so in words', async ({ app, problem
   await win.getByRole('button', { name: 'RATES', exact: true }).click()
   await win.getByRole('button', { name: /^INTEREST RATE CAP$/i }).click()
   await win.locator('select').filter({ has: app.locator('option', { hasText: 'RIJEKA DEMO BANK AG' }) }).first().selectOption({ label: 'RIJEKA DEMO BANK AG' })
+  await expect(win.locator('input[type=date]').nth(2)).not.toHaveValue('')
+  const answer = app.waitForResponse(r => r.url().startsWith(API) && r.url().endsWith('/api/price/cap') && r.request().method() === 'POST')
   await win.getByRole('button', { name: '▶ PRICE' }).click()
-  await expect(win.locator('.tbw-footer, .tbw-foot').first()).toBeVisible()
+  const quote = await (await answer).json()
   await win.getByRole('button', { name: 'XVA', exact: true }).click()
-  const refused = app.waitForResponse(r => r.url().endsWith('/api/xva/simulate') && r.request().method() === 'POST', { timeout: 60_000 })
-  await win.getByRole('button', { name: /SIMULATE/ }).click()
-  const r = await refused
-  expect(r.status()).toBe(422)
-  await expect(win.getByText(/XVA is not available for this trade yet/)).toBeVisible()
-  await expect(win.getByTestId('xva-outputs')).not.toContainText('CVA -')
-  // the refusal is the point: that one 422, and the console line the browser writes for it, are not problems of the page;
-  // anything else still is
-  const expected = x => /HTTP 422 POST .*\/api\/xva\/simulate/.test(x) || /Failed to load resource.*422/.test(x)
-  const others = problems.filter(x => !expected(x))
-  problems.length = 0
-  problems.push(...others)
+  await win.getByRole('button', { name: 'NO CSA', exact: true }).click()
+  const one = await simulateWithComparison(app, win, '/api/xva/simulate')
+  expect(one.request.trade?.instrument_type).toBe('IR_CAP')
+  // the cap the paths valued is the one the ticket priced: struck at the money, at the rate the price struck
+  expect(one.request.trade.legs[0].embedded_options[0]).toMatchObject({ type: 'CAP', direction: 'BUY', default_strike: quote.cap_rate })
+  expect(one.run.basis).toMatchObject({ kind: 'TRADE', instrument: 'IR_CAP' })
+  const opt = one.run.basis.options[0]
+  expect(opt).toMatchObject({ kind: 'CAP', side: 'LONG' })
+  expect(opt.vol_bp, 'the vol the ticket priced at stands beside the model\'s').toBeCloseTo(quote.vol_bp, 1)
+  expect(opt.vol_used_bp).toBeGreaterThan(0)
+  // a bought cap is never owed by us
+  expect(Math.min(...one.run.ene)).toBeGreaterThanOrEqual(-0.5)
+  expect(Math.max(...one.run.ee)).toBeGreaterThan(0)
+  expect(one.run.xva.cva).toBeLessThan(0)
+  expect(Math.abs(one.run.xva.dva)).toBeLessThan(0.5)
+  await expect(win.getByTestId('xva-basis')).toContainText("each period valued on the paths at the model's own variance")
+  await expect(win.getByTestId('xva-basis')).toContainText(`the ticket prices at ${quote.vol_bp.toFixed(1)}bp`)
+  await expect(win.getByTestId('xva-outputs')).toContainText('CVA')
+  await expect(win.getByText(/XVA is not available for this trade yet/)).toHaveCount(0)
+  await app.screenshot({ path: 'e2e/.out/shots/rates-xva-cap.png' })
   expectClean(problems)
 })

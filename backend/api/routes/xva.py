@@ -521,8 +521,7 @@ def get_latest_calibration(
 
 # ── Simulate ──────────────────────────────────────────────────────────────────
 
-NOT_ON_PATHS = {"IR_CAP": "a cap", "IR_FLOOR": "a floor", "IR_COLLAR": "a collar", "INTEREST_RATE_CAP": "a cap", "INTEREST_RATE_FLOOR": "a floor",
-                "INTEREST_RATE_COLLAR": "a collar", "RATES_CAP": "a cap", "RATES_FLOOR": "a floor", "RATES_COLLAR": "a collar"}
+NOT_ON_PATHS: dict = {}               # instrument type -> its name in words, for one the engine does not value on paths (none since 0.60.0: a cap, a floor and a collar are)
 RATES_RUN_MAX_WORK = 4_000_000       # months × paths of one rates run that values the trade itself (_trade_paths): 30 years at 10,000 paths fit, 40 do not
 
 
@@ -587,6 +586,19 @@ def _trade_paths(trade, db: Session, user: dict, a: float, sigma: float, curve, 
     for o in ns.options:
         if it.get("hw_vol_bp") is not None and it["kind"] == "SWAPTION":
             o["vol_used_bp"] = round(float(it["hw_vol_bp"]), 2)
+    # A cap or a floor on the leg (a cap, a floor, a collar; a capped leg of a swap) is valued on the paths at the
+    # model's own variance of each period's compounded rate (ccr/options.py value_caplets). Beside it the run says
+    # the vol the ticket prices the strip at (the surface at its strike and remaining life), and the one normal vol
+    # at which the ticket's pricer would give the model's value today.
+    from ccr import options as O
+    for c in it.get("caplets") or []:
+        o = c.get("_reported")
+        if o is None:
+            continue
+        o["vol_bp"], o["vol_source"] = O.cap_market_vol_bp(db, uid, val_date, c, p.p0[key], max(years(val_date, it["maturity"]), 0.0))
+        o["vol_bp"] = round(float(o["vol_bp"]), 2)
+        used = O.model_cap_vol_bp(c, p, ccy)
+        o["vol_used_bp"] = round(used, 2) if used is not None else None
     T = len(p.t) - 1
     dt = float(p.t[-1]) / T                                    # the grid is monthly by the calendar: the mean step, as the waterfall takes one length
     p0 = p.p0[key]
