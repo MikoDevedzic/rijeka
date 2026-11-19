@@ -336,7 +336,9 @@ test('demo: everything outside the launch set is on request; the home does not p
 test('an existing firm is untouched: the dashboard, every tab, and the XVA tab as it was', async ({ app, problems }) => {
   await app.goto('/command-center')
   await expect(app.getByTestId('launch-home')).toHaveCount(0)
-  await expect(app.getByText('USD SOFR', { exact: true })).toBeVisible()
+  // the first: the home's fixing ladder names the index again on each day a booked swap resets, which depends on what the
+  // local database holds from earlier runs (six matches on 19 November 2026, where a fresh database gives one)
+  await expect(app.getByText('USD SOFR', { exact: true }).first()).toBeVisible()
   await expect(app.getByRole('button', { name: 'RISK', exact: true }).first()).toBeVisible()
   const win = await openTicket(app)
   await expect(win.getByRole('button', { name: 'CAPITAL', exact: true }), 'no ticket has a CAPITAL tab since 0.39.1').toHaveCount(0)
