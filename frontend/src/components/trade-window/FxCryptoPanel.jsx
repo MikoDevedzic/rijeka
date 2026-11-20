@@ -537,7 +537,7 @@ const FxCryptoPanel = forwardRef(function FxCryptoPanel({ ac, inst, onPriced, on
   // (CME CF BRR, the venues) publish every calendar day, and the caption says so when the fixing falls on a weekend
   const forwardFixing = fixingCaption({ product: 'FORWARD', fixingDate: fixingShown, settlementDate: settlesShown, time: settle.time })
   const fixingDay = fixingShown ? closedWhy(fixingShown, null) : null
-  const forwardFixingLine = fixingDay ? forwardFixing.replace(`fixes on ${fixingShown}`, `fixes on ${fixingShown} (a ${fixingDay}: this benchmark publishes every day)`) : forwardFixing
+  const forwardFixingLine = fixingDay ? forwardFixing.replace(`fixes on ${fixingShown}`, `fixes on ${fixingShown} (a ${fixingDay}; published daily)`) : forwardFixing
   const settlesOn = settleOptions.length > 0 && (
     <div className="tbw-fx-row" data-fx-row="settles-on" style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'flex-start', marginTop: 10 }}>
       <div className="tbw-fx-cell" style={{ flex: '0 1 300px' }}>

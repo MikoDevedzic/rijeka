@@ -3,6 +3,15 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.44). Commits on `main` are the detail.
 
+## 0.61.1 · 20 November 2026
+
+**A forward that fixes on a weekend no longer pushes the ticket's TRADE tab into a scroll.** On a day whose
+three-month settlement date follows a weekend (a Friday, 20 November 2026 among them), a digital-asset forward
+fixes on the Sunday before, and the note beside FIXING DATE said so in words long enough to take a third line: the
+fees block slid under the footer and the tab scrolled inside its window. The note now reads "(a Sunday; published
+daily)". Found by the journey that measures the tab, which failed on that date with no code changed. No figure
+changes. The README's test counts are also brought up to date.
+
 ## 0.61.0 · 19 November 2026
 
 **The confirmation of an option on a rate says it is an option.** From a walk of CONFIRM: seventeen tickets priced,

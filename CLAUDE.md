@@ -370,3 +370,5 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   that builds its record, not only where it is verified.
 - A value the system can compute is not a term the parties agreed: a premium is entered, never filled in with the
   model's value, which is a mid.
+- A screen is looked at on the date that makes it longest, not only on the day it was built: a weekend fixing adds
+  words to a ticket that a weekday never shows.
