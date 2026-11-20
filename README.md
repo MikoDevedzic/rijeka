@@ -37,7 +37,7 @@ Hosted demo at [app.rijeka.app](https://app.rijeka.app); the in-app **ROADMAP** 
 
 ## Validation
 
-Every product is repriced in QuantLib on every commit: more than 400 comparisons in `backend/tests/reference`, each with a tolerance that fails the build when exceeded. Around them, about 1,900 Python tests, 800 frontend tests, 175 browser journeys on a local stack and 16 Foundry tests on the registry contract, in six CI jobs that run on every pull request. What is validated against what, and the open findings ([#31](https://github.com/MikoDevedzic/rijeka/issues/31)–[#36](https://github.com/MikoDevedzic/rijeka/issues/36)), is in [docs/VALIDATION.md](docs/VALIDATION.md). Independent validators are wanted, named on the report and listed as contributors.
+Every product is repriced in QuantLib on every commit: more than 400 comparisons in `backend/tests/reference`, each with a tolerance that fails the build when exceeded. Around them, about 2,000 Python tests, 900 frontend tests, 230 browser journeys on a local stack and 16 Foundry tests on the registry contract, in six CI jobs that run on every pull request. What is validated against what, and the open findings ([#31](https://github.com/MikoDevedzic/rijeka/issues/31)–[#36](https://github.com/MikoDevedzic/rijeka/issues/36)), is in [docs/VALIDATION.md](docs/VALIDATION.md). Independent validators are wanted, named on the report and listed as contributors.
 
 ## Public tools
 
