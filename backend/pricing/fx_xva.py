@@ -27,20 +27,12 @@ import numpy as np
 from pricing.csa import CSA
 from pricing.xva_engine import WaterfallParams, WaterfallResult, hazard_beta, run_waterfall
 
-# Flat annualised vols by pair, percent: desk inputs for the demo, not market data.
-DEFAULT_VOL_PCT = {
-    "EURUSD": 7.5, "GBPUSD": 8.0, "USDJPY": 10.0, "USDCHF": 8.0, "AUDUSD": 10.0, "USDCAD": 7.0,
-    "BTCUSD": 55.0, "ETHUSD": 70.0, "SOLUSD": 90.0,
-}
-G10 = {"USD", "EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "NZD", "SEK", "NOK"}
+# The vol of a pair with no surface saved: one table, the pricer's (pricing/fx_vol.DEFAULT_VOL_PCT), since 0.63.0.
+from pricing.fx_vol import DEFAULT_VOL_PCT, MAJORS as G10, default_vol_pct      # noqa: E402,F401  (names other modules import from here)
 # Which Basel group a digital asset is run under when the desk does not say (SCO60.55: Group 2a needs a
 # regulated derivative or ETF, USD 10bn of market capitalisation, USD 50m of daily volume and a year of prices,
 # shown to the supervisor; everything else is 2b). The default is this engine's reading, the desk's to change.
 GROUP_2A_DEFAULT = {"BTC", "ETH"}
-
-
-def default_vol_pct(pair: str) -> float:
-    return DEFAULT_VOL_PCT.get(pair.upper(), 60.0 if pair[:3].upper() not in G10 else 9.0)
 
 
 def is_crypto(pair: str) -> bool:
@@ -324,14 +316,16 @@ def _option_lag(inp: OptionXvaInput, vi: np.ndarray, v0: float, x: dict, steps: 
             continue
         s_lag = inp.forward * m_lag[:, i] * math.exp(-(r_q - r_b) * (inp.t_settle - tl))
         tau = (float(t[i_exp]) if j - 1 == i_exp else inp.t_expiry) - tl       # in the expiry's own step: to the date the paths fix the payoff on
+        # before the expiry's own step: the forward and the discounting to settlement, as the grid values read them
+        r_l, rb_l = (r_q, r_b) if j - 1 == i_exp or tau <= 1e-9 else rates_to_settlement(r_q, r_b, inp.t_settle - tl, tau)
         if tau <= 1e-9:
             out[:, i] = sign * scale * _payoff_at_expiry(spec, s_lag, knocked) * df
         elif inp.pillars:
-            f_exp = s_lag * math.exp((r_q - r_b) * tau)
+            f_exp = s_lag * math.exp((r_l - rb_l) * tau)
             sig = path_vols(inp.pillars, tl, tl + tau, f_exp, spec.strike if spec.style != "TOUCH" else None)
-            out[:, i] = sign * scale * value_on_paths_vols(spec, s_lag, r_q, r_b, sig, tau, knocked, 1.0)
+            out[:, i] = sign * scale * value_on_paths_vols(spec, s_lag, r_l, rb_l, sig, tau, knocked, 1.0)
         else:
-            out[:, i] = sign * scale * value_on_paths(spec, s_lag, r_q, r_b, sigma, tau, knocked, 1.0)
+            out[:, i] = sign * scale * value_on_paths(spec, s_lag, r_l, rb_l, sigma, tau, knocked, 1.0)
     return out
 
 
@@ -440,6 +434,18 @@ class OptionXvaInput:
     watch_between: bool = True       # a barrier is watched between the grid dates as well as on them (knocked_by); False: on the dates alone
 
 
+def rates_to_settlement(r_q: float, r_b: float, to_settle: float, tau: float) -> tuple[float, float]:
+    """The ticket's reading of an option, carried along a path. The pricer takes the forward and the discount factor
+    to the SETTLEMENT date and implies the rate and the carry from them over the time to the EXPIRY
+    (pricing/fx_exotic.price_exotic, pricing/fx_option.price_fx_option; the credit engine does the same,
+    ccr/options.value_fx_option). At a date with `tau` left to the expiry and `to_settle` to the settlement that is
+    (r, r_base) with e^(−r·τ) = DF_q(t, T_s) and S_t·e^((r − r_base)·τ) = F_t, the forward to settlement: the flat
+    rates scaled by to_settle/τ. Until 0.63.0 the paths read both at the expiry: a value today a few days' carry and
+    discounting off the ticket's price (0.09 % of the premium on an eighteen-month EURUSD call, 0.27 % on a three-month one)."""
+    k = max(to_settle, tau) / tau
+    return r_q * k, r_b * k
+
+
 def _payoff_at_expiry(spec, S_T: np.ndarray, knocked: np.ndarray) -> np.ndarray:
     from pricing.fx_exotic import ExoticSpec, _expired
     if spec.style in ("EUROPEAN", "AMERICAN", "DIGITAL"):
@@ -526,16 +532,18 @@ def _option_values(inp: OptionXvaInput, steps: int, dt: float, m: np.ndarray, sv
         knocked = seen[:, min(k, i_exp) + 1]
         if t[k] < inp.t_expiry - 1e-9:
             tau = inp.t_expiry - t[k]
+            r_k, rb_k = rates_to_settlement(r_q, r_b, inp.t_settle - float(t[k]), tau)     # the forward and the discounting to settlement
             if inp.pillars:
-                # the forward vol for the remaining life, the smile at each path's moneyness (sticky-delta)
-                f_exp = s_t[:, k] * math.exp((r_q - r_b) * tau)
+                # the forward vol for the remaining life, the smile at each path's moneyness (sticky-delta): the forward to settlement against the strike
+                f_exp = s_t[:, k] * math.exp((r_k - rb_k) * tau)
                 sig_k = path_vols(inp.pillars, float(t[k]), inp.t_expiry, f_exp, spec.strike if spec.style != "TOUCH" else None)
-                V[:, k] = sign * scale * value_on_paths_vols(spec, s_t[:, k], r_q, r_b, sig_k, tau, knocked, 1.0)
+                V[:, k] = sign * scale * value_on_paths_vols(spec, s_t[:, k], r_k, rb_k, sig_k, tau, knocked, 1.0)
             else:
-                V[:, k] = sign * scale * value_on_paths(spec, s_t[:, k], r_q, r_b, sigma, tau, knocked, 1.0)
+                V[:, k] = sign * scale * value_on_paths(spec, s_t[:, k], r_k, rb_k, sigma, tau, knocked, 1.0)
         else:
             V[:, k] = sign * scale * _payoff_at_expiry(spec, s_t[:, i_exp], knocked) * (df_t_T[k] if t[k] <= inp.t_settle + 1e-9 else 1.0)
-    v0 = sign * scale * float(value(spec, inp.spot, r_q, r_b, sigma, inp.t_expiry, 1.0))
+    r_0, rb_0 = rates_to_settlement(r_q, r_b, inp.t_settle, max(inp.t_expiry, 1e-9))
+    v0 = sign * scale * float(value(spec, inp.spot, r_0, rb_0, sigma, inp.t_expiry, 1.0))       # the ticket's price: forward and discounting to settlement
     return V, v0, {"f_t": f_t, "s_t": s_t, "df_t_T": df_t_T, "p0": p0, "r_b": r_b, "i_exp": i_exp, "knocked": seen}
 
 

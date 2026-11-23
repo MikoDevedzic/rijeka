@@ -5,8 +5,22 @@ methodology document carries its own version (v1.46). Commits on `main` are the 
 
 ## 0.63.0 · 23 November 2026
 
-**The XVA workbooks of currency and digital-asset tickets are the ticket's own run.** Two are rebuilt and two are
-new. No figure of a ticket changes.
+**The XVA workbooks of currency and digital-asset tickets are the ticket's own run, and two defects the new option
+workbook showed are fixed.** Two workbooks are rebuilt and two are new. Two figures change.
+
+- **Changed: an option's XVA run starts from the ticket's price.** The exposure of an option on a currency pair or a
+  digital asset read the forward and the discounting at the expiry, where the ticket prices the option on the forward
+  to settlement, discounted from the settlement date. The run's value today stood 0.09 % below the ticket's
+  price on an eighteen-month EURUSD call and 0.27 % below on a three-month one (four days from expiry to
+  settlement), and every exposure carried that. The paths now read both at the settlement, on every path and a
+  margin period earlier, for every style; the value the exposure starts from is the ticket's price to rounding.
+  Measured before against after at 5,000 paths: an uncollateralised EURUSD call's CVA and FCA rise 0.09 % at
+  eighteen months and 0.27 % at three; margined, every charge moves under 0.1 %; a BTC option's, under 0.01 %.
+- **Changed: one default for the vol of a pair with no surface.** The option's price and the XVA runs each had a
+  table. An option on a digital asset with no surface saved was priced at the currencies' 10 %, where a forward's
+  XVA run on the same asset used 55 %; GBPUSD, USDCHF and USDCAD stood half a point apart in the two. One table now
+  (`pricing/fx_vol.DEFAULT_VOL_PCT`): the price's levels for the currency pairs, 55, 70 and 90 % for BTC, ETH and
+  SOL. Nothing changes for a pair with a surface saved, which on the hosted demo is every pair it lists.
 
 - **A forward's XVA run** (`xva_fx`, `xva_crypto`). The book takes the forward the ticket's route reads from the
   account's market (the pair's stored spot, curves and points, the spot date) and runs eighteen months, where the
@@ -24,14 +38,6 @@ new. No figure of a ticket changes.
   risk as a default intensity tied to the asset; the capital of a Group 2b digital asset.
 - `python -m scripts.check_workbook` runs the four currency books under each margin preset, with a surface and
   without one, on five valuation dates.
-
-- **Found by the option book, and stated, not yet changed.** The value an option's XVA run starts from reads the
-  forward and the discounting at the expiry; the ticket prices the option on the forward to settlement, discounted
-  from the settlement date. On an eighteen-month EURUSD call the run starts 0.09 % below the ticket's price; on the digital asset's, with one
-  day between the two dates, within a hundredth of one per cent either way. And an
-  option on a pair with no surface saved and no default level of its own is priced at 10 % flat, a digital asset
-  included, where a forward's XVA run on the same asset defaults to 55 %: two tables for one default. The hosted
-  demo saves a surface for every pair it lists, so neither default is reached there.
 
 ## 0.62.0 · 23 November 2026
 

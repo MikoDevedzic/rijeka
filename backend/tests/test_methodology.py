@@ -387,7 +387,8 @@ def test_xva_fx_workbooks_carry_the_engine_draws_and_a_live_mode():
 
 def test_xva_option_workbooks_value_the_option_on_every_path_in_the_tickets_flat_mode():
     """0.63.0. The XVA book of a European option on a currency pair and on a digital asset: the ticket's run in its
-    FLAT vol mode. Its value today against the closed form written out here (not the engine's), the supervisory delta
+    FLAT vol mode. Its value today against the closed form written out here (not the engine's) and against the ticket's
+    price, the supervisory delta
     against CRE52.40 written out here, the mean of the discounted values on many paths against the value today (a
     bought option's value is a martingale under the measure the paths are drawn in), and the book's shape."""
     import math
@@ -406,22 +407,19 @@ def test_xva_option_workbooks_value_the_option_on_every_path_in_the_tickets_flat
         assert fi["ticket"] is False and inp.pillars is None and fi["pillars"] == [], "no account and no surface: one default vol, the FLAT mode"
         assert eng["T"] in (18, 19) and eng["dt"] == pytest.approx(inp.t_settle / eng["T"]) and 0 < inp.t_settle - inp.t_expiry < eng["dt"]
         assert inp.grid_per_year is None and (eng["T"], eng["dt"]) == exposure_grid(inp.t_settle) and eng["T"] == math.ceil(12 * inp.t_settle), "the ticket's own grid, by the ticket's own rule"
-        # the value today, from the formula: the forward to the expiry on the carry the forward to settlement implies
-        r_q = -math.log(inp.df_quote_t) / inp.t_settle
-        r_b = r_q - math.log(inp.forward / inp.spot) / inp.t_settle
-        f_e = inp.spot * math.exp((r_q - r_b) * inp.t_expiry)
+        # the value today, from the formula: on the forward to settlement, discounted from the settlement date, over the time to the expiry
         sT = inp.vol * math.sqrt(inp.t_expiry)
-        d1 = (math.log(f_e / inp.spec.strike) + 0.5 * sT * sT) / sT
-        v0 = inp.base_notional * math.exp(-r_q * inp.t_expiry) * (f_e * Phi(d1) - inp.spec.strike * Phi(d1 - sT))
+        d1 = (math.log(inp.forward / inp.spec.strike) + 0.5 * sT * sT) / sT
+        v0 = inp.base_notional * inp.df_quote_t * (inp.forward * Phi(d1) - inp.spec.strike * Phi(d1 - sT))
         assert eng["v0"] == pytest.approx(v0, rel=1e-10)
-        assert abs(eng["v0"] / fi["npv"] - 1.0) < 2e-3 and eng["v0"] != pytest.approx(fi["npv"], rel=1e-6), "the run reads the forward and the discounting at the expiry, the ticket at the settlement: close, not equal"
+        assert eng["v0"] == pytest.approx(fi["npv"], rel=1e-10), "the run starts from the ticket's price (0.63.0; it read the forward and the discounting at the expiry until then)"
         # the supervisory delta of the strike, with the class's supervisory volatility
         ds = (math.log(inp.spot / inp.spec.strike) + 0.5 * sup_vol ** 2 * inp.t_expiry) / (sup_vol * math.sqrt(inp.t_expiry))
         assert eng["sup_delta"] == pytest.approx(Phi(ds), rel=1e-12) and 0.3 < eng["sup_delta"] < 1.0
         # a martingale: the mean discounted value at a date in the middle and at the last date, on many paths
         V, p0, _ = simulate_option_paths(inp, n_paths=60000, seed=7)
         for k in (eng["T"] // 2, eng["T"] - 1):
-            assert float(V[:, k].mean()) * p0[k + 1] == pytest.approx(v0, rel=0.03), k      # about four standard errors: a gross error, not a small drift (the closed form above is the exact check)
+            assert float(V[:, k].mean()) * p0[k + 1] == pytest.approx(v0, rel=0.05), k      # a gross error, not a small drift (the closed form above is the exact check; tests/test_fx_option_run_settlement.py has the tight one)
         # a bought option is an asset on every path: nothing owed, so no DVA and no funding benefit without collateral
         unc = eng["runs"]["UNCOLLATERALISED"][1]
         assert unc.dva == 0.0 and unc.fba == 0.0 and unc.cva < 0 and all(v == 0.0 for v in unc.ene)
@@ -437,7 +435,8 @@ def test_xva_option_workbooks_value_the_option_on_every_path_in_the_tickets_flat
             assert got[label] == pytest.approx(getattr(wf, attr))
         assert total == pytest.approx(wf.xva_total)
         m = wb["Model"]
-        assert m["B29"].value.startswith("=B7*B6*EXP(-B15*B24)*B22*(B26*NORMSDIST(B22*B27)") and m["C29"].value == pytest.approx(v0, rel=1e-10)
+        assert m["B29"].value.startswith("=B7*B6*B10*B22*(B13*NORMSDIST(B22*B27)") and m["C29"].value == pytest.approx(v0, rel=1e-10)
+        assert any(c.value == "V(0) against the ticket's NPV" for row in wb["Checks"].iter_rows() for c in row), "the two ends of the model are among the checks"
         assert m["B30"].value == pytest.approx(fi["npv"]) and m["B33"].value.startswith("=B7*B22*NORMSDIST(")
         paths = [c.value for row in wb["Paths"].iter_rows() for c in row if isinstance(c.value, str) and c.value.startswith("=")]
         assert sum("NORMSDIST(Cp*" in f for f in paths) == N_PATHS * (eng["T"] - 1), "the closed form on every path at every date before the last"

@@ -36,8 +36,20 @@ from pricing.fx_option import forward_delta
 
 TENOR_YEARS = {"ON": 1 / 365, "1W": 7 / 365, "2W": 14 / 365, "3W": 21 / 365, "1M": 1 / 12, "2M": 2 / 12, "3M": 3 / 12, "4M": 4 / 12,
                "6M": 0.5, "9M": 0.75, "1Y": 1.0, "18M": 1.5, "2Y": 2.0, "3Y": 3.0, "5Y": 5.0}
-DEFAULT_VOL_PCT = {"EURUSD": 7.5, "GBPUSD": 8.5, "AUDUSD": 10.0, "USDJPY": 10.0, "USDCHF": 7.5, "USDCAD": 6.5}
-DEFAULT_FALLBACK_PCT = 10.0
+# Flat annualised vols by pair, percent, for a pair with no surface saved: desk inputs, not market data. One table
+# for the option's price, the XVA runs and the credit engine's factors (0.63.0: until then the XVA runs had a table
+# of their own, and an option on a digital asset with no surface was priced at the currency fallback of 10 %).
+DEFAULT_VOL_PCT = {"EURUSD": 7.5, "GBPUSD": 8.5, "AUDUSD": 10.0, "USDJPY": 10.0, "USDCHF": 7.5, "USDCAD": 6.5,
+                   "BTCUSD": 55.0, "ETHUSD": 70.0, "SOLUSD": 90.0}
+DEFAULT_FALLBACK_PCT = 10.0             # a pair of two major currencies that is not in the table
+DEFAULT_FALLBACK_OTHER_PCT = 60.0       # a pair whose base is anything else (a digital asset not in the table)
+MAJORS = {"USD", "EUR", "GBP", "JPY", "CHF", "AUD", "CAD", "NZD", "SEK", "NOK"}
+
+
+def default_vol_pct(pair: str) -> float:
+    """The level a pair with no surface is run at, percent."""
+    p = str(pair).upper()
+    return DEFAULT_VOL_PCT.get(p, DEFAULT_FALLBACK_PCT if p[:3] in MAJORS else DEFAULT_FALLBACK_OTHER_PCT)
 QUOTE_TYPES = ("ATM", "RR25", "BF25")
 
 
@@ -123,7 +135,7 @@ def lookup_vol(quotes, pair: str, T: float, F: float, K: float, override_pct: Op
         tier = "SURFACE" if smiled else "ATM"
         return v, tier, (f"{pair}_VOL: ATM/RR25/BF25 at {len(pillars)} tenors, Malz smile in delta" if smiled
                          else f"{pair}_VOL: ATM at {len(pillars)} tenors, no smile quoted")
-    lvl = DEFAULT_VOL_PCT.get(pair.upper(), DEFAULT_FALLBACK_PCT)
+    lvl = default_vol_pct(pair)
     return lvl / 100.0, "DEFAULT", f"no {pair}_VOL snapshot: flat {lvl:.1f}% desk default"
 
 
