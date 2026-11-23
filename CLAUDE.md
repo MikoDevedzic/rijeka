@@ -377,3 +377,13 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   route, and the two ends of the model are compared with each other: the swaption book matched the engine at every
   cell while the engine priced the option on a swap starting at the expiry and delivered one starting two days
   later (1.5 % of the option's value; found by the model validator's own derivation, 23 November 2026).
+- A size quoted for a defect is measured on the real ticket at each tenor it is quoted for, not on a trade put
+  together from another tenor's rates: 0.27 % was written for a three-month option from the eighteen-month
+  ticket's rates, and the ticket's own is 0.09 to 0.18 % (found by the model validator's own run, 23 November 2026).
+- A fix is asked what else reads the thing it changes before its changelog says what moves. One table for a default
+  vol also fed the credit engine's factors and the P&L's revaluation; the changelog said "the option's price" until
+  two reviewers read the callers.
+- When the methodology gains or loses a displayed formula the pinned tags are found by a search before the push, in
+  the unit test and in the journeys (`grep -n "'([0-9]*)'" frontend/e2e/*.spec.js`). The journeys' tags were left
+  twice (0.60.0 and 0.63.0), the second time with the lesson already written in the journey tester's definition: a
+  lesson in a role's file is read at the start of that role's work, also when the builder plays the role.

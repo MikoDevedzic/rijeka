@@ -156,7 +156,7 @@ test('methodology: a section reads as the document does, with its evidence, a wo
   await expect(rail.locator('.mr-sub')).toHaveCount(5)
   await rail.getByTestId('mr-go-10').click()
   await expect(app.getByTestId('mr-worked-cva').getByTestId('mr-cva-out')).not.toHaveText('—')
-  await expect(app.getByTestId('mr-section').locator('.mr-eq').first()).toContainText('(20)')      // (14) until v1.14, (15) until v1.15; (18) until v1.43, whose two displays in §9 move every later one up by two
+  await expect(app.getByTestId('mr-section').locator('.mr-eq').first()).toContainText('(22)')      // (14) until v1.14, (15) until v1.15; (18) until v1.43 and (20) until v1.46, each with two displays in §9 that move every later one up by two
 
   // the reference table, the workbooks and the document's own page
   await rail.getByTestId('mr-go-18').click()
