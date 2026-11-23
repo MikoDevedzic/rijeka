@@ -39,8 +39,11 @@ from pricing.sa_ccr import SUPERVISORY
 from pricing.xva_engine import IM_CONFIDENCE
 from pricing.xva_engine import ALPHA, CAP_R, SF_IR
 
-N_PATHS, MONTHS, DIRECTION = 200, 6, "BUY"
-GRID_PER_YEAR = 12                 # this book's steps a year: monthly (see the note on the grid above)
+N_PATHS, MONTHS, DIRECTION = 200, 18, "BUY"
+# An eighteen-month forward (0.63.0; six months until then). A ticket of up to a year runs weekly steps and one
+# beyond a year monthly steps (pricing/fx_xva.exposure_grid): at eighteen months the ticket's own grid is the
+# monthly one this book is written on (a margin period inside one step), so the book is the ticket's run, not the
+# same engine on another grid.
 PRESETS = ("UNCOLLATERALISED", "BILATERAL", "ON_CHAIN")
 DEFAULT_PRESET = "BILATERAL"
 SMILE_ITERATIONS = 8          # pricing/fx_vol.vol_at's fixed point
@@ -59,8 +62,10 @@ XVA_CRYPTO_CASE = dict(pair="BTCUSD", base="BTC", quote="USD", spot=65_000.0, ba
 
 # ── the engine's own numbers ──────────────────────────────────────────────────
 
-def settlement_date(val: date, months: int = MONTHS) -> date:
-    return date(val.year + (val.month + months - 1) // 12, (val.month + months - 1) % 12 + 1, min(val.day, 28))
+def settlement_date(val: date, pair: str = "EURUSD", months: int = MONTHS) -> date:
+    """The settlement date of the book's forward, as a ticket takes a tenor: from the pair's spot date, by its calendar."""
+    from pricing import tenor_dates
+    return tenor_dates.forward_date(pair, val, f"{months}M")
 
 
 def surface_for(mkt, pair: str) -> list:
@@ -68,22 +73,37 @@ def surface_for(mkt, pair: str) -> list:
 
 
 def forward_inputs(mkt, case: dict) -> dict:
-    """The forward priced by the engine (pricing/currency_forward.py) at the fair forward, the pair's surface read as the
-    XVA route reads it (the smile vol at K = F at the forward's tenor), and the ForwardXvaInput the engine simulates."""
+    """The book's forward as the XVA route takes it: the engine's input (ForwardXvaInput) and where it came from.
+
+    With an account (api/routes/methodology.market_for hands the ticket's own reading in `mkt.fx_tickets`): the
+    forward priced by the ticket's route from the pair's stored spot, curves and points, and its surface as the
+    route reads it: exactly what POST /api/xva/currency simulates for this trade. Without one (a test market): the
+    same trade priced here from the case's spot and flat base rate, carried from the pair's spot date, with the
+    market's surface if it has one. Either way the paths step the surface's ATM term structure (the ticket's
+    SURFACE mode) where there is a surface, and hold the engine's default vol flat where there is none."""
     val = mkt.valuation_date
-    T = settlement_date(val)
+    pair = case["pair"]
+    tk = (getattr(mkt, "fx_tickets", None) or {}).get(pair)
+    if tk:
+        inp = tk["inp"]
+        src = (inp.vol_source or "desk input") if inp.vol_pct is not None else f"the engine's default {default_vol_pct(pair):g}% flat (no {pair}_VOL surface saved; pricing/fx_xva.DEFAULT_VOL_PCT)"
+        return {"inp": inp, "pillars": list(inp.pillars or []), "settle": tk["settle"], "vol_source": src, "ticket": True, "spot": float(inp.spot or case["spot"])}
+    from pricing import tenor_dates
+    T = settlement_date(val, pair)
+    sd = None if is_crypto(pair) else tenor_dates.spot(pair, val)
     r = price_currency_forward(base_currency=case["base"], quote_currency=case["quote"], base_notional=case["notional"], forward_rate=None,
-                               spot=case["spot"], valuation_date=val, settlement_date=T, quote_curve=mkt.curve, base_rate=case["base_rate"], direction=DIRECTION)
-    pillars = parse_surface(surface_for(mkt, case["pair"]))
+                               spot=case["spot"], valuation_date=val, settlement_date=T, quote_curve=mkt.curve, base_rate=case["base_rate"], direction=DIRECTION,
+                               spot_date=sd)
+    pillars = parse_surface(surface_for(mkt, pair))
     if pillars:
         vol_pct = vol_at(pillars, r.t, r.forward, r.forward) * 100.0
-        src = f"the account's {case['pair']}_VOL surface, the smile vol at K = F for {r.t:.3f}y ({'ATM/RR25/BF25' if any(p.smile for p in pillars) else 'ATM only'} at {len(pillars)} tenors)"
+        src = f"the account's {pair}_VOL surface, the smile vol at K = F for {r.t:.3f}y ({'ATM/RR25/BF25' if any(p.smile for p in pillars) else 'ATM only'} at {len(pillars)} tenors)"
     else:
-        vol_pct, src = None, f"the engine's default {default_vol_pct(case['pair']):g}% flat (no {case['pair']}_VOL surface saved; pricing/fx_xva.DEFAULT_VOL_PCT)"
-    inp = ForwardXvaInput(pair=case["pair"], base_notional=case["notional"], forward=r.forward, strike=r.forward_rate, t_years=r.t, df_quote_t=r.df_quote,
+        vol_pct, src = None, f"the engine's default {default_vol_pct(pair):g}% flat (no {pair}_VOL surface saved; pricing/fx_xva.DEFAULT_VOL_PCT)"
+    inp = ForwardXvaInput(pair=pair, base_notional=case["notional"], forward=r.forward, strike=r.forward_rate, t_years=r.t, df_quote_t=r.df_quote,
                           quote_zero=r.quote_rate, direction=DIRECTION, vol_pct=vol_pct, spot01=r.spot01, vol_source=src, spot=case["spot"],
-                          grid_per_year=GRID_PER_YEAR)
-    return {"fwd": r, "inp": inp, "pillars": pillars, "settle": T, "vol_source": src}
+                          pillars=pillars or None)
+    return {"inp": inp, "pillars": pillars, "settle": T, "vol_source": src, "ticket": False, "spot": case["spot"]}
 
 
 def engine_runs(fi: dict) -> dict:
@@ -94,7 +114,9 @@ def engine_runs(fi: dict) -> dict:
         csa = CSA.from_request({"preset": preset})
         wf, meta = forward_xva(fi["inp"], csa, n_paths=N_PATHS, seed=42, noise_out=noise, waterfall_rng=np.random.default_rng(43))
         runs[preset] = (csa, wf, meta)
-    steps, dt = exposure_grid(fi["inp"].t_years, GRID_PER_YEAR)
+    steps, dt = exposure_grid(fi["inp"].t_years, getattr(fi["inp"], "grid_per_year", None))
+    if abs(dt - 1.0 / 12.0) > 0.01:
+        raise ValueError("the workbook is written on monthly steps: its forward must run beyond a year")
     # a digital asset's vol regimes (pricing/vol_regimes): the variance each step accumulated on each path, as a
     # multiple of σ²Δ, and the share of it that came before the date a margin period earlier, for each preset's period
     ck, u, omega = noise.get("clock"), None, {}
@@ -107,6 +129,7 @@ def engine_runs(fi: dict) -> dict:
             w = 1.0 - runs[preset][0].mpor_years / dt
             omega[preset] = np.stack([share_before(ck, k, w) for k in range(steps)], axis=1)
     return {"noise": noise, "runs": runs, "T": steps, "dt": dt, "sigma": float(noise["sigma"]), "v0": float(runs[DEFAULT_PRESET][2]["v0"]),
+            "sv": [float(x) for x in noise["step_vols"]],
             "u": u, "omega": omega, "regimes": runs[DEFAULT_PRESET][2].get("vol_regimes"),
             "sf": SUPERVISORY["CRYPTO" if is_crypto(fi["inp"].pair) else "FX"]["sf"], "im_basis": runs[DEFAULT_PRESET][2]["im_basis"]}
 
