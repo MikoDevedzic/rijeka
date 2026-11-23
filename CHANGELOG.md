@@ -22,7 +22,7 @@ changes, most where the option is short.
   it still nets there.
 - **What moves** (tickets of four tenors valued on two dates, 20,000 paths, before against after). It follows the
   days between expiry and settlement. Uncollateralised, a EURUSD call's CVA and FCA fall 3.4 % at one week with two
-  days between and 6.4 % with four, 0.3 to 0.5 % at one month, under 0.1 % at three months and nothing at eighteen.
+  days between and 6.4 % with four, 0.3 to 0.6 % at one month, under 0.1 % at three months and nothing at eighteen.
   Margined, its total falls 3 to 11 % at one week, 1 to 5 % at one month and 0.6 to 2.3 % beyond. A BTC option's
   uncollateralised CVA falls 2.1 % at one week with one day between and 8.2 % with three; margined, 1 to 4 % at one
   week and one month.
