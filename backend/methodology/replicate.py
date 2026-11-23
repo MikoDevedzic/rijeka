@@ -78,6 +78,14 @@ PRODUCTS = [
      "default": "BTC/USD · 3 months · digitals USD 100k / 1 BTC · the eight single barriers at ±15% with a rebate · touches · double knock-out and knock-in",
      "formula": "the FX option styles' closed forms with the funding rate as the carry (Reiner–Rubinstein; the two-barrier image series); American is a tree",
      "replication": "xlsx"},
+    {"id": "floor", "name": "Interest rate floor", "group": "Rates", "section": "6",
+     "default": "USD 10m · 5y quarterly floor on SOFR · strike at the ATM forward · 85bp normal vol · a Side cell for the party that wrote it",
+     "formula": "Floor = Σ floorlets; floorlet = N·τ·DF(pays)·[(K − F)·N(−d) + σ√T·n(d)], the put of the caplet's formula",
+     "replication": "xlsx"},
+    {"id": "collar", "name": "Interest rate collar", "group": "Rates", "section": "6",
+     "default": "USD 10m · 5y quarterly on SOFR · the cap bought 50bp above the ATM forward, the floor sold 50bp below · 85bp normal vol · a Side cell for the other party",
+     "formula": "Collar = Σ (caplet at the cap's strike − floorlet at the floor's strike): a long cap and a short floor on the same periods",
+     "replication": "xlsx"},
     {"id": "xva_rates", "name": "XVA on a swap: the trade's own schedule on Hull-White paths, calibration, CSA, waterfall", "group": "Valuation adjustments (XVA)", "section": "9-10",
      "default": "Pay 3.643% on USD 10m for 2y from spot, both legs yearly, as a ticket books it · monthly grid · 200 paths with the engine's own draws (ENGINE) or Excel's (LIVE) · a, σ from the swaption calibration · presets uncollateralised / bilateral 10bd / on-chain 5bd",
      "formula": "the run of a rates ticket's XVA tab: x stepped exactly on monthly dates; P(t,T) = P(0,T)/P(0,t)·e^(−B·(x+φ) − σ²/4a·B²·(1−e^(−2at))); V = the trade's own legs on each path (each fixed coupon at its bond, each floating period with its accrued interest); C from V(t−δ) by Brownian bridge on the value with its payments still in it; EE/ENE/PFE; CVA, DVA, FCA, FBA on the exposure discounted on its own path, E[D(t)·V⁺]; SA-CCR EAD → KVA, IM (the 99th percentile move over the margin period) → MVA; RMSE of the fit and a grid around it",
@@ -392,30 +400,77 @@ def cap_ticket_price(mkt: Market, strike: Optional[float] = None, vol_bp: float 
     return float(res.npv), res.legs[0].option_strips[0][1], float(strike)
 
 
-def cap_workbook(mkt: Market):
-    npv, strip, K = cap_ticket_price(mkt)
+COLLAR_HALF_WIDTH = 0.005        # the collar book's strikes: the at-the-money forward plus and minus 50bp (a collar's strikes are typed on a ticket)
+
+
+def cap_like_price(mkt: Market, kind: str, vol_bp: float = 85.0):
+    """(value as bought, {type: strip}, {type: strike}) of a cap, a floor or a collar as its ticket books it: the
+    cap ticket's leg (cap_ticket_leg) with the options of that product on it, through the swap pricer. A cap and a
+    floor are struck at the money (the forward of the leg's periods, as a ticket strikes a blank field); a collar is
+    the cap bought and the floor sold, struck COLLAR_HALF_WIDTH either side of it. A sold option's periods come back
+    negative: the strips here are turned to the buyer's side, so each is what that option is worth to whoever holds it."""
+    kind = kind.upper()
+    val = mkt.valuation_date
+    atm = cap_ticket_price(mkt, None, vol_bp)[2]
+    strikes = {"CAP": {"CAP": atm}, "FLOOR": {"FLOOR": atm},
+               "COLLAR": {"CAP": round(atm + COLLAR_HALF_WIDTH, 8), "FLOOR": round(atm - COLLAR_HALF_WIDTH, 8)}}[kind]
+    leg = cap_ticket_leg(val, atm, vol_bp)
+    leg["embedded_options"] = [{"type": t, "direction": "SELL" if (kind == "COLLAR" and t == "FLOOR") else "BUY", "default_strike": k, "strike_schedule": []}
+                               for t, k in strikes.items()]
+    res = price_swap(kind.lower(), [leg], {"USD_SOFR": mkt.curve}, val)
+    strips = dict(res.legs[0].option_strips)
+    return float(res.npv), strips, strikes
+
+
+def _cap_like_workbook(mkt: Market, kind: str):
+    """The cap, floor or collar ticket as it opens, in cells. One sheet, named for the product; the cap's keeps the
+    cells it always had. A floorlet is the put of the caplet's formula; a collar's sheet carries both and their
+    difference. `Side` turns the figure for whoever wrote the option: the price is the holder's with its sign changed."""
+    kind = kind.upper()
+    npv, strips, strikes = cap_like_price(mkt, kind)
+    name = {"CAP": "Cap", "FLOOR": "Floor", "COLLAR": "Collar"}[kind]
+    lead = strips["CAP"] if "CAP" in strips else strips["FLOOR"]
+    n = lead.n_periods
     wb = Workbook()
-    _readme(wb, "Interest rate cap", [
-        f"The cap ticket as it opens: USD 10m, 5y from the spot date, quarterly on SOFR, ACT/360, strike at the money ({K:.6%}, the "
-        "forward of the cap's own periods), flat normal vol 85bp (typed, so the replication does not depend on the cap surface).",
+    what = {"CAP": f"strike at the money ({strikes.get('CAP', 0):.6%}, the forward of the cap's own periods)",
+            "FLOOR": f"strike at the money ({strikes.get('FLOOR', 0):.6%}, the forward of the floor's own periods)",
+            "COLLAR": f"the cap bought at {strikes.get('CAP', 0):.6%} and the floor sold at {strikes.get('FLOOR', 0):.6%} (the at-the-money forward plus and minus "
+                      f"{COLLAR_HALF_WIDTH * 1e4:.0f}bp: a collar's two strikes are typed on a ticket, which has none to take from the market)"}[kind]
+    formula = {"CAP": "Each caplet: forward F = (DF(start)/DF(end) − 1)/τ; price = N·τ·DF(pays)·[(F − K)·N(d) + σ√T·n(d)], d = (F − K)/(σ√T), ",
+               "FLOOR": "Each floorlet: forward F = (DF(start)/DF(end) − 1)/τ; price = N·τ·DF(pays)·[(K − F)·N(−d) + σ√T·n(d)], d = (F − K)/(σ√T), the put of the caplet's formula, ",
+               "COLLAR": "Each period: the caplet N·τ·DF(pays)·[(F − K_c)·N(d_c) + σ√T·n(d_c)] less the floorlet N·τ·DF(pays)·[(K_f − F)·N(−d_f) + σ√T·n(d_f)], d = (F − K)/(σ√T), "}[kind]
+    _readme(wb, f"Interest rate {name.lower()}", [
+        f"The {name.lower()} ticket as it opens: USD 10m, 5y from the spot date, quarterly on SOFR, ACT/360, {what}, flat normal vol 85bp "
+        f"(typed, so the replication does not depend on the cap surface).",
         "The periods are those of the leg the ticket books, and the value is the one the ticket shows and the booked trade carries: "
         "accruals between unadjusted dates, each paid two business days after its period ends (modified following, New York).",
-        "Each caplet: forward F = (DF(start)/DF(end) − 1)/τ; price = N·τ·DF(pays)·[(F − K)·N(d) + σ√T·n(d)], d = (F − K)/(σ√T), "
-        "T = time from the valuation date to the middle of the accrual period on ACT/365F (SOFR fixes in arrears over the period).",
-        f"Rijeka NPV: {npv:,.2f} over {strip.n_periods} caplets.",
+        formula + "T = time from the valuation date to the middle of the accrual period on ACT/365F (SOFR fixes in arrears over the period).",
+        "Side: the figures are the holder's. Set the yellow Side to −1 for the party that wrote the option: every figure of a written option is the holder's with its sign changed, "
+        "which is how the ticket shows a SELL.",
+        f"Rijeka NPV: {npv:,.2f} over {n} periods.",
     ], mkt)
     _curve_sheet(wb, mkt)
-    ws = wb.create_sheet("Cap", 1)
+    ws = wb.create_sheet(name, 1)
+    collar = kind == "COLLAR"
     ws["A1"] = "Notional"; ws["B1"] = 10_000_000; ws["B1"].fill = IN; ws["B1"].number_format = "#,##0"
-    ws["A2"] = "Strike"; ws["B2"] = K; ws["B2"].fill = IN; ws["B2"].number_format = "0.000000%"
+    ws["A2"] = "Cap strike" if collar else "Strike"; ws["B2"] = strikes["CAP" if (collar or kind == "CAP") else "FLOOR"]; ws["B2"].fill = IN; ws["B2"].number_format = "0.000000%"
     ws["A3"] = "Normal vol (bp)"; ws["B3"] = 85.0; ws["B3"].fill = IN
-    ws["D1"] = "Cap PV (formulas)"; ws["E1"] = None
-    ws["D2"] = "Cap PV (Rijeka)"; ws["E2"] = npv; ws["E2"].fill = RJ; ws["E2"].number_format = "#,##0.00"
+    ws["D1"] = f"{name} PV (formulas)"; ws["E1"] = None
+    ws["D2"] = f"{name} PV (Rijeka)"; ws["E2"] = npv; ws["E2"].fill = RJ; ws["E2"].number_format = "#,##0.00"
     ws["D3"] = "Difference"; ws["E3"] = "=E1-E2"; ws["E3"].number_format = "#,##0.00"
-    _hdr(ws, 5, ["Start", "End", "Pays", "τ", "T to mid-period (y)", "DF(start)", "DF(end)", "DF(pays)", "Forward", "d", "Caplet PV", "Rijeka PV"])
+    ws["G1"] = "Side (1 held, −1 written)"; ws["H1"] = 1; ws["H1"].fill = IN
+    ws["G2"] = "PV on that side"; ws["H2"] = "=H1*E1"; ws["H2"].number_format = "#,##0.00"
+    if collar:
+        ws["G3"] = "Floor strike"; ws["H3"] = strikes["FLOOR"]; ws["H3"].fill = IN; ws["H3"].number_format = "0.000000%"
+    head = ["Start", "End", "Pays", "τ", "T to mid-period (y)", "DF(start)", "DF(end)", "DF(pays)", "Forward", "d"]
+    head += {"CAP": ["Caplet PV", "Rijeka PV"], "FLOOR": ["Floorlet PV", "Rijeka PV"],
+             "COLLAR": ["Caplet PV", "Rijeka caplet", "d (floor)", "Floorlet PV", "Rijeka floorlet", "Net (cap less floor)"]}[kind]
+    _hdr(ws, 5, head)
     r0 = 6
     _d = lambda x: x if isinstance(x, date) else date.fromisoformat(str(x)[:10])      # real dates, so YEARFRAC needs no coercion
-    for k, cp in enumerate(strip.caplets):
+    call = lambda r, d, k: f"=IF(E{r}>0,$B$1*D{r}*H{r}*((I{r}-{k})*NORMSDIST({d}{r})+$B$3/10000*SQRT(E{r})*NORMDIST({d}{r},0,1,FALSE)),$B$1*D{r}*H{r}*MAX(I{r}-{k},0))"
+    put = lambda r, d, k: f"=IF(E{r}>0,$B$1*D{r}*H{r}*(({k}-I{r})*NORMSDIST(-{d}{r})+$B$3/10000*SQRT(E{r})*NORMDIST({d}{r},0,1,FALSE)),$B$1*D{r}*H{r}*MAX({k}-I{r},0))"
+    for k, cp in enumerate(lead.caplets):
         r = r0 + k
         for col, key in ((1, "start_date"), (2, "end_date"), (3, "payment_date")):
             ws.cell(row=r, column=col, value=_d(cp[key])).number_format = "yyyy-mm-dd"
@@ -426,20 +481,47 @@ def cap_workbook(mkt: Market):
         ws.cell(row=r, column=8, value=f"={DF(f'C{r}')}").number_format = "0.000000"
         ws.cell(row=r, column=9, value=f"=(F{r}/G{r}-1)/D{r}").number_format = "0.0000%"
         ws.cell(row=r, column=10, value=f"=IF(E{r}>0,(I{r}-$B$2)/($B$3/10000*SQRT(E{r})),0)")
-        ws.cell(row=r, column=11, value=f"=IF(E{r}>0,$B$1*D{r}*H{r}*((I{r}-$B$2)*NORMSDIST(J{r})+$B$3/10000*SQRT(E{r})*NORMDIST(J{r},0,1,FALSE)),$B$1*D{r}*H{r}*MAX(I{r}-$B$2,0))").number_format = "#,##0.00"
-        c = ws.cell(row=r, column=12, value=float(cp["pv"])); c.fill = RJ; c.number_format = "#,##0.00"
-    r1 = r0 + len(strip.caplets) - 1
-    ws["E1"] = f"=SUM(K{r0}:K{r1})"; ws["E1"].number_format = "#,##0.00"
-    _widths(ws, [12, 12, 12, 10, 14, 11, 11, 11, 11, 10, 14, 14])
-    W.check(wb, "Cap", "Cap PV (Σ caplets)", "E1", "E2", 1e-6)
-    W.ticket(wb, "ANALYTICS", [("CAP PV", "Cap!E1", "#,##0.00", f"Σ of {strip.n_periods} caplets, USD")])
-    W.ticket(wb, "TERMS", [("NOTIONAL", "Cap!B1", "#,##0", "USD"), ("STRIKE", "Cap!B2", "0.000000%", "at the money: the forward of the cap's periods"), ("NORMAL VOL", "Cap!B3", "0.0", "bp, typed")])
-    for sym, notn, ref, note, fmt in [("τ", "YEARFRAC(start, end, ACT/360)", f"Cap!D{r0}", "the first caplet", "0.000000"),
-                                      ("T", "time to the middle of the accrual period, ACT/365F", f"Cap!E{r0}", "SOFR fixes in arrears over the period", "0.000000"),
-                                      ("F", "(DF(start)/DF(end) − 1)/τ", f"Cap!I{r0}", "", "0.0000%"), ("d", "(F − K)/(σ√T)", f"Cap!J{r0}", "", "0.000000"),
-                                      ("caplet", "N·τ·DF(pays)·[(F − K)·N(d) + σ√T·n(d)]", f"Cap!K{r0}", "Bachelier call, paid two business days after the period", "#,##0.00"), ("cap", "Σ caplets", "Cap!E1", "", "#,##0.00")]:
+        ws.cell(row=r, column=11, value=put(r, "J", "$B$2") if kind == "FLOOR" else call(r, "J", "$B$2")).number_format = "#,##0.00"
+        c = ws.cell(row=r, column=12, value=abs(float(cp["pv"]))); c.fill = RJ; c.number_format = "#,##0.00"
+        if collar:
+            ws.cell(row=r, column=13, value=f"=IF(E{r}>0,(I{r}-$H$3)/($B$3/10000*SQRT(E{r})),0)")
+            ws.cell(row=r, column=14, value=put(r, "M", "$H$3")).number_format = "#,##0.00"
+            c = ws.cell(row=r, column=15, value=abs(float(strips["FLOOR"].caplets[k]["pv"]))); c.fill = RJ; c.number_format = "#,##0.00"
+            ws.cell(row=r, column=16, value=f"=K{r}-N{r}").number_format = "#,##0.00"
+    r1 = r0 + n - 1
+    ws["E1"] = f"=SUM(P{r0}:P{r1})" if collar else f"=SUM(K{r0}:K{r1})"; ws["E1"].number_format = "#,##0.00"
+    _widths(ws, [12, 12, 12, 10, 14, 11, 11, 11, 11, 10, 14, 14] + ([10, 14, 14, 16] if collar else []))
+    W.check(wb, name, f"{name} PV (Σ periods)", "E1", "E2", 1e-6)
+    piece = {"CAP": "caplets", "FLOOR": "floorlets", "COLLAR": "periods, cap less floor"}[kind]
+    W.ticket(wb, "ANALYTICS", [(f"{name.upper()} PV", f"{name}!E1", "#,##0.00", f"Σ of {n} {piece}, USD, to the holder"), ("ON YOUR SIDE", f"{name}!H2", "#,##0.00", "the holder's figure times Side")])
+    terms = [("NOTIONAL", f"{name}!B1", "#,##0", "USD"), ("CAP STRIKE" if collar else "STRIKE", f"{name}!B2", "0.000000%", "typed" if collar else f"at the money: the forward of the {name.lower()}'s periods")]
+    if collar:
+        terms.append(("FLOOR STRIKE", f"{name}!H3", "0.000000%", "typed"))
+    W.ticket(wb, "TERMS", terms + [("NORMAL VOL", f"{name}!B3", "0.0", "bp, typed")])
+    rows = [("τ", "YEARFRAC(start, end, ACT/360)", f"{name}!D{r0}", "the first period", "0.000000"),
+            ("T", "time to the middle of the accrual period, ACT/365F", f"{name}!E{r0}", "SOFR fixes in arrears over the period", "0.000000"),
+            ("F", "(DF(start)/DF(end) − 1)/τ", f"{name}!I{r0}", "", "0.0000%"), ("d", "(F − K)/(σ√T)", f"{name}!J{r0}", "", "0.000000")]
+    if kind == "FLOOR":
+        rows += [("floorlet", "N·τ·DF(pays)·[(K − F)·N(−d) + σ√T·n(d)]", f"{name}!K{r0}", "Bachelier put, paid two business days after the period", "#,##0.00"), ("floor", "Σ floorlets", f"{name}!E1", "", "#,##0.00")]
+    else:
+        rows += [("caplet", "N·τ·DF(pays)·[(F − K)·N(d) + σ√T·n(d)]", f"{name}!K{r0}", "Bachelier call, paid two business days after the period", "#,##0.00")]
+        rows += ([("floorlet", "N·τ·DF(pays)·[(K_f − F)·N(−d_f) + σ√T·n(d_f)]", f"{name}!N{r0}", "Bachelier put at the floor's strike", "#,##0.00"),
+                  ("collar", "Σ (caplet − floorlet)", f"{name}!E1", "the cap bought, the floor sold", "#,##0.00")] if collar else [("cap", "Σ caplets", f"{name}!E1", "", "#,##0.00")])
+    for sym, notn, ref, note, fmt in rows:
         W.derive(wb, sym, notn, ref, note, fmt)
     return wb, npv
+
+
+def cap_workbook(mkt: Market):
+    return _cap_like_workbook(mkt, "CAP")
+
+
+def floor_workbook(mkt: Market):
+    return _cap_like_workbook(mkt, "FLOOR")
+
+
+def collar_workbook(mkt: Market):
+    return _cap_like_workbook(mkt, "COLLAR")
 
 
 def _crypto_common(wb, mkt: Market, spot_px: float, btc_rate: float, months: int):
@@ -1009,7 +1091,8 @@ def xva_crypto_workbook(mkt):
     return _b(mkt)
 
 
-BUILDERS = {"irs": irs_workbook, "ois": ois_workbook, "swaption": swaption_workbook, "cap": cap_workbook, "xva_rates": xva_rates_workbook, "xva_cap": xva_cap_workbook,
+BUILDERS = {"irs": irs_workbook, "ois": ois_workbook, "swaption": swaption_workbook, "cap": cap_workbook, "floor": floor_workbook, "collar": collar_workbook,
+            "xva_rates": xva_rates_workbook, "xva_cap": xva_cap_workbook,
             "fx_forward": fx_forward_workbook, "fx_option": fx_option_workbook, "fx_option_styles": fx_option_styles_workbook,
             "crypto_ndf": crypto_ndf_workbook, "crypto_ndo": crypto_ndo_workbook, "crypto_option_styles": crypto_option_styles_workbook,
             "xva_fx": xva_fx_workbook, "xva_crypto": xva_crypto_workbook}

@@ -565,3 +565,64 @@ def test_the_fx_forward_workbook_is_the_ticket_as_it_opens_carried_from_the_spot
             assert ws[f"C{row}"].value == pytest.approx(want), row
     # the digital-asset forward keeps its rows: its quoted spot settles at once
     assert rep.build("crypto_ndf", mkt)[1] is not None
+
+
+@pytest.mark.parametrize("kind,sheet", [("FLOOR", "Floor"), ("COLLAR", "Collar")])
+def test_the_floor_and_collar_workbooks_cells_reproduce_the_engine(kind, sheet):
+    """0.62.0. A floor and a collar had no workbook: the cap's was one bought cap. Each is the ticket as it opens, on
+    the leg it books, through the swap pricer (a floorlet the put of the caplet's formula; a collar the cap bought
+    and the floor sold). Every period is evaluated outside Excel, the normal distribution in Python, against the
+    engine's figure for that period and the total. Skipped where pycel is not installed."""
+    pytest.importorskip("pycel")
+    import math
+    import tempfile
+    from pycel import ExcelCompiler
+    from methodology import workbook as W
+    from scripts.check_workbook import evaluation_copy, test_market
+    mkt = test_market()
+    wb, npv = rep._cap_like_workbook(mkt, kind)
+    W.finish(wb)
+    value, strips, strikes = rep.cap_like_price(mkt, kind)
+    assert npv == pytest.approx(value) and wb[sheet]["E2"].value == pytest.approx(value)
+    Phi = lambda x: 0.5 * (1 + math.erf(x / math.sqrt(2)))
+    phi = lambda x: math.exp(-x * x / 2) / math.sqrt(2 * math.pi)
+    with tempfile.NamedTemporaryFile(suffix=".xlsx") as f:
+        evaluation_copy(wb).save(f.name)
+        xl = ExcelCompiler(filename=f.name)
+        N, K, vol = xl.evaluate(f"{sheet}!B1"), xl.evaluate(f"{sheet}!B2"), xl.evaluate(f"{sheet}!B3") / 1e4
+        Kf = xl.evaluate(f"{sheet}!H3") if kind == "COLLAR" else K
+        assert K == pytest.approx(strikes["CAP" if kind == "COLLAR" else "FLOOR"]) and Kf == pytest.approx(strikes["FLOOR"])
+        total, r = 0.0, 6
+        while xl.evaluate(f"{sheet}!A{r}") not in (None, ""):
+            tau, T, df_pay, F = (xl.evaluate(f"{sheet}!{c}{r}") for c in "DEHI")
+            sd = vol * math.sqrt(T)
+            call = N * tau * df_pay * ((F - K) * Phi((F - K) / sd) + sd * phi((F - K) / sd))
+            put = N * tau * df_pay * ((Kf - F) * Phi(-(F - Kf) / sd) + sd * phi((F - Kf) / sd))
+            if kind == "FLOOR":
+                assert put == pytest.approx(xl.evaluate(f"{sheet}!L{r}"), abs=1e-3), r
+                total += put
+            else:
+                assert call == pytest.approx(xl.evaluate(f"{sheet}!L{r}"), abs=1e-3), r
+                assert put == pytest.approx(xl.evaluate(f"{sheet}!O{r}"), abs=1e-3), r
+                total += call - put
+            r += 1
+    assert r - 6 == 20 and total == pytest.approx(npv, abs=1e-3)
+
+
+def test_a_floor_at_the_money_is_worth_the_cap_and_a_written_option_is_the_holders_with_the_sign_turned():
+    """Two checks the books rest on. At the money a cap and a floor on the same periods are worth the same (put-call
+    parity: the strike is the forward of those periods, to eight decimals). And the Side cell is the engine's own
+    rule: the pricer's value of a written floor is the held floor's, negated."""
+    from pricing.ir_swap import price_swap
+    from scripts.check_workbook import test_market
+    mkt = test_market()
+    cap, _, _ = rep.cap_like_price(mkt, "CAP")
+    floor, _, k = rep.cap_like_price(mkt, "FLOOR")
+    assert cap == pytest.approx(floor, abs=1.0)
+    leg = rep.cap_ticket_leg(mkt.valuation_date, k["FLOOR"])
+    leg["embedded_options"] = [{"type": "FLOOR", "direction": "SELL", "default_strike": k["FLOOR"], "strike_schedule": []}]
+    written = price_swap("floor", [leg], {"USD_SOFR": mkt.curve}, mkt.valuation_date).npv
+    assert written == pytest.approx(-floor, abs=1e-6)
+    wb, _ = rep.floor_workbook(mkt)
+    assert wb["Floor"]["H1"].value == 1 and wb["Floor"]["H2"].value == "=H1*E1"
+    assert {"floor", "collar"} <= {p["id"] for p in rep.PRODUCTS} and {"floor", "collar"} <= set(rep.BUILDERS)
