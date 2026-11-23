@@ -1,7 +1,35 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.44). Commits on `main` are the detail.
+methodology document carries its own version (v1.45). Commits on `main` are the detail.
+
+## 0.62.0 · 23 November 2026
+
+**More of what a ticket shows can be rebuilt in a spreadsheet.** Six workbooks are new and one is corrected. Each is
+generated in the Methodology tab from the account's own market, has its formulas evaluated against the engine outside
+Excel, and, where it is an XVA book, has the engine's figures held to the ticket's own run to the cent. No figure of
+a ticket changes.
+
+- **A swaption's XVA run** (`xva_swaption`). A bought payer swaption, one year into a two-year swap, as the ticket
+  books it. Until the expiry the trade is the option on each path: its annuity and forward swap rate in Bachelier's
+  formula, at the normal vol the paths' own model implies. From the expiry it is the swap delivered, on the paths
+  where the swap was worth having, and nothing on the others. An Option sheet rebuilds that vol from the model's exact
+  price. 163 to 166 checks under each margin preset.
+- **A floor's and a collar's XVA run** (`xva_floor`, `xva_collar`). The cap's book with each period the put, and a
+  collar whose floor is written: a sold option is on the paths, the set's value takes both signs, and DVA and FBA
+  are charged. 114 and 115 checks under each preset.
+- **A floor's and a collar's price** (`floor`, `collar`). Each the ticket as it opens, on the leg it books; every
+  period against the engine to a tenth of a cent; a Side cell for the party that wrote the option.
+- **The forward of a currency pair** (`fx_forward`) is carried from the pair's spot date and settles three months
+  from it, as the ticket's does. The book carried from the valuation date and stood about 1.6 pips from the ticket
+  on a three-month EURUSD.
+- **The methodology** (v1.45) has a table of which instrument has which workbook and which has none, a replication
+  paragraph for each new book, and says which books have been opened in Excel itself (the swap's and the cap's XVA
+  books) and which are checked by an evaluator outside it.
+
+Still without a book, and stated in that table: the XVA run of an option on a currency or a digital asset; a
+non-deliverable currency forward; a basis swap; a written or a receiver swaption. The XVA books of a currency and a
+digital-asset forward rebuild the engine's arithmetic on illustrative inputs and are not yet held to a ticket's run.
 
 ## 0.61.2 · 23 November 2026
 
