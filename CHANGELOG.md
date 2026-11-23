@@ -17,10 +17,15 @@ changes, most where the option is short.
   side. The payoff is fixed on it, a barrier is watched to the expiry and no further, and the value a margin period
   earlier in that step runs to the expiry. The discounted value is a martingale to the last date, within the error
   of 200,000 paths at one week and at three months.
-- **What moves** (tickets of four tenors, 20,000 paths, before against after). Uncollateralised, a EURUSD call's CVA
-  and FCA fall 6.4 % at one week, 0.3 % at one month, 0.1 % at three months and nothing at eighteen. Margined, the
-  total falls 7 % at one week and about 1 % from one month to eighteen. A BTC option's uncollateralised CVA falls
-  2 % at one week and 0.5 % at one month; its margined total 1 to 3 %.
+- **A package reads one path.** The levels at the expiries of a package's options are drawn once for the run, and
+  the value a margin period earlier is read on the same path by every leg: an option against a forward that hedges
+  it still nets there.
+- **What moves** (tickets of four tenors valued on two dates, 20,000 paths, before against after). It follows the
+  days between expiry and settlement. Uncollateralised, a EURUSD call's CVA and FCA fall 3.4 % at one week with two
+  days between and 6.4 % with four, 0.3 to 0.5 % at one month, under 0.1 % at three months and nothing at eighteen.
+  Margined, its total falls 3 to 11 % at one week, 1 to 5 % at one month and 0.6 to 2.3 % beyond. A BTC option's
+  uncollateralised CVA falls 2.1 % at one week with one day between and 8.2 % with three; margined, 1 to 4 % at one
+  week and one month.
 - **The option workbooks** (`xva_fx_option`, `xva_crypto_option`) rebuild the level at the expiry and the last
   step's lag in cells: 99 checks under each margin preset. Methodology v1.47.
 - **Stated, not changed.** On a digital asset, an at-the-money option's expected payoff on the regime paths is below

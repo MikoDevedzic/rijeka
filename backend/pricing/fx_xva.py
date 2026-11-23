@@ -213,7 +213,7 @@ def wwr_meta(wf: WaterfallResult, cp_hazard_if_halves: float, own_hazard_if_halv
 # (tests/test_fx_xva_lag.py). Here the level itself is drawn where it is exact, and every leg is valued on it.
 
 def _lagged_driver(m: np.ndarray, sv: np.ndarray, dt: float, lag_y: float, rng: np.random.Generator,
-                   noise_out: Optional[np.ndarray] = None, ck: Optional[np.ndarray] = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+                   noise_out: Optional[np.ndarray] = None, ck: Optional[np.ndarray] = None, levels: Optional[dict] = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """M at t_i − δ for every grid date t_i = (i+1)·dt, the time itself, and j: t_i − δ lies strictly inside
     (t_{j−1}, t_j), t_k = k·dt (j ≤ 0: before today). For a margin period that is not a whole number of steps
     (exact_lag sends the other case to the grid values themselves). Inside a step ln M is a Brownian motion with
@@ -240,7 +240,27 @@ def _lagged_driver(m: np.ndarray, sv: np.ndarray, dt: float, lag_y: float, rng: 
             continue                                                           # before today: the level of today
         w = 1.0 - frac
         lo, hi = lnm[:, j - 1], lnm[:, j]
-        if ck is None:
+        inside = levels["steps"].get(j - 1) if levels else None
+        if inside:
+            # the step holds a level already drawn (an option's expiry): the level at t − δ is on the same path, a bridge
+            # between the levels drawn either side of it, so every leg reads one path and a hedged package still nets
+            if ck is None:
+                om, var_j = np.full(n_paths, w), np.full(n_paths, float(sv[j - 1]) ** 2 * dt)
+            else:
+                from pricing.vol_regimes import share_before
+                om, var_j = share_before(ck, j - 1, w), float(sv[j - 1]) ** 2 * dt * ck.u[:, j - 1]
+            t_l = (j - 1 + w) * dt
+            l_om, l_ln, r_om, r_ln = np.zeros(n_paths), lo, np.ones(n_paths), hi
+            for t_p, om_p, ln_p in inside:
+                if t_p <= t_l:
+                    l_om, l_ln = om_p, ln_p
+                else:
+                    r_om, r_ln = om_p, ln_p
+                    break
+            span = np.maximum(r_om - l_om, 1e-12)
+            rho = np.clip((om - l_om) / span, 0.0, 1.0)
+            out[:, i] = np.exp(l_ln + rho * (r_ln - l_ln) + z * np.sqrt(var_j * span * rho * (1.0 - rho)))
+        elif ck is None:
             out[:, i] = np.exp(lo + w * (hi - lo) + z * float(sv[j - 1]) * math.sqrt(w * (1.0 - w) * dt))
         else:
             from pricing.vol_regimes import share_before
@@ -271,12 +291,13 @@ def _forward_lag(inp: ForwardXvaInput, vi: np.ndarray, v0: float, steps: int, dt
 
 
 def _option_lag(inp: OptionXvaInput, vi: np.ndarray, v0: float, x: dict, steps: int, dt: float,
-                m_lag: np.ndarray, t_lag: np.ndarray, j_of: np.ndarray, ctx: Optional[dict] = None) -> np.ndarray:
+                m_lag: np.ndarray, t_lag: np.ndarray, j_of: np.ndarray) -> np.ndarray:
     """An option's value at each t_i − δ: the style's closed form on the spot there with the time left. After
     the expiry's grid date the payoff is fixed and only discounting is left; once settled, the amount it paid.
 
-    In the expiry's own step the time left runs to the expiry, and the level there is drawn given the level at the
-    expiry (level_at_expiry), which the payoff is fixed on: since 0.64.0; until then it ran to the grid date after it.
+    In the expiry's own step the time left runs to the expiry, and the level there is the run's own, drawn given the
+    level at the expiry (interior_levels, _lagged_driver), which the payoff is fixed on: since 0.64.0; until then
+    the time left ran to the grid date after it.
     One approximation is left, the paths' own, stated in docs/xva.md. A barrier
     or a touch carries the knock state the grid dates BEFORE t_i − δ have seen, and is then valued by a closed form
     that monitors continuously: a path that is beyond the barrier at t_i − δ and has not knocked on the grid is
@@ -315,21 +336,9 @@ def _option_lag(inp: OptionXvaInput, vi: np.ndarray, v0: float, x: dict, steps: 
         if j - 1 > i_exp or tau <= AT_EXPIRY:                                  # at or after the expiry: the payoff is fixed, on the level at the expiry
             out[:, i] = sign * scale * _payoff_at_expiry(spec, x["f_exp"], touched[:, i_exp + 1] if barrier_like else knocked) * df
             continue
-        m_l = m_lag[:, i]
-        if j - 1 == i_exp and ctx is not None and x.get("xi_exp") is not None:
-            # in the expiry's own step, before the expiry: the level there given the level at the expiry, which the payoff
-            # is fixed on (a bridge from the step's start to the expiry, the lag's own normal), not given the grid date
-            # after it. ω_l, the share of the step's variance before t − δ, is the driver's own.
-            w_l = 1.0 - (ctx["lag_y"] / dt - math.floor(ctx["lag_y"] / dt + 1e-12))
-            if ctx["ck"] is not None:
-                from pricing.vol_regimes import share_before
-                om_l = share_before(ctx["ck"], i_exp, w_l)
-            else:
-                om_l = np.full(n_paths, w_l)
-            ratio = np.minimum(om_l / np.maximum(x["om_exp"], 1e-12), 1.0)
-            lo = np.log(ctx["m"][:, i_exp - 1]) if i_exp > 0 else np.zeros(n_paths)
-            m_l = np.exp(lo + ratio * (np.log(x["m_exp"]) - lo) + ctx["z"][:, i] * np.sqrt(x["v_exp"] * om_l * (1.0 - ratio)))
-        s_lag = inp.forward * m_l * math.exp(-(r_q - r_b) * (inp.t_settle - tl))
+        # the level there is the run's own (_lagged_driver): in the expiry's step it is on the bridge to the level at the
+        # expiry, which the payoff is fixed on
+        s_lag = inp.forward * m_lag[:, i] * math.exp(-(r_q - r_b) * (inp.t_settle - tl))
         # the forward and the discounting to settlement, as the grid values read them
         r_l, rb_l = rates_to_settlement(r_q, r_b, inp.t_settle - tl, tau)
         if inp.pillars:
@@ -342,7 +351,7 @@ def _option_lag(inp: OptionXvaInput, vi: np.ndarray, v0: float, x: dict, steps: 
 
 
 def exact_lag(legs: list, parts: list, steps: int, dt: float, m: np.ndarray, sv: np.ndarray, whole: np.ndarray, v0: float,
-              ck: Optional[np.ndarray] = None):
+              ck: Optional[np.ndarray] = None, levels: Optional[dict] = None):
     """The set's value a margin period before every grid date, for run_waterfall(lag_values=): the driver drawn
     at that time (_lagged_driver), every leg valued on it (_forward_lag, _option_lag), and the legs added. `parts`
     is, per leg, (its value paths, its value today, what its engine returned beside them). A leg that has settled
@@ -355,12 +364,10 @@ def exact_lag(legs: list, parts: list, steps: int, dt: float, m: np.ndarray, sv:
         back = lag_y / dt
         if lag_y <= 0 or back - math.floor(back + 1e-12) < 1e-12:
             return lagged_values(whole, v0, dt, lag_y, rng, noise_out=noise_out)
-        zs = noise_out if noise_out is not None else np.zeros_like(m)          # the normals drawn: an option reads its own in its expiry's step
-        m_lag, t_lag, j_of = _lagged_driver(m, sv, dt, lag_y, rng, zs, ck)
-        ctx = {"m": m, "ck": ck, "z": zs, "lag_y": lag_y}
+        m_lag, t_lag, j_of = _lagged_driver(m, sv, dt, lag_y, rng, noise_out, ck, levels)
         total = np.zeros_like(m)
         for leg, (vi, v0i, x) in zip(legs, parts):
-            total = total + (_option_lag(leg, vi, v0i, x, steps, dt, m_lag, t_lag, j_of, ctx) if _is_option(leg)
+            total = total + (_option_lag(leg, vi, v0i, x, steps, dt, m_lag, t_lag, j_of) if _is_option(leg)
                              else _forward_lag(leg, vi, v0i, steps, dt, m_lag, t_lag, j_of))
         return total
     return lag
@@ -473,35 +480,55 @@ def rates_to_settlement(r_q: float, r_b: float, to_settle: float, tau: float) ->
     return r_q * k, r_b * k
 
 
-def level_at_expiry(t_expiry: float, i_exp: int, steps: int, dt: float, m: np.ndarray, sv, sigma: float, ck, seed: int):
-    """(M at the expiry on each path, the share of the expiry step's variance that came before the expiry, the step's
-    variance on each path, the standard normal drawn for it or None).
+EXPIRY_TAG = 0x65787079
 
-    The expiry lies inside the grid step that ends on the first grid date at or after it (for a single option the
-    last step: the settlement date a few days later). Until 0.64.0 the payoff was fixed on the level at that grid
-    date, which has diffused for those days as well: the expected value at that date stood above the option's price
-    by about sqrt(T_s/T_e) − 1 (2 % at three months with four days between, 13 % on a one-week option). The level at
-    the expiry is drawn where it is exact: ln M is a Brownian motion inside the step, so given the two grid levels
-    either side it is a bridge, mean on the straight line between them, variance v·ω(1−ω), with v the step's variance
-    and ω the share of it before the expiry (its share of the step's time; on a digital asset's clock the share of the
-    step's own variance, pricing/vol_regimes.share_before). One standard normal per path, from a generator of its own
-    (the seed and a tag), so no other draw of the run moves. An expiry on the grid date is that date's level."""
+
+def interior_levels(times, steps: int, dt: float, m: np.ndarray, sv, sigma: float, ck, seed: int) -> dict:
+    """The driver's level at dates that lie inside grid steps (the expiries of a run's options), drawn once for the
+    run, on the one path every leg and every lagged value reads.
+
+    An option expires inside the grid step that ends on the first grid date at or after its expiry (for a single
+    option the last step: the settlement date is some days later). Until 0.64.0 its payoff was fixed on the level at
+    that grid date, which has diffused for those days as well: the expected value at that date stood above the
+    option's price by about sqrt(T_s/T_e) − 1 (2 % at three months with four days between, 13 to 25 % at one week).
+    The level at the expiry is drawn where it is exact: ln M is a Brownian motion inside the step, so given the two
+    grid levels either side it is a bridge, mean on the straight line between them, variance v·ω(1−ω), with v the
+    step's variance and ω the share of it before the date (its share of the step's time; on a digital asset's clock
+    the share of the step's own variance, pricing/vol_regimes.share_before). Several dates in one step are drawn in
+    order of time, each a bridge between the one before it and the step's end. One standard normal per path and
+    date, from a generator of its own (the seed and a tag), so no other draw of the run moves. A date on a grid date
+    (within AT_EXPIRY) is that date's level and is not here.
+
+    {"at": {date: {"m", "om", "xi", "step"}}, "steps": {step: [(date, om, ln m), ...] in order of time}}; `om` is
+    the share of the step's variance before the date, per path."""
     n = m.shape[0]
-    t_prev = i_exp * dt
-    w = (t_expiry - t_prev) / dt
-    s_i = float(sigma if sv is None else np.asarray(sv, dtype=float)[i_exp])
-    v = np.full(n, s_i * s_i * dt) * (ck.u[:, i_exp] if ck is not None else 1.0)
-    if w >= 1.0 - AT_EXPIRY / dt or w <= 0.0:
-        return m[:, i_exp].copy(), 1.0, v, None
-    if ck is not None:
-        from pricing.vol_regimes import share_before
-        om = share_before(ck, i_exp, w)
-    else:
-        om = np.full(n, w)
-    xi = np.random.default_rng([int(seed), 0x65787079]).standard_normal(n)
-    lo = np.log(m[:, i_exp - 1]) if i_exp > 0 else np.zeros(n)
-    hi = np.log(m[:, i_exp])
-    return np.exp(lo + om * (hi - lo) + xi * np.sqrt(v * om * (1.0 - om))), om, v, xi
+    rng = np.random.default_rng([int(seed), EXPIRY_TAG])
+    out = {"at": {}, "steps": {}}
+    exact = {}
+    for x in times:
+        exact.setdefault(round(float(x), 10), float(x))             # the key is rounded; the arithmetic is on the date itself
+    for key in sorted(exact):
+        t_e = exact[key]
+        j = next((k for k in range(steps) if (k + 1) * dt >= t_e - AT_EXPIRY), steps - 1)
+        w = (t_e - j * dt) / dt
+        if w >= 1.0 - AT_EXPIRY / dt or w <= 0.0:
+            continue
+        s_j = float(sigma if sv is None else np.asarray(sv, dtype=float)[j])
+        v = np.full(n, s_j * s_j * dt) * (ck.u[:, j] if ck is not None else 1.0)
+        if ck is not None:
+            from pricing.vol_regimes import share_before
+            om = share_before(ck, j, w)
+        else:
+            om = np.full(n, w)
+        hi = np.log(m[:, j])
+        before = out["steps"].setdefault(j, [])
+        om_p, ln_p = (before[-1][1], before[-1][2]) if before else (np.zeros(n), np.log(m[:, j - 1]) if j > 0 else np.zeros(n))
+        rho = (om - om_p) / np.maximum(1.0 - om_p, 1e-12)
+        xi = rng.standard_normal(n)
+        ln_m = ln_p + rho * (hi - ln_p) + xi * np.sqrt(v * (1.0 - om_p) * rho * (1.0 - rho))
+        before.append((t_e, om, ln_m))
+        out["at"][key] = {"m": np.exp(ln_m), "om": om, "xi": xi, "step": j}
+    return out
 
 
 def _payoff_at_expiry(spec, S_T: np.ndarray, knocked: np.ndarray) -> np.ndarray:
@@ -560,7 +587,7 @@ def knocked_by(spec, spot0: float, s_t: np.ndarray, var, i_exp: int, seed: int, 
     return out
 
 
-def _option_values(inp: OptionXvaInput, steps: int, dt: float, m: np.ndarray, sv=None, ck=None, seed: int = 42) -> tuple[np.ndarray, float, dict]:
+def _option_values(inp: OptionXvaInput, steps: int, dt: float, m: np.ndarray, sv=None, ck=None, seed: int = 42, levels: Optional[dict] = None) -> tuple[np.ndarray, float, dict]:
     """An option's value from our side on a grid of `steps` × dt driven by M, and V0. On a grid longer than the
     option (a package, simulate_package_paths) it stays to the first grid date at or after its settlement, where it
     is its payoff, and is nothing after: an expiry or a settlement between two grid dates is read at the later one."""
@@ -587,7 +614,10 @@ def _option_values(inp: OptionXvaInput, steps: int, dt: float, m: np.ndarray, sv
     var = var[None, :] * ck.u if ck is not None else var
     # the level at the expiry, inside its step: the payoff is fixed on the forward to settlement there, and a barrier is
     # watched to the expiry and no further (the spot there, the part of the step's variance before it)
-    m_e, om_e, v_e, xi_e = level_at_expiry(inp.t_expiry, i_exp, steps, dt, m, sv, sigma, ck, seed)
+    if levels is None:                                                          # an option on its own: its expiry is the run's one interior date
+        levels = interior_levels([inp.t_expiry], steps, dt, m, sv, sigma, ck, seed)
+    lv = levels["at"].get(round(float(inp.t_expiry), 10))
+    m_e, om_e, xi_e = (lv["m"], lv["om"], lv["xi"]) if lv is not None else (m[:, i_exp].copy(), 1.0, None)
     f_e = inp.forward * m_e
     if barrier_like:
         s_watch = s_t.copy()
@@ -614,7 +644,7 @@ def _option_values(inp: OptionXvaInput, steps: int, dt: float, m: np.ndarray, sv
     r_0, rb_0 = rates_to_settlement(r_q, r_b, inp.t_settle, max(inp.t_expiry, 1e-9))
     v0 = sign * scale * float(value(spec, inp.spot, r_0, rb_0, sigma, inp.t_expiry, 1.0))       # the ticket's price: forward and discounting to settlement
     return V, v0, {"f_t": f_t, "s_t": s_t, "df_t_T": df_t_T, "p0": p0, "r_b": r_b, "i_exp": i_exp, "knocked": seen,
-                   "f_exp": f_e, "m_exp": m_e, "om_exp": om_e, "v_exp": v_e, "xi_exp": xi_e}
+                   "f_exp": f_e, "om_exp": om_e, "xi_exp": xi_e}
 
 
 def simulate_option_paths(inp: OptionXvaInput, n_paths: int = 2000, seed: int = 42, noise_out: Optional[dict] = None) -> tuple[np.ndarray, list[float], float]:
@@ -622,11 +652,12 @@ def simulate_option_paths(inp: OptionXvaInput, n_paths: int = 2000, seed: int = 
     steps, dt = _grid_of(inp, inp.t_settle)
     sigma = float(inp.vol)
     z, _, sv, m, ck = _driver(n_paths, steps, dt, seed, sigma, inp.pillars, _regimes(inp))
-    V, v0, x = _option_values(inp, steps, dt, m, sv, ck, seed)
+    levels = interior_levels([inp.t_expiry], steps, dt, m, sv, sigma, ck, seed)
+    V, v0, x = _option_values(inp, steps, dt, m, sv, ck, seed, levels)
     if noise_out is not None:
         noise_out.update(z=z, f_t=x["f_t"], s_t=x["s_t"], df_t_T=x["df_t_T"], sigma=sigma, steps=steps, dt=dt, r_b=x["r_b"], i_exp=x["i_exp"], step_vols=sv, clock=ck,
                          f_exp=x["f_exp"], om_exp=x["om_exp"], xi_exp=x["xi_exp"],
-                         lag=exact_lag([inp], [(V, v0, x)], steps, dt, m, sv, V, v0, ck))
+                         lag=exact_lag([inp], [(V, v0, x)], steps, dt, m, sv, V, v0, ck, levels))
     return V, x["p0"], v0
 
 
@@ -725,15 +756,17 @@ def simulate_package_paths(legs: list, n_paths: int = 2000, seed: int = 42, nois
     V = np.zeros((n_paths, steps))
     settled = np.zeros((n_paths, steps))          # the cash that has settled out of the set by each date, per path
     v0, rows, parts = 0.0, [], []
+    # the level at every option leg's expiry, drawn once: the legs and the lagged level read one path
+    levels = interior_levels([l.t_expiry for l in legs if _is_option(l)], steps, dt, m, sv, sigma, ck, seed)
     for leg in legs:
         # every option leg reads the same uniforms for a touch between dates, so two legs on one barrier agree on
         # which paths touched it (a knock-in and a knock-out of the same terms still add up to the plain option)
-        Vi, v0i, xi = _option_values(leg, steps, dt, m, sv, ck, seed) if _is_option(leg) else _forward_values(leg, steps, dt, m)
+        Vi, v0i, xi = _option_values(leg, steps, dt, m, sv, ck, seed, levels) if _is_option(leg) else _forward_values(leg, steps, dt, m)
         k_last = _settle_step(t, _horizon(leg))
         # what the lag needs of this leg: its value on its settlement's grid date (one column, not the matrix) and, for
         # an option, its spots on the grid (a matrix per option leg, held until the run's noise_out is dropped)
         parts.append((Vi if keep_leg_paths else _ColumnOnly(Vi[:, k_last].copy(), k_last), v0i,
-                      {k: xi[k] for k in ("r_b", "s_t", "i_exp", "knocked", "f_exp", "m_exp", "om_exp", "v_exp", "xi_exp") if k in xi}))
+                      {k: xi[k] for k in ("r_b", "s_t", "i_exp", "knocked", "f_exp") if k in xi}))
         V = V + Vi
         v0 += v0i
         k_set = _settle_step(t, _horizon(leg))
@@ -743,7 +776,7 @@ def simulate_package_paths(legs: list, n_paths: int = 2000, seed: int = 42, nois
                      "ee_gross_peak": float(np.max(np.mean(np.maximum(Vi, 0.0), axis=0))), **({"paths": Vi} if keep_leg_paths else {})})
     if noise_out is not None:
         noise_out.update(z=z, m=m, sigma=sigma, steps=steps, dt=dt, step_vols=sv, clock=ck, settled=settled if settled.any() else None,
-                         lag=exact_lag(legs, parts, steps, dt, m, sv, V + settled, v0, ck))
+                         lag=exact_lag(legs, parts, steps, dt, m, sv, V + settled, v0, ck, levels))
     return V, p0, v0, rows
 
 

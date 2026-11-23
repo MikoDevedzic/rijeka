@@ -387,3 +387,11 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   the unit test and in the journeys (`grep -n "'([0-9]*)'" frontend/e2e/*.spec.js`). The journeys' tags were left
   twice (0.60.0 and 0.63.0), the second time with the lesson already written in the journey tester's definition: a
   lesson in a role's file is read at the start of that role's work, also when the builder plays the role.
+- A measured effect names the dates it was measured on and what it depends on. The last-step fix moved a one-week
+  option's CVA by 3 % or by 6 % according to the days between its expiry and its settlement; one valuation date
+  gave one of the two, and the model validator, on another date, could reproduce neither (23 November 2026).
+- A level drawn for one leg is drawn for the run. The first version of the last-step fix gave an option its own
+  level a margin period earlier while the forward beside it in a package read the driver's: each was right alone and
+  a hedge no longer netted (found by both reviewers). Anything random a leg needs is put on the one path every leg
+  and every lagged value reads, and a package that should net is a test.
+

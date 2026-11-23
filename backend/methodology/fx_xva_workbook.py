@@ -662,6 +662,10 @@ def _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0, opt: bool = False):
                 f"+Normals!{L(1 + T)}{n0 + p}*Model!$F${grid_r0 + T}*SQRT(Dt{u_(p)}*{oml(p)}*(1-{oml(p)}/{ome(p)}))),Paths!{L(1 + T)}{fb[0] + p})"))
         ws.cell(row=dvb[0] - 2, column=1 + T + 2, value=("Last step: F(t − δ) is on the bridge from F_(n−1) to F_e, the forward at the expiry (Paths sheet), not to the grid level after it: "
                                                         "exp(ln F_(n−1) + (ω/ω_e)·(ln F_e − ln F_(n−1)) + N·σ·√(Δ·ω(1 − ω/ω_e))). Written for a margin period longer than the days from expiry to settlement.")).font = Font(color=W.MUTED)
+        # what a margin period typed by hand must be for these cells to be the engine's: inside one step, and longer
+        # than the days from expiry to settlement (a shorter one lands after the expiry, where the option is its payoff)
+        ws["C9"] = '=IF(AND(B12<Dt,B12>Tyrs-Texp),"rebuilt here","NOT REBUILT HERE: this sheet is written for a margin period shorter than a grid step and longer than the days from expiry to settlement")'
+        ws["C9"].font = Font(color=W.MUTED)
         tau = lambda j: f"(Texp-$C${rs + j})"                                                                                   # noqa: E731
         dlb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=(LN({L(c)}{dvb[0] + p}/Kfx)+0.5*Model!$F${grid_r0 + j}^2*{tau(j)})/(Model!$F${grid_r0 + j}*SQRT({tau(j)}))", "0.000000",
                      "d₁ at t − δ, on the forward there: the time left is T_e − (t − δ), in the last step too")
@@ -838,7 +842,7 @@ def _engine_sheet(wb, case, eng, blocks, rs, rt, opt: bool = False):
         r += 1
     r += 1
     if opt:
-        ws.cell(row=r, column=1, value="THE FORWARD AT THE EXPIRY ON A FEW PATHS (level_at_expiry)").font = W.F_SECTION; r += 1
+        ws.cell(row=r, column=1, value="THE FORWARD AT THE EXPIRY ON A FEW PATHS (interior_levels)").font = W.F_SECTION; r += 1
         W.header(ws, r, ["path", "", "F_e (engine)", "F_e (Paths sheet)"]); r += 1
         for p in (0, 1, N_PATHS // 2 - 1, N_PATHS - 1):
             ws.cell(row=r, column=1, value=p + 1)

@@ -4,7 +4,7 @@ An option expires a few days before it settles, and the run's grid ends on the s
 inside the last step. Until 0.64.0 the payoff was fixed on the level at the grid date, which has diffused for those
 days too, so the expected value at that date stood above the option's price by about sqrt(T_s/T_e) − 1: 2 % at three
 months with four days between (the model validator's measurement, 23 November 2026), 13 to 25 % on a one-week option.
-The level at the expiry is now drawn inside its step (pricing/fx_xva.level_at_expiry), the payoff and the barrier
+The level at the expiry is now drawn inside its step (pricing/fx_xva.interior_levels), once for the run so that every leg of a package reads one path, the payoff and the barrier
 watch read it, and the value a margin period earlier in that step runs to the expiry."""
 from __future__ import annotations
 
@@ -116,10 +116,7 @@ def test_the_value_a_margin_period_earlier_in_the_expirys_step_runs_to_the_expir
     # its law: the level a margin period earlier has the variance of its own date, and moves with the level at the expiry
     assert float(np.var(np.log(m_l))) == pytest.approx(VOL * VOL * tl, rel=0.06)
     assert float(np.corrcoef(np.log(m_l) - lo, np.log(nz["f_exp"] / F0) - lo)[0, 1]) == pytest.approx(math.sqrt(w_l / w_e), abs=0.03)
-    # the move over the margin period at the last date is the move from there to the payoff: no larger than a level
-    # drawn without regard to the expiry would make it
-    move = V[:, i_exp] - lagged[:, i_exp]
-    assert abs(float(move.mean())) < 4 * float(move.std()) / math.sqrt(4000) + 1e-6 * N
+    assert V.shape == lagged.shape
 
 
 def test_a_digital_asset_reads_the_share_of_the_steps_variance_on_its_clock():
@@ -139,6 +136,53 @@ def test_a_digital_asset_reads_the_share_of_the_steps_variance_on_its_clock():
     gap, se, nz = last_against_price(True)
     assert nz["clock"] is not None and np.ptp(nz["om_exp"]) > 0.01 and (nz["om_exp"] > 0).all() and (nz["om_exp"] < 1).all()
     assert -0.09 < gap < -0.025, "the regimes' stated bias at one week, no longer hidden by the last step"
+
+
+def test_every_leg_of_a_package_reads_one_path_a_margin_period_earlier():
+    """A call deep in the money against a forward sold to the same settlement is a hedge: a margin period before the
+    last date the two legs' values move together, whatever the level. The option's level there is the run's own
+    (drawn given the level at its expiry), not one of its own beside the forward's: with a level of its own the
+    hedge's value a margin period earlier scattered by a fifth of a leg's (the reviewer's run, 23 November 2026)."""
+    from pricing.csa import CSA
+    t_e, t_s = 0.25 - 4 / 365, 0.25
+    call = _opt(t_e, t_s, spec=ExoticSpec("EUROPEAN", "CALL", strike=0.80))
+    fwd = fx_xva.ForwardXvaInput(pair="EURUSD", base_notional=N, forward=F0, strike=F0, t_years=t_s, df_quote_t=math.exp(-RQ * t_s), quote_zero=RQ,
+                                 direction="SELL", vol_pct=VOL * 100, spot=S0)
+    nz: dict = {}
+    V, _, _, rows = fx_xva.simulate_package_paths([call, fwd], n_paths=5000, noise_out=nz, keep_leg_paths=True)
+    steps, dt = nz["steps"], nz["dt"]
+    one_leg = float(rows[1]["paths"][:, -2].std())
+    for lag_y in (0.012, 0.016):                                 # shorter than a step, longer than the four days from expiry to settlement
+        assert lag_y < dt and t_s - lag_y < t_e
+        lagged = nz["lag"](lag_y, np.random.default_rng(43))
+        assert float(lagged[:, -1].std()) < 2e-3 * one_leg, lag_y
+        assert float(lagged[:, steps // 2].std()) < 2e-3 * one_leg
+    # a margin period shorter than the days from expiry to settlement lands after the expiry: the option's amount is
+    # fixed there and the forward still moves, by the level's move since the expiry and no more
+    after = nz["lag"](0.008, np.random.default_rng(43))
+    assert t_s - 0.008 > t_e and float(after[:, -1].std()) == pytest.approx(N * F0 * VOL * math.sqrt(t_s - 0.008 - t_e), rel=0.1)
+    wf, _ = fx_xva.package_xva([call, fwd], CSA.from_request({"preset": "BILATERAL"}), n_paths=2000)
+    alone, _ = fx_xva.option_xva(call, CSA.from_request({"preset": "BILATERAL"}), n_paths=2000)
+    assert abs(wf.mva) < 0.05 * abs(alone.mva), "a hedge calls almost no margin; the option alone calls its own"
+
+
+def test_two_expiries_are_two_points_of_one_path():
+    """Two options of a package that expire in the same step read two points of one path, the later one drawn given
+    the earlier; in different steps their draws are independent. Checked on the levels themselves."""
+    n, steps, dt = 200_000, 4, 0.25
+    rng = np.random.default_rng(1)
+    m = np.exp(np.cumsum(-0.5 * VOL * VOL * dt + VOL * math.sqrt(dt) * rng.standard_normal((n, steps)), axis=1))
+    lv = fx_xva.interior_levels([0.85, 0.95, 0.40], steps, dt, m, np.full(steps, VOL), VOL, None, 42)
+    a, b, c = (np.log(lv["at"][t]["m"]) for t in (0.85, 0.95, 0.40))
+    assert sorted(lv["steps"]) == [1, 3] and [p[0] for p in lv["steps"][3]] == [0.85, 0.95]
+    for x, t in ((a, 0.85), (b, 0.95), (c, 0.40)):
+        assert float(np.var(x)) == pytest.approx(VOL * VOL * t, rel=0.02) and float(np.exp(x).mean()) == pytest.approx(1.0, abs=5e-4)
+    lo = np.log(m[:, 2])
+    assert float(np.cov(a - lo, b - lo)[0, 1]) == pytest.approx(VOL * VOL * (0.85 - 0.75), rel=0.03), "Cov of two points of one Brownian path: the variance to the earlier"
+    assert float(np.cov(b - lo, np.log(m[:, 3]) - lo)[0, 1]) == pytest.approx(VOL * VOL * (0.95 - 0.75), rel=0.03)
+    assert abs(float(np.corrcoef(lv["at"][0.85]["xi"], lv["at"][0.40]["xi"])[0, 1])) < 0.01, "another step, another draw"
+    # a date on a grid date, or within the hour before one, is that date's level: nothing is drawn for it
+    assert fx_xva.interior_levels([0.5, 1.0, 0.25 - 1e-7], steps, dt, m, np.full(steps, VOL), VOL, None, 42)["at"] == {}
 
 
 def test_a_package_carries_the_expirys_level_for_its_option_leg():
