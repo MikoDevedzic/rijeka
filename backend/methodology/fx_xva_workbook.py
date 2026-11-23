@@ -171,7 +171,14 @@ def engine_runs(fi: dict) -> dict:
         if int(noise["i_exp"]) != steps - 1:
             raise W.DoesNotFit("the option workbook is written for an expiry inside the grid's last step")
         row = saccr_rows([fi["inp"]])[0]
-        extra = {"r_b": float(noise["r_b"]), "s_t": noise["s_t"], "v_paths": runs[DEFAULT_PRESET][2]["_paths"], "sup_delta": float(row.delta),
+        if noise.get("xi_exp") is None:
+            raise W.DoesNotFit("the option workbook is written for an expiry before the last grid date, inside the last step")
+        gap = fi["inp"].t_settle - fi["inp"].t_expiry
+        if any(runs[p][0].mpor_years <= gap for p in ("BILATERAL", "ON_CHAIN")):
+            raise W.DoesNotFit("the option workbook is written for a margin period longer than the days from expiry to settlement")
+        extra = {"xi_exp": noise["xi_exp"], "om_exp": np.asarray(noise["om_exp"], dtype=float), "f_exp": noise["f_exp"],
+                 "w_exp": (fi["inp"].t_expiry - (steps - 1) * dt) / dt,
+                 "r_b": float(noise["r_b"]), "s_t": noise["s_t"], "v_paths": runs[DEFAULT_PRESET][2]["_paths"], "sup_delta": float(row.delta),
                  "sup_vol": float(SUPERVISORY["CRYPTO" if is_crypto(fi["inp"].pair) else "FX"]["vol"])}
     if abs(dt - 1.0 / 12.0) > 0.01:
         raise W.DoesNotFit("the workbook is written on monthly steps: its forward must run beyond a year")
@@ -305,7 +312,8 @@ def _option_model_sheet(wb, mkt, case, fi, eng):
     ws["A2"] = ("The forward to settlement F_t is driftless under the settlement-date forward measure and steps the monthly grid at one vol, the option's own (the ticket's FLAT vol mode): "
                 "F_t = F_(t−1)·exp(−½σ²Δ + σ·√Δ·Z). Before the expiry the option is valued as the ticket prices it, on the forward to settlement and discounted from the settlement date, with the time left "
                 "to the expiry: V = side·N·DF_q(t,T_s)·cp·[F_t·N(cp·d₁) − K·N(cp·d₂)], τ = T_e − t, d₁ = [ln(F_t/K) + ½σ²τ]/(σ√τ). "
-                "At the last grid date, the settlement date, it is its payoff on the spot there, S_t = F_t·e^(−(r_q−r_b)(T_s−t)) with r_b the carry the forward implies. The forward, its discount factor and the vol are "
+                "The expiry lies inside the last step: the forward at the expiry, F_e, is on the bridge between the two grid levels either side (Paths sheet), and at the last grid date, the settlement date, "
+                "the option is its payoff on it, side·N·max(cp·(F_e − K), 0). The forward, its discount factor and the vol are "
                 + ("the ticket's own (POST /api/currency/option/price for this trade on the account's market)" if fi["ticket"] else "priced here from the spot and the rate below, carried from the pair's spot date")
                 + ": the option's own price is the option workbook's."); ws["A2"].font = W.F_SUB
     took = "the ticket's" if fi["ticket"] else "as priced for this book"
@@ -340,7 +348,8 @@ def _option_model_sheet(wb, mkt, case, fi, eng):
             ("V(0) less the ticket's NPV: nothing, the run starts from the ticket's price (since 0.63.0)", "=B29-B30", "#,##0.000000", False, None),   # 31
             (f"Supervisory volatility of the class (SA-CCR: {'SCO60.98' if ac == 'CRYPTO' else 'CRE52.72'})", eng["sup_vol"], "0.00%", False, None),   # 32
             ("Supervisory delta (CRE52.40) = side·cp·N(cp·[ln(S/K) + ½σ_s²T_e]/(σ_s√T_e)), T_e floored at a day", "=B7*B22*NORMSDIST(B22*(LN(B5/B14)+0.5*B32^2*MAX(B24,1/365))/(B32*SQRT(MAX(B24,1/365))))", "0.00000000", False, eng["sup_delta"]),   # 33
-            ("Steps the engine takes beyond a year: MAX(2, ROUNDUP(12·T_s, 0))", "=MAX(2,ROUNDUP(12*B9,0))", "0", False, float(T))]             # 34
+            ("Steps the engine takes beyond a year: MAX(2, ROUNDUP(12·T_s, 0))", "=MAX(2,ROUNDUP(12*B9,0))", "0", False, float(T)),             # 34
+            ("ω_e = (T_e − t_(n−1))/Δ: the share of the last step's time that comes before the expiry", f"=(B24-B{38 + T - 1})/B18", "0.00000000", False, eng["w_exp"])]   # 35
     for i, (label, v, fmt, inp_, engv) in enumerate(rows, 4):
         ws.cell(row=i, column=1, value=label)
         c = ws.cell(row=i, column=2, value=v); c.number_format = fmt
@@ -357,7 +366,7 @@ def _option_model_sheet(wb, mkt, case, fi, eng):
     W.dropdown(ws, "B20", ["ENGINE", "LIVE"])
     _names(wb, {"Spot": "Model!B5", "Nbase": "Model!B6", "Sgn": "Model!B7", "Settle": "Model!B8", "Tyrs": "Model!B9", "DFqT": "Model!B10",
                 "F0": "Model!B13", "Kfx": "Model!B14", "Rq": "Model!B15", "Sigma": "Model!B16", "Nsteps": "Model!B17", "Dt": "Model!B18", "Npaths": "Model!B19",
-                "Mode": "Model!B20", "NotlQ": "Model!B21", "Cp": "Model!B22", "Texp": "Model!B24", "Rb": "Model!B25", "V0": "Model!B29", "SupDelta": "Model!B33"})
+                "Mode": "Model!B20", "NotlQ": "Model!B21", "Cp": "Model!B22", "Texp": "Model!B24", "Rb": "Model!B25", "V0": "Model!B29", "SupDelta": "Model!B33", "Wexp": "Model!B35"})
     ws["A36"] = "THE GRID"; ws["A36"].font = W.F_SECTION
     W.header(ws, 37, ["k", "t = k·Δ", "date (valuation + round(t·365), as the engine counts; a value)", "DF_q(0,t) = e^(−r_q·t)", "DF_q(t,T_s) = DF_q(0,T_s)/DF_q(0,t)",
                       "σ_k: the vol of the step that ends at t_k (one vol: the FLAT mode)", "τ = T_e − t: the time left to the expiry (nothing at the last date: the payoff)"])
@@ -505,6 +514,16 @@ def _normals_sheet(wb, eng, wf_noise):
                         "Ω, ON_CHAIN: the same for its margin period (5 business days)")
         last, clock_rows = c1, {"U": (u0, u1), "BILATERAL": (b0, b1), "ON_CHAIN": (c0, c1)}
     eng["clock_rows"] = clock_rows
+    eng["exp_rows"] = None
+    if eng.get("xi_exp") is not None:
+        x0, x1 = _block(ws, last + 3, N_PATHS, 1, lambda p, j, r, c: float(eng["xi_exp"][p]), "0.000000",
+                        "X: the normal of the level at the expiry, inside the last step (a generator of its own: the seed and a tag)")
+        last, rows = x1, {"X": (x0, x1), "OM": None}
+        if eng["u"] is not None:
+            o0, o1 = _block(ws, x1 + 3, N_PATHS, 1, lambda p, j, r, c: float(eng["om_exp"][p]), "0.000000",
+                            "Ωe: of the last step's variance on the path, the share that came before the expiry (the asset's vol regimes)")
+            last, rows = o1, {"X": (x0, x1), "OM": (o0, o1)}
+        eng["exp_rows"] = rows
     for row in ws.iter_rows(min_row=z0, max_row=last, min_col=2, max_col=1 + T):
         for c in row:
             if isinstance(c.value, float):
@@ -515,21 +534,28 @@ def _normals_sheet(wb, eng, wf_noise):
 
 
 def _option_value_blocks(ws, case, eng, grid_r0, fb, top):
-    """Below the forward's block: the spot each path implies, d₁, and the option's value from our side. Before the
+    """Below the forward's block: the forward at the expiry, d₁, and the option's value from our side. Before the
     last date the ticket's closed form with the time left (the forward to settlement, discounted from the settlement
-    date); at the last date, the settlement date, the payoff on the spot there."""
+    date); at the last date, the settlement date, the payoff on the forward at the expiry."""
     T = eng["T"]
     g = lambda j: grid_r0 + j                                                                                               # noqa: E731
-    sb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"={L(c)}{fb[0] + p}*EXP(-(Rq-Rb)*(Tyrs-Model!$B${g(j)}))", case["spot_fmt"],
-                "S_t = F_t·e^(−(r_q−r_b)(T_s−t)): the spot the forward implies with the carry held")
+    # the forward at the expiry, inside the last step: on the bridge between the step's two grid levels, the share of
+    # the step's variance before the expiry (its share of the step's time; on a digital asset's clock the path's own)
+    er, cr = eng["exp_rows"], eng.get("clock_rows")
+    lo_ = lambda p: "F0" if T == 1 else f"{L(T)}{fb[0] + p}"                                                              # noqa: E731
+    om_ = lambda p: f"Normals!$B${er['OM'][0] + p}" if er["OM"] else "Wexp"                                              # noqa: E731
+    u_ = lambda p: f"*Normals!{L(1 + T)}{cr['U'][0] + p}" if cr else ""                                                   # noqa: E731
+    sb = _block(ws, top, N_PATHS, 1, lambda p, j, r, c: (f"=EXP(LN({lo_(p)})+{om_(p)}*(LN({L(1 + T)}{fb[0] + p})-LN({lo_(p)}))"
+                                                         f"+IF(Mode=\"ENGINE\",Normals!$B${er['X'][0] + p},NORMSINV(RAND()))*Model!$F${g(T)}*SQRT(Dt{u_(p)}*{om_(p)}*(1-{om_(p)})))"),
+                case["spot_fmt"], "F_e: the forward at the expiry, inside the last step: exp(ln F_(n−1) + ω_e·(ln F_n − ln F_(n−1)) + X·σ·√(Δ·ω_e(1−ω_e))), a Brownian bridge between the two grid levels (on a digital asset Δ·U and the path's own Ω_e)")
     top = sb[1] + 3
     db = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"=(LN({L(c)}{fb[0] + p}/Kfx)+0.5*Model!$F${g(j)}^2*Model!$G${g(j)})/(Model!$F${g(j)}*SQRT(Model!$G${g(j)}))" if j < T else "—"),
                 "0.000000", "d₁ = [ln(F_t/K) + ½σ²τ]/(σ√τ), F_t the forward to settlement on the path, τ the time left to the expiry (Model sheet); nothing at the last date")
     top = db[1] + 3
     vb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (
         f"=Sgn*Nbase*Model!$E${g(j)}*Cp*({L(c)}{fb[0] + p}*NORMSDIST(Cp*{L(c)}{db[0] + p})-Kfx*NORMSDIST(Cp*({L(c)}{db[0] + p}-Model!$F${g(j)}*SQRT(Model!$G${g(j)}))))" if j < T
-        else f"=Sgn*Nbase*MAX(Cp*({L(c)}{sb[0] + p}-Kfx),0)*Model!$E${g(j)}"), case["mtm_fmt"],
-        "V = side·N·DF_q(t,T_s)·cp·[F_t·N(cp·d₁) − K·N(cp·d₂)] before the expiry; at the last date the payoff side·N·max(cp·(S − K), 0)·DF_q(t,T_s)")
+        else f"=Sgn*Nbase*MAX(Cp*($B${sb[0] + p}-Kfx),0)*Model!$E${g(j)}"), case["mtm_fmt"],
+        "V = side·N·DF_q(t,T_s)·cp·[F_t·N(cp·d₁) − K·N(cp·d₂)] before the expiry; at the last date the payoff on the forward at the expiry, side·N·max(cp·(F_e − K), 0)·DF_q(t,T_s)")
     return sb, db, vb
 
 
@@ -551,8 +577,8 @@ def _paths_sheet(wb, case, eng, grid_r0, zrows, opt: bool = False):
                     case["spot_fmt"], "F_t = F_prev·exp(−½σ²Δ·U + σ·√(Δ·U)·Z): the forward on the path, lognormal over the step given the variance the step accumulated")
         blocks["F"] = fb; top = fb[1] + 3
         if opt:
-            ws["A2"] = "Z and U (the step's variance on the path, the asset's vol regimes) → F_t = F_prev·exp(−½σ²Δ·U + σ·√(Δ·U)·Z) → the option's value on it, by the ticket's closed form at σ (the payoff on the spot at the last date). Every cell is a formula."
-            blocks["S"], blocks["D1"], blocks["V"] = _option_value_blocks(ws, case, eng, grid_r0, fb, top)
+            ws["A2"] = "Z and U (the step's variance on the path, the asset's vol regimes) → F_t = F_prev·exp(−½σ²Δ·U + σ·√(Δ·U)·Z) → the option's value on it, by the ticket's closed form at σ (at the last date the payoff on the forward at the expiry, which lies inside the last step). Every cell is a formula."
+            blocks["FE"], blocks["D1"], blocks["V"] = _option_value_blocks(ws, case, eng, grid_r0, fb, top)
         else:
             blocks["V"] = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=Sgn*Nbase*({L(c)}{fb[0] + p}-Kfx)*Model!$E${grid_r0 + j}", case["mtm_fmt"], "V = side·N·(F_t − K)·DF_q(t,T): the forward's value from our side")
         W.widths(ws, [10] + [13] * T)
@@ -565,8 +591,8 @@ def _paths_sheet(wb, case, eng, grid_r0, zrows, opt: bool = False):
                 case["spot_fmt"], "F_t = F_(t−1)·exp(−½σ_k²Δ + σ_k·√Δ·Z): the forward on the path, each step at its own vol")
     blocks["F"] = fb; top = fb[1] + 3
     if opt:
-        ws["A2"] = "Z → F_t = F_(t−1)·exp(−½σ²Δ + σ·√Δ·Z) → the option's value on it, by the ticket's closed form with the time left (the payoff on the spot at the last date). Every cell is a formula."
-        blocks["S"], blocks["D1"], blocks["V"] = _option_value_blocks(ws, case, eng, grid_r0, fb, top)
+        ws["A2"] = "Z → F_t = F_(t−1)·exp(−½σ²Δ + σ·√Δ·Z) → the option's value on it, by the ticket's closed form with the time left (at the last date the payoff on the forward at the expiry, which lies inside the last step). Every cell is a formula."
+        blocks["FE"], blocks["D1"], blocks["V"] = _option_value_blocks(ws, case, eng, grid_r0, fb, top)
     else:
         blocks["V"] = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=Sgn*Nbase*({L(c)}{fb[0] + p}-Kfx)*Model!$E${grid_r0 + j}", case["mtm_fmt"], "V = side·N·(F_t − K)·DF_q(t,T): the forward's value from our side")
     W.widths(ws, [10] + [13] * T)
@@ -623,18 +649,24 @@ def _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0, opt: bool = False):
         # on the expiry's grid date (the last) the time left runs to that date, where the paths fix the payoff
         ws["A2"] = ("V a margin period earlier (the forward bridged between grid dates where it is lognormal, the option valued on it there by the ticket's closed form with the time left), "
                     "the collateral it calls, the residual, and EE / ENE / PFE per step. Choose a preset or set the terms.")
-        tau = lambda j: f"($B${rs + j}-$C${rs + j})" if j == T else f"(Texp-$C${rs + j})"                                     # noqa: E731
-        # the forward the closed form reads and the discount factor on it. Before the last step: the forward to settlement
-        # and DF_q(t−δ, T_s), as on the grid. In the last step the payoff is fixed on the spot at the last grid date, so
-        # the forward is to that date and the discounting from it (the engine's own reading of that step)
-        slb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"={L(c)}{dvb[0] + p}" if j < T else f"={L(c)}{dvb[0] + p}*EXP(-(Rq-Rb)*(Tyrs-$C${rs + j}))*EXP((Rq-Rb)*{tau(j)})"), case["spot_fmt"],
-                     "The forward the option is read on at t − δ: F(t − δ), the forward to settlement; in the last step the forward to the last grid date, S(t − δ)·e^((r_q−r_b)τ)")
-        top = slb[1] + 3
-        dfl = lambda j: f"DFqT/EXP(-Rq*$C${rs + j})" if j < T else f"EXP(-Rq*{tau(j)})"                                         # noqa: E731
-        dlb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=(LN({L(c)}{slb[0] + p}/Kfx)+0.5*Model!$F${grid_r0 + j}^2*{tau(j)})/(Model!$F${grid_r0 + j}*SQRT({tau(j)}))", "0.000000",
-                     "d₁ at t − δ: the time left is T_e − (t − δ); in the last step it runs to the last grid date, where the paths fix the payoff (the engine's own reading, stated in docs/xva.md)")
+        # in the last step the level a margin period earlier is drawn given the level at the EXPIRY, which the payoff is
+        # fixed on (a bridge from the step's start to the expiry, the lag's own normal), not given the grid date after it
+        er, feb = eng["exp_rows"], blocks["FE"]
+        lo_ = lambda p: "F0" if T == 1 else f"Paths!{L(T)}{fb[0] + p}"                                                         # noqa: E731
+        ome = lambda p: f"Normals!$B${er['OM'][0] + p}" if er["OM"] else "Wexp"                                                # noqa: E731
+        oml = lambda p: om(p, 1 + T) if cr else "Wlag"                                                                         # noqa: E731
+        u_ = lambda p: f"*Normals!{L(1 + T)}{cr['U'][0] + p}" if cr else ""                                                    # noqa: E731
+        for p in range(N_PATHS):
+            ws.cell(row=dvb[0] + p, column=1 + T, value=(
+                f"=IF(Coll=1,EXP(LN({lo_(p)})+({oml(p)}/{ome(p)})*(LN(Paths!$B${feb[0] + p})-LN({lo_(p)}))"
+                f"+Normals!{L(1 + T)}{n0 + p}*Model!$F${grid_r0 + T}*SQRT(Dt{u_(p)}*{oml(p)}*(1-{oml(p)}/{ome(p)}))),Paths!{L(1 + T)}{fb[0] + p})"))
+        ws.cell(row=dvb[0] - 2, column=1 + T + 2, value=("Last step: F(t − δ) is on the bridge from F_(n−1) to F_e, the forward at the expiry (Paths sheet), not to the grid level after it: "
+                                                        "exp(ln F_(n−1) + (ω/ω_e)·(ln F_e − ln F_(n−1)) + N·σ·√(Δ·ω(1 − ω/ω_e))). Written for a margin period longer than the days from expiry to settlement.")).font = Font(color=W.MUTED)
+        tau = lambda j: f"(Texp-$C${rs + j})"                                                                                   # noqa: E731
+        dlb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=(LN({L(c)}{dvb[0] + p}/Kfx)+0.5*Model!$F${grid_r0 + j}^2*{tau(j)})/(Model!$F${grid_r0 + j}*SQRT({tau(j)}))", "0.000000",
+                     "d₁ at t − δ, on the forward there: the time left is T_e − (t − δ), in the last step too")
         top = dlb[1] + 3
-        lagb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"=IF(Coll=1,Sgn*Nbase*{dfl(j)}*Cp*({L(c)}{slb[0] + p}*NORMSDIST(Cp*{L(c)}{dlb[0] + p})"
+        lagb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"=IF(Coll=1,Sgn*Nbase*DFqT/EXP(-Rq*$C${rs + j})*Cp*({L(c)}{dvb[0] + p}*NORMSDIST(Cp*{L(c)}{dlb[0] + p})"
                                                                f"-Kfx*NORMSDIST(Cp*({L(c)}{dlb[0] + p}-Model!$F${grid_r0 + j}*SQRT({tau(j)})))),Paths!{L(c)}{vb[0] + p})"),
                       "#,##0", "V(t − δ) = side·N·DF_q(t − δ, T_s)·cp·[F·N(cp·d₁) − K·N(cp·d₂)] on the forward at t − δ: the option valued on that level")
     else:
@@ -806,6 +838,15 @@ def _engine_sheet(wb, case, eng, blocks, rs, rt, opt: bool = False):
         r += 1
     r += 1
     if opt:
+        ws.cell(row=r, column=1, value="THE FORWARD AT THE EXPIRY ON A FEW PATHS (level_at_expiry)").font = W.F_SECTION; r += 1
+        W.header(ws, r, ["path", "", "F_e (engine)", "F_e (Paths sheet)"]); r += 1
+        for p in (0, 1, N_PATHS // 2 - 1, N_PATHS - 1):
+            ws.cell(row=r, column=1, value=p + 1)
+            c = ws.cell(row=r, column=3, value=float(eng["f_exp"][p])); c.fill = W.FILL_RJ; c.number_format = case["spot_fmt"]
+            ws.cell(row=r, column=4, value=f"=Paths!$B${blocks['FE'][0] + p}").number_format = case["spot_fmt"]
+            W.check(wb, "Paths", f"F at the expiry on path {p + 1}", f"Paths!$B${blocks['FE'][0] + p}", f"Engine!C{r}", 1e-9)
+            r += 1
+        r += 1
         ws.cell(row=r, column=1, value="THE OPTION'S VALUE ON A FEW PATHS (simulate_option_paths' values)").font = W.F_SECTION; r += 1
         W.header(ws, r, ["path", "step", "V (engine)", "V (Paths sheet)"]); r += 1
         vb, vp = blocks["V"], eng["v_paths"]
@@ -944,7 +985,7 @@ def _xva_option_workbook(mkt, case: dict):
         "drives every path and values the option on every path. In the ticket's SURFACE mode, its default, the paths step the surface's term structure and each path reads the smile at its "
         "own moneyness, eight groups of paths each valued at its group's vol: that mode is not rebuilt here, and neither are the other styles (American, digital, barrier, touch).",
         "Model: the forward to settlement is lognormal and driftless under the settlement-date forward measure; the spot it implies carries the forward's own carry; before the expiry the option is valued on "
-        "each path as the ticket prices it, with the time left: on the forward to settlement, discounted from the settlement date (Garman–Kohlhagen); at the settlement date it is its payoff "
+        "each path as the ticket prices it, with the time left: on the forward to settlement, discounted from the settlement date (Garman–Kohlhagen); the expiry lies inside the last step, where the forward at the expiry is drawn between the two grid levels, and at the settlement date the option is its payoff on it "
         "(pricing/fx_xva.option_xva, docs/xva.md). The run's value today is the ticket's price: the Model sheet checks one against the other.",
         *([f"Vol regimes: a digital asset's vol is not one level. On each path a day's vol is σ × a fast state (calm or stressed, {eng['regimes']['fast']['stressed_spell_days']:g} days of stress at a time) × a slow state "
            f"(low or high, about {eng['regimes']['slow']['high_spell_days']:g} days at a time), scaled so the variance expected over any period is σ²: between {eng['regimes']['lowest_vol_pct']:g} % and "
@@ -994,11 +1035,11 @@ def _xva_option_workbook(mkt, case: dict):
         *([("U", "the variance a step accumulated on the path, as a multiple of σ²Δ", f"Normals!B{cr['U'][0]}", "path 1, step 1: the asset's vol regimes, day by day (pricing/vol_regimes.py)", "0.000000"),
            ("F_t", "F_prev·exp(−½σ²Δ·U + σ·√(Δ·U)·Z)", f"Paths!B{blocks['F'][0]}", "the forward on path 1 at step 1", case["spot_fmt"])] if cr else
           [("F_t", "F_prev·exp(−½σ²Δ + σ·√Δ·Z)", f"Paths!B{blocks['F'][0]}", "the forward on path 1 at step 1", case["spot_fmt"])]),
-        ("S_t", "F_t·e^(−(r_q−r_b)(T_s−t))", f"Paths!B{blocks['S'][0]}", "the spot the forward implies on path 1 at step 1: the payoff at the last date is on it", case["spot_fmt"]),
+        ("F_e", "exp(ln F_(n−1) + ω_e·(ln F_n − ln F_(n−1)) + X·σ·√(Δ·ω_e(1−ω_e)))", f"Paths!B{blocks['FE'][0]}", "the forward at the expiry on path 1: a bridge inside the last step; the payoff is on it", case["spot_fmt"]),
         ("d₁", "[ln(F_t/K) + ½σ²τ]/(σ√τ), τ = T_e − t", f"Paths!B{blocks['D1'][0]}", "path 1 at step 1", "0.000000"),
-        ("V", "side·N·DF_q(t,T_s)·cp·[F_t·N(cp·d₁) − K·N(cp·d₂)]; at the last date side·N·max(cp·(S − K), 0)", f"Paths!B{blocks['V'][0]}", "the option's value on path 1 at step 1", "#,##0"),
+        ("V", "side·N·DF_q(t,T_s)·cp·[F_t·N(cp·d₁) − K·N(cp·d₂)]; at the last date side·N·max(cp·(F_e − K), 0)", f"Paths!B{blocks['V'][0]}", "the option's value on path 1 at step 1", "#,##0"),
         ("F(t−δ)", "exp(ln F_lo + Ω·(ln F_hi − ln F_lo) + N·σ·√(Ω(1−Ω)·Δ·U)), Ω the share of the step's variance before the date" if cr else "exp(ln F_lo + w·(ln F_hi − ln F_lo) + N·σ·√(w(1−w)·Δ))", f"Exposure!B{blocks_exp['DV'][0]}", "the forward a margin period earlier: ln F is a Brownian bridge between two grid dates", case["spot_fmt"]),
-        ("V(t−δ)", "the same closed form on F(t−δ) with the time left there, discounted from the settlement date", f"Exposure!B{blocks_exp['LAG'][0]}", "the option valued on that level", "#,##0"),
+        ("V(t−δ)", "the same closed form on F(t−δ) with the time left to the expiry, discounted from the settlement date; in the last step F(t−δ) is on the bridge to F_e", f"Exposure!B{blocks_exp['LAG'][0]}", "the option valued on that level", "#,##0"),
         ("C", "max(V_lag − TH_cp, 0) − max(−V_lag − TH_own, 0), zeroed under the MTA", f"Exposure!B{blocks_exp['C'][0]}", "", "#,##0"),
         ("IM₀", "99th percentile fall of V over the margin period, about its mean", "Exposure!B18", "the first date; not an industry margin model", "#,##0.00"),
         ("EE, ENE, PFE", "mean(max(V−C−IM,0)), mean(min(V−C+IM,0)), 95th percentile of V−C", f"Exposure!D{rs + 1}", "step 1", "#,##0.00"),

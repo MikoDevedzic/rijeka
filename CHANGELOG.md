@@ -1,7 +1,32 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.46). Commits on `main` are the detail.
+methodology document carries its own version (v1.47). Commits on `main` are the detail.
+
+## 0.64.0 · 23 November 2026
+
+**The last step of an option's XVA run.** The exposure of every option on a currency pair or a digital asset
+changes, most where the option is short.
+
+- **What was wrong.** An option expires some days before it settles, and its run ends on the settlement date. The
+  payoff was fixed on the level at that date, which had moved for those days as well as for the option's life. The
+  expected value at the last date stood above the option's price by about √(T_s/T_e) − 1: 2 % at three months with
+  four days between expiry and settlement, 13 to 25 % on a one-week option. The value a margin period earlier in
+  that step was read with the same extra days.
+- **What it is now.** The level at the expiry is drawn inside the last step, between the two grid levels either
+  side. The payoff is fixed on it, a barrier is watched to the expiry and no further, and the value a margin period
+  earlier in that step runs to the expiry. The discounted value is a martingale to the last date, within the error
+  of 200,000 paths at one week and at three months.
+- **What moves** (tickets of four tenors, 20,000 paths, before against after). Uncollateralised, a EURUSD call's CVA
+  and FCA fall 6.4 % at one week, 0.3 % at one month, 0.1 % at three months and nothing at eighteen. Margined, the
+  total falls 7 % at one week and about 1 % from one month to eighteen. A BTC option's uncollateralised CVA falls
+  2 % at one week and 0.5 % at one month; its margined total 1 to 3 %.
+- **The option workbooks** (`xva_fx_option`, `xva_crypto_option`) rebuild the level at the expiry and the last
+  step's lag in cells: 99 checks under each margin preset. Methodology v1.47.
+- **Stated, not changed.** On a digital asset, an at-the-money option's expected payoff on the regime paths is below
+  its mark, by 5.5 % at one week (the methodology has carried this at one month and beyond; the last step's error
+  had been hiding it at short expiries). The netting-set engine behind the incremental charge still fixes an
+  option's payoff on its own grid date.
 
 ## 0.63.0 · 23 November 2026
 
