@@ -325,12 +325,15 @@ def test_xva_fx_workbooks_carry_the_engine_draws_and_a_live_mode():
     from methodology.fx_xva_workbook import N_PATHS, XVA_CRYPTO_CASE, XVA_FX_CASE, engine_runs, forward_inputs
     from pricing.csa import CSA
     from pricing.fx_vol import quotes_from_grid, vol_at
-    from pricing.fx_xva import forward_xva
+    from pricing.fx_xva import exposure_grid, forward_xva
+    import math
     mkt = _mkt()
     for product, case in (("xva_fx", XVA_FX_CASE), ("xva_crypto", XVA_CRYPTO_CASE)):
         fi = forward_inputs(mkt, case)
         eng = engine_runs(fi)
-        assert eng["noise"]["z"].shape == (N_PATHS, eng["T"]) and eng["T"] in (18, 19) and abs(eng["noise"]["z"].mean()) < 0.1    # eighteen months from the spot date: the ticket's own monthly grid
+        assert eng["noise"]["z"].shape == (N_PATHS, eng["T"]) and eng["T"] in (18, 19) and abs(eng["noise"]["z"].mean()) < 0.1    # eighteen months from the spot date
+        # the ticket's own grid, by the ticket's own rule and nothing set on the input: monthly steps beyond a year
+        assert getattr(fi["inp"], "grid_per_year", None) is None and (eng["T"], eng["dt"]) == exposure_grid(fi["inp"].t_years) and eng["T"] == math.ceil(12 * fi["inp"].t_years)
         assert fi["ticket"] is False, "a market with no account behind it: the book prices the same trade from its own inputs"
         assert set(eng["runs"]) == {"UNCOLLATERALISED", "BILATERAL", "ON_CHAIN"}
         assert eng["runs"]["BILATERAL"][1].cva > eng["runs"]["UNCOLLATERALISED"][1].cva           # margining cuts the cost (less negative)
@@ -392,7 +395,7 @@ def test_xva_option_workbooks_value_the_option_on_every_path_in_the_tickets_flat
     from methodology.fx_xva_workbook import N_PATHS, XVA_CRYPTO_OPTION_CASE, XVA_FX_OPTION_CASE, engine_runs, option_inputs
     from pricing.csa import CSA
     from pricing.fx_vol import vol_at
-    from pricing.fx_xva import option_xva, simulate_option_paths
+    from pricing.fx_xva import exposure_grid, option_xva, simulate_option_paths
     from scripts.check_workbook import with_surfaces
     Phi = lambda x: 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))        # noqa: E731
     mkt = _mkt()
@@ -402,6 +405,7 @@ def test_xva_option_workbooks_value_the_option_on_every_path_in_the_tickets_flat
         eng = engine_runs(fi)
         assert fi["ticket"] is False and inp.pillars is None and fi["pillars"] == [], "no account and no surface: one default vol, the FLAT mode"
         assert eng["T"] in (18, 19) and eng["dt"] == pytest.approx(inp.t_settle / eng["T"]) and 0 < inp.t_settle - inp.t_expiry < eng["dt"]
+        assert inp.grid_per_year is None and (eng["T"], eng["dt"]) == exposure_grid(inp.t_settle) and eng["T"] == math.ceil(12 * inp.t_settle), "the ticket's own grid, by the ticket's own rule"
         # the value today, from the formula: the forward to the expiry on the carry the forward to settlement implies
         r_q = -math.log(inp.df_quote_t) / inp.t_settle
         r_b = r_q - math.log(inp.forward / inp.spot) / inp.t_settle
@@ -415,9 +419,9 @@ def test_xva_option_workbooks_value_the_option_on_every_path_in_the_tickets_flat
         ds = (math.log(inp.spot / inp.spec.strike) + 0.5 * sup_vol ** 2 * inp.t_expiry) / (sup_vol * math.sqrt(inp.t_expiry))
         assert eng["sup_delta"] == pytest.approx(Phi(ds), rel=1e-12) and 0.3 < eng["sup_delta"] < 1.0
         # a martingale: the mean discounted value at a date in the middle and at the last date, on many paths
-        V, p0, _ = simulate_option_paths(inp, n_paths=20000, seed=7)
+        V, p0, _ = simulate_option_paths(inp, n_paths=60000, seed=7)
         for k in (eng["T"] // 2, eng["T"] - 1):
-            assert float(V[:, k].mean()) * p0[k + 1] == pytest.approx(v0, rel=0.05), k
+            assert float(V[:, k].mean()) * p0[k + 1] == pytest.approx(v0, rel=0.03), k      # about four standard errors: a gross error, not a small drift (the closed form above is the exact check)
         # a bought option is an asset on every path: nothing owed, so no DVA and no funding benefit without collateral
         unc = eng["runs"]["UNCOLLATERALISED"][1]
         assert unc.dva == 0.0 and unc.fba == 0.0 and unc.cva < 0 and all(v == 0.0 for v in unc.ene)
@@ -456,6 +460,47 @@ def test_xva_option_workbooks_value_the_option_on_every_path_in_the_tickets_flat
     cal = wb["Calibration"]
     assert str(cal["B5"].value).startswith("=F") and any("LN(F0/Kfx)" in str(c.value) for row in cal.iter_rows(min_col=3, max_col=3) for c in row)
     assert not any(str(c.value).startswith("=SQRT(MAX(") for row in cal.iter_rows() for c in row), "no step vols in the FLAT mode"
+
+
+def test_the_currency_xva_books_trades_fit_the_books_grid_on_any_valuation_date():
+    """The currency XVA books are written for one shape of run: monthly steps (a trade beyond a year), a margin period
+    inside one step and, for an option, an expiry inside the last step. Their trade is eighteen months from the spot
+    date, so that holds whatever the valuation date: every fifth day of a year and a half, weekends and month ends among
+    them. (The route answers 422, not a server error, should a market ever give another shape.)"""
+    from datetime import date, timedelta
+    from methodology.fx_xva_workbook import XVA_CRYPTO_CASE, XVA_FX_CASE, option_dates, settlement_date
+    from pricing.csa import CSA
+    from pricing.fx_xva import exposure_grid
+    longest = max(CSA.from_request({"preset": p}).mpor_years for p in ("BILATERAL", "ON_CHAIN"))
+    d0 = date(2026, 8, 3)
+    for n in range(0, 550, 5):
+        val = d0 + timedelta(days=n)
+        for case in (XVA_FX_CASE, XVA_CRYPTO_CASE):
+            pair = case["pair"]
+            t = (settlement_date(val, pair) - val).days / 365.0
+            steps, dt = exposure_grid(t)
+            assert abs(dt - 1.0 / 12.0) < 0.01 and longest < dt, (val, pair, "the forward's grid")
+            od = option_dates(val, pair)
+            t_e, t_s = (od["expiry"] - val).days / 365.0, (od["settlement"] - val).days / 365.0
+            steps, dt = exposure_grid(t_s)
+            assert abs(dt - 1.0 / 12.0) < 0.01 and longest < dt, (val, pair, "the option's grid")
+            assert (steps - 1) * dt < t_e - 1e-9 <= steps * dt, (val, pair, "the option's expiry is inside the last step")
+
+
+def test_a_workbook_that_cannot_be_built_is_answered_not_a_server_error(monkeypatch):
+    """A book written for one shape of trade raises when the market does not give it that shape: the download answers
+    422 with the reason."""
+    from fastapi import HTTPException
+    from api.routes import _limits, methodology as M
+
+    def refuse(product, mkt):
+        raise ValueError("the workbook is written on monthly steps: its forward must run beyond a year")
+    monkeypatch.setattr(M, "market_for", lambda db, uid, product=None: None)
+    monkeypatch.setattr(M.rep, "build", refuse)
+    _limits._buckets.clear()
+    with pytest.raises(HTTPException) as e:
+        M.replication("xva_fx", db=None, user={"sub": "someone"})
+    assert e.value.status_code == 422 and "monthly steps" in e.value.detail and "cannot be built" in e.value.detail
 
 
 def test_hw1f_mc_matches_the_route_loop():

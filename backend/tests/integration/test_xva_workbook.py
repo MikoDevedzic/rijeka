@@ -226,6 +226,13 @@ def test_the_currency_option_xva_workbooks_run_what_the_tickets_route_runs(clien
     finally:
         db.close()
     assert pair in mkt.fx_option_tickets, "the stack's account prices this pair: the book takes the ticket's option"
+    db = SessionLocal()
+    try:
+        own = market_for(db, USER_A, product)        # a download prices its own book's trade and no other
+    finally:
+        db.close()
+    assert set(own.fx_option_tickets) == {pair} and own.fx_tickets == {}
+    assert own.fx_option_tickets[pair]["inp"] == mkt.fx_option_tickets[pair]["inp"]
     fi = F.option_inputs(mkt, case)
     assert fi["ticket"] is True and fi["inp"].t_settle > 1.02 and fi["inp"].pillars is None
     eng = F.engine_runs(fi)

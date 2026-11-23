@@ -20,13 +20,15 @@ new. No figure of a ticket changes.
   add-on is at the option's supervisory delta. The engine's figures are held to `POST /api/xva/currency-option` to
   the cent, for the option as the ticket prices and books it.
 - **Not rebuilt, and said so in the books and in the methodology** (v1.46): the ticket's default mode for an option,
-  in which each path reads the smile; the other option styles; a sold option's checks.
+  in which each path reads the smile; the other option styles; a sold option's checks; a ticket's fees; wrong-way
+  risk as a default intensity tied to the asset; the capital of a Group 2b digital asset.
 - `python -m scripts.check_workbook` runs the four currency books under each margin preset, with a surface and
   without one, on five valuation dates.
 
 - **Found by the option book, and stated, not yet changed.** The value an option's XVA run starts from reads the
   forward and the discounting at the expiry; the ticket prices the option on the forward to settlement, discounted
-  from the settlement date. On an eighteen-month EURUSD call the run starts 0.09 % below the ticket's price. And an
+  from the settlement date. On an eighteen-month EURUSD call the run starts 0.09 % below the ticket's price; on the digital asset's, with one
+  day between the two dates, within a hundredth of one per cent either way. And an
   option on a pair with no surface saved and no default level of its own is priced at 10 % flat, a digital asset
   included, where a forward's XVA run on the same asset defaults to 55 %: two tables for one default. The hosted
   demo saves a surface for every pair it lists, so neither default is reached there.

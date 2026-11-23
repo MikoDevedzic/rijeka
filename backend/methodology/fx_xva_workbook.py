@@ -868,6 +868,7 @@ def _xva_forward_workbook(mkt, case: dict):
         "Initial margin is the engine's own estimate from these paths: at each date the 99th percentile rise (what we call) and fall (what we post) of V over the margin period, about its mean. "
         "It is not an industry margin model; a desk with its own figure types it on the ticket.",
         f"The capital add-on is {case['sf_basis']}: the supervisory factor on the notional in the quote currency at spot.",
+        "Not in the book: a ticket's fees; wrong-way risk as a default intensity tied to the asset (the Waterfall sheet has the multiplier alone, at one); the capital of a Group 2b digital asset; a margin period of a grid step or longer. The CEM and internal-model capital branches are in the Waterfall sheet's cells and are not among the Checks.",
         case["rate_note"],
     ], mkt, summary=[("Model", f"lognormal forward{' on the clock of its vol regimes' if eng.get('regimes') else ''}, σ = {eng['sigma']:.4%} from {fi['vol_source']}"), ("Paths", f"{N_PATHS} on {T} monthly steps (Δ = {eng['dt']:.5f}y)")])
     _curve_sheet(wb, mkt)
@@ -950,6 +951,7 @@ def _xva_option_workbook(mkt, case: dict):
         f"The capital add-on is {case['sf_basis']}: the supervisory factor on the notional in the quote currency at spot, at the option's supervisory delta (CRE52.40: the Black delta of its strike at the class's supervisory volatility).",
         "A bought option is an asset on every path: uncollateralised it has no negative exposure, so DVA and FBA are nothing; under a CSA the collateral held against it leaves a residual of either sign. "
         "Change the side on the Model sheet to see the sold option (the Checks then read against a bought one).",
+        "Not in the book: a ticket's fees; wrong-way risk as a default intensity tied to the asset (the Waterfall sheet has the multiplier alone, at one); the capital of a Group 2b digital asset; a margin period of a grid step or longer. The CEM and internal-model capital branches are in the Waterfall sheet's cells and are not among the Checks.",
         case["rate_note"],
     ], mkt, summary=[("Model", f"European {kind} on a lognormal forward{' on the clock of its vol regimes' if eng.get('regimes') else ''}, σ = {eng['sigma']:.4%} from {fi['vol_source']}"),
                      ("Paths", f"{N_PATHS} on {T} monthly steps (Δ = {eng['dt']:.5f}y)")])

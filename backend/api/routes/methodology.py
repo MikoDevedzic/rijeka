@@ -39,7 +39,18 @@ def _latest(db: Session, user_id: str, curve_id: str):
         {"c": curve_id, "u": user_id}).first()
 
 
-FORWARD_XVA_BOOKS, OPTION_XVA_BOOKS = ("xva_fx", "xva_crypto"), ("xva_fx_option", "xva_crypto_option")
+# the currency XVA books and the pair each one's trade is on: a download prices its own pair's trade and no other
+FORWARD_XVA_BOOKS = {"xva_fx": "EURUSD", "xva_crypto": "BTCUSD"}
+OPTION_XVA_BOOKS = {"xva_fx_option": "EURUSD", "xva_crypto_option": "BTCUSD"}
+
+
+def _not_priced(pair: str, what: str, e: Exception) -> None:
+    """A book's trade the account's market did not price: the book is built from its own inputs and says so on its
+    Model sheet. The pricing routes' own refusal (no spot, no curve) is expected; anything else is logged as a fault."""
+    if isinstance(e, HTTPException):
+        log.info("methodology: %s on %s is not priced on this account's market (%s): its XVA book uses its own inputs", what, pair, str(e.detail)[:160])
+    else:
+        log.warning("methodology: pricing %s on %s for its XVA book failed with %s (%s): the book uses its own inputs", what, pair, type(e).__name__, str(e)[:160])
 
 
 def market_for(db: Session, user_id: str, product: str | None = None) -> rep.Market:
@@ -72,11 +83,11 @@ def market_for(db: Session, user_id: str, product: str | None = None) -> rep.Mar
                       quotes=snap.quotes or [], curve=curve, vol_quotes=(vol.quotes if vol else []) or [],
                       vol_date=vol.valuation_date if vol else None, fx_vol_quotes=(fxv.quotes if fxv else []) or [],
                       vol_quotes_by_pair={"BTCUSD": (btc.quotes if btc else []) or []}, hw1f=hw1f,
-                      fx_tickets=fx_tickets(db, user_id, val) if product is None or product in FORWARD_XVA_BOOKS else {},
-                      fx_option_tickets=fx_option_tickets(db, user_id, val) if product is None or product in OPTION_XVA_BOOKS else {})
+                      fx_tickets=fx_tickets(db, user_id, val, FORWARD_XVA_BOOKS.get(product)) if product is None or product in FORWARD_XVA_BOOKS else {},
+                      fx_option_tickets=fx_option_tickets(db, user_id, val, OPTION_XVA_BOOKS.get(product)) if product is None or product in OPTION_XVA_BOOKS else {})
 
 
-def fx_tickets(db: Session, user_id: str, val) -> dict:
+def fx_tickets(db: Session, user_id: str, val, only: str | None = None) -> dict:
     """The forwards of the two currency XVA books as a ticket's XVA run reads them on this account's market: the
     route's own reader (api/routes/xva.forward_xva_input: the pair's stored spot, curves and points, the spot date,
     its surface in SURFACE mode), for the book's trade. A pair the account cannot price (no spot saved, no curve) is
@@ -86,6 +97,8 @@ def fx_tickets(db: Session, user_id: str, val) -> dict:
     out = {}
     for case in (XVA_FX_CASE, XVA_CRYPTO_CASE):
         pair = case["pair"]
+        if only is not None and pair != only:
+            continue
         try:
             settle = settlement_date(val, pair)
             inp, _q = forward_xva_input(db, user_id, pair, base_notional=case["notional"], settlement=settle, forward_rate=None,
@@ -93,11 +106,11 @@ def fx_tickets(db: Session, user_id: str, val) -> dict:
             out[pair] = {"inp": inp, "settle": settle}
         except Exception as e:      # noqa: BLE001 — a book is still built, from its own inputs
             db.rollback()
-            log.info("methodology: %s is not priced on this account's market (%s): its XVA book uses its own inputs", pair, str(e)[:120])
+            _not_priced(pair, "a forward", e)
     return out
 
 
-def fx_option_tickets(db: Session, user_id: str, val) -> dict:
+def fx_option_tickets(db: Session, user_id: str, val, only: str | None = None) -> dict:
     """The options of the two currency option XVA books as a ticket's XVA run reads them on this account's market in
     its FLAT vol mode: the route's own reader (api/routes/xva.option_xva_input: the option priced by the ticket's
     pricer from the pair's stored spot, curves, points and surface), for the book's trade, struck at the forward. A
@@ -107,6 +120,8 @@ def fx_option_tickets(db: Session, user_id: str, val) -> dict:
     out = {}
     for case in (XVA_FX_OPTION_CASE, XVA_CRYPTO_OPTION_CASE):
         pair = case["pair"]
+        if only is not None and pair != only:
+            continue
         try:
             d = option_dates(val, pair)
             terms = {"notional": case["notional"], "K": None, "shape": "OPTION", "option_type": OPTION_TYPE, "expiry": d["expiry"], "settle": d["settlement"],
@@ -115,7 +130,7 @@ def fx_option_tickets(db: Session, user_id: str, val) -> dict:
             out[pair] = {"inp": inp, "expiry": d["expiry"], "settle": d["settlement"], "npv": float(q["npv"]), "vol_source": str(q.get("vol_source") or inp.vol_source)}
         except Exception as e:      # noqa: BLE001 — a book is still built, from its own inputs
             db.rollback()
-            log.info("methodology: an option on %s is not priced on this account's market (%s): its XVA book uses its own inputs", pair, str(e)[:120])
+            _not_priced(pair, "an option", e)
     return out
 
 
@@ -125,7 +140,13 @@ def replication(product: str, db: Session = Depends(get_db), user: dict = Depend
         raise HTTPException(status_code=404, detail=f"No Excel replication for '{product}'.")
     heavy(user, "Excel replication", 6)          # the XVA book runs a calibration and a Monte Carlo per download
     mkt = market_for(db, user["sub"], product)
-    data, _ = rep.build(product, mkt)
+    try:
+        data, _ = rep.build(product, mkt)
+    except ValueError as e:
+        # a book written for one shape of trade (an XVA book's grid, an option's expiry in the last step) says when the
+        # account's market does not give it that shape: an answer, not a server error
+        log.warning("methodology: %s could not be built on this account's market: %s", product, str(e)[:200])
+        raise HTTPException(status_code=422, detail=f"This workbook cannot be built from this account's market today: {str(e)[:200]}")
     name = f"rijeka_{product}_replication_{mkt.valuation_date.isoformat()}.xlsx"
     return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})
