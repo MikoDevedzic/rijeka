@@ -32,7 +32,7 @@ class Paths:
     calib: Calibration
     n_paths: int
     seed: int = 7                           # the run's seed: a level inside a step is drawn from it (spot_between)
-    inside: dict = field(default_factory=dict)   # (SPOT factor, step) -> the step's daily bridge, drawn once
+    inside: dict = field(default_factory=dict)   # (SPOT factor, step, day) -> the level there, once asked for
 
 
 def add_months(d: date, n: int) -> date:
@@ -133,14 +133,32 @@ INSIDE_TAG = 0x696E7364    # the stream of the levels inside a step, apart from 
 
 def step_vol(paths: Paths, key: str, i: int) -> float:
     """The vol the spot factor `key` diffuses at inside step i (t_{i-1}, t_i]: the surface's forward vol for that
-    step where the factor has a surface, else the factor's one vol. Under historical sampling the step is a block
-    of observed days and no vol drew it: the factor's calibrated vol stands in for the spread inside the step."""
-    f = paths.calib.factors[key]
-    historical = paths.calib.sampling == "HISTORICAL" and paths.calib.panel is not None
+    step where the paths stepped on the factor's surface, else the factor's one vol. Under historical sampling the
+    step is a block of observed days and no vol drew it: the factor's calibrated vol stands in for the spread
+    inside the step. (The test for historical sampling is simulate()'s own.)"""
+    c = paths.calib
+    f = c.factors[key]
+    historical = c.sampling == "HISTORICAL" and c.panel is not None and c.panel.shape[1] == len(c.order)
     if getattr(f, "pillars", None) and not historical:
         from pricing.fx_vol import step_vols
         return float(step_vols(f.pillars, paths.t[1:])[i - 1])
     return max(float(f.sigma), 1e-6)
+
+
+def _step_bridges(paths: Paths, i: int, D: int) -> tuple[list[str], np.ndarray]:
+    """The daily bridges of step i for every spot factor, (paths, D, spot factors): a daily walk per factor, the
+    factors correlated as the paths' own shocks are (the calibration's matrix, its spot block), each walk less the
+    straight line to its own end. Drawn from the run's seed and the step alone, so it is the same array whenever
+    and for whichever factor it is asked."""
+    c = paths.calib
+    keys = [k for k in c.order if c.factors[k].kind == "SPOT"]
+    idx = [c.order.index(k) for k in keys]
+    corr = np.asarray(c.corr, dtype=float)[np.ix_(idx, idx)]
+    L = np.linalg.cholesky(corr + 1e-10 * np.eye(len(idx)))
+    rng = np.random.default_rng([int(paths.seed), INSIDE_TAG, i])
+    w = np.cumsum(rng.standard_normal((paths.n_paths, D, len(idx))) @ L.T, axis=1)
+    days = np.arange(1, D + 1)
+    return keys, w - (days / D)[None, :, None] * w[:, -1:, :]
 
 
 def spot_between(paths: Paths, key: str, T_years: float) -> np.ndarray:
@@ -148,9 +166,13 @@ def spot_between(paths: Paths, key: str, T_years: float) -> np.ndarray:
     between the two grid levels either side. In logs the path is a straight line between them (its drift is linear
     in time inside a step) plus a Brownian bridge at the step's vol, pinned to nothing at both ends:
     ln S(T) = ln S_{i-1} + rho (ln S_i - ln S_{i-1}) + sigma sqrt(1/365.25) b_d, rho = d/D for day d of the step's
-    D days, b the bridge of a daily walk (variance d(1 - d/D)). The whole step's bridge is drawn once, by day, from
-    the run's seed, the factor and the step, so every date inside a step is a point of one path whatever order the
-    dates are asked in, and two trades with one date read one level. A time on a grid date is the grid level."""
+    D days, b the bridge of a daily walk (variance d(1 - d/D)). The step's bridges are drawn by day for every spot
+    factor at once, correlated as the paths' shocks are, from the run's seed and the step, so every date inside a
+    step is a point of one path whatever order the dates are asked in, two trades with one date read one level,
+    and two pairs move together inside a step as they do across it. (A rate's bonds are read on grid dates only,
+    so no rate has a level inside a step.) A time on a grid date is the grid level; a time before the first grid
+    date (an option already expired, not yet settled) is today's level. The levels asked for are kept on the
+    paths, one column each; the step's draw is made again when another date in it is asked."""
     S = paths.s[key]
     t = paths.t
     for j in range(len(t)):
@@ -167,16 +189,14 @@ def spot_between(paths: Paths, key: str, T_years: float) -> np.ndarray:
         return S[:, i - 1]
     if d >= D:
         return S[:, i]
-    b = paths.inside.get((key, i))
-    if b is None:
-        rng = np.random.default_rng([int(paths.seed), INSIDE_TAG, paths.calib.order.index(key), i])
-        w = np.cumsum(rng.standard_normal((paths.n_paths, D)), axis=1)
-        days = np.arange(1, D + 1)
-        b = w - (days / D)[None, :] * w[:, -1:]             # the bridge at days 1..D (nothing at day D)
-        paths.inside[(key, i)] = b
-    rho = d / D
-    lo, hi = np.log(S[:, i - 1]), np.log(S[:, i])
-    return np.exp(lo + rho * (hi - lo) + step_vol(paths, key, i) * math.sqrt(1.0 / 365.25) * b[:, d - 1])
+    level = paths.inside.get((key, i, d))
+    if level is None:
+        keys, b = _step_bridges(paths, i, D)
+        rho = d / D
+        lo, hi = np.log(S[:, i - 1]), np.log(S[:, i])
+        level = np.exp(lo + rho * (hi - lo) + step_vol(paths, key, i) * math.sqrt(1.0 / 365.25) * b[:, d - 1, keys.index(key)])
+        paths.inside[(key, i, d)] = level
+    return level
 
 
 BLOCK_DAYS = 21          # one month of business days per step

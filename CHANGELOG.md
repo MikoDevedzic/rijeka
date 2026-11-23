@@ -6,25 +6,33 @@ methodology document carries its own version (v1.48). Commits on `main` are the 
 ## 0.65.0 · 23 November 2026
 
 **An option's expiry in the counterparty engine.** The figures of a netting set that holds an option on a currency
-pair or a digital asset change at one date: the monthly grid date that falls between the option's expiry and its
-settlement. It reaches the counterparty report, the incremental charge on a ticket, the reserves and the capital
-stock for such a set. A ticket's own XVA is not touched (0.64.0 mended the same thing there).
+pair or a digital asset change at one date: the monthly grid date that falls on the option's expiry or between it
+and the settlement (about three booked EURUSD tenors in four, one BTC tenor in four). It reaches the counterparty
+report, the incremental charge on a ticket, the reserves and the capital stock for such a set. A ticket's own XVA
+run is another engine and is not in this change (0.64.0 mended the same thing there).
 
 - **What was wrong.** The engine steps monthly from the valuation date. An option booked today expires one to three
   days before the grid date its tenor lands on about one time in five (a weekend or a holiday between), and settles
-  after it. On that date the payoff was fixed on the date's own spot. Two errors, of opposite sign for a call: the
-  level had moved for the days since the expiry (the value there averaged 1.4 % above the price with one day between
-  and 5.1 % with three, on a one-month EURUSD call), and the payoff was on the spot where the price is on the rate
-  for delivery at settlement (0.7 to 1.5 % of the same call, the carry over those days).
+  after it; one in two expires on the grid date itself. On that date the payoff was fixed on the date's own spot.
+  Two errors, of opposite sign for a call where the quote currency's rate is the higher: where the expiry is before
+  the grid date the level had moved for the days since (the value there averaged 1.4 % above the price with one day
+  between and 5.1 % with three, on a one-month EURUSD call), and in both cases the payoff was on the spot where the
+  price is on the rate for delivery at settlement (the carry over the days from expiry to settlement: 0.65 % of the
+  same call with two days and 1.35 % with four, at a 2 % rate differential).
 - **What it is now.** The level at the expiry is the one the path passed through inside the step
   (`ccr/simulate.spot_between`): a straight line in logs between the two grid levels and a Brownian bridge at the
-  step's vol, drawn once per step and factor, so two options with one expiry read one level. A barrier is watched to
-  the expiry and no further. The payoff is on the rate for delivery at settlement. The value on that date averages to
-  the option's price within the error of 200,000 paths, at one, three and twelve months, EURUSD and BTC.
+  step's vol, drawn per step for every spot factor at once and correlated as the paths are, so two options with one
+  expiry read one level and two pairs move together inside a step. A barrier is watched to the expiry and no
+  further. The payoff is on the rate for delivery at settlement. The value on that date averages to the option's
+  price within the error of 200,000 paths: the tests hold a call and a put at one, three and twelve months on
+  EURUSD and at one and three months on BTC, on flat curves and one vol; the validator's own daily paths gave
+  94,396 ± 221 for the one-month call with three days between, against a price of 94,521 and the engine's
+  94,348 ± 312 on that date (200,000 paths, as the code now draws).
 - **What is not checked.** The sizes are measured on flat curves and one vol, on 23 November 2026; a whole set's
   charge on the hosted market was not measured before and after. Under historical sampling the spread inside a
-  step is the factor's calibrated vol, an approximation. There is no workbook for this engine.
-- Tests: `tests/test_ccr_option_expiry.py` (10). Methodology v1.48 (§13, with the equation), `docs/ccr.md`, the
+  step is the factor's calibrated vol, an approximation. A surface with a smile on that date, and a rate that moves
+  between the expiry and the settlement, are not tested. There is no workbook and no QuantLib row for this engine.
+- Tests: `tests/test_ccr_option_expiry.py` (17). Methodology v1.48 (§13, with the equation), `docs/ccr.md`, the
   model inventory.
 
 ## 0.64.0 · 23 November 2026

@@ -464,7 +464,8 @@ def value_fx_option(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float
     a barrier is watched at the grid dates before the expiry and at the expiry, no further. The payoff is on the
     rate for delivery at settlement as it stands at the expiry (the spot then, carried over the days to settlement
     on today's curves), which is the rate the price is of; a barrier is a level of the spot and is watched on it.
-    (Until 0.65.0 the payoff was fixed, and a barrier last watched, on the spot at the grid date at or after the
+    An option already expired and not yet settled reads today's level, carried from today. (Until 0.65.0 the
+    payoff was fixed, and a barrier last watched, on the spot at the grid date at or after the
     expiry: the level had diffused for the days between, which the price does not count, and the carry to
     settlement was left out.) Sign: from our side (sold options negative)."""
     from ccr.simulate import spot_between
