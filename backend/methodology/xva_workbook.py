@@ -1137,15 +1137,19 @@ def _engine_paths(wb, eng, B):
         bd = lambda i, d: O.bond(eng["p"], eng["key"], i, _yrs(val_, d))
         ann = sum(tau * bd(h, pay) for pay, tau in o["future"])
         fwd = (bd(h, eng["item"]["start"]) - bd(h, o["future"][-1][0])) / ann
-        yes = int(np.argmax(o["swap"][:, ie] > 0)); no = int(np.argmax(~(o["swap"][:, ie] > 0)))
+        took = o["swap"][:, ie] > 0
         rows += [(f"the annuity on path 1 at step {h}", float(ann[0]), f"Paths!{hc}{B['ANN'][0]}"),
                  (f"the forward swap rate on path 1 at step {h}", float(fwd[0]), f"Paths!{hc}{B['FWD'][0]}"),
-                 (f"the option on path 2 at step {h}", float(eng["V"][1, h]), f"Paths!{hc}{B['V'][0] + 1}"),
-                 (f"the swap delivered on path {yes + 1} at the expiry step {ie} (exercised)", float(o["swap"][yes, ie]), f"Paths!{L(1 + ie)}{B['VS'][0] + yes}"),
-                 (f"the swap delivered on path {no + 1} at the expiry step {ie} (not exercised)", float(o["swap"][no, ie]), f"Paths!{L(1 + ie)}{B['VS'][0] + no}"),
-                 (f"V on path {yes + 1} at step {T - 1} (exercised)", float(eng["V"][yes, T - 1]), f"Paths!{L(T)}{B['V'][0] + yes}"),
-                 (f"V on path {no + 1} at step {T - 1} (not exercised)", float(eng["V"][no, T - 1]), f"Paths!{L(T)}{B['V'][0] + no}"),
-                 (f"the net cash path {yes + 1} has been paid by step {T}", float(eng["paid"][yes, T - 1]), f"Paths!{last}{B['PAID'][0] + yes}")]
+                 (f"the option on path 2 at step {h}", float(eng["V"][1, h]), f"Paths!{hc}{B['V'][0] + 1}")]
+        # a path that exercised and one that did not, where the run has each (a strike far from the curve has only one kind)
+        for kind, mask in (("exercised", took), ("not exercised", ~took)):
+            if not mask.any():
+                continue
+            q_ = int(np.argmax(mask))
+            rows += [(f"the swap delivered on path {q_ + 1} at the expiry step {ie} ({kind})", float(o["swap"][q_, ie]), f"Paths!{L(1 + ie)}{B['VS'][0] + q_}"),
+                     (f"V on path {q_ + 1} at step {T - 1} ({kind})", float(eng["V"][q_, T - 1]), f"Paths!{L(T)}{B['V'][0] + q_}")]
+            if kind == "exercised":
+                rows.append((f"the net cash path {q_ + 1} has been paid by step {T}", float(eng["paid"][q_, T - 1]), f"Paths!{last}{B['PAID'][0] + q_}"))
     for label, v, ref in rows:
         ws.cell(row=r, column=1, value=label)
         c = ws.cell(row=r, column=2, value=v); c.fill = W.FILL_RJ; c.number_format = "#,##0.00000000"

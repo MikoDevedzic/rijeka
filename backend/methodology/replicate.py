@@ -55,8 +55,8 @@ PRODUCTS = [
      "formula": "Cap = Σ caplets; caplet = N·τ·DF(end)·Bachelier_call(F, K, T_fix, σ)",
      "replication": "xlsx"},
     {"id": "fx_forward", "name": "FX forward (EURUSD)", "group": "FX & digital assets", "section": "12",
-     "default": "EUR/USD · EUR 10m · 3-month deliverable forward · rate at the fair forward",
-     "formula": "F = S·DF_EUR(T)/DF_USD(T) (covered interest parity, each currency on its own curve); NPV_USD = ±N_EUR·(F − K)·DF_USD(T); FX01 and both IR01s beside the engine's",
+     "default": "EUR/USD · EUR 10m · deliverable forward settling three months from the spot date, as the ticket opens · rate at the fair forward",
+     "formula": "F = S·[DF_EUR(T)/DF_EUR(spot)]/[DF_USD(T)/DF_USD(spot)] (covered interest parity from the pair's spot date, each currency on its own curve); NPV_USD = ±N_EUR·(F − K)·DF_USD(T); FX01 and both IR01s beside the engine's",
      "replication": "xlsx"},
     {"id": "fx_option", "name": "FX option (EURUSD European)", "group": "FX & digital assets", "section": "13",
      "default": "EUR/USD · EUR 10m · 3-month call · strike at the forward · ATM vol from the pair's surface (7.5% without one)",
@@ -323,6 +323,15 @@ def ois_workbook(mkt):   return _swap_workbook(mkt, title="OIS swap", fixed_dc="
                                                ois_note="OIS convention: both legs annual ACT/360; the float coupon is the daily-compounded SOFR over the year, which the DF ratio reproduces exactly on the curve's own pillars.")
 
 
+def _years_on(d: date, n: int) -> date:
+    """The same day n years on; the 28th of February for the 29th where that year has none. (Until 0.62.0 the swaption
+    book was built with date(year + n, month, day) and could not be built on a 29 February.)"""
+    try:
+        return date(d.year + n, d.month, d.day)
+    except ValueError:
+        return date(d.year + n, d.month, 28)
+
+
 def swaption_workbook(mkt: Market):
     val = mkt.valuation_date
     vol = next((float(q["rate"]) for q in mkt.vol_quotes if q.get("tenor") == "1Yx5Y"), 90.0)
@@ -339,7 +348,7 @@ def swaption_workbook(mkt: Market):
     ], mkt)
     _curve_sheet(wb, mkt)
     ws = wb.create_sheet("Swaption", 1)
-    T0 = date(val.year + 1, val.month, val.day)
+    T0 = _years_on(val, 1)
     ws["A1"] = "Notional"; ws["B1"] = 10_000_000; ws["B1"].fill = IN; ws["B1"].number_format = "#,##0"
     ws["A2"] = "Expiry (years)"; ws["B2"] = 1.0; ws["B2"].fill = IN
     ws["A3"] = "Strike"; ws["B3"] = F; ws["B3"].fill = IN; ws["B3"].number_format = "0.0000%"
@@ -349,7 +358,7 @@ def swaption_workbook(mkt: Market):
     _hdr(ws, 8, ["Payment date", "τ (ACT/360-ish annual)", "DF", "τ·DF"])
     rows = []
     for k in range(1, 6):
-        r = 8 + k; d = date(T0.year + k, T0.month, T0.day); prev = date(T0.year + k - 1, T0.month, T0.day)  # noqa: F841  launch audit: assigned, never used
+        r = 8 + k; d = _years_on(T0, k); prev = _years_on(T0, k - 1)  # noqa: F841  launch audit: assigned, never used
         ws.cell(row=r, column=1, value=d).number_format = "yyyy-mm-dd"
         ws.cell(row=r, column=2, value=f"=YEARFRAC(DATE(YEAR(A{r})-1,MONTH(A{r}),DAY(A{r})),A{r},2)")
         ws.cell(row=r, column=3, value=f"={DF(f'A{r}')}").number_format = "0.000000"

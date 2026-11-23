@@ -5,7 +5,7 @@ methodology document carries its own version (v1.45). Commits on `main` are the 
 
 ## 0.62.0 · 23 November 2026
 
-**More of what a ticket shows can be rebuilt in a spreadsheet.** Six workbooks are new and one is corrected. Each is
+**More of what a ticket shows can be rebuilt in a spreadsheet.** Five workbooks are new and one is corrected. Each is
 generated in the Methodology tab from the account's own market, has its formulas evaluated against the engine outside
 Excel, and, where it is an XVA book, has the engine's figures held to the ticket's own run to the cent. No figure of
 a ticket changes.
@@ -26,6 +26,13 @@ a ticket changes.
 - **The methodology** (v1.45) has a table of which instrument has which workbook and which has none, a replication
   paragraph for each new book, and says which books have been opened in Excel itself (the swap's and the cap's XVA
   books) and which are checked by an evaluator outside it.
+
+- **Found by the swaption book, and stated, not yet changed.** The price a swaption's XVA run starts from takes the
+  swap as starting on the expiry date; the paths exercise into the swap from its own start, two business days later.
+  In the same model that is about 1.5 % of the option's value on the test market, so a swaption's exposure before
+  its expiry is high by about that. The methodology and the inventory say so; the engine is to be changed after
+  the launch, with its figures.
+- **The swaption price workbook** could not be built on a 29 February; it can.
 
 Still without a book, and stated in that table: the XVA run of an option on a currency or a digital asset; a
 non-deliverable currency forward; a basis swap; a written or a receiver swaption. The XVA books of a currency and a
