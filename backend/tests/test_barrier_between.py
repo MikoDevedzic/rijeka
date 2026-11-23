@@ -34,14 +34,21 @@ def test_on_the_dates_alone_it_is_what_it_was_and_between_them_it_only_adds_touc
     x_dates, _ = _paths(spec, watch_between=False)
     x, _ = _paths(spec)
     s_t, i_exp = x["s_t"], x["i_exp"]
+    # the last point watched is the spot at the EXPIRY, inside the step that ends on the expiry's grid date (0.64.0):
+    # until then it was the spot on that grid date, some days after the option had expired
+    opt = _opt(spec)
+    r_b = opt.quote_zero - math.log(opt.forward / opt.spot) / opt.t_settle
+    s_exp = x_dates["f_exp"] * math.exp(-(opt.quote_zero - r_b) * (opt.t_settle - opt.t_expiry))
+    assert not np.allclose(s_exp, s_t[:, i_exp]), "this option expires inside its last step"
     for j in range(0, i_exp + 2):                                   # column j: by grid point j, as knocked_so_far saw the points up to it
-        hist = np.concatenate([np.full((len(s_t), 1), S0), s_t[:, :j]], axis=1)
+        seen = s_t[:, :j] if j <= i_exp else np.concatenate([s_t[:, :i_exp], s_exp[:, None]], axis=1)
+        hist = np.concatenate([np.full((len(s_t), 1), S0), seen], axis=1)
         assert np.array_equal(x_dates["knocked"][:, j], knocked_so_far(spec, hist)), j
     assert np.all(x["knocked"] >= x_dates["knocked"]), "watching between the dates never takes a touch away"
     assert x["knocked"][:, -1].mean() > x_dates["knocked"][:, -1].mean() + 0.02
     assert np.all(np.diff(x["knocked"].astype(int), axis=1) >= 0), "a touch is for good"
     assert not x["knocked"][:, 0].any(), "the level starts inside"
-    assert np.array_equal(x["knocked"][:, i_exp + 1], x["knocked"][:, -1]), "watching stops at the expiry's grid date"
+    assert np.array_equal(x["knocked"][:, i_exp + 1], x["knocked"][:, -1]), "watching stops at the expiry"
 
 
 def test_no_barrier_no_record_and_a_level_already_beyond_is_touched_today():
