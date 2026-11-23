@@ -372,3 +372,8 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   model's value, which is a mid.
 - A screen is looked at on the date that makes it longest, not only on the day it was built: a weekend fixing adds
   words to a ticket that a weekday never shows.
+- A workbook that reproduces the engine to eleven digits reproduces what the engine does wrong as well. Before a
+  replication is called done, one figure is compared with a derivation that does not go through the engine's own
+  route, and the two ends of the model are compared with each other: the swaption book matched the engine at every
+  cell while the engine priced the option on a swap starting at the expiry and delivered one starting two days
+  later (1.5 % of the option's value; found by the model validator's own derivation, 23 November 2026).
