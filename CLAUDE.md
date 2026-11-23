@@ -416,3 +416,7 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - One finding can be three. The swaption's "start date" was also each period's end and the payment after it, and
   the exercise a month late: after fixing what was reported, run the test that the whole thing should pass (there,
   the discounted value through the expiry) before sizing or documenting the one cause.
+- A role is called by its name in what the builder writes too, not only in what a role file says. Two sentences of
+  the methodology and a line of the inventory written on 23 November 2026 said "his" of the model validator and
+  reached the public site before the security reviewer noticed: before a document is built, search what was added
+  for he, his, she and her and read each hit (the owner's own words are his; a role's are the role's).

@@ -116,7 +116,7 @@ def test_the_value_on_the_grid_date_after_the_expiry_averages_to_the_price():
     at = value_fx_option(dict(item), p, 1, FX, FLAT) * math.exp(-RQ * float(p.t[1]))
     se = float(at.std() / math.sqrt(p.n_paths))
     assert abs(float(at.mean()) - v0) < 3.5 * se                                                # a martingale to that date
-    # the validator's own figure for this option (his closed form 94,507.6; his daily paths 94,396 +/- 221)
+    # the validator's own figure for this option (closed form 94,507.6; own daily paths 94,396 +/- 221)
     assert v0 == pytest.approx(94507.6, rel=5e-4)
     # what the engine did until 0.65.0: the payoff on the grid date's own spot, three days of diffusion too many
     T_s = years(item["settle"])

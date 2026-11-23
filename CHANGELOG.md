@@ -1,7 +1,12 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.49). Commits on `main` are the detail.
+methodology document carries its own version (v1.50). Commits on `main` are the detail.
+
+## 0.66.1 · 23 November 2026
+
+Wording only. The methodology (v1.50), the model inventory and two test comments named the model validator as
+"his" in what was written today; a role is called by its name. No figure, formula or screen changes.
 
 ## 0.66.0 · 23 November 2026
 

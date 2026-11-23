@@ -80,7 +80,7 @@ def test_a_swap_whose_value_turns_twice_is_refused():
 
 def test_the_validators_own_integration_of_the_payoff_gives_the_same_price():
     """The model validator, 23 November 2026: the delivered swap's payoff integrated over the factor at the expiry
-    with his own bond formula, on the checks' market: 77,625.0163, and the three steps from the old 79,533.155 (own
+    with a bond formula of the validator's own, on the checks' market: 77,625.0163, and the three steps from the old 79,533.155 (own
     start 78,305.92; each period to its own end 77,707.33; coupons paid after the period's end 77,625.02). Here the
     same integration, by quadrature, against the closed form, on a swap with a late start and a late payment."""
     terms = [(-K_ * t, [(q, 1)]) for q, t in zip(PAY, TAU)]
