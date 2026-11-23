@@ -3,6 +3,15 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.50). Commits on `main` are the detail.
 
+## 0.66.2 · 23 November 2026
+
+One migration, approved by the owner, applied by the runner on this deploy: `2026-11-11_sync_role_search_path.sql`
+names the search path of `public.sync_role_to_user_metadata()`, the function that copies a profile's new role into
+the sign-in record. One `ALTER FUNCTION ... SET search_path`; the body, the owner, the grants and the trigger are
+unchanged, and nothing a user sees changes. It is the hardening `is_admin()` had on 9 November. Read by the database
+keeper and the security reviewer before it was put to the owner. `2026-11-03_jobs.sql` was read with it and is not
+approved: as written it would queue four runs for a worker with no fallback and re-open a table to the browser.
+
 ## 0.66.1 · 23 November 2026
 
 Wording only. The methodology (v1.50), the model inventory and two test comments named the model validator as
