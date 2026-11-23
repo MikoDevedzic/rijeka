@@ -528,3 +528,40 @@ def test_xva_cap_workbook_formulas_reproduce_the_engine_under_every_preset():
         bad = [(x["label"], x["rel"]) for x in res if not x["ok"]]
         assert not bad, (preset, bad[:5])
         assert max(x["rel"] for x in res) < 1e-9, preset
+
+
+def test_the_fx_forward_workbook_is_the_ticket_as_it_opens_carried_from_the_spot_date():
+    """0.62.0. The book's forward settles three months from the pair's spot date and is carried from the spot date,
+    as the ticket's is (pricing/currency_forward.py, spot_date). Until then it settled three calendar months from the
+    valuation date and was carried from it: about 1.6 pips from the ticket on a three-month EURUSD. Every formula row
+    is evaluated outside Excel against the engine's figure beside it. Skipped where pycel is not installed."""
+    pytest.importorskip("pycel")
+    import tempfile
+    from pycel import ExcelCompiler
+    from methodology import workbook as W
+    from pricing import tenor_dates
+    from pricing.currency_forward import price_currency_forward
+    from scripts.check_workbook import evaluation_copy, test_market
+    mkt = test_market()
+    val = mkt.valuation_date
+    wb, npv = rep.fx_forward_workbook(mkt)
+    W.finish(wb)
+    ws = wb["Inputs"]
+    sd, T = tenor_dates.spot("EURUSD", val), tenor_dates.forward_date("EURUSD", val, "3M")
+    assert sd > val and (ws["B3"].value, ws["B4"].value) == (sd, T)
+    S, N, r_eur, K = ws["B1"].value, ws["B2"].value, ws["B9"].value, ws["B14"].value
+    eng = price_currency_forward(base_currency="EUR", quote_currency="USD", base_notional=N, forward_rate=K, spot=S, valuation_date=val, settlement_date=T,
+                                 quote_curve=mkt.curve, base_rate=r_eur, direction="BUY", spot_date=sd)
+    old = price_currency_forward(base_currency="EUR", quote_currency="USD", base_notional=N, forward_rate=K, spot=S, valuation_date=val, settlement_date=T,
+                                 quote_curve=mkt.curve, base_rate=r_eur, direction="BUY")
+    assert npv == pytest.approx(eng.npv) and ws["B16"].value == pytest.approx(eng.forward)
+    assert abs(eng.forward - old.forward) > 1e-5          # the spot date moves the forward: the book and the ticket were apart by this
+    with tempfile.NamedTemporaryFile(suffix=".xlsx") as f:
+        evaluation_copy(wb).save(f.name)
+        xl = ExcelCompiler(filename=f.name)
+        assert xl.evaluate("Inputs!B11") == pytest.approx(eng.forward, rel=1e-12)
+        for row, want in ((22, eng.npv), (23, eng.spot01), (24, eng.ir01_disc), (25, eng.ir01_base)):
+            assert xl.evaluate(f"Inputs!B{row}") == pytest.approx(want, rel=1e-9), ws[f"A{row}"].value
+            assert ws[f"C{row}"].value == pytest.approx(want), row
+    # the digital-asset forward keeps its rows: its quoted spot settles at once
+    assert rep.build("crypto_ndf", mkt)[1] is not None

@@ -495,23 +495,39 @@ def crypto_ndf_workbook(mkt: Market):
 
 
 def _forward_engine_rows(ws, mkt: Market, *, base: str, quote: str, S: float, N: float, T: date, base_rate: float, K_cell: str, npv_cell: str,
-                         k_off: float, crypto: bool, row0: int):
+                         k_off: float, crypto: bool, row0: int, spot_date: Optional[date] = None, cells: Optional[dict] = None):
     """Beneath a forward's formula block: the engine's NPV and sensitivities at an off-market strike, with the
     sheet's closed forms beside them. NPV = N·(S·DF_b − K·DF_q): FX01/CRY01 = N·S·DF_b·1 %; IR01 on the discounting
     curve = −N·K·ΔDF_q for +1bp; the base curve's = N·S·ΔDF_b for +1bp. On a digital asset that row is CRYBASIS01, the
     desk's name on every screen: the value for +1bp a year on the forward basis, which the engine reports as the
     negative of the +1bp bump of the asset's rate (api/routes/currencies.py: crybasis01), so the sheet's row is
-    −N·S·ΔDF_b and the engine's beside it −ir01_base."""
-    t = (T - mkt.valuation_date).days / 365.0
-    F = S * math.exp(-base_rate * t) / mkt.curve.df(T)
-    K = F + k_off
+    −N·S·ΔDF_b and the engine's beside it −ir01_base.
+
+    spot_date and cells (a currency pair, since 0.62.0): the quoted spot settles on the pair's spot date, so the carry
+    runs from there (τ = settlement − spot date) while the value is discounted from the settlement date to today (t):
+    F = S·e^(−r_b·τ)·DF_q(spot)/DF_q(T). The rows are then the engine's own bumps written out: +1 % spot is
+    N·F·DF_q(T)·1 %; +1bp on the quote curve lifts the forward over τ and the discounting over t; +1bp on the base
+    rate lowers the forward over τ. `cells` names the sheet's cells for N, F, DF_q(T), t and τ. With no spot date
+    (τ = t) these are the rows below, which a digital asset keeps."""
+    fair = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=N, forward_rate=None, spot=S, valuation_date=mkt.valuation_date,
+                                  settlement_date=T, quote_curve=mkt.curve, base_rate=base_rate, direction="BUY", spot_date=spot_date)
+    K = fair.forward + k_off
     r = price_currency_forward(base_currency=base, quote_currency=quote, base_notional=N, forward_rate=K, spot=S, valuation_date=mkt.valuation_date,
-                               settlement_date=T, quote_curve=mkt.curve, base_rate=base_rate, direction="BUY")
+                               settlement_date=T, quote_curve=mkt.curve, base_rate=base_rate, direction="BUY", spot_date=spot_date)
     ws[K_cell] = K
     delta, fund = ("CRY01", "CRYBASIS01") if crypto else ("FX01", f"IR01 BASE ({base})")
     ws.cell(row=row0, column=1, value=f"Engine comparison at K = F {k_off:+,.4g} (the yellow strike above)").font = Font(bold=True)
     _hdr(ws, row0 + 1, ["", "Formulas", "Rijeka engine", "Difference"])
     _ref_cell(ws, row0 + 2, f"NPV ({quote})", f"={npv_cell}", r.npv)
+    if cells:
+        c = cells
+        _ref_cell(ws, row0 + 3, f"{delta}: NPV for +1% spot = N·F·DF_{quote}(T)·1%", f"={c['N']}*{c['F']}*{c['DFq']}*0.01", r.spot01)
+        _ref_cell(ws, row0 + 4, f"IR01 {quote} curve: N·[(F·e^(1bp·τ) − K)·DF_{quote}·e^(−1bp·t) − (F − K)·DF_{quote}]",
+                  f"={c['N']}*(({c['F']}*EXP(0.0001*{c['tau']})-{K_cell})*{c['DFq']}*EXP(-0.0001*{c['t']})-({c['F']}-{K_cell})*{c['DFq']})", r.ir01_disc, "#,##0.0000")
+        _ref_cell(ws, row0 + 5, f"{fund}: N·F·(e^(−1bp·τ) − 1)·DF_{quote}", f"={c['N']}*{c['F']}*(EXP(-0.0001*{c['tau']})-1)*{c['DFq']}", r.ir01_base, "#,##0.0000")
+        ws.cell(row=row0 + 7, column=1, value="IR01 is the sum of both curves' rows; a forward is linear in spot, so the +1% row is exact (no gamma). τ is the time from the "
+                "spot date to settlement (the carry), t from today (the discounting).")
+        return r
     _ref_cell(ws, row0 + 3, f"{delta}: NPV for +1% spot = N·S·DF_{base}·1%", "=B2*B1*0.01*B7", getattr(r, "spot01", None) if getattr(r, "spot01", None) is not None else r.delta_quote_per_pct)
     _ref_cell(ws, row0 + 4, f"IR01{' (discounting)' if crypto else ' ' + quote + ' curve'}: −N·K·[DF_{quote}·e^(−1bp·T) − DF_{quote}]", f"=-B2*{K_cell}*(B5*EXP(-0.0001*B4)-B5)", r.ir01_disc, "#,##0.0000")
     if crypto:      # +1bp a year on the basis: the negative of the asset-rate bump, in the sheet as in the engine
@@ -526,46 +542,57 @@ def _forward_engine_rows(ws, mkt: Market, *, base: str, quote: str, S: float, N:
 
 
 def fx_forward_workbook(mkt: Market):
+    """The EURUSD forward as the ticket opens it: three months from the pair's spot date, the carry from the spot
+    date (pricing/currency_forward.py, spot_date). Until 0.62.0 the book carried from the valuation date and took
+    its settlement date as three calendar months from it: its forward was about 1.6 pips from the ticket's."""
+    from pricing import tenor_dates
     spot, r_eur = 1.1133, 0.025
+    val = mkt.valuation_date
+    sd = tenor_dates.spot("EURUSD", val)
+    T = tenor_dates.forward_date("EURUSD", val, "3M")
     wb = Workbook()
     _readme(wb, "FX forward", [
-        "Default trade: buy EUR 10m three months forward against USD, dealt at the fair forward (so the NPV is zero on day one). "
-        "Change the rate K or the spot on the Inputs sheet to see the mark.",
-        "Covered interest parity, each currency on its own curve: F = S·DF_EUR(T)/DF_USD(T), NPV_USD = N_EUR·(F − K)·DF_USD(T). "
-        "USD discounts off the SOFR curve on the Curve sheet; EUR is discounted flat here at 2.50% (the ECB deposit rate, illustrative) "
+        "Default trade: buy EUR 10m three months forward against USD, as the ticket opens it: settling three months after the pair's spot date, dealt at the "
+        "fair forward (so the NPV is zero on day one). Change the rate K or the spot on the Inputs sheet to see the mark.",
+        "Covered interest parity, each currency on its own curve, carried from the SPOT DATE: the quoted spot settles two business days on, so the forward is "
+        "F = S·[DF_EUR(T)/DF_EUR(spot)]/[DF_USD(T)/DF_USD(spot)], and the value is discounted from settlement to today: NPV_USD = N_EUR·(F − K)·DF_USD(T). "
+        "USD discounts off the SOFR curve on the Curve sheet; EUR is carried flat here at 2.50% (the ECB deposit rate, illustrative) "
         "because the hosted demo carries no EUR OIS curve; on a desk, DF_EUR comes from the €STR curve the same way.",
-        "This is the same formula as the crypto NDF with EUR in place of the digital asset (pricing/currency_forward.py). "
-        "The canonical on-chain record for this trade is the FX product in chain/canonical.py.",
+        "A digital asset's quoted spot settles at once, so its forward is carried from today: the crypto NDF book is this one with the spot date at the valuation "
+        "date and the asset's funding rate in place of EUR's (pricing/currency_forward.py). The canonical on-chain record for this trade is the FX product in chain/canonical.py.",
     ], mkt)
     _curve_sheet(wb, mkt)
-    val = mkt.valuation_date
-    T = date(val.year + (val.month + 2) // 12, (val.month + 2) % 12 + 1, min(val.day, 28))
     ws = wb.create_sheet("Inputs", 1)
     ws["A1"] = "EUR/USD spot (USD per EUR)"; ws["B1"] = spot; ws["B1"].fill = IN; ws["B1"].number_format = "0.00000"
     ws["A2"] = "Notional (EUR)"; ws["B2"] = 10_000_000; ws["B2"].fill = IN; ws["B2"].number_format = "#,##0"
-    ws["A3"] = "Settlement date"; ws["B3"] = T; ws["B3"].number_format = "yyyy-mm-dd"; ws["B3"].fill = IN
-    ws["A4"] = "T (ACT/365)"; ws["B4"] = "=(B3-ValDate)/365"
-    ws["A5"] = "USD DF(T) from the SOFR curve"; ws["B5"] = f"={DF('B3')}"; ws["B5"].number_format = "0.000000"
-    ws["A6"] = "EUR rate (cont., p.a., flat)"; ws["B6"] = r_eur; ws["B6"].fill = IN; ws["B6"].number_format = "0.00%"
-    ws["A7"] = "EUR DF(T) = exp(−r_EUR·T)"; ws["B7"] = "=EXP(-B6*B4)"; ws["B7"].number_format = "0.000000"
-    ws["A8"] = "Forward F = S·DF_EUR/DF_USD"; ws["B8"] = "=B1*B7/B5"; ws["B8"].number_format = "0.00000"
-    ws["A9"] = "Forward points (F − S)·10⁴"; ws["B9"] = "=(B8-B1)*10000"; ws["B9"].number_format = "0.0"
-    ws["A11"] = "Rate K (USD per EUR)"; ws["B11"] = "=B8"; ws["B11"].fill = IN; ws["B11"].number_format = "0.00000"
-    ws["A12"] = "NPV_USD (formulas) = N·(F − K)·DF_USD"; ws["B12"] = "=B2*(B8-B11)*B5"; ws["B12"].number_format = "#,##0.00"
-    t = (T - val).days / 365
-    F = spot * math.exp(-r_eur * t) / mkt.curve.df(T)
-    ws["A13"] = "Reference forward (Rijeka)"; ws["B13"] = F; ws["B13"].fill = RJ; ws["B13"].number_format = "0.00000"
-    ws["A15"] = "Positive USD rates above EUR rates put the forward above spot: borrow USD, buy EUR today, lend EUR; the forward repays the USD interest."
-    r = _forward_engine_rows(ws, mkt, base="EUR", quote="USD", S=spot, N=10_000_000, T=T, base_rate=r_eur, K_cell="B11", npv_cell="B12", k_off=-0.0050, crypto=False, row0=17)
-    _widths(ws, [62, 18, 18, 14])
-    W.ticket(wb, "ANALYTICS", [("NET NPV", "Inputs!B19", "#,##0.00", "USD, at the yellow rate K"), ("FX01", "Inputs!B20", "#,##0.00", "PV for +1% spot"),
-                               ("IR01 USD", "Inputs!B21", "#,##0.0000", "+1bp on the USD curve"), ("IR01 EUR", "Inputs!B22", "#,##0.0000", "+1bp on the EUR rate")])
-    W.ticket(wb, "MARKET", [("SPOT", "Inputs!B1", "0.00000", "USD per EUR"), ("FAIR FORWARD", "Inputs!B8", "0.00000", "covered interest parity"), ("POINTS", "Inputs!B9", "0.0", "(F − S)·10⁴"),
-                            ("DF USD", "Inputs!B5", "0.000000", "to settlement")])
-    for sym, notn, ref, note, fmt in [("T", "(settlement − valuation)/365", "Inputs!B4", "ACT/365", "0.0000"), ("DF_USD", "from the SOFR curve, log-linear", "Inputs!B5", "", "0.000000"),
-                                      ("DF_EUR", "exp(−r_EUR·T)", "Inputs!B7", "flat here; the €STR curve on a desk", "0.000000"), ("F", "S·DF_EUR/DF_USD", "Inputs!B8", "parity", "0.00000"),
-                                      ("NPV", "N·(F − K)·DF_USD", "Inputs!B12", "", "#,##0.00"), ("FX01", "N·S·DF_EUR·1%", "Inputs!B20", "exact: a forward is linear in spot", "#,##0.00"),
-                                      ("IR01 USD", "−N·K·[DF_USD·e^(−1bp·T) − DF_USD]", "Inputs!B21", "", "#,##0.0000"), ("IR01 EUR", "N·S·[DF_EUR·e^(−1bp·T) − DF_EUR]", "Inputs!B22", "", "#,##0.0000")]:
+    ws["A3"] = "Spot date (the quoted spot settles here: two business days on, open in both centres)"; ws["B3"] = sd; ws["B3"].number_format = "yyyy-mm-dd"; ws["B3"].fill = IN
+    ws["A4"] = "Settlement date (three months from the spot date, modified following)"; ws["B4"] = T; ws["B4"].number_format = "yyyy-mm-dd"; ws["B4"].fill = IN
+    ws["A5"] = "t = (settlement − valuation)/365: the discounting"; ws["B5"] = "=(B4-ValDate)/365"; ws["B5"].number_format = "0.000000"
+    ws["A6"] = "τ = (settlement − spot date)/365: the carry"; ws["B6"] = "=(B4-B3)/365"; ws["B6"].number_format = "0.000000"
+    ws["A7"] = "USD DF to settlement, from the SOFR curve"; ws["B7"] = f"={DF('B4')}"; ws["B7"].number_format = "0.000000"
+    ws["A8"] = "USD DF to the spot date"; ws["B8"] = f"={DF('B3')}"; ws["B8"].number_format = "0.000000"
+    ws["A9"] = "EUR rate (cont., p.a., flat)"; ws["B9"] = r_eur; ws["B9"].fill = IN; ws["B9"].number_format = "0.00%"
+    ws["A10"] = "EUR carry from the spot date to settlement = exp(−r_EUR·τ)"; ws["B10"] = "=EXP(-B9*B6)"; ws["B10"].number_format = "0.000000"
+    ws["A11"] = "Forward F = S·exp(−r_EUR·τ)/[DF_USD(T)/DF_USD(spot)]"; ws["B11"] = "=B1*B10/(B7/B8)"; ws["B11"].number_format = "0.00000"
+    ws["A12"] = "Forward points (F − S)·10⁴"; ws["B12"] = "=(B11-B1)*10000"; ws["B12"].number_format = "0.0"
+    ws["A14"] = "Rate K (USD per EUR)"; ws["B14"] = "=B11"; ws["B14"].fill = IN; ws["B14"].number_format = "0.00000"
+    ws["A15"] = "NPV_USD (formulas) = N·(F − K)·DF_USD(T)"; ws["B15"] = "=B2*(B11-B14)*B7"; ws["B15"].number_format = "#,##0.00"
+    r = _forward_engine_rows(ws, mkt, base="EUR", quote="USD", S=spot, N=10_000_000, T=T, base_rate=r_eur, K_cell="B14", npv_cell="B15", k_off=-0.0050, crypto=False, row0=20,
+                             spot_date=sd, cells={"N": "B2", "F": "B11", "DFq": "B7", "t": "B5", "tau": "B6"})
+    ws["A16"] = "Reference forward (Rijeka)"; ws["B16"] = r.forward; ws["B16"].fill = RJ; ws["B16"].number_format = "0.00000"
+    ws["A18"] = "Positive USD rates above EUR rates put the forward above spot: borrow USD, buy EUR today, lend EUR; the forward repays the USD interest."
+    _widths(ws, [78, 18, 18, 14])
+    W.ticket(wb, "ANALYTICS", [("NET NPV", "Inputs!B22", "#,##0.00", "USD, at the yellow rate K"), ("FX01", "Inputs!B23", "#,##0.00", "PV for +1% spot"),
+                               ("IR01 USD", "Inputs!B24", "#,##0.0000", "+1bp on the USD curve"), ("IR01 EUR", "Inputs!B25", "#,##0.0000", "+1bp on the EUR rate")])
+    W.ticket(wb, "MARKET", [("SPOT", "Inputs!B1", "0.00000", "USD per EUR"), ("FAIR FORWARD", "Inputs!B11", "0.00000", "covered interest parity from the spot date"),
+                            ("POINTS", "Inputs!B12", "0.0", "(F − S)·10⁴"), ("DF USD", "Inputs!B7", "0.000000", "to settlement")])
+    for sym, notn, ref, note, fmt in [("t", "(settlement − valuation)/365", "Inputs!B5", "ACT/365: the discounting", "0.0000"), ("τ", "(settlement − spot date)/365", "Inputs!B6", "ACT/365: the carry", "0.0000"),
+                                      ("DF_USD", "from the SOFR curve, log-linear", "Inputs!B7", "to settlement", "0.000000"),
+                                      ("carry_EUR", "exp(−r_EUR·τ)", "Inputs!B10", "flat here; the €STR curve on a desk", "0.000000"),
+                                      ("F", "S·carry_EUR/[DF_USD(T)/DF_USD(spot)]", "Inputs!B11", "parity from the spot date", "0.00000"),
+                                      ("NPV", "N·(F − K)·DF_USD", "Inputs!B15", "", "#,##0.00"), ("FX01", "N·F·DF_USD·1%", "Inputs!B23", "exact: a forward is linear in spot", "#,##0.00"),
+                                      ("IR01 USD", "N·[(F·e^(1bp·τ) − K)·DF_USD·e^(−1bp·t) − (F − K)·DF_USD]", "Inputs!B24", "", "#,##0.0000"),
+                                      ("IR01 EUR", "N·F·(e^(−1bp·τ) − 1)·DF_USD", "Inputs!B25", "", "#,##0.0000")]:
         W.derive(wb, sym, notn, ref, note, fmt)
     return wb, r.npv
 
