@@ -458,8 +458,16 @@ def value_fx_option(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float
     valued with today, held flat; barriers and touches carry which paths have already knocked, monitored at the
     grid points seen so far (discrete, where the pricer is continuous: a stated simplification); an American
     option is valued as its European on the paths (early exercise is not simulated: a lower bound). At and after
-    expiry: the payoff fixed on the expiry grid point (knock status included) and discounted to settlement until
-    paid. Sign: from our side (sold options negative)."""
+    expiry: the payoff fixed on the level at the expiry and discounted to settlement until paid. An expiry is
+    seldom a grid date (a trade booked today expires a day or more before the grid date its tenor lands on): the
+    level at the expiry is then the one the path passed through inside that step (ccr.simulate.spot_between), and
+    a barrier is watched at the grid dates before the expiry and at the expiry, no further. The payoff is on the
+    rate for delivery at settlement as it stands at the expiry (the spot then, carried over the days to settlement
+    on today's curves), which is the rate the price is of; a barrier is a level of the spot and is watched on it.
+    (Until 0.65.0 the payoff was fixed, and a barrier last watched, on the spot at the grid date at or after the
+    expiry: the level had diffused for the days between, which the price does not count, and the carry to
+    settlement was left out.) Sign: from our side (sold options negative)."""
+    from ccr.simulate import spot_between
     from pricing.fx_exotic import ExoticSpec, knocked_so_far, value_on_paths
     asof = paths.grid[0]; t_i = float(paths.t[i])
     T_e, T_s = _years(asof, item["expiry"]), _years(asof, item["settle"])
@@ -467,15 +475,22 @@ def value_fx_option(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float
         return np.zeros(paths.n_paths)
     qkey = f"RATES:{CURVE_OF.get(item['quote'], item['quote'] + '_OIS')}"
     dfq = bond(paths, qkey, i, T_s)
-    S = paths.s[f"SPOT:{item['pair']}"]
+    skey = f"SPOT:{item['pair']}"
+    S = paths.s[skey]
     spec = item.get("spec") or ExoticSpec("EUROPEAN", item["option_type"], strike=item["K"])
     k = fx_to_usd.get(item["quote"], 1.0) * float(item.get("sign", 1.0))
     N = item["N"]
     scale = N if spec.style in ("EUROPEAN", "AMERICAN", "BARRIER", "DOUBLE_BARRIER") else 1.0
     i_exp = min(j for j in range(len(paths.t)) if float(paths.t[j]) >= T_e - 1e-9)
-    j_last = min(i, i_exp)
-    knocked = knocked_so_far(spec, S[:, :j_last + 1]) if spec.style in ("BARRIER", "DOUBLE_BARRIER", "TOUCH") else np.zeros(paths.n_paths, dtype=bool)
-    if t_i < T_e - 1e-9:
+    before = t_i < T_e - 1e-9
+    on_grid = abs(float(paths.t[i_exp]) - T_e) <= 1e-9
+    if before or on_grid:
+        watched = S[:, :min(i, i_exp) + 1]
+    else:                                        # the grid dates before the expiry, then the expiry itself
+        S_T = spot_between(paths, skey, T_e)
+        watched = np.concatenate([S[:, :i_exp], S_T[:, None]], axis=1)
+    knocked = knocked_so_far(spec, watched) if spec.style in ("BARRIER", "DOUBLE_BARRIER", "TOUCH") else np.zeros(paths.n_paths, dtype=bool)
+    if before:
         bkey = f"RATES:{CURVE_OF.get(item['base'])}" if item["base"] in CURVE_OF else None
         dfb = bond(paths, bkey, i, T_s) if bkey and bkey in paths.x else np.full(paths.n_paths, math.exp(-flat_base.get(item["pair"], 0.0) * (T_s - t_i)))
         tau = T_e - t_i
@@ -496,9 +511,15 @@ def value_fx_option(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float
         else:
             v = value_on_paths(spec, S[:, i], rq, rb, item["vol"], tau, knocked, 1.0)
         return k * scale * v
-    # at or after expiry: the payoff fixed at the expiry grid point, with the knock status then
+    # at or after expiry: the payoff fixed on the level at the expiry, with the knock status then
     from pricing.fx_exotic import _expired
-    S_T = S[:, i_exp]
+    if on_grid:
+        S_T = S[:, i_exp]
+    bkey = f"RATES:{CURVE_OF.get(item['base'])}" if item["base"] in CURVE_OF else None
+    pq = paths.p0[qkey]
+    carry_q = pq(T_s) / max(pq(T_e), 1e-12)
+    carry_b = (paths.p0[bkey](T_s) / max(paths.p0[bkey](T_e), 1e-12)) if bkey and bkey in paths.p0 else math.exp(-flat_base.get(item["pair"], 0.0) * (T_s - T_e))
+    S_T = S_T * carry_b / carry_q                 # the rate for delivery at settlement, as the expiry leaves it
     v = np.zeros(paths.n_paths)
     if spec.style in ("EUROPEAN", "AMERICAN", "DIGITAL"):
         v = np.array([_expired(spec, float(s), 1.0) for s in S_T])

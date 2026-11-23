@@ -1,7 +1,31 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.47). Commits on `main` are the detail.
+methodology document carries its own version (v1.48). Commits on `main` are the detail.
+
+## 0.65.0 · 23 November 2026
+
+**An option's expiry in the counterparty engine.** The figures of a netting set that holds an option on a currency
+pair or a digital asset change at one date: the monthly grid date that falls between the option's expiry and its
+settlement. It reaches the counterparty report, the incremental charge on a ticket, the reserves and the capital
+stock for such a set. A ticket's own XVA is not touched (0.64.0 mended the same thing there).
+
+- **What was wrong.** The engine steps monthly from the valuation date. An option booked today expires one to three
+  days before the grid date its tenor lands on about one time in five (a weekend or a holiday between), and settles
+  after it. On that date the payoff was fixed on the date's own spot. Two errors, of opposite sign for a call: the
+  level had moved for the days since the expiry (the value there averaged 1.4 % above the price with one day between
+  and 5.1 % with three, on a one-month EURUSD call), and the payoff was on the spot where the price is on the rate
+  for delivery at settlement (0.7 to 1.5 % of the same call, the carry over those days).
+- **What it is now.** The level at the expiry is the one the path passed through inside the step
+  (`ccr/simulate.spot_between`): a straight line in logs between the two grid levels and a Brownian bridge at the
+  step's vol, drawn once per step and factor, so two options with one expiry read one level. A barrier is watched to
+  the expiry and no further. The payoff is on the rate for delivery at settlement. The value on that date averages to
+  the option's price within the error of 200,000 paths, at one, three and twelve months, EURUSD and BTC.
+- **What is not checked.** The sizes are measured on flat curves and one vol, on 23 November 2026; a whole set's
+  charge on the hosted market was not measured before and after. Under historical sampling the spread inside a
+  step is the factor's calibrated vol, an approximation. There is no workbook for this engine.
+- Tests: `tests/test_ccr_option_expiry.py` (10). Methodology v1.48 (§13, with the equation), `docs/ccr.md`, the
+  model inventory.
 
 ## 0.64.0 · 23 November 2026
 

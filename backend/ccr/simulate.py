@@ -11,7 +11,7 @@ or zero / historical (real-world). Brownian motions are correlated by the calibr
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Callable
 
@@ -31,6 +31,8 @@ class Paths:
     p0: dict[str, Callable[[float], float]]  # RATES factor -> P(0, t) in years
     calib: Calibration
     n_paths: int
+    seed: int = 7                           # the run's seed: a level inside a step is drawn from it (spot_between)
+    inside: dict = field(default_factory=dict)   # (SPOT factor, step) -> the step's daily bridge, drawn once
 
 
 def add_months(d: date, n: int) -> date:
@@ -123,7 +125,58 @@ def simulate(calib: Calibration, curves: dict[str, object], spots: dict[str, flo
                 w = np.cumsum(z[:, :, j] * np.sqrt(dts)[:, None], axis=0).T  # (paths, T)
                 w = np.concatenate([np.zeros((n_paths, 1)), w], axis=1)
                 s[key] = spots[key] * np.exp((mu - 0.5 * sig ** 2) * t[None, :] + sig * w)
-    return Paths(grid=grid, t=t, x=x, r=r, s=s, p0=p0, calib=calib, n_paths=n_paths)
+    return Paths(grid=grid, t=t, x=x, r=r, s=s, p0=p0, calib=calib, n_paths=n_paths, seed=seed)
+
+
+INSIDE_TAG = 0x696E7364    # the stream of the levels inside a step, apart from the paths' own
+
+
+def step_vol(paths: Paths, key: str, i: int) -> float:
+    """The vol the spot factor `key` diffuses at inside step i (t_{i-1}, t_i]: the surface's forward vol for that
+    step where the factor has a surface, else the factor's one vol. Under historical sampling the step is a block
+    of observed days and no vol drew it: the factor's calibrated vol stands in for the spread inside the step."""
+    f = paths.calib.factors[key]
+    historical = paths.calib.sampling == "HISTORICAL" and paths.calib.panel is not None
+    if getattr(f, "pillars", None) and not historical:
+        from pricing.fx_vol import step_vols
+        return float(step_vols(f.pillars, paths.t[1:])[i - 1])
+    return max(float(f.sigma), 1e-6)
+
+
+def spot_between(paths: Paths, key: str, T_years: float) -> np.ndarray:
+    """The spot of factor `key` on every path at a time that is not a grid date: the level the path passed through
+    between the two grid levels either side. In logs the path is a straight line between them (its drift is linear
+    in time inside a step) plus a Brownian bridge at the step's vol, pinned to nothing at both ends:
+    ln S(T) = ln S_{i-1} + rho (ln S_i - ln S_{i-1}) + sigma sqrt(1/365.25) b_d, rho = d/D for day d of the step's
+    D days, b the bridge of a daily walk (variance d(1 - d/D)). The whole step's bridge is drawn once, by day, from
+    the run's seed, the factor and the step, so every date inside a step is a point of one path whatever order the
+    dates are asked in, and two trades with one date read one level. A time on a grid date is the grid level."""
+    S = paths.s[key]
+    t = paths.t
+    for j in range(len(t)):
+        if abs(float(t[j]) - T_years) <= 1e-9:
+            return S[:, j]
+    if T_years <= 0.0:
+        return S[:, 0]
+    if T_years >= float(t[-1]):
+        return S[:, -1]
+    i = int(np.searchsorted(t, T_years))                    # t[i-1] < T < t[i]
+    D = (paths.grid[i] - paths.grid[i - 1]).days
+    d = int(round((T_years - float(t[i - 1])) * 365.25))
+    if D < 2 or d <= 0:
+        return S[:, i - 1]
+    if d >= D:
+        return S[:, i]
+    b = paths.inside.get((key, i))
+    if b is None:
+        rng = np.random.default_rng([int(paths.seed), INSIDE_TAG, paths.calib.order.index(key), i])
+        w = np.cumsum(rng.standard_normal((paths.n_paths, D)), axis=1)
+        days = np.arange(1, D + 1)
+        b = w - (days / D)[None, :] * w[:, -1:]             # the bridge at days 1..D (nothing at day D)
+        paths.inside[(key, i)] = b
+    rho = d / D
+    lo, hi = np.log(S[:, i - 1]), np.log(S[:, i])
+    return np.exp(lo + rho * (hi - lo) + step_vol(paths, key, i) * math.sqrt(1.0 / 365.25) * b[:, d - 1])
 
 
 BLOCK_DAYS = 21          # one month of business days per step
