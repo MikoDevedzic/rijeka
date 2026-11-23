@@ -3,6 +3,26 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.50). Commits on `main` are the detail.
 
+## 0.66.3 · 23 November 2026
+
+**The ticket's colours.** The owner, looking at the new-trade window: the chosen side too faint, the rest dull.
+Nothing on an unpriced ticket was lit, and a selected chip was a shade off its neighbours. No figure changes.
+
+- **The brass follows the next step.** PRICE is the brass button while the ticket has no price; once it has one
+  the brass is BOOK TRADE's and PRICE is an ordinary button again. Never both. A BOOK TRADE that is priced and
+  cannot yet be pressed (no counterparty chosen) is outlined in brass, as where the ticket is going.
+- **A chosen side is a solid face.** BUY and SELL, pay and receive, a fee's side: the side's colour as the chip's
+  face with the page's dark for its word, where it was a 15 % tint.
+- **What is selected is ruled in brass.** A selected chip (an asset class, a product, a call or a put, a style)
+  has a brass edge and a brass rule under it, the mark the selected tab carries; the selected tab's word is
+  brass and its rule a pixel heavier, drawn inside so no tab changes height.
+- **A section's heading has a short bar** in the dim brass at its left. Its words stay limestone: brass is never
+  a label.
+- **The footer stands apart**: a clearer top edge and a shadow onto the form above it, and the first figure (the
+  value) a weight heavier than the sensitivities beside it.
+- `docs/design.md` says each of these. The design check's counts did not rise (one literal colour fewer). The
+  journey `controls.spec.js` holds the new states. Not checked on a phone.
+
 ## 0.66.2 · 23 November 2026
 
 One migration, approved by the owner, applied by the runner on this deploy: `2026-11-11_sync_role_search_path.sql`

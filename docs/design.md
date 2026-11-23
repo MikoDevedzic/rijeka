@@ -8,7 +8,7 @@ code that draws on a canvas, and `theme.test.js` holds the two together.
 
 | Token | Means | Never |
 |---|---|---|
-| `--accent` (brass), `--accent-hi` | the action of the view (BOOK TRADE, + NEW TRADE), the selected tab's rule, what is sealed on chain, the saving on chain, the name RIJEKA | a label, a typed value, a positive number |
+| `--accent` (brass), `--accent-hi` | the action of the view (BOOK TRADE, + NEW TRADE; on a ticket with no price yet, PRICE), what is selected (a tab's word and rule, a chip's edge and rule), the short bar that marks a section's heading on a ticket (`--accent-dim`; the heading's words stay limestone), what is sealed on chain, the saving on chain, the name RIJEKA | a label, a typed value, a positive number |
 | `--up`, `--down` | the sign of a number; a side that is chosen (coral for paying or selling, green for receiving or buying, the same in the swap's direction, an option's side, a forward's and a leg's); a state that is good or bad in itself (live, calibrated, a verify that passed; defaulted, a failed check) | a selection, an action |
 | `--amber` | a caution, something provisional, the PFE tail, the trade's own mark on a chart of a curve it is priced on (its vol, its strike) | an action |
 | `--blue` | the counterpart series on a chart (ENE), a link on paper, the second desk's paths in the logo | a selection; a figure in a table (it takes the colour of its sign) |
@@ -239,12 +239,16 @@ pressed, typed into or pointed at"; tokens `--btn-*`, `--fld-*`, `--row-*`).
   (`:focus-visible` in `index.css`, two pixels in the accent; it was one, which was easy to lose on a dark panel).
 - **A button is raised.** A lighter face than the panel it stands on, a bright edge, bright text, a darker foot
   under it; it lifts under the pointer and goes down onto the foot when pressed. Brass is still the one action of
-  a view and stands on the same foot. A button whose colour says something (BUY or SELL, a selected mode, a
+  a view and stands on the same foot. On a ticket the brass follows the next step: PRICE while no price is held,
+  BOOK TRADE once one is, never both; a BOOK TRADE that is priced and cannot yet be pressed (no counterparty
+  chosen) is outlined in brass, as where the ticket is going, without a face (0.66.3: until then nothing on an
+  unpriced ticket was lit). A button whose colour says something (BUY or SELL, a selected mode, a
   warning) keeps its colour and gains only the foot and the lift (`rj-press`). An icon or a link with no edge is
   not a button in this sense and has neither.
-- **The chip that is selected is told at a glance.** A lighter face, a bright edge and a rule under it; a shade of
-  fill alone is not enough beside an unselected chip that is itself raised. A side takes its colour when chosen
-  (`tbw-chip-dir-pay` coral, `tbw-chip-dir-rec` green); a type (call or put, a style, a product) is not a side and
+- **The chip that is selected is told at a glance.** A lighter face, a brass edge and a brass rule under it, the
+  mark of the selected tab; a shade of fill alone is not enough beside an unselected chip that is itself raised. A
+  side takes its colour when chosen, as a solid face with the page's dark for its word (`tbw-chip-dir-pay` coral,
+  `tbw-chip-dir-rec` green; a tint was too faint to read from across a desk); a type (call or put, a style, a product) is not a side and
   is selected in no colour of a sign.
 - **A field is a well.** Lighter than the panel, with the field's own edge; lighter still under the pointer; a
   brass ring and its lightest fill while it is typed in. The fill is set for every input, select and textarea

@@ -74,7 +74,9 @@ test('buttons are raised, fields are wells with a ring in focus, and the row und
 
 // Reported by the owner on 11 November 2026: on the new trade's front page BUY and SELL were the same colour, and
 // the same as CALL and PUT. A side has a colour (selling or paying coral, buying or receiving green); a type has
-// none; and the chip that is selected is told from the one that is not by more than a shade.
+// none; and the chip that is selected is told from the one that is not by more than a shade. Since 0.66.3 a chosen
+// side is a solid face in its colour with the page's dark for its word (the owner, 23 November 2026: the tint was
+// too faint): the colour is read from the face of a chip, and still from the word of a leg's own toggle.
 test('a side has its colour, a type has none, and the selected chip stands out', async ({ app, problems }) => {
   const UP = 'rgb(143, 224, 174)', DOWN = 'rgb(240, 130, 140)'
   await app.goto('/blotter')
@@ -87,19 +89,20 @@ test('a side has its colour, a type has none, and the selected chip stands out',
   const call = win.getByRole('button', { name: 'CALL', exact: true }), put = win.getByRole('button', { name: 'PUT', exact: true })
   await app.mouse.move(5, 5)
   await expect(buy).toHaveClass(/is-on/)
-  await expect.poll(() => css(buy, 'color'), { message: 'buying is green' }).toBe(UP)
-  expect(await css(sell, 'color'), 'the side not chosen has no colour').not.toBe(DOWN)
+  await expect.poll(() => css(buy, 'backgroundColor'), { message: 'buying is green' }).toBe(UP)
+  expect(await css(buy, 'color'), 'its word is the dark of the page, read on the green').toBe('rgb(11, 29, 26)')
+  for (const prop of ['backgroundColor', 'color']) expect(await css(sell, prop), 'the side not chosen has no colour').not.toBe(DOWN)
   await sell.click()
   await app.mouse.move(5, 5)
-  await expect.poll(() => css(sell, 'color'), { message: 'selling is coral' }).toBe(DOWN)
-  expect(await css(buy, 'color')).not.toBe(UP)
+  await expect.poll(() => css(sell, 'backgroundColor'), { message: 'selling is coral' }).toBe(DOWN)
+  for (const prop of ['backgroundColor', 'color']) expect(await css(buy, prop)).not.toBe(UP)
   // a type is not a side: the selected one is lit and ruled, in no colour of a sign
   await expect(call).toHaveClass(/is-on/)
   const [onFace, offFace] = [await css(call, 'backgroundColor'), await css(put, 'backgroundColor')]
   expect(onFace, 'the selected type has a face of its own').not.toBe(offFace)
   expect(await css(call, 'boxShadow'), 'and a rule under it').toMatch(/inset/)
   expect(await css(put, 'boxShadow')).not.toMatch(/inset/)
-  for (const c of [UP, DOWN]) expect(await css(call, 'color')).not.toBe(c)
+  for (const c of [UP, DOWN]) for (const prop of ['color', 'backgroundColor']) expect(await css(call, prop)).not.toBe(c)
   await win.locator('.tbw-light-r').click()
 
   // the swap's direction: paying coral, receiving green
@@ -109,11 +112,11 @@ test('a side has its colour, a type has none, and the selected chip stands out',
   await win.getByRole('button', { name: /^IR SWAP$/i }).click()
   const pay = win.getByRole('button', { name: /^PAY/ }).first(), rec = win.getByRole('button', { name: /^RECEIVE/ }).first()
   await app.mouse.move(5, 5)
-  await expect.poll(() => css(pay, 'color')).toBe(DOWN)
+  await expect.poll(() => css(pay, 'backgroundColor')).toBe(DOWN)
   await rec.click()
   await app.mouse.move(5, 5)
-  await expect.poll(() => css(rec, 'color')).toBe(UP)
-  expect(await css(pay, 'color')).not.toBe(DOWN)
+  await expect.poll(() => css(rec, 'backgroundColor')).toBe(UP)
+  expect(await css(pay, 'backgroundColor')).not.toBe(DOWN)
   await win.locator('.tbw-light-r').click()
 
   // a leg's side on DETAILS takes the same two colours
@@ -164,5 +167,64 @@ test('a figure is set one way: the forwards page, the ticket, and a field like t
   const notional = win.getByTestId('fx-notional'), date = win.locator('input[type="date"]').first()
   expect((await face(date))[0], 'a date is a figure').toBe((await face(notional))[0])
   expect((await face(date))[0]).toBe('DM Mono')
+  expectClean(problems)
+})
+
+// 0.66.3. The owner, of the ticket the night before the launch: the chosen side too faint, the rest dull. The
+// brass follows the next step (PRICE until a price is held, then BOOK TRADE, never both); a chosen side is a solid
+// face; a selected chip and the selected tab carry the brass rule; a section's heading has its bar.
+test('on a ticket the brass is the next step, a chosen side is solid, and what is selected is ruled in brass', async ({ app, problems }) => {
+  const BRASS = 'rgb(217, 178, 92)', BRASS_DIM = 'rgb(125, 103, 49)', UP = 'rgb(143, 224, 174)', DOWN = 'rgb(240, 130, 140)', INK = 'rgb(11, 29, 26)'
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  const rates = win.getByRole('button', { name: 'RATES', exact: true })
+  await rates.click()
+  const price = win.locator('.tbw-btn-price'), book = win.locator('.tbw-btn-book')
+
+  // no price yet: PRICE is the one lit button, BOOK is not
+  await expect(price).toHaveClass(/is-next/)
+  await app.mouse.move(5, 5)
+  await expect.poll(() => css(price, 'backgroundColor'), { message: 'PRICE is the action of an unpriced ticket' }).toBe(BRASS)
+  expect(await css(book, 'backgroundColor'), 'and BOOK is not lit beside it').not.toBe(BRASS)
+
+  // what is selected: the instrument's chip and the tab, in the brass of a selection; a heading has its bar
+  expect(await css(rates, 'borderTopColor'), 'a selected chip has a brass edge').toBe(BRASS_HI)
+  expect(await css(rates, 'boxShadow'), 'and a brass rule under it').toContain(BRASS)
+  const tab = win.locator('.tbw-tab.is-active')
+  expect(await css(tab, 'color')).toBe(BRASS_HI)
+  expect(await css(tab, 'borderBottomColor')).toBe(BRASS)
+  const heading = win.locator('.tbw-sec > .tbw-lbl:first-child, .tbw-sec > .tbw-sec-header > .tbw-lbl').first()
+  expect(await css(heading, 'borderLeftColor'), 'a section heading carries a bar').toBe(BRASS_DIM)
+  expect(await css(heading, 'color'), 'and its words are not brass').not.toBe(BRASS)
+
+  // a chosen side is a solid face in its colour, its word in the page's dark; the other side is plain
+  const sides = win.locator('.tbw-chip.tbw-chip-dir-pay, .tbw-chip.tbw-chip-dir-rec')
+  const on = sides.locator('xpath=self::*[contains(@class,"is-on")]').first()
+  await expect(on).toBeVisible()
+  const isPay = await on.evaluate(el => el.classList.contains('tbw-chip-dir-pay'))
+  expect(await css(on, 'backgroundColor'), 'the chosen side is filled').toBe(isPay ? DOWN : UP)
+  expect(await css(on, 'color')).toBe(INK)
+  const off = win.locator('.tbw-chip.tbw-chip-dir-pay:not(.is-on), .tbw-chip.tbw-chip-dir-rec:not(.is-on)').first()
+  expect(await css(off, 'backgroundColor'), 'the side not chosen has no fill').not.toBe(isPay ? UP : DOWN)
+
+  // priced, no counterparty: PRICE is an ordinary button again; BOOK is where the ticket is going, outlined in brass
+  await price.click()
+  await app.mouse.move(5, 5)                                    // off the button: its face at rest is what is read
+  await expect(book, 'priced, and waiting for a counterparty').toHaveClass(/is-waiting/, { timeout: 60_000 })
+  await expect(price).not.toHaveClass(/is-next/)
+  await expect.poll(() => css(price, 'backgroundColor'), { message: 'PRICE is an ordinary button once a price is held' }).toBe(RAISED)   // the face fades over 120 ms
+  expect(await css(book, 'color')).toBe(BRASS)
+  expect(await css(book, 'borderTopColor')).toBe(BRASS_DIM)
+  expect(await css(book, 'backgroundColor'), 'it cannot be pressed, so it has no face').not.toBe(BRASS)
+
+  // a counterparty chosen: BOOK TRADE takes the brass, and PRICE does not have it
+  await selectDemoBank(app, win)
+  await app.mouse.move(5, 5)
+  await expect(book).toBeEnabled({ timeout: 60_000 })
+  await expect.poll(() => css(book, 'backgroundColor'), { message: 'BOOK TRADE is the action of a priced ticket' }).toBe(BRASS)
+  expect(await css(price, 'backgroundColor')).not.toBe(BRASS)
+  await win.locator('.tbw-light-r').click()
   expectClean(problems)
 })

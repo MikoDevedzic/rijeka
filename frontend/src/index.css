@@ -782,8 +782,8 @@ button, input, select, textarea { font-family: inherit; }
    class take the look at the weight of an ordinary rule, so a colour set on one button (a red TERMINATE) stands. */
 .rj-btn:not(.cert *) { background: var(--btn-bg) !important; border-color: var(--btn-bd) !important; color: var(--btn-fg) !important; box-shadow: var(--btn-shadow); }
 .rj-btn:not(.cert *):hover:not(:disabled) { background: var(--btn-bg-hover) !important; border-color: var(--btn-bd-hover) !important; color: #ffffff !important; }
-:root :is(.btn:not(.primary), .pnl-btn:not(.ghost), .tbw-btn:not(.tbw-btn-book, .tbw-btn-cancel), .tc-btn:not(.primary), .ms-btn.ghost, .doc-btn:not(.primary), .source-btn:not(.active, .disabled), .mr-btn, .mr-step:not([aria-pressed="true"], .go)):not(.cert *) { background: var(--btn-bg); border-color: var(--btn-bd); color: var(--btn-fg); box-shadow: var(--btn-shadow); }
-:root :is(.btn:not(.primary), .pnl-btn:not(.ghost), .tbw-btn:not(.tbw-btn-book, .tbw-btn-cancel), .tc-btn:not(.primary), .ms-btn.ghost, .doc-btn:not(.primary), .source-btn:not(.active, .disabled), .mr-btn, .mr-step:not([aria-pressed="true"], .go)):not(.cert *):hover:not(:disabled) { background: var(--btn-bg-hover); border-color: var(--btn-bd-hover); color: #ffffff; }
+:root :is(.btn:not(.primary), .pnl-btn:not(.ghost), .tbw-btn:not(.tbw-btn-book, .tbw-btn-cancel, .is-next), .tc-btn:not(.primary), .ms-btn.ghost, .doc-btn:not(.primary), .source-btn:not(.active, .disabled), .mr-btn, .mr-step:not([aria-pressed="true"], .go)):not(.cert *) { background: var(--btn-bg); border-color: var(--btn-bd); color: var(--btn-fg); box-shadow: var(--btn-shadow); }
+:root :is(.btn:not(.primary), .pnl-btn:not(.ghost), .tbw-btn:not(.tbw-btn-book, .tbw-btn-cancel, .is-next), .tc-btn:not(.primary), .ms-btn.ghost, .doc-btn:not(.primary), .source-btn:not(.active, .disabled), .mr-btn, .mr-step:not([aria-pressed="true"], .go)):not(.cert *):hover:not(:disabled) { background: var(--btn-bg-hover); border-color: var(--btn-bd-hover); color: #ffffff; }
 /* a button whose colour says something keeps it, and gains the foot and the lift */
 .rj-press:not(.cert *) { box-shadow: var(--btn-shadow); }
 .rj-press:not(.cert *):hover:not(:disabled) { filter: brightness(1.22); }
@@ -791,11 +791,11 @@ button, input, select, textarea { font-family: inherit; }
 .rj-press:not(.cert *):disabled, .ldt-locked button:disabled { opacity: 0.45; cursor: default; }
 .ldt-locked input:disabled { opacity: 0.85; cursor: default; }
 /* the brass ones: the action of the view, on the same foot */
-:root :is(.btn.primary, .tbw-btn-book, .bl-new-trade-btn, .doc-btn.primary):not(.cert *) { box-shadow: var(--btn-shadow-brass); }
+:root :is(.btn.primary, .tbw-btn-book, .tbw-btn-price.is-next, .bl-new-trade-btn, .doc-btn.primary):not(.cert *) { box-shadow: var(--btn-shadow-brass); }
 /* pressed: every button goes down onto its foot. A button that cannot be pressed is flat: no face, no foot. */
 :root :is(.rj-btn, .rj-press, .btn, .pnl-btn, .tbw-btn, .tc-btn, .ms-btn, .doc-btn, .mr-btn, .mr-step, .bl-new-trade-btn, .tbw-chip):not(.cert *):active:not(:disabled) { transform: translateY(2px); box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.25); }
 :root :is(.rj-btn, .rj-press, .btn, .pnl-btn, .tbw-btn, .tc-btn, .ms-btn, .doc-btn, .mr-btn, .mr-step, .bl-new-trade-btn, .tbw-chip):not(.cert *):disabled { box-shadow: none; }
-:root :is(.btn:not(.primary), .pnl-btn:not(.ghost), .tbw-btn:not(.tbw-btn-book, .tbw-btn-cancel), .tc-btn:not(.primary), .ms-btn.ghost, .doc-btn:not(.primary), .source-btn:not(.active, .disabled), .mr-btn, .mr-step:not([aria-pressed="true"], .go)):not(.cert *):disabled, .rj-btn:not(.cert *):disabled { background: transparent !important; border-color: var(--border-hi) !important; color: var(--text-mute) !important; }
+:root :is(.btn:not(.primary), .pnl-btn:not(.ghost), .tbw-btn:not(.tbw-btn-book, .tbw-btn-cancel, .is-next), .tc-btn:not(.primary), .ms-btn.ghost, .doc-btn:not(.primary), .source-btn:not(.active, .disabled), .mr-btn, .mr-step:not([aria-pressed="true"], .go)):not(.cert *):disabled, .rj-btn:not(.cert *):disabled { background: transparent !important; border-color: var(--border-hi) !important; color: var(--text-mute) !important; }
 /* a quiet toggle (P&L's ghost buttons) and a chip: a clearer edge; the selected one stays the lighter panel */
 :root .pnl-btn.ghost:not(.on) { border-color: var(--border-glow); color: var(--text); }
 :root .pnl-btn.ghost:not(.on):hover:not(:disabled) { background: var(--panel-2); color: var(--text-hi); border-color: var(--btn-bd-hover); }
