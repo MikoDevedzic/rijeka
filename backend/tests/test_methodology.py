@@ -737,9 +737,12 @@ def test_xva_swaption_workbook_is_the_swaption_tickets_own_run_in_cells():
     # the option is worth something on every path until the expiry; from it the trade is the swap on some paths and nothing on the others
     assert float(eng["V"][:, :o["i_exp"]].min()) > 0
     after = eng["V"][:, o["i_exp"]]
-    took = o["swap"][:, o["i_exp"]] > 0
-    assert took.any() and (~took).any() and (after[~took] == 0).all() and (after[took] > 0).all()
-    assert eng["v0"] == pytest.approx(10_000_000.0 * o["jam"]["npv"], rel=1e-6), "the value today is the model's exact price"
+    took = o["took"]
+    assert took.any() and (~took).any() and (after[~took] == 0).all()
+    # exercised at the expiry: on a grid date the swap is then worth having; inside a step it may have turned by the next grid date
+    assert (after[took] > 0).all() if o["inside"] is None else (after[took] != 0).all()
+    assert eng["v0"] == pytest.approx(10_000_000.0 * o["hw"]["npv"], rel=1e-6), "the value today is the model's exact price"
+    assert abs(sum(t["at_root"] for t in o["hw"]["terms"])) < 1e-10, "the swap delivered is worth nothing at the root"
     wb, total = xva_swaption_workbook(mkt, 12)
     assert {"Model", "Trade", "Option", "Bonds", "Normals", "Paths", "Exposure", "Waterfall", "Engine"} <= set(wb.sheetnames) and isinstance(total, float)
     assert wb["Model"]["A9"].value.startswith("Strike K") and {"Texp", "SigN", "Xstar"} <= set(wb.defined_names)
@@ -759,6 +762,38 @@ def test_xva_swaption_workbook_is_the_swaption_tickets_own_run_in_cells():
         bad = [(x["label"], x["rel"]) for x in res if not x["ok"]]
         assert not bad, (preset, bad[:5])
         assert max(x["rel"] for x in res) < 1e-6, preset
+
+
+def test_xva_swaption_workbook_decides_the_exercise_at_an_expiry_inside_a_step():
+    """0.66.0. A swaption priced on a Friday expires a year on, moved off the Saturday: two days into a monthly step.
+    The engine decides the exercise on the factor's state at the expiry (ccr/options.exercised), not on the grid date
+    a month later, and the book rebuilds that state and the swap's value at it in cells, with its own normal."""
+    from datetime import date as _d
+    from methodology import workbook as W
+    from methodology.xva_workbook import PRESETS, engine_runs, hw1f_fit, swaption_dates, xva_swaption_workbook
+    from scripts.check_workbook import SWAPTION_DATES, run_checks, test_market
+    val = _d(2026, 11, 20)
+    assert val.isoformat() in SWAPTION_DATES
+    mkt = test_market(val)
+    expiry, _, _ = swaption_dates(val)
+    eng = engine_runs(mkt, hw1f_fit(mkt), 12, "swaption")
+    o = eng["option"]
+    assert expiry not in eng["p"].grid and o["inside"] is not None and o["inside"]["d"] == 2
+    late = o["swap"][:, o["i_exp"]] > 0                         # the grid date a month on: what decided until 0.66.0
+    assert o["took"].any() and (~o["took"]).any() and o["took"].shape == late.shape
+    wb, _ = xva_swaption_workbook(mkt, 12)
+    paths = [c.value for row in wb["Paths"].iter_rows() for c in row if isinstance(c.value, str)]
+    assert any("Normals!B" in f and "SQRT(Option!$B$" in f for f in paths), "x at the expiry: the bridge between the grid states, and its own normal"
+    assert any(f.count("EXP(Option!$E$") >= 4 for f in paths), "the swap at the expiry: the Option sheet's terms at that state"
+    pytest.importorskip("pycel")
+    W.finish(wb)
+    bio = io.BytesIO(); wb.save(bio)
+    for preset in PRESETS:
+        res = run_checks(load_workbook(io.BytesIO(bio.getvalue())), "Exposure!B4", preset)
+        labels = [x["label"] for x in res]
+        assert any(l.startswith("x at the expiry on path 1") for l in labels) and any(l.startswith("the variance left") for l in labels)
+        bad = [(x["label"], x["rel"]) for x in res if not x["ok"]]
+        assert not bad, (preset, bad[:5])
 
 
 def test_the_fx_forward_workbook_is_the_ticket_as_it_opens_carried_from_the_spot_date():

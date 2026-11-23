@@ -230,14 +230,22 @@ def engine_runs(mkt, fit: dict, n_paths: int = N_PATHS, product: str = "swap") -
     runs = {preset: waterfall_for(eng, {"preset": preset}) for preset in PRESETS}
     opt = {}
     if item["kind"] == "SWAPTION":
-        from pricing.bermudan_swaption import price_european_swaption_hw1f_jamshidian
+        from ccr.simulate import _inside, ou_bridge, rate_between
         t_exp = years(val, item["expiry"])
         i_exp = min(j for j in range(T + 1) if float(p.t[j]) >= t_exp - 1e-9)
         future = [(pay, tau) for (_, _, pay, tau) in item["fixed_sched"] if years(val, pay) > t_exp - 1e-9]
-        jam = price_european_swaption_hw1f_jamshidian(1.0, item["K"], item["is_payer"], t_exp, [years(val, pay) for pay, _ in future], [tau for _, tau in future],
-                                                      a, sig, discount_fn=p.p0[key])
-        opt = {"t_exp": t_exp, "i_exp": i_exp, "future": future, "jam": jam, "sig_n": float(O.hw_implied_vol(item, p)), "is_payer": bool(item["is_payer"]),
-               "sign": float(item.get("sign", 1.0)), "swap": np.stack([swap_at(item, p, i) for i in range(T + 1)], axis=1)}
+        hw = O.hw_price(item, p)
+        opt = {"t_exp": t_exp, "i_exp": i_exp, "future": future, "hw": hw, "sig_n": float(O.hw_implied_vol(item, p)), "is_payer": bool(item["is_payer"]),
+               "sign": float(item.get("sign", 1.0)), "swap": np.stack([swap_at(item, p, i) for i in range(T + 1)], axis=1),
+               "took": O.exercised(item, p, swap_at), "flows": O.swaption_flows(item, val), "inside": None}
+        where = _inside(p, t_exp)
+        if where[0] == "step":
+            # the expiry is not a grid date: the factor's state there, between the two grid states either side
+            _, i_s, d, D = where
+            k = ou_bridge(a, sig, d, D)
+            x_e = rate_between(p, key, t_exp)
+            mean = x[:, i_s - 1] * k["decay_d"] + k["c_d"] * (x[:, i_s] - x[:, i_s - 1] * k["decay_D"])
+            opt["inside"] = {**k, "step": i_s, "x_e": x_e, "xi": (x_e - mean) / math.sqrt(k["var"])}
     return {"option": opt, "product": product, "params": params, "n": n_paths, "item": item, "p": p, "key": key, "a": a, "sig": sig, "T": T, "dt": dt, "V": V, "v0": v0, "flows": fl, "paid": paid, "w": w,
             "z": z, "x": x, "A": account(p, key), "p0_grid": p0_grid, "maturity_y": maturity_y, "runs": runs, "sim": SimpleNamespace(z=z)}
 
@@ -531,82 +539,106 @@ def _bonds_sheet(wb, eng, dates, dr0):
 
 def _option_sheet(wb, eng, periods, idx, dr0):
     """The normal vol the paths' own model implies for the swaption (ccr/options.hw_implied_vol), in cells. The model
-    prices a European swaption exactly (Jamshidian: at one level of the factor the swap delivered is worth nothing,
-    and the option on the swap is a sum of options on the bonds its fixed leg pays, each struck at that bond's price
-    at that level). The vol is the one at which Bachelier's formula on today's forward swap rate gives that price: with
-    it the option's value before the expiry and its exercise on the paths at the expiry are one model. The level x*
-    and the vol are the engine's roots (values); the sheet shows that each is a root. Returns the cells Paths reads."""
-    o = eng["option"]; p, key = eng["p"], eng["key"]
-    a, sig, te = eng["a"], eng["sig"], o["t_exp"]
+    prices a European swaption exactly: at the expiry every bond is exp(ln A − B·x), so the swap delivered, written as
+    its cash flows (ccr/options.swaption_flows: its own start, each period's end, each payment date), is a sum of terms
+    α·exp(−β·x) that rises with x through one level x*; x at the expiry is normal, so each term has a closed form.
+    The vol is the one at which Bachelier's formula on today's forward swap rate gives that price: with it the option's
+    value before the expiry and its exercise on the paths at the expiry are one model. The level x* and the vol are the
+    engine's roots (values); the sheet shows that each is a root. Returns the cells Paths reads."""
+    from ccr.valuation import years
+    o = eng["option"]; p = eng["p"]; hw = o["hw"]
+    te = o["t_exp"]
     val = p.grid[0]
     ws = wb.create_sheet("Option")
     ws["A1"] = "THE SWAPTION IN THE PATHS' OWN MODEL: ITS EXACT PRICE AND THE NORMAL VOL THAT GIVES IT"; ws["A1"].font = W.F_TITLE
-    ws["A2"] = ("Jamshidian: at the expiry every bond is P(T_e, T) = exp(ln A − B·x), falling in x. At one level x* the fixed leg's payments c_k (K·τ_k, and one more unit at the "
-                "last) are worth one unit, so the swap delivered is worth nothing; a payer swaption is then Σ c_k × a put on the bond to T_k struck at its price at x* "
-                "(a receiver: calls). σ_n is the vol at which Bachelier's formula on today's forward swap rate gives that price per unit of annuity: the Paths sheet values "
-                "the option at it until the expiry, so the value today is the model's own price and not the ticket's."); ws["A2"].font = W.F_SUB
+    ws["A2"] = ("At the expiry every bond is P(T_e, T) = exp(ln A − B·x), falling in x. The swap delivered is its cash flows: each fixed coupon −K·τ·P(T_e, pay), each floating "
+                "period P(T_e, start)·P(T_e, pay)/P(T_e, end) − P(T_e, pay) (the period's growth, paid on its payment date). Each is a term α·exp(−β·x); the payer swap's value "
+                "is their sum and rises with x through one level x*. Under the measure of the bond to T_e, x is normal with mean −φ(T_e) and the variance below, so a payer "
+                "swaption is P(0,T_e)·Σ α·exp(β·φ + ½β²s²)·Φ((−φ − β·s² − x*)/s) (a receiver: the same sum on the other side of x*). σ_n is the vol at which Bachelier's "
+                "formula on today's forward swap rate gives that price per unit of annuity: the Paths sheet values the option at it until the expiry, so the value today is "
+                "the model's own price and not the ticket's."); ws["A2"].font = W.F_SUB
     rows = [("T_e", "=Texp", "0.000000"), ("P(0, T_e) from the curve", f"={_DF('Model!$B$15')}", "0.00000000"),
             ("φ(T_e) = σ²/2a²·(1 − e^(−a·T_e))²", "=SigA2*(1-EXP(-HW_a*Texp))^2", "0.0000000000"),
-            ("the factor's variance at T_e: σ²/2a·(1 − e^(−2a·T_e))", "=HW_sig^2/(2*HW_a)*(1-EXP(-2*HW_a*Texp))", "0.000000000000")]
+            ("s²: the factor's variance at T_e, σ²/2a·(1 − e^(−2a·T_e))", "=HW_sig^2/(2*HW_a)*(1-EXP(-2*HW_a*Texp))", "0.000000000000")]
     for i, (lab, f, fmt) in enumerate(rows, 4):
         ws.cell(row=i, column=1, value=lab); ws.cell(row=i, column=2, value=f).number_format = fmt
-    # x*: the engine's root, as the factor level of this book's bond formula (taken from the first bond's strike)
-    p0 = p.p0[key]
-    fixed = [q for q in periods if q["kind"] == "FIXED" and q["tp"] > te - 1e-9]
-    Bk = lambda T: (1 - math.exp(-a * (T - te))) / a
-    lnA = lambda T: math.log(p0(T) / p0(te)) - Bk(T) * (sig * sig / (2 * a * a)) * (1 - math.exp(-a * te)) ** 2 - sig * sig / (4 * a) * Bk(T) ** 2 * (1 - math.exp(-2 * a * te))
-    T1 = fixed[0]["tp"]
-    xstar = (lnA(T1) - math.log(o["jam"]["zcb_strikes"][0])) / Bk(T1)
     ws["A8"] = "x*: the factor level at the expiry where the swap delivered is worth nothing (the engine's root)"
-    c = ws["B8"]; c.value = xstar; c.fill = W.FILL_RJ; c.number_format = "0.000000000000"
+    c = ws["B8"]; c.value = float(hw["x_star"]); c.fill = W.FILL_RJ; c.number_format = "0.000000000000"
     _names(wb, {"Xstar": "Option!B8"})
-    W.header(ws, 10, ["k", "T_k (the fixed leg pays)", "τ_k", "c_k = K·τ_k (+1 at the last)", "P(0, T_k)", "B_k = (1 − e^(−a(T_k − T_e)))/a",
-                      "ln A_k", "X_k = exp(ln A_k − B_k·x*)", "X_k (engine)", "σ_p,k = √(variance at T_e)·B_k", "h_k = ln(P_k/(P_e·X_k))/σ_p + σ_p/2",
-                      "the put on the bond" if o["is_payer"] else "the call on the bond", "c_k × that option"])
-    r0 = 11
-    for k, q in enumerate(fixed):
-        r = r0 + k
-        ws.cell(row=r, column=1, value=k + 1)
-        ws.cell(row=r, column=2, value=f"=Trade!$J${q['row']}").number_format = "0.000000"
-        ws.cell(row=r, column=3, value=f"=Trade!$F${q['row']}").number_format = "0.00000000"
-        ws.cell(row=r, column=4, value=f"=Kfix*C{r}" + ("+1" if k == len(fixed) - 1 else "")).number_format = "0.0000000000"
-        ws.cell(row=r, column=5, value=f"=Trade!$D${dr0 + idx[q['pay']]}").number_format = "0.00000000"
-        ws.cell(row=r, column=6, value=f"=(1-EXP(-HW_a*(B{r}-Texp)))/HW_a").number_format = "0.00000000"
-        ws.cell(row=r, column=7, value=f"=LN(E{r}/$B$5)-F{r}*$B$6-SigA4*F{r}^2*(1-EXP(-2*HW_a*Texp))").number_format = "0.0000000000"
-        ws.cell(row=r, column=8, value=f"=EXP(G{r}-F{r}*Xstar)").number_format = "0.0000000000"
-        c = ws.cell(row=r, column=9, value=float(o["jam"]["zcb_strikes"][k])); c.fill = W.FILL_RJ; c.number_format = "0.0000000000"
-        ws.cell(row=r, column=10, value=f"=SQRT($B$7)*F{r}").number_format = "0.0000000000"
-        ws.cell(row=r, column=11, value=f"=LN(E{r}/($B$5*H{r}))/J{r}+J{r}/2").number_format = "0.00000000"
-        ws.cell(row=r, column=12, value=(f"=H{r}*$B$5*NORMSDIST(J{r}-K{r})-E{r}*NORMSDIST(-K{r})" if o["is_payer"]
-                                         else f"=E{r}*NORMSDIST(K{r})-H{r}*$B$5*NORMSDIST(K{r}-J{r})")).number_format = "0.000000000000"
-        ws.cell(row=r, column=13, value=f"=D{r}*L{r}").number_format = "0.000000000000"
-        W.check(wb, "Option", f"the bond's price at x*, payment {k + 1}", f"H{r}", f"I{r}", 1e-7)
-    r1 = r0 + len(fixed) - 1
-    r = r1 + 2
+
+    # the bonds the cash flows are made of
+    r = 10
+    W.header(ws, r, ["m", "T (a date of the swap delivered)", "P(0, T)", "B = (1 − e^(−a(T − T_e)))/a", "ln A"]); r += 1
+    drow = {}
+    late = [d for d in sorted(idx, key=lambda d: idx[d]) if years(val, d) > te + 1e-12]
+    for d in late:
+        ws.cell(row=r, column=1, value=idx[d] + 1)
+        ws.cell(row=r, column=2, value=f"=Trade!$C${dr0 + idx[d]}").number_format = "0.000000"
+        ws.cell(row=r, column=3, value=f"=Trade!$D${dr0 + idx[d]}").number_format = "0.00000000"
+        ws.cell(row=r, column=4, value=f"=(1-EXP(-HW_a*(B{r}-Texp)))/HW_a").number_format = "0.0000000000"
+        ws.cell(row=r, column=5, value=f"=LN(C{r}/$B$5)-D{r}*$B$6-SigA4*D{r}^2*(1-EXP(-2*HW_a*Texp))").number_format = "0.0000000000"
+        drow[round(years(val, d), 9)] = r
+        r += 1
+
+    # the cash flows, term by term, in the engine's order: the fixed coupons, then the floating periods
+    r += 1
+    W.header(ws, r, ["m", "the term", "w", "β = Σ ±B", "ln|α| = ln|w| + Σ ±ln A", "at x*: ±exp(ln|α| − β·x*)", "forward at T_e: ±exp(ln|α| + β·φ + ½β²s²)",
+                     "d = (−φ − β·s² − x*)/s", "its part of the price", "its part (engine)", "today: w·Π P(0,·)^±"])
+    r += 1
+    t0 = r
+    tau_row = {round(q["tp"], 9): q["row"] for q in periods if q["kind"] == "FIXED"}
+    cells = []
+    for m, term in enumerate(hw["terms"]):
+        w, bonds = term["w"], term["bonds"]
+        refs = [(drow.get(round(T, 9)), sgn) for T, sgn in bonds]                 # a date at the expiry itself is a bond worth one: no row
+        fixed = m < hw["n_fixed"]
+        ws.cell(row=r, column=1, value=m + 1)
+        if fixed:
+            what = "a fixed coupon: −K·τ·P(pay)"
+            wf = f"=-Kfix*Trade!$F${tau_row[round(bonds[0][0], 9)]}"
+        elif len(bonds) == 3:
+            what = "a floating period: P(start)·P(pay)/P(end)"; wf = float(w)
+        elif w > 0:
+            what = "a floating period: P(start)"; wf = float(w)
+        else:
+            what = "a floating period: −P(end)" if abs(w) >= 1 - 1e-12 else "a spread"; wf = float(w)
+        ws.cell(row=r, column=2, value=what)
+        c = ws.cell(row=r, column=3, value=wf); c.number_format = "0.0000000000"
+        if not fixed:
+            c.fill = W.FILL_RJ
+        ws.cell(row=r, column=4, value="=" + ("".join(f"{'+' if sgn > 0 else '-'}D{rr}" for rr, sgn in refs if rr) or "0")).number_format = "0.0000000000"
+        ws.cell(row=r, column=5, value=f"=LN(ABS(C{r}))" + "".join(f"{'+' if sgn > 0 else '-'}E{rr}" for rr, sgn in refs if rr)).number_format = "0.0000000000"
+        ws.cell(row=r, column=6, value=f"=SIGN(C{r})*EXP(E{r}-D{r}*Xstar)").number_format = "0.000000000000"
+        ws.cell(row=r, column=7, value=f"=SIGN(C{r})*EXP(E{r}+D{r}*$B$6+D{r}^2*$B$7/2)").number_format = "0.000000000000"
+        ws.cell(row=r, column=8, value=f"=(-$B$6-D{r}*$B$7-Xstar)/SQRT($B$7)").number_format = "0.00000000"
+        ws.cell(row=r, column=9, value=(f"=$B$5*G{r}*NORMSDIST(H{r})" if o["is_payer"] else f"=-$B$5*G{r}*NORMSDIST(-H{r})")).number_format = "0.000000000000"
+        c = ws.cell(row=r, column=10, value=float(term["part"])); c.fill = W.FILL_RJ; c.number_format = "0.000000000000"
+        ws.cell(row=r, column=11, value=f"=C{r}" + "".join(f"{'*' if sgn > 0 else '/'}C{rr}" for rr, sgn in refs if rr)).number_format = "0.000000000000"
+        W.check(wb, "Option", f"term {m + 1}'s part of the price ({what.split(':')[0]})", f"I{r}", f"J{r}", 1e-9)
+        cells.append((1.0 if w > 0 else -1.0, f"Option!$E${r}", f"Option!$D${r}"))
+        r += 1
+    t1 = r - 1
+    nf = hw["n_fixed"]
+    r += 1
     out = {}
-    start = eng["item"]["start"]
-    A0 = sum(tau * p0((pay - val).days / 365.25) for pay, tau in o["future"])
-    F0 = (p0((start - val).days / 365.25) - p0((o["future"][-1][0] - val).days / 365.25)) / A0
     sT = "(SigN*SQRT(Texp))"
-    lines = [("one", "Σ c_k·X_k: one unit, so the swap delivered is worth nothing at x*", f"=SUMPRODUCT(D{r0}:D{r1},H{r0}:H{r1})", 1.0, "0.000000000000", 1e-9),
-             ("jam", "the model's price per unit of notional: Σ c_k × option on the bond", f"=SUM(M{r0}:M{r1})", float(o["jam"]["npv"]), "0.000000000000", 1e-7),
-             ("A0", "A₀ = Σ τ_k·P(0, T_k): the annuity today", f"=SUMPRODUCT(C{r0}:C{r1},E{r0}:E{r1})", float(A0), "0.0000000000", 1e-9),
-             ("F0", "F₀ = (P(0, start) − P(0, T_n))/A₀: the forward swap rate today", None, float(F0), "0.0000000000", 1e-9),
-             ("target", "the price per unit of annuity", None, float(o["jam"]["npv"] / A0), "0.000000000000", 1e-7),
+    lines = [("zero", "Σ of the terms at x*: nothing, so the swap delivered is worth nothing there", f"=SUM(F{t0}:F{t1})", 0.0, "0.000000000000", 1e-9),
+             ("price", "the model's price per unit of notional: Σ of the terms' parts", f"=SUM(I{t0}:I{t1})", float(hw["npv"]), "0.000000000000", 1e-9),
+             ("A0", "A₀ = Σ τ·P(0, pay) over the fixed coupons: the annuity today", f"=-SUM(K{t0}:K{t0 + nf - 1})/Kfix", float(hw["A0"]), "0.0000000000", 1e-9),
+             ("F0", "F₀ = the floating leg today / A₀: the forward rate of the swap delivered", f"=SUM(K{t0 + nf}:K{t1})/B{{A0}}", float(hw["F0"]), "0.0000000000", 1e-9),
+             ("target", "the price per unit of annuity", "=B{price}/B{A0}", float(hw["npv"] / hw["A0"]), "0.000000000000", 1e-7),
              ("sig", "σ_n: the normal vol at which Bachelier's formula gives that price (the engine's root)", None, float(o["sig_n"]), "0.0000000000", None),
              ("bach", "Bachelier per unit of annuity at σ_n: σ_n√T_e·[d·Φ(d) + φ(d)], d = (F₀ − K)/(σ_n√T_e)" + ("" if o["is_payer"] else ", less (F₀ − K) for a receiver"), None,
-              float(o["jam"]["npv"] / A0), "0.000000000000", 1e-6)]
+              float(hw["npv"] / hw["A0"]), "0.000000000000", 1e-6)]
     W.header(ws, r, ["", "in cells", "the engine's"]); r += 1
     for name, lab, f, engine, fmt, tol in lines:
         out[name] = r
         ws.cell(row=r, column=1, value=lab)
-        if name == "F0":
-            f = f"=(Trade!$D${dr0 + idx[start]}-E{r1})/B{out['A0']}"
-        elif name == "target":
-            f = f"=B{out['jam']}/B{out['A0']}"
-        elif name == "bach":
+        if name == "bach":
             d = f"((B{out['F0']}-Kfix)/{sT})"
             f = f"={sT}*({d}*NORMSDIST({d})+EXP(-{d}^2/2)/SQRT(2*PI()))" + ("" if o["is_payer"] else f"-(B{out['F0']}-Kfix)")
+        elif f:
+            f = f.replace("{A0}", str(out.get("A0", ""))).replace("{price}", str(out.get("price", "")))
         if name == "sig":
             c = ws.cell(row=r, column=2, value=engine); c.fill = W.FILL_RJ; c.number_format = fmt
         else:
@@ -617,8 +649,38 @@ def _option_sheet(wb, eng, periods, idx, dr0):
     _names(wb, {"SigN": f"Option!B{out['sig']}"})
     ws.cell(row=r + 1, column=1, value=("The last row is the vol's own check: Bachelier at σ_n against the model's price. They agree to the tolerance the engine's root-finder stops at. "
                                         "The model's vol is not the market's quote for this swaption; the ticket prices at the quote, so the run starts from the model's price.")).font = W.F_SUB
-    W.widths(ws, [84, 22, 16, 22, 14, 26, 16, 26, 16, 26, 30, 22, 20])
-    return {"A0": f"Option!$B${out['A0']}", "F0": f"Option!$B${out['F0']}", "bach": f"Option!$B${out['bach']}", "sig": f"Option!$B${out['sig']}"}
+    r += 3
+    res = {"A0": f"Option!$B${out['A0']}", "F0": f"Option!$B${out['F0']}", "bach": f"Option!$B${out['bach']}", "sig": f"Option!$B${out['sig']}", "terms": cells, "inside": None}
+    ins = o.get("inside")
+    if ins:
+        # the expiry is inside a step: the factor's state there, given the two grid states either side (ccr/simulate.rate_between)
+        ws.cell(row=r, column=1, value=f"THE EXPIRY IS NOT A GRID DATE: THE FACTOR'S STATE THERE, INSIDE STEP {ins['step']}").font = W.F_SECTION; r += 1
+        ws.cell(row=r, column=1, value=("x at the expiry, given x at the grid dates either side, is normal about lo·e^(−a·d·h) + c·(hi − lo·e^(−a·D·h)) with the variance below "
+                                        "(h one day, d the expiry's day of the step's D days). The holder decides on the swap's value at that state: Σ ±exp(ln|α| − β·x), the terms above.")).font = W.F_SUB; r += 1
+        W.header(ws, r, ["", "in cells", "the engine's"]); r += 1
+        g = {}
+        rows2 = [("d", "d: the expiry's day of the step", None, float(ins["d"]), "0"), ("D", "D: the step's days", None, float(ins["D"]), "0"),
+                 ("dd", "e^(−a·d·h), h = 1/365.25", "=EXP(-HW_a*B{d}/365.25)", ins["decay_d"], "0.000000000000"),
+                 ("dD", "e^(−a·D·h)", "=EXP(-HW_a*B{D}/365.25)", ins["decay_D"], "0.000000000000"),
+                 ("vd", "v(d) = σ²/2a·(1 − e^(−2a·d·h))", "=HW_sig^2/(2*HW_a)*(1-EXP(-2*HW_a*B{d}/365.25))", ins["v_d"], "0.000000000000000"),
+                 ("vD", "v(D)", "=HW_sig^2/(2*HW_a)*(1-EXP(-2*HW_a*B{D}/365.25))", ins["v_D"], "0.000000000000000"),
+                 ("c", "c = e^(−a·(D − d)·h)·v(d)/v(D)", "=EXP(-HW_a*(B{D}-B{d})/365.25)*B{vd}/B{vD}", ins["c_d"], "0.000000000000"),
+                 ("var", "the variance left: v(d) − c²·v(D)", "=B{vd}-B{c}^2*B{vD}", ins["var"], "0.000000000000000")]
+        for name, lab, f, engine, fmt in rows2:
+            g[name] = r
+            ws.cell(row=r, column=1, value=lab)
+            if f is None:
+                c = ws.cell(row=r, column=2, value=engine); c.fill = W.FILL_RJ; c.number_format = fmt
+            else:
+                for k_, v_ in g.items():
+                    f = f.replace("{" + k_ + "}", str(v_))
+                ws.cell(row=r, column=2, value=f).number_format = fmt
+                c = ws.cell(row=r, column=3, value=float(engine)); c.fill = W.FILL_RJ; c.number_format = fmt
+                W.check(wb, "Option", lab.split(":")[0], f"B{r}", f"C{r}", 1e-9)
+            r += 1
+        res["inside"] = {k_: f"Option!$B${v_}" for k_, v_ in g.items()}
+    W.widths(ws, [84, 30, 18, 26, 24, 26, 34, 24, 22, 20, 22])
+    return res
 
 
 def _variance_sheet(wb, eng, periods):
@@ -689,7 +751,13 @@ def _normals_sheet(wb, eng, wf_noise):
     ws["A2"] = f"Standard normals, path by path and step by step, as the engine's steps used them (seed {SEED} for the paths, 43 for the margin-period bridge). ENGINE mode uses these; LIVE mode ignores them."; ws["A2"].font = W.F_SUB
     z0, z1 = _block(ws, 4, n, T, lambda p, j, r, c: float(eng["z"][p, j - 1]), "0.000000", "Z: the Hull-White step's normal")
     n0, n1 = _block(ws, z1 + 3, n, T, lambda p, j, r, c: float(wf_noise[p, j - 1]), "0.000000", "N: the margin-period bridge's normal")
-    for row in ws.iter_rows(min_row=z0, max_row=n1, min_col=2, max_col=1 + T):
+    last = n1
+    ins = (eng.get("option") or {}).get("inside")
+    if ins:
+        e0, last = _block(ws, n1 + 3, n, 1, lambda p, j, r, c: float(ins["xi"][p]), "0.000000",
+                          "E: the normal of the factor's state at the expiry, between the two grid states either side (the engine's, standardised)")
+        ins["rows"] = (e0, last)
+    for row in ws.iter_rows(min_row=z0, max_row=last, min_col=2, max_col=1 + T):
         for c in row:
             if isinstance(c.value, float):
                 c.fill = W.FILL_RJ
@@ -858,26 +926,40 @@ def _paths_sheet(wb, eng, periods, dates, idx, dr0, rB, rA, zrows, vcells=None):
         # worth having at that date, and nothing on the others. The option's sign for the side that wrote it.
         o = eng["option"]; ie = o["i_exp"]; sg = "-" if o["sign"] < 0 else ""
         fut = [qd for qd in periods if qd["kind"] == "FIXED" and qd["tp"] > o["t_exp"] - 1e-9]
-        start = eng["item"]["start"]
-        B["VS"] = _block(ws, top, n, T, lambda q, j, r, c: (value(q, j) if j >= ie else None), "#,##0.00",
-                         f"VS: the swap delivered, on its own schedule, from the expiry (step {ie}); empty before it. Its sign at step {ie} is the exercise")
+        B["VS"] = _block(ws, top, n, T, lambda q, j, r, c: value(q, j), "#,##0.00",
+                         "VS: the swap delivered, on its own schedule (before the expiry the forward swap: the option's forward rate is read from it)")
         sb = B["VS"]; top = sb[1] + 3
         B["ANN"] = _block(ws, top, n, T, lambda q, j, r, c: ("=" + "+".join(f"Trade!$F${qd['row']}*{bond(q, j, qd['pay'])}" for qd in fut) if j < ie else None), "0.0000000000",
                           "A: the annuity on the path, Σ τ·P(t, payment) over the fixed leg; empty from the expiry")
         nb = B["ANN"]; top = nb[1] + 3
-        B["FWD"] = _block(ws, top, n, T, lambda q, j, r, c: (f"=({bond(q, j, start)}-{bond(q, j, fut[-1]['pay'])})/{L(c)}{nb[0] + q}" if j < ie else None), "0.0000000000",
-                          "F: the forward swap rate on the path, (P(t, start) − P(t, T_n))/A; empty from the expiry")
+        side = "+" if o["is_payer"] else "-"
+        B["FWD"] = _block(ws, top, n, T, lambda q, j, r, c: (f"=Kfix{side}{L(c)}{sb[0] + q}/(Notl*{L(c)}{nb[0] + q})" if j < ie else None), "0.0000000000",
+                          "F: the forward rate of the swap delivered on the path, its floating leg over A, which is K + the payer swap's value/(N·A); empty from the expiry")
         fb = B["FWD"]; top = fb[1] + 3
+        ins, oc = o.get("inside"), (vcells or {}).get("inside")
+        if ins:
+            # the expiry inside step i: the factor's state there, and the swap's value at it (ccr/options.exercised)
+            i_s = ins["step"]; e0 = ins["rows"][0]
+            B["XE"] = _block(ws, top, n, 1, lambda q, j, r, c: (f"={x(q, i_s - 1)}*{oc['dd']}+{oc['c']}*({x(q, i_s)}-{x(q, i_s - 1)}*{oc['dD']})"
+                                                               f"+IF(Mode=\"ENGINE\",Normals!B{e0 + q},NORMSINV(RAND()))*SQRT({oc['var']})"), "0.000000000000",
+                             f"x at the expiry, inside step {i_s}: between the two grid states either side (Option sheet), plus its own normal")
+            eb = B["XE"]; top = eb[1] + 3
+            B["FE"] = _block(ws, top, n, 1, lambda q, j, r, c: "=" + "".join(f"{'+' if sg_ > 0 else '-'}EXP({la}-{be}*B{eb[0] + q})" for sg_, la, be in vcells["terms"]), "0.000000000000",
+                             "the payer swap delivered, per unit, at the expiry: Σ ±exp(ln|α| − β·x) over the Option sheet's terms. Its sign is the exercise")
+            xb2 = B["FE"]; top = xb2[1] + 3
 
         def opt(q, j, r, c):
             if j >= ie:
+                if ins:
+                    return f"={sg}IF(B{xb2[0] + q}{'>' if o['is_payer'] else '<'}0,{L(c)}{sb[0] + q},0)"
                 return f"={sg}IF({L(1 + ie)}{sb[0] + q}>0,{L(c)}{sb[0] + q},0)"
             sT = f"(SigN*SQRT(Texp-Model!$C${GRID_R0 + j}))"
             d = f"(({L(c)}{fb[0] + q}-Kfix)/{sT})"
             unit = f"{sT}*({d}*NORMSDIST({d})+EXP(-{d}^2/2)/SQRT(2*PI()))" + ("" if o["is_payer"] else f"-({L(c)}{fb[0] + q}-Kfix)")
             return f"={sg}Notl*{L(c)}{nb[0] + q}*({unit})"
         B["V"] = _block(ws, top, n, T, opt, "#,##0.00",
-                        f"V: until the expiry N·A·Bachelier(F, K, T_e − t, σ_n), σ_n the model's own (Option sheet); from step {ie} the swap delivered where VS at step {ie} is positive, nothing where it is not")
+                        f"V: until the expiry N·A·Bachelier(F, K, T_e − t, σ_n), σ_n the model's own (Option sheet); from step {ie} the swap delivered where it was worth having at the expiry ("
+                        + ("the sign of the block above" if o.get("inside") else f"VS at step {ie}, the expiry's own date") + "), nothing where it was not")
     else:
         B["V"] = _block(ws, top, n, T, lambda q, j, r, c: value(q, j), "#,##0.00",
                         "V: fixed coupons still to pay at their bonds; each floating period ended (its amount known), running (accrued so far over the bond to its end) or not begun")
@@ -894,8 +976,9 @@ def _paths_sheet(wb, eng, periods, dates, idx, dr0, rB, rA, zrows, vcells=None):
 
     if swaption:
         # the swap's coupons, on the paths that exercised, from the option's side (ccr.valuation.flows_per_step)
+        took = (lambda q: f"B{xb2[0] + q}{'>' if o['is_payer'] else '<'}0") if ins else (lambda q: f"{L(1 + ie)}{sb[0] + q}>0")   # the exercise V reads
         B["PAID"] = _block(ws, top, n, T, lambda q, j, r, c: "=" + ("0" if j == 1 else f"{L(c - 1)}{r}")
-                           + (f"+{sg}IF({L(1 + ie)}{sb[0] + q}>0,1,0)*(0{flow(q, j)})" if flow(q, j) else ""), "#,##0.00",
+                           + (f"+{sg}IF({took(q)},1,0)*(0{flow(q, j)})" if flow(q, j) else ""), "#,##0.00",
                            "PAID: the net cash the swap delivered has paid us by each date, on the paths that exercised: V + PAID is the value with its payments still in it")
     else:
         B["PAID"] = _block(ws, top, n, T, lambda q, j, r, c: "=" + ("0" if j == 1 else f"{L(c - 1)}{r}") + flow(q, j), "#,##0.00",
@@ -1136,8 +1219,12 @@ def _engine_paths(wb, eng, B):
         o = eng["option"]; ie = o["i_exp"]; h = max(1, ie // 2); hc = L(1 + h); val_ = eng["p"].grid[0]
         bd = lambda i, d: O.bond(eng["p"], eng["key"], i, _yrs(val_, d))
         ann = sum(tau * bd(h, pay) for pay, tau in o["future"])
-        fwd = (bd(h, eng["item"]["start"]) - bd(h, o["future"][-1][0])) / ann
-        took = o["swap"][:, ie] > 0
+        Ph = lambda Ty: O.bond(eng["p"], eng["key"], h, Ty)
+        fwd = O._sum_of_bond_products(o["flows"]["floating"], Ph) / ann
+        took = o["took"]
+        if o.get("inside"):
+            rows += [(f"x at the expiry on path 1 (inside step {o['inside']['step']})", float(o["inside"]["x_e"][0]), f"Paths!B{B['XE'][0]}"),
+                     ("x at the expiry on path 2", float(o["inside"]["x_e"][1]), f"Paths!B{B['XE'][0] + 1}")]
         rows += [(f"the annuity on path 1 at step {h}", float(ann[0]), f"Paths!{hc}{B['ANN'][0]}"),
                  (f"the forward swap rate on path 1 at step {h}", float(fwd[0]), f"Paths!{hc}{B['FWD'][0]}"),
                  (f"the option on path 2 at step {h}", float(eng["V"][1, h]), f"Paths!{hc}{B['V'][0] + 1}")]
@@ -1291,13 +1378,13 @@ def xva_rates_workbook(mkt, n_paths: int = N_PATHS, product: str = "swap"):
                   + ("; a floor's period the put, X·Φ(v − d₁) − M·Φ(−d₁)" if product == "collar" else ""), f"Paths!B{B['U'][0][0]}", "the caplet per unit, before discounting", "0.0000000000")),
            ("V", "Σ over the periods not yet paid of ±N·P(t, pay)·U: plus for an option held, minus for one written", f"Paths!B{vb[0]}", f"the {word}'s value on path 1 at step 1", "#,##0.00")]
           if cap else
-          [("x*", "the factor level at the expiry where Σ c_k·P(T_e, T_k) = 1: the swap delivered is worth nothing", "Option!B8", "the engine's root", "0.0000000000"),
-           ("the model's price", "Σ c_k × the option on the bond to T_k struck at its price at x* (Jamshidian)", vcells["bach"].replace("$", "").replace("Option!B", "Option!C"), "per unit of annuity", "0.000000000000"),
+          [("x*", "the factor level at the expiry where the swap delivered, as its cash flows Σ α·exp(−β·x), is worth nothing", "Option!B8", "the engine's root", "0.0000000000"),
+           ("the model's price", "P(0,T_e)·Σ α·exp(β·φ + ½β²s²)·Φ((−φ − β·s² − x*)/s) over the swap's cash flows", vcells["bach"].replace("$", "").replace("Option!B", "Option!C"), "per unit of annuity", "0.000000000000"),
            ("σ_n", "the normal vol at which Bachelier on F₀ gives the model's price", vcells["sig"].replace("$", ""), "the paths' own, not the market's quote", "0.0000000000"),
            ("A", "Σ τ·P(t, payment) over the fixed leg, on the path", f"Paths!B{B['ANN'][0]}", "path 1, step 1", "0.0000000000"),
-           ("F", "(P(t, start) − P(t, T_n))/A, on the path", f"Paths!B{B['FWD'][0]}", "path 1, step 1", "0.0000000000"),
+           ("F", "the swap delivered's floating leg over A, on the path: K + its value/(N·A)", f"Paths!B{B['FWD'][0]}", "path 1, step 1", "0.0000000000"),
            ("V before the expiry", "N·A·σ_n√(T_e − t)·[d·Φ(d) + φ(d)], d = (F − K)/(σ_n√(T_e − t))", f"Paths!B{vb[0]}", "the option on path 1 at step 1", "#,##0.00"),
-           ("V from the expiry", "the swap delivered where it was worth having at the expiry's grid date, nothing where it was not", f"Paths!{L(1 + eng['option']['i_exp'])}{vb[0]}", "path 1 at the expiry step", "#,##0.00")]
+           ("V from the expiry", "the swap delivered where it was worth having at the expiry (its own state when the expiry is inside a step), nothing where it was not", f"Paths!{L(1 + eng['option']['i_exp'])}{vb[0]}", "path 1 at the expiry step", "#,##0.00")]
           if swn else
           [("V", "−N·K·Σ τ·P(t, pay) on the fixed leg; per floating period N·(G − P(t, end)), or N·(G/P(t,end) − 1)·P(t, pay) where it pays after its end", f"Paths!B{vb[0]}", "the trade's value on path 1 at step 1", "#,##0.00")]),
         ("V(0)", "the same formula today: every bond is the curve's", "Exposure!B15", "", "#,##0.00"),

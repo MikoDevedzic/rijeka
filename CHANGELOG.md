@@ -1,7 +1,39 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.48). Commits on `main` are the detail.
+methodology document carries its own version (v1.49). Commits on `main` are the detail.
+
+## 0.66.0 · 23 November 2026
+
+**A swaption through its expiry.** Every swaption's XVA changes: the value its run starts from and its exposure, on
+the ticket and in a counterparty's netting set. Swaps, caps, floors and collars are not touched.
+
+- **What was wrong.** Three things in a swaption's exposure run were not the swap it delivers.
+  - The price the run starts from was of a par swap that begins at the expiry and ends on the last payment date. A
+    ticket's swap begins two business days later, and each floating period has its own end and payment date.
+  - Before the expiry the option was valued on that same par swap's forward rate.
+  - The holder decided on the first monthly grid date at or after the expiry. A ticket's expiry is a tenor on, moved
+    off a weekend: two days in seven it lies inside a step, and the decision came 28 to 30 days late.
+- **What it is now.** The option is priced on the cash flows of the swap delivered
+  (`price_european_swaption_hw1f_terms`), valued before the expiry on that swap's forward, and exercised at the
+  expiry on the rate's state there (`ccr/simulate.rate_between`, `ccr/options.exercised`). The coupons of the
+  exercised swap follow the same decision.
+- **How large.** On the checks' market, a one-year into two-year payer on ten million:
+  - the value the run starts from: 77,625 where it was 79,533 on 3 August 2026 (−2.4 %); −1.6 % on 18 November 2026,
+    +0.1 % on 29 March 2027. The old figure moved 2.5 % with the calendar; the new one is 77,625 to 77,646.
+  - uncollateralised CVA and FCA: −0.6 to +0.3 %; margined charges: under a tenth of a unit.
+  - priced on a Friday whose expiry rolls to a Monday (20 November 2026): value today −3.1 %, uncollateralised CVA
+    and FCA −1.3 %, DVA and FBA +13 %.
+- **How it is held.** The option's discounted value on the paths is a martingale through its expiry, at one year and
+  three months, with the expiry on a grid date and inside a step (100,000 paths): the test that would have caught
+  all three. Two derivations of the price agree to twelve decimals. The swaption's XVA workbook rebuilds the price,
+  the forward and the exercise in cells: 167 to 175 checks under each preset on six dates, one with the expiry
+  inside a step, and the ticket's route ties to it to the cent.
+- **What is not checked.** Historical sampling spreads the rate inside a step at its calibrated vol, an
+  approximation. A written swaption and a receiver are in the engine's tests and not in the workbook. A Bermudan's
+  exposure is still run as its European's. The workbook has not been opened in Excel itself.
+- Tests: `tests/test_ccr_swaption_expiry.py` (22), one more workbook test. Methodology v1.49, `docs/ccr.md`,
+  `docs/xva.md`, the model inventory.
 
 ## 0.65.0 · 23 November 2026
 

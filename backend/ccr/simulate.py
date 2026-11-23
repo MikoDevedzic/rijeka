@@ -145,20 +145,123 @@ def step_vol(paths: Paths, key: str, i: int) -> float:
     return max(float(f.sigma), 1e-6)
 
 
-def _step_bridges(paths: Paths, i: int, D: int) -> tuple[list[str], np.ndarray]:
-    """The daily bridges of step i for every spot factor, (paths, D, spot factors): a daily walk per factor, the
-    factors correlated as the paths' own shocks are (the calibration's matrix, its spot block), each walk less the
-    straight line to its own end. Drawn from the run's seed and the step alone, so it is the same array whenever
-    and for whichever factor it is asked."""
+def _step_normals(paths: Paths, i: int, D: int) -> tuple[list[str], np.ndarray]:
+    """Step i's daily standard normals for every factor, (paths, D, factors), correlated as the paths' own shocks
+    are (the calibration's matrix), with the factors' keys in the order of the columns: the spots, then the
+    rates. Drawn from the run's seed and the step alone, so it is the same array whenever and for whichever factor
+    it is asked. (The spots come first and are correlated among themselves by their own block's factor, so a
+    spot's level inside a step is the number 0.65.0 drew, before a rate had one.)"""
     c = paths.calib
-    keys = [k for k in c.order if c.factors[k].kind == "SPOT"]
+    spots = [k for k in c.order if c.factors[k].kind == "SPOT"]
+    rates = [k for k in c.order if c.factors[k].kind != "SPOT"]
+    keys = spots + rates
     idx = [c.order.index(k) for k in keys]
     corr = np.asarray(c.corr, dtype=float)[np.ix_(idx, idx)]
-    L = np.linalg.cholesky(corr + 1e-10 * np.eye(len(idx)))
+    ns = len(spots)
     rng = np.random.default_rng([int(paths.seed), INSIDE_TAG, i])
-    w = np.cumsum(rng.standard_normal((paths.n_paths, D, len(idx))) @ L.T, axis=1)
+    z_s = rng.standard_normal((paths.n_paths, D, ns))
+    out = np.empty((paths.n_paths, D, len(keys)))
+    L_s = np.linalg.cholesky(corr[:ns, :ns] + 1e-10 * np.eye(ns)) if ns else np.zeros((0, 0))
+    out[:, :, :ns] = z_s @ L_s.T
+    if rates:
+        z_r = rng.standard_normal((paths.n_paths, D, len(rates)))
+        L = np.linalg.cholesky(corr + 1e-10 * np.eye(len(keys)))
+        out[:, :, ns:] = z_s @ L[ns:, :ns].T + z_r @ L[ns:, ns:].T
+    return keys, out
+
+
+def _step_bridges(paths: Paths, i: int, D: int) -> tuple[list[str], np.ndarray]:
+    """The daily bridges of step i for every factor, (paths, D, factors): a daily walk per factor less the straight
+    line to its own end (what a spot's log does inside a step, about the line between its two grid levels)."""
+    keys, z = _step_normals(paths, i, D)
+    w = np.cumsum(z, axis=1)
     days = np.arange(1, D + 1)
     return keys, w - (days / D)[None, :, None] * w[:, -1:, :]
+
+
+def _inside(paths: Paths, T_years: float):
+    """Where a time falls on the grid: ("grid", j) on a grid date (or clamped to the first or last), else
+    ("step", i, d, D): day d of the D days of step i, t_{i-1} < T < t_i."""
+    t = paths.t
+    for j in range(len(t)):
+        if abs(float(t[j]) - T_years) <= 1e-9:
+            return ("grid", j)
+    if T_years <= 0.0:
+        return ("grid", 0)
+    if T_years >= float(t[-1]):
+        return ("grid", len(t) - 1)
+    i = int(np.searchsorted(t, T_years))
+    D = (paths.grid[i] - paths.grid[i - 1]).days
+    d = int(round((T_years - float(t[i - 1])) * 365.25))
+    if D < 2 or d <= 0:
+        return ("grid", i - 1)
+    if d >= D:
+        return ("grid", i)
+    return ("step", i, d, D)
+
+
+def rate_shift(paths: Paths, key: str, T_years: float) -> float:
+    """What simulate() adds to a rate factor's deviation at time T in a real-world run so the mean short rate
+    follows its target (today's rate, plus the factor's drift where the drift is the historical one) and not the
+    forward curve; nothing in a risk-neutral or forward-drift run. The same formulas as simulate(), at any time."""
+    c = paths.calib
+    if c.measure == "RISK_NEUTRAL" or c.drift_mode == "forward":
+        return 0.0
+    f = c.factors[key]
+    a, sig = max(f.a, 1e-4), max(f.sigma, 1e-6)
+    pf = paths.p0[key]
+    h = 1.0 / 365.25
+
+    def alpha(tt: float) -> float:
+        fwd = -(math.log(pf(tt + h)) - math.log(pf(max(tt - h, 0.0)))) / (2 * h if tt > h else h)
+        return fwd + (sig ** 2) / (2 * a ** 2) * (1 - math.exp(-a * tt)) ** 2
+    target = alpha(0.0) + (f.drift if c.drift_mode == "historical" else 0.0) * T_years
+    return target - alpha(T_years)
+
+
+def ou_bridge(a: float, sig: float, d: int, D: int) -> dict:
+    """The coefficients of an Ornstein-Uhlenbeck state on day d of a step of D days, given the states at both ends:
+    mean = lo·decay_d + c_d·(hi − lo·decay_D), variance var (what is left over is normal with it)."""
+    h = 1.0 / 365.25
+    v = lambda n: sig ** 2 * (1 - math.exp(-2 * a * n * h)) / (2 * a)
+    c_d = math.exp(-a * (D - d) * h) * v(d) / v(D)
+    return {"d": d, "D": D, "decay_d": math.exp(-a * d * h), "decay_D": math.exp(-a * D * h), "c_d": c_d, "v_d": v(d), "v_D": v(D),
+            "var": v(d) - c_d * c_d * v(D), "decay_1": math.exp(-a * h), "s_1": math.sqrt(v(1))}
+
+
+def rate_between(paths: Paths, key: str, T_years: float) -> np.ndarray:
+    """The deviation x of the rate factor `key` on every path at a time that is not a grid date (as paths.x holds it
+    on the grid): the state the path passed through between the two grid states either side. x is an
+    Ornstein-Uhlenbeck process, so given both ends it is normal about
+    x_{i-1} e^{-a d h} + c_d (x_i - x_{i-1} e^{-a D h}),  c_d = e^{-a (D-d) h} v(d) / v(D),  v(n) = sigma^2 (1 - e^{-2 a n h}) / (2a),
+    h one day, and what is left over is y_d - c_d y_D for a daily walk y of the same process from nothing, built on
+    the step's normals for this factor (_step_normals: one draw per step for every factor, correlated as the paths
+    are). In a real-world run the deterministic shift simulate() adds is taken off the two ends and put back at T
+    (rate_shift). Under historical sampling the step is a block of observed days: the block's end is kept and the
+    spread inside it is the factor's calibrated vol, an approximation. A time on a grid date is the grid's state."""
+    where = _inside(paths, T_years)
+    X = paths.x[key]
+    if where[0] == "grid":
+        return X[:, where[1]]
+    _, i, d, D = where
+    state = paths.inside.get((key, i, d))
+    if state is None:
+        f = paths.calib.factors[key]
+        a, sig = max(f.a, 1e-4), max(f.sigma, 1e-6)
+        k = ou_bridge(a, sig, d, D)
+        keys, z = _step_normals(paths, i, D)
+        zk = z[:, :, keys.index(key)]
+        y = np.zeros(paths.n_paths); y_d = None
+        for n in range(1, D + 1):
+            y = y * k["decay_1"] + k["s_1"] * zk[:, n - 1]
+            if n == d:
+                y_d = y.copy()
+        lo = X[:, i - 1] - rate_shift(paths, key, float(paths.t[i - 1]))
+        hi = X[:, i] - rate_shift(paths, key, float(paths.t[i]))
+        mean = lo * k["decay_d"] + k["c_d"] * (hi - lo * k["decay_D"])
+        state = mean + (y_d - k["c_d"] * y) + rate_shift(paths, key, T_years)
+        paths.inside[(key, i, d)] = state
+    return state
 
 
 def spot_between(paths: Paths, key: str, T_years: float) -> np.ndarray:
@@ -174,21 +277,10 @@ def spot_between(paths: Paths, key: str, T_years: float) -> np.ndarray:
     date (an option already expired, not yet settled) is today's level. The levels asked for are kept on the
     paths, one column each; the step's draw is made again when another date in it is asked."""
     S = paths.s[key]
-    t = paths.t
-    for j in range(len(t)):
-        if abs(float(t[j]) - T_years) <= 1e-9:
-            return S[:, j]
-    if T_years <= 0.0:
-        return S[:, 0]
-    if T_years >= float(t[-1]):
-        return S[:, -1]
-    i = int(np.searchsorted(t, T_years))                    # t[i-1] < T < t[i]
-    D = (paths.grid[i] - paths.grid[i - 1]).days
-    d = int(round((T_years - float(t[i - 1])) * 365.25))
-    if D < 2 or d <= 0:
-        return S[:, i - 1]
-    if d >= D:
-        return S[:, i]
+    where = _inside(paths, T_years)
+    if where[0] == "grid":
+        return S[:, where[1]]
+    _, i, d, D = where
     level = paths.inside.get((key, i, d))
     if level is None:
         keys, b = _step_bridges(paths, i, D)
@@ -214,9 +306,15 @@ def _block_increments(panel: np.ndarray, T: int, n_paths: int, rng) -> np.ndarra
 
 def bond(paths: Paths, key: str, i: int, T_years: float) -> np.ndarray:
     """P(t_i, T) on every path for the RATES factor `key`, T in years from as-of."""
+    return bond_at(paths, key, float(paths.t[i]), paths.x[key][:, i], T_years)
+
+
+def bond_at(paths: Paths, key: str, t_i: float, x: np.ndarray, T_years: float) -> np.ndarray:
+    """P(t, T) on every path from the factor's deviation x at time t (years from as-of): on a grid date the grid's
+    own column (bond), at an option's expiry inside a step the state the path passed through (rate_between)."""
     f = paths.calib.factors[key]
     a, sig = max(f.a, 1e-4), max(f.sigma, 1e-6)
-    t_i = float(paths.t[i]); tau = max(T_years - t_i, 0.0)
+    tau = max(T_years - t_i, 0.0)
     if tau <= 0:
         return np.ones(paths.n_paths)
     B = (1 - math.exp(-a * tau)) / a
@@ -229,7 +327,7 @@ def bond(paths: Paths, key: str, i: int, T_years: float) -> np.ndarray:
     # below the curve (≈ 8bp at 5y, 27bp at 10y for a = 3%, sigma = 85bp) until 2026-11. The risk-neutral
     # martingale check in tests/reference/test_ref_ccr.py pins it.
     phi = (sig ** 2) / (2 * a * a) * (1 - math.exp(-a * t_i)) ** 2
-    return ratio * np.exp(-B * (paths.x[key][:, i] + phi) - var)
+    return ratio * np.exp(-B * (x + phi) - var)
 
 
 def account(paths: Paths, key: str) -> np.ndarray:

@@ -390,33 +390,115 @@ def value_swaption(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float]
     return float(item.get("sign", 1.0)) * _value_swaption_long(item, paths, i, fx_to_usd, swap_value)
 
 
-def hw_implied_vol(item: dict, paths: Paths) -> float:
-    """The normal vol (decimal) at which Bachelier on today's forward swap rate equals the exact Hull-White
-    price of the swaption on the paths' own model (Jamshidian with the factor's a, sigma and the curve the
-    paths reproduce). Valuing with it before expiry is consistent with exercising on the paths at expiry;
-    with today's market vol instead, expected exposure stepped at expiry by the ratio of the two vols
-    (13–25 % in the reference test) until 2026-11. Cached on the item per path set."""
-    cache = item.setdefault("_hw_vol", {})
+def swaption_flows(item: dict, asof: date) -> dict:
+    """The swap a swaption delivers, as its cash flows per unit of the option's notional, from the payer's side
+    (floating received, fixed paid), in years from as-of:
+      fixed     [(pay, tau·n)]                      a coupon of K·tau·n at `pay`
+      floating  [(w, [(T, s), ...])]                products of bonds: a period [start, end] paid at `pay` is worth
+                                                    P(start)·P(pay)/P(end) − P(pay), its spread s·tau·P(pay)
+    n is the leg's notional over the option's. With the item's legs these are the swap ccr.valuation.value_swap
+    delivers at the expiry: its own start date, each period's end, each payment date. An item without legs (a
+    schedule of fixed coupons alone) has the floating leg of a par swap from its start to its last payment date,
+    P(start) − P(last payment). Kept on the item."""
+    got = item.get("_flows")
+    if got is not None:
+        return got
+    T_exp = _years(asof, item["expiry"])
+    N = float(item.get("N") or 1.0) or 1.0
+    fixed, floating = [], []
+    for lg, sched in item.get("legs") or []:
+        n = float(lg.get("notional") or N) / N
+        future = [(ps, pe, pay, tau) for (ps, pe, pay, tau) in sched if _years(asof, pay) > T_exp - 1e-9]
+        if str(lg.get("leg_type", "")).upper() == "FIXED":
+            fixed += [(_years(asof, pay), tau * n) for (_, _, pay, tau) in future]
+            continue
+        lev = (1.0 if lg.get("leverage") is None else float(lg.get("leverage"))) * n
+        spread = float(lg.get("spread") or 0.0) * n
+        for (ps, pe, pay, tau) in future:
+            ts, te, tp = max(_years(asof, ps), T_exp), _years(asof, pe), _years(asof, pay)
+            if abs(tp - te) <= 1e-12:
+                floating += [(lev, [(ts, 1)]), (-lev, [(te, 1)])]
+            else:
+                floating += [(lev, [(ts, 1), (tp, 1), (te, -1)]), (-lev, [(tp, 1)])]
+            if spread:
+                floating.append((spread * tau, [(tp, 1)]))
+    if not fixed:
+        fixed = [(_years(asof, pay), tau) for (_, _, pay, tau) in item["fixed_sched"] if _years(asof, pay) > T_exp - 1e-9]
+    if not floating and fixed:
+        floating = [(1.0, [(_years(asof, item["start"]), 1)]), (-1.0, [(fixed[-1][0], 1)])]
+    item["_flows"] = {"fixed": fixed, "floating": floating}
+    return item["_flows"]
+
+
+def _sum_of_bond_products(terms: list, P) -> Any:
+    """Σ w·Π P(T)^s over (w, [(T, s), ...]); P(T) a number (today's curve) or a column of the paths."""
+    total = 0.0
+    for w, bonds in terms:
+        v = w
+        for T, sgn in bonds:
+            v = v * P(T) if sgn > 0 else v / P(T)
+        total = total + v
+    return total
+
+
+def hw_price(item: dict, paths: Paths) -> Optional[dict]:
+    """The exact Hull-White price of the swaption on the paths' own model, per unit of notional, on the cash
+    flows of the swap it delivers (pricing.bermudan_swaption.price_european_swaption_hw1f_terms with the factor's
+    a, sigma and the curve the paths reproduce), with today's annuity A0 and forward F0 = floating leg / A0 on the
+    same flows. None when there is nothing to price. Cached on the item per path set."""
+    cache = item.setdefault("_hw_price", {})
     if id(paths) in cache:
         return cache[id(paths)]
-    from scipy.optimize import brentq
-    from pricing.bermudan_swaption import price_european_swaption_hw1f_jamshidian
+    from pricing.bermudan_swaption import price_european_swaption_hw1f_terms
     asof = paths.grid[0]
     key = f"RATES:{CURVE_OF.get(item['ccy'], item['ccy'] + '_OIS')}"
     f = paths.calib.factors[key]
     a, sig = max(f.a, 1e-4), max(f.sigma, 1e-6)
     T_exp = _years(asof, item["expiry"])
-    future = [(pay, tau) for (_, _, pay, tau) in item["fixed_sched"] if _years(asof, pay) > T_exp - 1e-9]
-    vol = item["vol"]
-    if future and T_exp > 1e-6:
+    fl = swaption_flows(item, asof)
+    out = None
+    if fl["fixed"] and T_exp > 1e-6:
         p0 = paths.p0[key]
-        pay_y = [_years(asof, pay) for pay, _ in future]
-        taus = [tau for _, tau in future]
-        A0 = sum(tau * p0(ty) for ty, tau in zip(pay_y, taus))
-        F0 = (p0(_years(asof, item["start"])) - p0(pay_y[-1])) / max(A0, 1e-12)
+        A0 = sum(tau * p0(ty) for ty, tau in fl["fixed"])
+        F0 = float(_sum_of_bond_products(fl["floating"], p0)) / max(A0, 1e-12)
+        terms = [(-item["K"] * tau, [(ty, 1)]) for ty, tau in fl["fixed"]] + list(fl["floating"])
         try:
-            jam = price_european_swaption_hw1f_jamshidian(1.0, item["K"], item["is_payer"], T_exp, pay_y, taus, a, sig, discount_fn=p0)
-            target = float(jam["npv"]) / max(A0, 1e-12)                    # per unit of annuity
+            out = {**price_european_swaption_hw1f_terms(terms, item["is_payer"], T_exp, a, sig, p0), "A0": A0, "F0": F0, "a": a, "sigma": sig, "T_exp": T_exp,
+                   "n_fixed": len(fl["fixed"])}
+            # the root as a level of the deviation x the paths carry (P(T_e, T) = exp(ln A − B·x), ccr.simulate.bond_at):
+            # the level at which the longest bond has the price it has at the pricer's root
+            from pricing.bermudan_swaption import hw1f_bond_price
+            T_ref = max(T for _, bonds in terms for T, _ in bonds)
+            Bx = (1 - math.exp(-a * (T_ref - T_exp))) / a
+            lnA = (math.log(p0(T_ref) / p0(T_exp)) - Bx * (sig ** 2) / (2 * a * a) * (1 - math.exp(-a * T_exp)) ** 2
+                   - (sig ** 2) / (4 * a) * Bx * Bx * (1 - math.exp(-2 * a * T_exp)))
+            out["x_star"] = (lnA - math.log(hw1f_bond_price(a, sig, T_exp, T_ref, out["r_star"], p0))) / Bx
+        except Exception as e:              # noqa: BLE001 — the caller keeps the market vol and says nothing new
+            log.debug("ccr: HW price for %s: %s", item.get("trade", ""), e)
+    cache[id(paths)] = out
+    return out
+
+
+def hw_implied_vol(item: dict, paths: Paths) -> float:
+    """The normal vol (decimal) at which Bachelier on today's forward swap rate equals the exact Hull-White
+    price of the swaption on the paths' own model (hw_price: the factor's a, sigma and the curve the paths
+    reproduce, on the cash flows of the swap delivered). Valuing with it before expiry is consistent with
+    exercising on the paths at expiry; with today's market vol instead, expected exposure stepped at expiry by the
+    ratio of the two vols (13–25 % in the reference test) until 2026-11. Until 0.66.0 the price was of a par swap
+    that starts at the expiry and ends on the last payment date, while the forward and the swap delivered on the
+    paths start two business days later and end on the last period's end: the value before the expiry stood 1.2
+    to 1.5 % above what the exercise on the paths gives (the model validator, 23 November 2026). Cached on the item
+    per path set."""
+    cache = item.setdefault("_hw_vol", {})
+    if id(paths) in cache:
+        return cache[id(paths)]
+    from scipy.optimize import brentq
+    vol = item["vol"]
+    g = hw_price(item, paths)
+    if g is not None:
+        try:
+            F0, T_exp = g["F0"], g["T_exp"]
+            target = float(g["npv"]) / max(g["A0"], 1e-12)                 # per unit of annuity
             intrinsic = max(F0 - item["K"], 0.0) if item["is_payer"] else max(item["K"] - F0, 0.0)
             if target > intrinsic + 1e-12:
                 vol = brentq(lambda s: float(bachelier(np.array([F0]), item["K"], T_exp, s, item["is_payer"])[0]) - target, 1e-6, 0.05, xtol=1e-9)
@@ -433,22 +515,41 @@ def _value_swaption_long(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, 
     key = f"RATES:{CURVE_OF.get(item['ccy'], item['ccy'] + '_OIS')}"
     k = fx_to_usd.get(item["ccy"], 1.0)
     if t_i < T_exp - 1e-9:
-        fixed = item["fixed_sched"]
-        future = [(pay, tau) for (_, _, pay, tau) in fixed if _years(asof, pay) > T_exp - 1e-9]
-        if not future:
+        fl = swaption_flows(item, asof)
+        if not fl["fixed"]:
             return np.zeros(paths.n_paths)
-        A = sum(tau * bond(paths, key, i, _years(asof, pay)) for pay, tau in future)
-        T0 = _years(asof, item["start"]); Tn = _years(asof, future[-1][0])
-        F = (bond(paths, key, i, T0) - bond(paths, key, i, Tn)) / np.maximum(A, 1e-12)
+        seen: dict[float, np.ndarray] = {}
+        P = lambda T: seen[T] if T in seen else seen.setdefault(T, bond(paths, key, i, T))    # noqa: E731
+        A = sum(tau * P(ty) for ty, tau in fl["fixed"])
+        # the forward of the swap delivered: its floating leg over its annuity, on the path's bonds, so
+        # N·A·(F − K) is that swap's value on the path and the option meets its own exercise at the expiry
+        F = _sum_of_bond_products(fl["floating"], P) / np.maximum(A, 1e-12)
         return item["N"] * A * bachelier(F, item["K"], T_exp - t_i, hw_implied_vol(item, paths), item["is_payer"]) * k
     # at or after expiry: physical settlement on the paths that were in the money at expiry
-    i_exp = min(j for j in range(len(paths.t)) if float(paths.t[j]) >= T_exp - 1e-9)
+    return np.where(exercised(item, paths, swap_value), swap_value(item, paths, i), 0.0)
+
+
+def exercised(item: dict, paths: Paths, swap_value) -> np.ndarray:
+    """The paths on which the swaption's holder takes the swap: those where the swap is worth having at the
+    expiry. On a grid date that is swap_value(item, paths, that date). An expiry is seldom a grid date (the grid is
+    monthly from the valuation date; a ticket's expiry rolls off a weekend two days in seven, and a booked trade's
+    falls anywhere in a step): the swap is then valued at the expiry itself, from the rate's state inside the step
+    (ccr.simulate.rate_between, ccr.valuation.value_swap with `at`). Until 0.66.0 the holder decided on the first
+    grid date at or after the expiry, up to a month late, with a month more of the rate's variance: an option with
+    a later expiry, worth more (2.5 % for one year, 14 % for three months, three days into a step). Kept on the
+    item per path set; the cash flows of the exercised swap (valuation.flows_per_step) read the same answer."""
     cache = item.setdefault("_exercised", {})
     mask = cache.get(id(paths))
     if mask is None:
-        mask = swap_value(item, paths, i_exp) > 0.0
+        T_exp = _years(paths.grid[0], item["expiry"])
+        i_exp = min(j for j in range(len(paths.t)) if float(paths.t[j]) >= T_exp - 1e-9)
+        if abs(float(paths.t[i_exp]) - T_exp) <= 1e-9 or T_exp <= 0.0:
+            mask = swap_value(item, paths, i_exp) > 0.0
+        else:
+            from ccr.valuation import value_swap
+            mask = value_swap(item, paths, i_exp, {}, at=T_exp) > 0.0
         cache[id(paths)] = mask
-    return np.where(mask, swap_value(item, paths, i), 0.0)
+    return mask
 
 
 # ── FX options ───────────────────────────────────────────────────────────────

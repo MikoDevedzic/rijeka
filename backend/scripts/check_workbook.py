@@ -121,6 +121,9 @@ TYPED_CSA = {"preset": "BILATERAL", "threshold_cp": 250_000.0, "threshold_own": 
              "im_yield_pickup_bp": 10.0, "vm_post_carry_bp": 15.0, "vm_recv_carry_bp": -10.0}
 TYPED_WWR = 1.25
 DATES = ("2026-08-03", "2026-11-18", "2026-12-30", "2027-03-29", "2028-02-27")     # a weekend's roll, a year-end, a month-end, a leap day among them
+# a swaption's expiry is a year on, moved off a weekend: on none of the dates above does it leave the monthly grid.
+# On this one it does (a Friday: a year on is a Saturday), and the holder decides inside a step (0.66.0)
+SWAPTION_DATES = DATES + ("2026-11-20",)
 
 
 def typed_terms(mkt, n_paths: int = 12, product: str = "swap") -> list[dict]:
@@ -184,7 +187,7 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--dates", nargs="*", default=None, help=f"valuation dates of the test market (default: {' '.join(DATES)})")
     a = ap.parse_args(argv)
     bad = 0
-    for d in (a.dates or DATES):
+    for d in (a.dates or (SWAPTION_DATES if a.product == "xva_swaption" else DATES)):
         mkt = test_market(date.fromisoformat(d))
         if a.product in ("xva_rates", "xva_cap", "xva_floor", "xva_collar", "xva_swaption"):
             from methodology.xva_workbook import PRESETS, xva_rates_workbook

@@ -13,6 +13,7 @@ import logging
 from datetime import date, timedelta
 from functools import partial
 from decimal import Decimal
+from typing import Optional
 
 import numpy as np
 
@@ -186,9 +187,23 @@ def _bond_once(seen: dict, paths: Paths, key: str, i: int, T: float) -> np.ndarr
     return seen[T]
 
 
-def value_swap(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float]) -> np.ndarray:
+_grid_bond, _grid_bond_once = bond, _bond_once
+
+
+def value_swap(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float], at: Optional[float] = None) -> np.ndarray:
+    """The swap's value on every path at grid date i; or, with `at` (years from as-of), at that time inside a
+    step, from the state the path passed through there (ccr.simulate.rate_between): what a swaption's holder
+    looks at on the expiry when the expiry is not a grid date."""
     asof = paths.grid[0]; t_i = float(paths.t[i])
     key = f"RATES:{CURVE_OF.get(item['ccy'], item['ccy'] + '_OIS')}"
+    if at is not None:
+        from ccr.simulate import bond_at, rate_between
+        t_i = float(at)
+        x_at = rate_between(paths, key, t_i)
+        bond = lambda _p, _k, _i, T: bond_at(paths, key, t_i, x_at, T)             # noqa: E731  this call's bonds, from that state
+        _bond_once = lambda seen, _p, _k, _i, T: seen.setdefault(T, bond_at(paths, key, t_i, x_at, T))   # noqa: E731
+    else:
+        bond, _bond_once = _grid_bond, _grid_bond_once
     v = np.zeros(paths.n_paths)
     for lg, sched in item["legs"]:
         sign = -1.0 if str(lg.get("direction", "")).upper().startswith("PAY") else 1.0
@@ -275,11 +290,7 @@ def flows_per_step(ns: NettingSet, paths: Paths, fx_to_usd: dict[str, float]) ->
             i_exp = min((j for j in range(len(paths.t)) if float(paths.t[j]) >= t_exp - 1e-9), default=None)
             if i_exp is None:
                 continue
-            cache = it.setdefault("_exercised", {})
-            mask = cache.get(id(paths))
-            if mask is None:
-                mask = value_swap(it, paths, i_exp, fx_to_usd) > 0.0
-                cache[id(paths)] = mask
+            mask = O.exercised(it, paths, lambda item, p, j: value_swap(item, p, j, fx_to_usd))
             weight = float(it.get("sign", 1.0)) * mask.astype(float)
         for lg, sched in it["legs"]:
             pay_sign = 1.0 if str(lg.get("direction", "")).upper().startswith("PAY") else -1.0

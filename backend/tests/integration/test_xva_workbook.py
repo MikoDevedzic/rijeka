@@ -130,8 +130,8 @@ def test_the_swaption_xva_workbook_runs_what_the_swaption_tickets_route_runs(cli
         assert out["ee"] == pytest.approx([round(v, 2) for v in wf.ee], abs=0.0051), preset
         assert out["ene"] == pytest.approx([round(v, 2) for v in wf.ene], abs=0.0051), preset
     # the value today is the model's exact price of the option, and some paths exercise and some do not
-    assert eng["v0"] == pytest.approx(10_000_000.0 * o["jam"]["npv"], rel=1e-6)
-    exercised = int((o["swap"][:, o["i_exp"]] > 0).sum())
+    assert eng["v0"] == pytest.approx(10_000_000.0 * o["hw"]["npv"], rel=1e-6)
+    exercised = int(o["took"].sum())
     assert 0 < exercised < n
 
 

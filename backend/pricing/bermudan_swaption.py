@@ -244,11 +244,18 @@ def price_european_swaption_hw1f_jamshidian(
     notional_schedule: Optional[List[float]] = None,
     r_search_lo      : float = -0.50,
     r_search_hi      : float = +0.50,
+    start_y          : Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Exact HW1F European swaption price via Jamshidian decomposition.
 
-    Supports amortizing notionals. Forward-starting at T_e = expiry_y.
+    Supports amortizing notionals. The swap starts at `start_y` (years), at the expiry when none is given.
+    A swap that starts after the expiry (a ticket's starts two business days later) has a floating leg worth
+    N_1·P(T_e, T_0) at the expiry, not N_1: the payer's payoff is (N_1·P(T_e, T_0) − Σ c_k·P(T_e, T_k))⁺. Every
+    bond falls as the rate rises, so with r* the rate at which the two sides are equal the payoff is
+    Σ c_k·(K_k − P(T_e, T_k))⁺ − N_1·(K_0 − P(T_e, T_0))⁺, K_0 = P(T_e, T_0 | r*): the same puts, less a put on
+    the bond to the start. (Until 0.66.0 the exposure engine priced every swaption as if its swap started at
+    the expiry; `start` in the result says which was priced.)
 
     Returns dict with `npv`, `r_star` (decomposition pivot), `coupon_strikes`
     (per-period ZCB strikes), and per-period ZBO contributions.
@@ -288,16 +295,19 @@ def price_european_swaption_hw1f_jamshidian(
         c[k] = (N_per[k] - N_per[k + 1]) + K * N_per[k] * period_dcf[k]
     c[n_periods - 1] = N_per[n_periods - 1] + K * N_per[n_periods - 1] * period_dcf[n_periods - 1]
 
-    # Strike of the put-on-coupon-bond (forward-start: PV_float(T_e) = N_1)
+    # Strike of the put-on-coupon-bond: PV_float(T_e) = N_1·P(T_e, T_0), which is N_1 when the swap starts at T_e
     coupon_strike = N_per[0]
+    late_start = start_y is not None and float(start_y) > expiry_y + 1e-9
 
-    # Solve for r* such that bond-PV at T_e equals N_1.
+    # Solve for r* such that bond-PV at T_e equals the floating leg's value there.
     def _cb_value(r):
         s = 0.0
         for k in range(n_periods):
             T_k = payment_dates_y[k]
             P_TeTk = hw1f_bond_price(a, sigma, expiry_y, T_k, r, discount_fn)
             s += c[k] * P_TeTk
+        if late_start:
+            return s - coupon_strike * hw1f_bond_price(a, sigma, expiry_y, float(start_y), r, discount_fn)
         return s - coupon_strike
 
     # Bracket — must straddle zero.
@@ -344,8 +354,16 @@ def price_european_swaption_hw1f_jamshidian(
             "weighted": c[k] * zbo,
         })
         npv += c[k] * zbo
+    start_term = None
+    if late_start:
+        K_0 = hw1f_bond_price(a, sigma, expiry_y, float(start_y), r_star, discount_fn)
+        zbo_0 = _hw1f_zbo_price(a, sigma, expiry_y, float(start_y), K_0, discount_fn, is_call=is_call_zbo)
+        start_term = {"T_0": float(start_y), "c_0": -coupon_strike, "K_0": K_0, "ZBO_0": zbo_0, "weighted": -coupon_strike * zbo_0}
+        npv -= coupon_strike * zbo_0
 
     return {
+        "start":          float(start_y) if late_start else float(expiry_y),
+        "start_term":     start_term,
         "npv":            float(npv),
         "r_star":         float(r_star),
         "coupon_strike":  float(coupon_strike),
@@ -359,6 +377,80 @@ def price_european_swaption_hw1f_jamshidian(
 # ─────────────────────────────────────────────────────────────────────────────
 # Trinomial tree
 # ─────────────────────────────────────────────────────────────────────────────
+
+def price_european_swaption_hw1f_terms(
+    terms       : List[tuple],
+    is_payer    : bool,
+    expiry_y    : float,
+    a           : float,
+    sigma       : float,
+    discount_fn,
+    r_search_lo : float = -0.50,
+    r_search_hi : float = +0.50,
+) -> Dict[str, Any]:
+    """
+    Exact HW1F price of a European option on a swap given as its cash flows: the swap the holder is delivered,
+    with its own start date, period ends and payment dates, not a par bond that starts at the expiry.
+
+    `terms` is the payer swap's value at the expiry per unit of notional (floating received, fixed paid) as a
+    sum of products of bonds: each term (w, [(T, s), ...]) is w · Π P(T_e, T)^s, s = +1 or −1. A fixed coupon is
+    (−K·τ, [(pay, 1)]); a floating period [start, end] paid at `pay` is worth P(start)·P(pay)/P(end) − P(pay):
+    (1, [(start, 1), (pay, 1), (end, −1)]) and (−1, [(pay, 1)]).
+
+    Under HW1F every bond is A(T_e, T)·exp(−B(T_e, T)·r) in the short rate r at the expiry, so every term is
+    α·exp(−β·r) with α = w·Π A^s and β = Σ s·B, and the payer swap's value f(r) = Σ α·exp(−β·r) rises with r
+    through one root r*. Under the T_e-forward measure r is normal with variance s² = σ²(1 − e^{−2a·T_e})/(2a)
+    and a mean μ that any bond gives (P(0,T)/P(0,T_e) = A·exp(−B·μ + ½B²s²)). Then
+        Payer    =  P(0,T_e) · Σ α·exp(−β·μ + ½β²s²) · Φ((μ − β·s² − r*)/s)
+        Receiver = −P(0,T_e) · Σ α·exp(−β·μ + ½β²s²) · Φ((r* − μ + β·s²)/s)
+    which is Jamshidian's decomposition written term by term (for a par swap starting at the expiry it is the sum
+    of bond options of price_european_swaption_hw1f_jamshidian, to rounding). Returns npv per unit of notional,
+    the root, μ, s and, per term, α, β, its forward value and its part of the price.
+    """
+    from scipy.optimize import brentq
+    from scipy.stats import norm
+
+    ab = []
+    for w, bonds in terms:
+        alpha, beta = float(w), 0.0
+        for T, sgn in bonds:
+            if T > expiry_y:
+                alpha *= hw1f_A(a, sigma, expiry_y, T, discount_fn) ** sgn
+                beta += sgn * hw1f_B(a, T - expiry_y)
+        ab.append((alpha, beta))
+
+    def f(r):
+        return sum(al * math.exp(-be * r) for al, be in ab)
+
+    lo, hi = r_search_lo, r_search_hi
+    if f(lo) * f(hi) > 0:
+        for w_ in (1.0, 2.0, 5.0):
+            if f(-w_) * f(w_) <= 0:
+                lo, hi = -w_, w_
+                break
+        else:
+            raise RuntimeError("swaption on cash flows: the swap's value has no root in the short rate")
+    if not f(lo) < 0 < f(hi):
+        raise RuntimeError("swaption on cash flows: the payer swap's value does not rise with the short rate")
+    r_star = brentq(f, lo, hi, xtol=1e-13, rtol=1e-13)
+
+    s2 = sigma * sigma * expiry_y if a < 1e-9 else sigma * sigma * (1.0 - math.exp(-2.0 * a * expiry_y)) / (2.0 * a)
+    s = math.sqrt(max(s2, 1e-300))
+    T_ref = max([T for _, bonds in terms for T, _ in bonds if T > expiry_y], default=expiry_y + 1.0)
+    P_e = discount_fn(expiry_y)
+    B_ref = hw1f_B(a, T_ref - expiry_y)
+    mu = (math.log(hw1f_A(a, sigma, expiry_y, T_ref, discount_fn)) - math.log(discount_fn(T_ref) / P_e) + 0.5 * B_ref * B_ref * s2) / B_ref
+
+    parts, npv = [], 0.0
+    for (al, be), (w, bonds) in zip(ab, terms):
+        fwd = al * math.exp(-be * mu + 0.5 * be * be * s2)                 # the term's forward value at the expiry
+        d = (mu - be * s2 - r_star) / s
+        part = P_e * fwd * (norm.cdf(d) if is_payer else -norm.cdf(-d))
+        parts.append({"w": float(w), "bonds": list(bonds), "alpha": al, "beta": be, "forward": fwd, "d": d, "part": part,
+                      "at_root": al * math.exp(-be * r_star)})
+        npv += part
+    return {"npv": float(npv), "r_star": float(r_star), "mu": float(mu), "s": float(s), "P_expiry": float(P_e), "terms": parts, "is_payer": is_payer}
+
 
 class HW1FTrinomialTree:
     """
