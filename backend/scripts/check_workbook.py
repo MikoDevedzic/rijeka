@@ -1,6 +1,6 @@
 """Evaluate a replication workbook's Checks sheet outside Excel: every formula against the engine's value.
 
-    python -m scripts.check_workbook xva_rates|xva_cap [--paths 12] [--presets UNCOLLATERALISED BILATERAL ON_CHAIN] [--dates 2026-08-03 ...]
+    python -m scripts.check_workbook xva_rates|xva_cap|xva_floor|xva_collar [--paths 12] [--presets UNCOLLATERALISED BILATERAL ON_CHAIN] [--dates 2026-08-03 ...]
 
 The book is built on a stated test market (a sloped curve, the demo's parametric swaption grid) on five valuation
 dates, not on an account's: nothing is read from a database. For the XVA book it also types non-zero CSA terms into the
@@ -173,9 +173,9 @@ def main(argv: list[str]) -> int:
     bad = 0
     for d in (a.dates or DATES):
         mkt = test_market(date.fromisoformat(d))
-        if a.product in ("xva_rates", "xva_cap"):
+        if a.product in ("xva_rates", "xva_cap", "xva_floor", "xva_collar"):
             from methodology.xva_workbook import PRESETS, xva_rates_workbook
-            product = "cap" if a.product == "xva_cap" else "swap"
+            product = {"xva_rates": "swap", "xva_cap": "cap", "xva_floor": "floor", "xva_collar": "collar"}[a.product]
             wb, _ = xva_rates_workbook(mkt, a.paths, product=product)
             W.finish(wb)
             bio = io.BytesIO(); wb.save(bio)

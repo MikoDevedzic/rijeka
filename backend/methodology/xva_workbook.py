@@ -50,6 +50,15 @@ BASKET_DEF = [("1Y", "5Y", 1.0), ("2Y", "5Y", 1.0), ("3Y", "5Y", 1.0), ("5Y", "5
               ("1Y", "1Y", 0.8), ("1Y", "2Y", 0.8), ("1Y", "3Y", 0.8), ("1Y", "7Y", 0.8), ("1Y", "9Y", 0.8), ("3Y", "7Y", 0.8), ("7Y", "3Y", 0.8), ("5Y", "9Y", 0.7)]
 MAX_PAY = 9
 GRID_R0 = 24            # Model: the grid's row for k = 0
+CAP_LIKE = ("cap", "floor", "collar")      # the products valued period by period on the paths (ccr/options.value_caplets)
+COLLAR_HALF_WIDTH = 0.005                  # the collar's strikes: FIXED_RATE plus (the cap, bought) and minus (the floor, sold) 50bp
+OPTION_WORD = {"cap": "cap", "floor": "floor", "collar": "collar"}
+
+
+def strikes_of(product: str) -> dict:
+    """{type: strike} of the book's option: a cap and a floor at FIXED_RATE; a collar's cap above it and its floor below."""
+    return {"cap": {"CAP": FIXED_RATE}, "floor": {"FLOOR": FIXED_RATE},
+            "collar": {"CAP": FIXED_RATE + COLLAR_HALF_WIDTH, "FLOOR": FIXED_RATE - COLLAR_HALF_WIDTH}}[product]
 
 
 
@@ -107,13 +116,17 @@ def trade_body(val: date, product: str = "swap") -> dict:
     quarterly, as the cap ticket books it: one floating leg with no participation in the rate and the cap on it."""
     from ccr.simulate import add_months
     eff = spot_date(val); mat = add_months(eff, 12 * TENOR_YEARS)
-    if product == "cap":
-        return {"instrument_type": "IR_CAP", "asset_class": "RATES", "structure": None, "notional": NOTIONAL, "notional_ccy": "USD",
+    if product in CAP_LIKE:
+        # a floor (0.62.0): the floor bought, as the floor ticket books it. A collar: the cap bought and the floor sold,
+        # so the book carries a written option on the paths as well as a held one
+        ks = strikes_of(product)
+        return {"instrument_type": f"IR_{product.upper()}", "asset_class": "RATES", "structure": None, "notional": NOTIONAL, "notional_ccy": "USD",
                 "trade_date": val.isoformat(), "effective_date": eff.isoformat(), "maturity_date": mat.isoformat(),
-                "terms": {"option": "CAP", "side": "BUY", "cap_rate": FIXED_RATE},
+                "terms": {"option": product.upper(), "side": "BUY", "cap_rate": ks.get("CAP"), "floor_rate": ks.get("FLOOR")},
                 "legs": [{"leg_ref": "OPT-1", "leg_seq": 1, "leg_type": "FLOAT", "direction": "RECEIVE", "currency": "USD", "notional": NOTIONAL,
                           "payment_frequency": "QUARTERLY", "day_count": "ACT/360", "bdc": "MOD_FOLLOWING", "payment_lag": 2, "leverage": 0, "spread": 0,
-                          "embedded_options": [{"type": "CAP", "direction": "BUY", "default_strike": FIXED_RATE, "strike_schedule": []}]}]}
+                          "embedded_options": [{"type": t, "direction": "SELL" if (product == "collar" and t == "FLOOR") else "BUY", "default_strike": k, "strike_schedule": []}
+                                               for t, k in ks.items()]}]}
     pay, rec = ("PAY", "RECEIVE") if DIRECTION == "PAY" else ("RECEIVE", "PAY")
     return {"instrument_type": "IR_SWAP", "asset_class": "RATES", "structure": "VANILLA", "notional": NOTIONAL, "notional_ccy": "USD",
             "trade_date": val.isoformat(), "effective_date": eff.isoformat(), "maturity_date": mat.isoformat(),
@@ -132,8 +145,8 @@ def the_trade(val: date, product: str = "swap"):
     ns = NettingSet(None, {"sub": who}, [hypothetical_trade(body, None, who)], val, mkt=None)
     if len(ns.items) != 1 or ns.items[0]["kind"] != "SWAP":
         raise ValueError(f"the workbook's trade was not taken as a swap: {ns.skipped}")
-    if product == "cap" and len(ns.items[0].get("caplets") or []) != 1:
-        raise ValueError("the workbook's cap was not taken as one strip of caplets")
+    if product in CAP_LIKE and [c["type"] for c in ns.items[0].get("caplets") or []] != list(strikes_of(product)):
+        raise ValueError(f"the workbook's {product} was not taken as its strips of caplets and floorlets")
     item = dict(ns.items[0])
     item["effective"] = date.fromisoformat(body["effective_date"])
     return item, ns.months
@@ -229,7 +242,9 @@ def _model_sheet(wb, mkt, fit, eng):
                 "P(t,T) = P(0,T)/P(0,t)·exp(−B·(x + φ) − σ²/4a·B²·(1 − e^(−2at))), which reprices today's curve."); ws["A2"].font = W.F_SUB
     rows = [("Mean reversion a", eng["a"], "0.000000", True), ("σ (short-rate vol, decimal)", eng["sig"], "0.000000", True),
             ("Δ: the mean step in years (the waterfall's one step length)", f"=C{GRID_R0 + T}/Nsteps", "0.00000000", False),
-            ("Steps T (monthly dates to the first on or after the maturity)", T, "0", False), ("Notional", NOTIONAL, "#,##0", True), ("Cap strike K" if eng.get("product") == "cap" else "Fixed rate K", FIXED_RATE, "0.0000%", True),
+            ("Steps T (monthly dates to the first on or after the maturity)", T, "0", False), ("Notional", NOTIONAL, "#,##0", True),
+            ({"cap": "Cap strike K", "floor": "Floor strike K", "collar": "Cap strike K (the collar's cap, bought)"}.get(eng.get("product"), "Fixed rate K"),
+             next(iter(strikes_of(eng["product"]).values())) if eng.get("product") in CAP_LIKE else FIXED_RATE, "0.0000%", True),
             ("Paths", eng["n"], "0", False),
             ("Mode (ENGINE: the engine's draws; LIVE: Excel re-rolls)", "ENGINE", "@", True),
             ("σ²/(2a²)", "=HW_sig^2/(2*HW_a^2)", "0.00000000", False), ("σ²/(4a)", "=HW_sig^2/(4*HW_a)", "0.00000000", False),
@@ -242,6 +257,10 @@ def _model_sheet(wb, mkt, fit, eng):
         if label.startswith(("Mean reversion", "σ (short")):
             c.fill = W.FILL_RJ
     W.dropdown(ws, "B11", ["ENGINE", "LIVE"])
+    if eng.get("product") == "collar":
+        ws["A15"] = "Floor strike (the collar's floor, sold)"
+        c = ws["B15"]; c.value = strikes_of("collar")["FLOOR"]; c.number_format = "0.0000%"; c.fill = W.FILL_IN
+        _names(wb, {"Kfloor": "Model!B15"})
     _names(wb, {"HW_a": "Model!B4", "HW_sig": "Model!B5", "Dt": "Model!B6", "Nsteps": "Model!B7", "Notl": "Model!B8", "Kfix": "Model!B9",
                 "Npaths": "Model!B10", "Mode": "Model!B11", "SigA2": "Model!B12", "SigA4": "Model!B13", "Mat": "Model!B14"})
     ws.cell(row=GRID_R0 - 2, column=1, value="THE GRID").font = W.F_SECTION
@@ -279,15 +298,20 @@ def _trade_sheet(wb, eng):
     periods = []
     r = 9
     t = [float(x) for x in eng["p"].t]
-    cap = eng.get("product") == "cap"
+    product = eng.get("product")
+    cap = product in CAP_LIKE
     if cap:
-        ws["A2"] = ("A bought cap from spot, quarterly, ACT/360, modified following, each period paid two business days after it ends: one floating leg with no participation "
-                    "in the rate and the cap on it, as the cap ticket books it. A period pays N·max(G − X, 0), G what one unit grows to over the period and X = 1 + τ·K. "
+        what = {"cap": "A bought cap", "floor": "A bought floor", "collar": "A collar, the cap bought and the floor sold,"}[product]
+        pays = {"cap": "A period pays N·max(G − X, 0)", "floor": "A period pays N·max(X − G, 0)",
+                "collar": "A period of the cap pays N·max(G − X, 0) and a period of the floor N·max(X − G, 0)"}[product]
+        ws["A2"] = (f"{what} from spot, quarterly, ACT/360, modified following, each period paid two business days after it ends: one floating leg with no participation "
+                    f"in the rate and the option{'s' if product == 'collar' else ''} on it, as the {product} ticket books it. {pays}, G what one unit grows to over the period and X = 1 + τ·K. "
                     "The dates are the production schedule generator's (values); every amount below them is a formula.")
-        ws["D4"] = "The book is of this cap, bought (column B: +1, held): the Engine sheet's figures are this trade's, so the side is not an input."
+        ws["D4"] = (f"The book is of this {product}" + (", the cap held (column B: +1) and the floor written (−1)" if product == "collar" else ", bought (column B: +1, held)")
+                    + ": the Engine sheet's figures are this trade's, so the side is not an input.")
         ws.cell(row=8, column=12, value="X = 1 + τ·K").font = W.F_SUB
-    # a swap: every period of each leg. A cap: the periods of its strip of caplets (the leg itself pays nothing)
-    legs = [({"leg_type": "CAP", "direction": "RECEIVE" if c["sign"] > 0 else "PAY"}, c["periods"]) for c in item["caplets"]] if cap else item["legs"]
+    # a swap: every period of each leg. A cap, a floor, a collar: the periods of each strip (the leg itself pays nothing)
+    legs = [({"leg_type": c["type"], "direction": "RECEIVE" if c["sign"] > 0 else "PAY"}, c["periods"]) for c in item["caplets"]] if cap else item["legs"]
     for lg, sched in legs:
         kind = str(lg["leg_type"]).upper(); sign = -1 if str(lg["direction"]).upper().startswith("PAY") else 1
         for (ps, pe, pay, tau) in sched:
@@ -302,8 +326,9 @@ def _trade_sheet(wb, eng):
                 ws.cell(row=r, column=col, value=f"=({src}{r}-ValDate)/365.25").number_format = "0.000000"
             ws.cell(row=r, column=11, value=step)
             if cap:
-                ws.cell(row=r, column=12, value=f"=1+F{r}*Kfix").number_format = "0.0000000000"
-            periods.append({"row": r, "kind": kind, "sign": sign, "ps": ps, "pe": pe, "pay": pay, "tau": float(tau),
+                strike = "Kfloor" if (product == "collar" and kind == "FLOOR") else "Kfix"
+                ws.cell(row=r, column=12, value=f"=1+F{r}*{strike}").number_format = "0.0000000000"
+            periods.append({"row": r, "kind": kind, "sign": sign, "call": kind != "FLOOR", "ps": ps, "pe": pe, "pay": pay, "tau": float(tau),
                             "ts": years(val, ps), "te": years(val, pe), "tp": tp, "step": step})
             r += 1
     dates = sorted({d for q in periods for d in (q["ps"], q["pe"], q["pay"]) if years(val, d) > 1e-12})
@@ -590,11 +615,12 @@ def _paths_sheet(wb, eng, periods, dates, idx, dr0, rB, rA, zrows, vcells=None):
             out += f"/{end}"
         return f"({out})"
 
-    cap = eng.get("product") == "cap"
-    floats = [qd for qd in periods if qd["kind"] == ("CAP" if cap else "FLOAT")]
-    # each floating period's whole growth: what it pays is N·(G − 1); a cap's period pays N·max(G − X, 0)
+    cap = eng.get("product") in CAP_LIKE
+    floats = [qd for qd in periods if (qd["kind"] in ("CAP", "FLOOR") if cap else qd["kind"] == "FLOAT")]
+    # each floating period's whole growth: what it pays is N·(G − 1); a cap's period pays N·max(G − X, 0), a floor's N·max(X − G, 0)
     gb = _block(ws, top, n, len(floats), lambda q, j, r, c: "=" + growth(q, floats[j - 1]["ps"], db=floats[j - 1]["pe"]), "0.0000000000",
-                "G: growth of one unit over each period (column = period, in the Trade sheet's order): " + ("a cap's period pays N·max(G − X, 0)" if cap else "the period pays N·(G − 1)"))
+                "G: growth of one unit over each period (column = period, in the Trade sheet's order): "
+                + ("a cap's period pays N·max(G − X, 0), a floor's N·max(X − G, 0)" if cap else "the period pays N·(G − 1)"))
     B["GROW"] = gb; top = gb[1] + 3
 
     if cap:
@@ -602,6 +628,11 @@ def _paths_sheet(wb, eng, periods, dates, idx, dr0, rB, rA, zrows, vcells=None):
         # to the period's end, or the two bonds' ratio before it begins), and U, the caplet per unit: Black on M with
         # the Variance sheet's figure while the period is open, the payoff of G once it has ended.
         X = lambda f: f"Trade!$L${floats[f]['row']}"
+        # what a period is worth per unit at its end, and before it: a cap the call on the growth, a floor the put
+        payoff = lambda f, g: f"MAX({g}-{X(f)},0)" if floats[f]["call"] else f"MAX({X(f)}-{g},0)"
+        black = lambda f, m, d1, v: (f"{m}*NORMSDIST({d1})-{X(f)}*NORMSDIST({d1}-{v})" if floats[f]["call"]
+                                     else f"{X(f)}*NORMSDIST({v}-{d1})-{m}*NORMSDIST(-({d1}))")
+        let = lambda f: "caplet" if floats[f]["call"] else "floorlet"
         mb, ub = [], []
         for f, qd in enumerate(floats):
             def m_cell(q, j, r, c, qd=qd):
@@ -616,11 +647,12 @@ def _paths_sheet(wb, eng, periods, dates, idx, dr0, rB, rA, zrows, vcells=None):
                 if not qd["tp"] > t[j] + 1e-9:
                     return None                                   # paid
                 if not qd["te"] > t[j] + 1e-9:
-                    return f"=MAX({L(2 + f)}{gb[0] + q}-{X(f)},0)"
+                    return "=" + payoff(f, f"{L(2 + f)}{gb[0] + q}")
                 m, v = f"{L(c)}{mb[f][0] + q}", vcells[f][j]
                 d1 = f"(LN({m}/{X(f)})+{v}^2/2)/MAX({v},1E-12)"            # the IF below takes the payoff where no variance is left; the guard keeps the other branch a number
-                return f"=IF({v}<1E-10,MAX({m}-{X(f)},0),{m}*NORMSDIST({d1})-{X(f)}*NORMSDIST({d1}-{v}))"
-            blk = _block(ws, top, n, T, u_cell, "0.0000000000", f"U, period {f + 1}: the caplet per unit of notional before discounting: Black on M while the period is open, max(G − X, 0) once it has ended; empty once paid")
+                return f"=IF({v}<1E-10,{payoff(f, m)},{black(f, m, d1, v)})"
+            blk = _block(ws, top, n, T, u_cell, "0.0000000000", f"U, period {f + 1}: the {let(f)} per unit of notional before discounting: Black on M while the period is open, "
+                         + ("max(G − X, 0)" if qd["call"] else "max(X − G, 0)") + " once it has ended; empty once paid")
             ub.append(blk); top = blk[1] + 3
         B["M"], B["U"] = mb, ub
 
@@ -629,7 +661,7 @@ def _paths_sheet(wb, eng, periods, dates, idx, dr0, rB, rA, zrows, vcells=None):
             return "=" + ("".join(terms) if terms else "0")
 
         def flow(q, j):
-            return "".join(f"{'+' if qd['sign'] > 0 else '-'}Notl*MAX({L(2 + f)}{gb[0] + q}-{X(f)},0)" for f, qd in enumerate(floats) if qd["step"] == j)
+            return "".join(f"{'+' if qd['sign'] > 0 else '-'}Notl*{payoff(f, f'{L(2 + f)}{gb[0] + q}')}" for f, qd in enumerate(floats) if qd["step"] == j)
 
         # today: the same formula with the curve's own bonds
         def today():
@@ -638,12 +670,12 @@ def _paths_sheet(wb, eng, periods, dates, idx, dr0, rB, rA, zrows, vcells=None):
                 m = f"({bond(0, 0, qd['ps'])}/{bond(0, 0, qd['pe'])})"
                 v = vcells[f][0]
                 d1 = f"(LN({m}/{X(f)})+{v}^2/2)/MAX({v},1E-12)"
-                terms.append(f"{'+' if qd['sign'] > 0 else '-'}Notl*{bond(0, 0, qd['pay'])}*({m}*NORMSDIST({d1})-{X(f)}*NORMSDIST({d1}-{v}))")
+                terms.append(f"{'+' if qd['sign'] > 0 else '-'}Notl*{bond(0, 0, qd['pay'])}*({black(f, m, d1, v)})")
             return "=" + "".join(terms)
         B["V"] = _block(ws, top, n, T, lambda q, j, r, c: value(q, j), "#,##0.00", "V: each period not yet paid, N·P(t, pay)·U")
         vb = B["V"]; top = vb[1] + 3
         B["PAID"] = _block(ws, top, n, T, lambda q, j, r, c: "=" + ("0" if j == 1 else f"{L(c - 1)}{r}") + flow(q, j), "#,##0.00",
-                           "PAID: what the cap has paid us by each date, N·max(G − X, 0) of each period paid: V + PAID is the value with its payments still in it, which has no jump at a payment")
+                           "PAID: what the option has paid us by each date (and what we have paid on one we wrote), each period's payoff as it is paid: V + PAID is the value with its payments still in it, which has no jump at a payment")
         top = B["PAID"][1] + 3
         B["W"] = _block(ws, top, n, T, lambda q, j, r, c: f"=(1/{L(c)}{ab[0] + q})/(SUMPRODUCT(1/{L(c)}${ab[0]}:{L(c)}${ab[1]})/Npaths)", "0.00000000",
                         "w: the path's discount factor over the paths' mean one, (1/A) / mean(1/A): what each path's discounting is over the curve's")
@@ -899,18 +931,23 @@ def _engine_paths(wb, eng, B):
             (f"the net cash path 1 has been paid by step {T}", float(eng["paid"][0, T - 1]), f"Paths!{last}{B['PAID'][0]}"),
             (f"the discounting weight on path 1 at step {T}", float(eng["w"][0, T - 1]), f"Paths!{last}{B['W'][0]}"),
             (f"the discounting weight on path 2 at step {mid}", float(eng["w"][1, mid - 1]), f"Paths!{midc}{B['W'][0] + 1}")]
-    if eng.get("product") == "cap":
-        # the model's variance, where the cap's value starts: the first period seen today, the last seen from half-way
+    if eng.get("product") in CAP_LIKE:
+        # the model's variance, where the option's value starts: the first period seen today, the last seen from half-way
         from ccr import options as O
-        caps = eng["item"]["caplets"][0]["periods"]
+        strip0 = eng["item"]["caplets"][0]
+        caps = strip0["periods"]
         yrs = lambda d: (d - eng["p"].grid[0]).days / 365.25
         for f, i in ((0, 0), (len(caps) - 1, mid)):
             ps, pe = caps[f][0], caps[f][1]
             rows.append((f"√variance of ln G, period {f + 1}, seen from grid date {i}",
                          math.sqrt(O.growth_variance(eng["p"], eng["key"], i, max(yrs(ps), float(eng["p"].t[i])), yrs(pe))), B["VAR"][f][i]))
-        rows.append((f"U (the caplet per unit) of the last period on path 1 at step {mid}", float(O.black_on_growth(
-            (O.bond(eng["p"], eng["key"], mid, yrs(caps[-1][0])) / O.bond(eng["p"], eng["key"], mid, yrs(caps[-1][1])))[:1], 1.0 + caps[-1][3] * FIXED_RATE,
-            math.sqrt(O.growth_variance(eng["p"], eng["key"], mid, yrs(caps[-1][0]), yrs(caps[-1][1]))), True)[0]), f"Paths!{midc}{B['U'][-1][0]}"))
+        # the last period of each strip on path 1, half-way: the caplet of a cap, the floorlet of a floor, both of a collar
+        for n_, strip in enumerate(eng["item"]["caplets"]):
+            last_ = strip["periods"][-1]
+            rows.append((f"U (the {'caplet' if strip['type'] == 'CAP' else 'floorlet'} per unit) of the last period on path 1 at step {mid}", float(O.black_on_growth(
+                (O.bond(eng["p"], eng["key"], mid, yrs(last_[0])) / O.bond(eng["p"], eng["key"], mid, yrs(last_[1])))[:1], 1.0 + last_[3] * strip["K"],
+                math.sqrt(O.growth_variance(eng["p"], eng["key"], mid, yrs(last_[0]), yrs(last_[1]))), strip["type"] == "CAP")[0]),
+                f"Paths!{midc}{B['U'][(n_ + 1) * len(caps) - 1][0]}"))
     for label, v, ref in rows:
         ws.cell(row=r, column=1, value=label)
         c = ws.cell(row=r, column=2, value=v); c.fill = W.FILL_RJ; c.number_format = "#,##0.00000000"
@@ -950,21 +987,37 @@ def xva_cap_workbook(mkt, n_paths: int = N_PATHS):
     return xva_rates_workbook(mkt, n_paths, product="cap")
 
 
+def xva_floor_workbook(mkt, n_paths: int = N_PATHS):
+    """The floor's book (0.62.0): the cap's, with each period the put on the growth."""
+    return xva_rates_workbook(mkt, n_paths, product="floor")
+
+
+def xva_collar_workbook(mkt, n_paths: int = N_PATHS):
+    """The collar's book (0.62.0): the cap held and the floor written on the same periods, so a written option is on the paths."""
+    return xva_rates_workbook(mkt, n_paths, product="collar")
+
+
 def xva_rates_workbook(mkt, n_paths: int = N_PATHS, product: str = "swap"):
     from methodology.replicate import _curve_sheet, _readme
-    cap = product == "cap"
+    cap = product in CAP_LIKE
+    word = OPTION_WORD.get(product, "swap")
+    ks = strikes_of(product) if cap else {}
+    trade_words = {"cap": f"a bought cap struck at {FIXED_RATE:.3%}", "floor": f"a bought floor struck at {FIXED_RATE:.3%}",
+                   "collar": f"a collar, the cap bought at {ks.get('CAP', 0):.3%} and the floor sold at {ks.get('FLOOR', 0):.3%},"}.get(product, "")
     fit = hw1f_fit(mkt)
     eng = engine_runs(mkt, fit, n_paths, product)
     T = eng["T"]
     wb = Workbook()
-    _readme(wb, "XVA on a cap: each period valued on Hull-White paths, CSA, waterfall" if cap else "XVA on a swap: the trade's own schedule on Hull-White paths, CSA, waterfall", [
-        (f"Default trade: a bought cap struck at {FIXED_RATE:.3%} on USD {NOTIONAL:,.0f} for {TENOR_YEARS} years from spot, quarterly, as the cap ticket books it; "
+    _readme(wb, f"XVA on a {word}: each period valued on Hull-White paths, CSA, waterfall" if cap else "XVA on a swap: the trade's own schedule on Hull-White paths, CSA, waterfall", [
+        (f"Default trade: {trade_words} on USD {NOTIONAL:,.0f} for {TENOR_YEARS} years from spot, quarterly, as the {word} ticket books it; "
          if cap else
          f"Default trade: {'pay' if DIRECTION == 'PAY' else 'receive'} fixed {FIXED_RATE:.3%} on USD {NOTIONAL:,.0f} for {TENOR_YEARS} years from spot, both legs yearly, as a ticket books it; ") +
         f"a monthly grid from the valuation date, {n_paths} paths; the engine's own random draws on the Normals sheet.",
-        ("This is the run of a cap ticket's XVA tab: each period of the cap valued on every path at every date by Black's formula on what one unit grows to over the period, at the "
-         "variance the paths' own model gives that growth (the Variance sheet), and CVA, DVA, FCA and FBA on the exposure discounted on its own path. The cap is valued at the model's "
-         "variance, not at the vol the ticket prices it at: the value today on the Exposure sheet is the model's, and differs from the ticket's price by that."
+        (f"This is the run of a {word} ticket's XVA tab: each period valued on every path at every date by Black's formula on what one unit grows to over the period "
+         "(a cap's period the call, a floor's the put), at the variance the paths' own model gives that growth (the Variance sheet), and CVA, DVA, FCA and FBA on the exposure "
+         f"discounted on its own path. The {word} is valued at the model's variance, not at the vol the ticket prices it at: the value today on the Exposure sheet is the model's, "
+         "and differs from the ticket's price by that."
+         + (" The floor is written: its periods count against us, so the set's value can be negative and DVA and FBA are not nil as they are for a bought option." if product == "collar" else "")
          if cap else
          "This is the run of a rates ticket's XVA tab: the trade's own legs valued on every path at every date (each fixed coupon at its bond, each floating period with its accrued "
          "interest), and CVA, DVA, FCA and FBA on the exposure discounted on its own path."),
@@ -992,7 +1045,7 @@ def xva_rates_workbook(mkt, n_paths: int = N_PATHS, product: str = "swap"):
     _engine_paths(wb, eng, B)
     _convergence_sheet(wb, eng, blocks_exp, rs)
     W.live(wb, "Mode")
-    W.ticket(wb, "XVA of the workbook's cap, each period valued on the paths as a cap ticket's XVA tab values it" if cap else "XVA of the workbook's swap, valued on its own schedule as a ticket's XVA tab values it", [
+    W.ticket(wb, f"XVA of the workbook's {word}, each period valued on the paths as a {word} ticket's XVA tab values it" if cap else "XVA of the workbook's swap, valued on its own schedule as a ticket's XVA tab values it", [
         ("CVA", f"Waterfall!B{rt}", "#,##0.00", "cost"), ("DVA", f"Waterfall!B{rt + 1}", "#,##0.00", "benefit"), ("FCA", f"Waterfall!B{rt + 2}", "#,##0.00", "funding cost"),
         ("FBA", f"Waterfall!B{rt + 3}", "#,##0.00", ""), ("KVA", f"Waterfall!B{rt + 4}", "#,##0.00", ""), ("MVA", f"Waterfall!B{rt + 5}", "#,##0.00", ""),
         ("ColVA", f"Waterfall!B{rt + 6}", "#,##0.00", "carry of the variation margin; zero for cash"),
@@ -1013,8 +1066,11 @@ def xva_rates_workbook(mkt, n_paths: int = N_PATHS, product: str = "swap"):
         ("growth of a period" if cap else "growth of a floating period", "from its start to the next grid date at the bond seen on the grid date before, then along the account, then over the bond to its end", f"Paths!B{B['GROW'][0]}", "path 1, the first period", "0.0000000000"),
         *([("√variance of ln G", "√(Σ_(k>i) σ²/2a·(1 − e^(−2a(t_k − t_i)))·w_k·(w_k + 2·S_k)): the model's own, seen from grid date i", B["VAR"][0][0].replace("$", ""), "the first period, seen today", "0.0000000000"),
            ("M", "G(start, t)/P(t, end) while the period runs; P(t, start)/P(t, end) before it begins", f"Paths!B{B['M'][0][0]}", "path 1, step 1, the first period", "0.0000000000"),
-           ("U", "M·Φ(d₁) − X·Φ(d₁ − v), d₁ = (ln(M/X) + v²/2)/v, X = 1 + τK; max(G − X, 0) once the period has ended", f"Paths!B{B['U'][0][0]}", "the caplet per unit, before discounting", "0.0000000000"),
-           ("V", "Σ over the periods not yet paid of N·P(t, pay)·U", f"Paths!B{vb[0]}", "the cap's value on path 1 at step 1", "#,##0.00")]
+           (("U", "X·Φ(v − d₁) − M·Φ(−d₁), d₁ = (ln(M/X) + v²/2)/v, X = 1 + τK; max(X − G, 0) once the period has ended", f"Paths!B{B['U'][0][0]}", "the floorlet per unit, before discounting", "0.0000000000")
+            if product == "floor" else
+            ("U", "M·Φ(d₁) − X·Φ(d₁ − v), d₁ = (ln(M/X) + v²/2)/v, X = 1 + τK; max(G − X, 0) once the period has ended"
+                  + ("; a floor's period the put, X·Φ(v − d₁) − M·Φ(−d₁)" if product == "collar" else ""), f"Paths!B{B['U'][0][0]}", "the caplet per unit, before discounting", "0.0000000000")),
+           ("V", "Σ over the periods not yet paid of ±N·P(t, pay)·U: plus for an option held, minus for one written", f"Paths!B{vb[0]}", f"the {word}'s value on path 1 at step 1", "#,##0.00")]
           if cap else
           [("V", "−N·K·Σ τ·P(t, pay) on the fixed leg; per floating period N·(G − P(t, end)), or N·(G/P(t,end) − 1)·P(t, pay) where it pays after its end", f"Paths!B{vb[0]}", "the trade's value on path 1 at step 1", "#,##0.00")]),
         ("V(0)", "the same formula today: every bond is the curve's", "Exposure!B15", "", "#,##0.00"),

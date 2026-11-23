@@ -94,6 +94,14 @@ PRODUCTS = [
      "default": "A bought cap struck at 3.643% on USD 10m for 2y from spot, quarterly, as the cap ticket books it · monthly grid · 200 paths with the engine's own draws (ENGINE) or Excel's (LIVE) · a, σ from the swaption calibration · presets uncollateralised / bilateral 10bd / on-chain 5bd",
      "formula": "the run of a cap ticket's XVA tab: a period pays N·max(G − X, 0), G what a unit grows to over it on the path and X = 1 + τK; ln G is a sum of the factor at grid dates, so the caplet is Black's formula on G at the variance the paths' own model gives it, Σ_(k>i) σ²/2a·(1 − e^(−2a(t_k − t_i)))·w_k·(w_k + 2·S_k) seen from grid date i; V = Σ N·P(t, pay)·U over the periods not yet paid; from there the swap book's own sheets: C from V(t−δ) by Brownian bridge on the value with its payments still in it; EE/ENE/PFE; CVA, DVA, FCA, FBA on the exposure discounted on its own path; SA-CCR EAD → KVA, IM → MVA",
      "replication": "xlsx"},
+    {"id": "xva_floor", "name": "XVA on a floor: each period valued on Hull-White paths, CSA, waterfall", "group": "Valuation adjustments (XVA)", "section": "9-10",
+     "default": "A bought floor struck at 3.643% on USD 10m for 2y from spot, quarterly, as the floor ticket books it · monthly grid · 200 paths with the engine's own draws (ENGINE) or Excel's (LIVE) · a, σ from the swaption calibration · presets uncollateralised / bilateral 10bd / on-chain 5bd",
+     "formula": "the cap's book with each period the put: a period pays N·max(X − G, 0), valued X·Φ(v − d₁) − M·Φ(−d₁) on the growth the path expects, at the paths' own variance",
+     "replication": "xlsx"},
+    {"id": "xva_collar", "name": "XVA on a collar: a cap held and a floor written, each period valued on Hull-White paths, CSA, waterfall", "group": "Valuation adjustments (XVA)", "section": "9-10",
+     "default": "The cap bought at 4.143% and the floor sold at 3.143% on USD 10m for 2y from spot, quarterly, as the collar ticket books it · monthly grid · 200 paths (ENGINE or LIVE) · a, σ from the swaption calibration · presets uncollateralised / bilateral 10bd / on-chain 5bd",
+     "formula": "V = Σ N·P(t, pay)·U_cap − Σ N·P(t, pay)·U_floor: a written option's periods count against us, so the set's value takes both signs and DVA and FBA are not nil",
+     "replication": "xlsx"},
     {"id": "xva_fx", "name": "XVA on an FX forward: lognormal forward from the pair's surface, CSA, waterfall", "group": "Valuation adjustments (XVA)", "section": "9-10",
      "default": "Buy EUR 10m six months forward at the fair forward · monthly grid · 200 paths with the engine's own draws (ENGINE) or Excel's (LIVE) · σ from the EURUSD surface at K = F · presets uncollateralised / bilateral 10bd / on-chain 5bd",
      "formula": "F_t = F₀·exp(−σ²t/2 + σ·W); V = side·N·(F_t − K)·DF_q(t,T); σ = ATM/RR/BF interpolated to T, Malz smile at Δ = N(½σ√T); C from V(t−δ), the forward bridged in logs a margin period earlier and the trade valued on it; EE/ENE/PFE; CVA, DVA, FCA, FBA, SA-CCR EAD on the FX class (4 %) → KVA, IM (the 99th percentile move over the margin period) → MVA",
@@ -1076,6 +1084,16 @@ def xva_rates_workbook(mkt):
     return _b(mkt)
 
 
+def xva_floor_workbook(mkt):
+    from methodology.xva_workbook import xva_floor_workbook as _b
+    return _b(mkt)
+
+
+def xva_collar_workbook(mkt):
+    from methodology.xva_workbook import xva_collar_workbook as _b
+    return _b(mkt)
+
+
 def xva_cap_workbook(mkt):
     from methodology.xva_workbook import xva_cap_workbook as _b
     return _b(mkt)
@@ -1092,7 +1110,7 @@ def xva_crypto_workbook(mkt):
 
 
 BUILDERS = {"irs": irs_workbook, "ois": ois_workbook, "swaption": swaption_workbook, "cap": cap_workbook, "floor": floor_workbook, "collar": collar_workbook,
-            "xva_rates": xva_rates_workbook, "xva_cap": xva_cap_workbook,
+            "xva_rates": xva_rates_workbook, "xva_cap": xva_cap_workbook, "xva_floor": xva_floor_workbook, "xva_collar": xva_collar_workbook,
             "fx_forward": fx_forward_workbook, "fx_option": fx_option_workbook, "fx_option_styles": fx_option_styles_workbook,
             "crypto_ndf": crypto_ndf_workbook, "crypto_ndo": crypto_ndo_workbook, "crypto_option_styles": crypto_option_styles_workbook,
             "xva_fx": xva_fx_workbook, "xva_crypto": xva_crypto_workbook}

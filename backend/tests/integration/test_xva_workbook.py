@@ -63,3 +63,39 @@ def test_the_cap_xva_workbook_runs_what_the_cap_tickets_route_runs(client, auth_
             assert out["xva"][k] == pytest.approx(getattr(wf, k), abs=0.0051), (preset, k)
         assert out["ee"] == pytest.approx([round(v, 2) for v in wf.ee], abs=0.0051), preset
         assert out["ene"] == pytest.approx([round(v, 2) for v in wf.ene], abs=0.0051), preset
+
+
+@pytest.mark.parametrize("product,instrument", [("floor", "IR_FLOOR"), ("collar", "IR_COLLAR")])
+def test_the_floor_and_collar_xva_workbooks_run_what_their_tickets_route_runs(client, auth_a, product, instrument):
+    """0.62.0. A floor's and a collar's book, as the cap's: the engine side (which the cells reproduce:
+    tests/test_methodology.py) against POST /api/xva/simulate for the same trade, parameters, paths and seed, under
+    each CSA preset: to the cent. The collar holds a written floor, so its set's value takes both signs: DVA and FBA
+    are charged where a bought option has none."""
+    from api.routes.methodology import market_for
+    from db.session import SessionLocal
+    from methodology.xva_workbook import PRESETS, engine_runs, hw1f_fit, trade_body
+    db = SessionLocal()
+    try:
+        mkt = market_for(db, USER_A)
+    finally:
+        db.close()
+    fit = hw1f_fit(mkt)
+    n = 300
+    eng = engine_runs(mkt, fit, n, product)
+    body = {"paths": n, "seed": 42, "valuation_date": mkt.valuation_date.isoformat(), "curve_id": "USD_SOFR",
+            "a": fit["a"], "sigma_bp": fit["sigma_bp"], "theta": fit["theta"], "trade": trade_body(mkt.valuation_date, product)}
+    for preset in PRESETS:
+        r = client.post("/api/xva/simulate", json={**body, "csa": {"preset": preset}}, headers=auth_a)
+        assert r.status_code == 200, (preset, r.text[:300])
+        out = r.json()
+        assert out["basis"]["instrument"] == instrument and out["basis"]["exposure_discounting"] == "ON_PATH", out["basis"]
+        wf = eng["runs"][preset][1]
+        for k in ("cva", "dva", "fca", "fba", "kva", "mva", "colva", "xva_total"):
+            assert out["xva"][k] == pytest.approx(getattr(wf, k), abs=0.0051), (preset, k)
+        assert out["ee"] == pytest.approx([round(v, 2) for v in wf.ee], abs=0.0051), preset
+        assert out["ene"] == pytest.approx([round(v, 2) for v in wf.ene], abs=0.0051), preset
+    unc = eng["runs"]["UNCOLLATERALISED"][1]
+    if product == "collar":
+        assert unc.dva > 0 and float(eng["V"].min()) < 0 < float(eng["V"].max()), "a written floor is on the paths: the value takes both signs"
+    else:
+        assert float(eng["V"].min()) >= -1e-6 and abs(unc.dva) < 0.005, "a bought floor is never a liability"

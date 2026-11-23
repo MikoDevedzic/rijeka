@@ -530,6 +530,46 @@ def test_xva_cap_workbook_formulas_reproduce_the_engine_under_every_preset():
         assert max(x["rel"] for x in res) < 1e-9, preset
 
 
+@pytest.mark.parametrize("product", ["floor", "collar"])
+def test_xva_floor_and_collar_workbooks_are_their_tickets_own_runs_in_cells(product):
+    """0.62.0. The cap's XVA book generalised: a floor's period is the put on the growth, a collar is a cap held and a
+    floor written on the same periods, each strip at its own strike. The trade is the ticket's booking; every row of
+    the Checks sheet is evaluated outside Excel under the three presets (skipped where pycel is not installed;
+    scripts/check_workbook.py xva_floor and xva_collar are the same check from a shell, with typed CSA terms)."""
+    from methodology import workbook as W
+    from methodology.xva_workbook import PRESETS, strikes_of, the_trade, trade_body, xva_rates_workbook
+    from scripts.check_workbook import run_checks, test_market
+    mkt = test_market()
+    body = trade_body(mkt.valuation_date, product)
+    options = body["legs"][0]["embedded_options"]
+    assert body["instrument_type"] == f"IR_{product.upper()}" and body["legs"][0]["leverage"] == 0
+    assert [(o["type"], o["direction"], o["default_strike"]) for o in options] == (
+        [("FLOOR", "BUY", strikes_of("floor")["FLOOR"])] if product == "floor"
+        else [("CAP", "BUY", strikes_of("collar")["CAP"]), ("FLOOR", "SELL", strikes_of("collar")["FLOOR"])])
+    item, _ = the_trade(mkt.valuation_date, product)
+    assert [(c["type"], c["sign"], len(c["periods"])) for c in item["caplets"]] == (
+        [("FLOOR", 1.0, 8)] if product == "floor" else [("CAP", 1.0, 8), ("FLOOR", -1.0, 8)])
+    wb, total = xva_rates_workbook(mkt, 12, product=product)
+    assert isinstance(total, float)
+    paths = [c.value for row in wb["Paths"].iter_rows() for c in row if isinstance(c.value, str)]
+    assert any("NORMSDIST(-(" in f and "Variance!" in f for f in paths), "a floorlet is the put: X·Φ(v − d₁) − M·Φ(−d₁)"
+    if product == "collar":
+        assert wb["Model"]["A15"].value.startswith("Floor strike") and "Kfloor" in wb.defined_names
+        trade = [c.value for row in wb["Trade"].iter_rows() for c in row if isinstance(c.value, str)]
+        assert any(f.endswith("*Kfix") for f in trade) and any(f.endswith("*Kfloor") for f in trade), "each strip at its own strike"
+        assert any("-Notl*" in f for f in paths), "the written floor's periods count against us"
+    pytest.importorskip("pycel")
+    W.finish(wb)
+    bio = io.BytesIO(); wb.save(bio)
+    for preset in PRESETS:
+        res = run_checks(load_workbook(io.BytesIO(bio.getvalue())), "Exposure!B4", preset)
+        assert len(res) > 100 and any(x["label"].startswith("U (the floorlet") for x in res)
+        assert (product != "collar") or any(x["label"].startswith("U (the caplet") for x in res)
+        bad = [(x["label"], x["rel"]) for x in res if not x["ok"]]
+        assert not bad, (preset, bad[:5])
+        assert max(x["rel"] for x in res) < 1e-9, preset
+
+
 def test_the_fx_forward_workbook_is_the_ticket_as_it_opens_carried_from_the_spot_date():
     """0.62.0. The book's forward settles three months from the pair's spot date and is carried from the spot date,
     as the ticket's is (pricing/currency_forward.py, spot_date). Until then it settled three calendar months from the
