@@ -9,6 +9,8 @@ GET /api/methodology/{product}/replication.xlsx the workbook (see methodology/re
 from __future__ import annotations
 
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 from sqlalchemy import text
@@ -21,6 +23,7 @@ from pricing.bootstrap import bootstrap_from_dicts
 from api.routes.pricer import _map_qt, CURVE_DC, CURVE_CAL, CURVE_SPOT_LAG, CURVE_CCY
 from methodology import replicate as rep
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/methodology", tags=["methodology"])
 
 
@@ -63,7 +66,29 @@ def market_for(db: Session, user_id: str) -> rep.Market:
     return rep.Market(valuation_date=val, curve_id="USD_SOFR", snapshot_date=snap.valuation_date, source=snap.source,
                       quotes=snap.quotes or [], curve=curve, vol_quotes=(vol.quotes if vol else []) or [],
                       vol_date=vol.valuation_date if vol else None, fx_vol_quotes=(fxv.quotes if fxv else []) or [],
-                      vol_quotes_by_pair={"BTCUSD": (btc.quotes if btc else []) or []}, hw1f=hw1f)
+                      vol_quotes_by_pair={"BTCUSD": (btc.quotes if btc else []) or []}, hw1f=hw1f,
+                      fx_tickets=fx_tickets(db, user_id, val))
+
+
+def fx_tickets(db: Session, user_id: str, val) -> dict:
+    """The forwards of the two currency XVA books as a ticket's XVA run reads them on this account's market: the
+    route's own reader (api/routes/xva.forward_xva_input: the pair's stored spot, curves and points, the spot date,
+    its surface in SURFACE mode), for the book's trade. A pair the account cannot price (no spot saved, no curve) is
+    left out, and its book prices the same trade from its own illustrative inputs and says so."""
+    from api.routes.xva import forward_xva_input
+    from methodology.fx_xva_workbook import DIRECTION, XVA_CRYPTO_CASE, XVA_FX_CASE, settlement_date
+    out = {}
+    for case in (XVA_FX_CASE, XVA_CRYPTO_CASE):
+        pair = case["pair"]
+        try:
+            settle = settlement_date(val, pair)
+            inp, _q = forward_xva_input(db, user_id, pair, base_notional=case["notional"], settlement=settle, forward_rate=None,
+                                        direction=DIRECTION, val_date=val, vol_pct=None, vol_mode="SURFACE")
+            out[pair] = {"inp": inp, "settle": settle}
+        except Exception as e:      # noqa: BLE001 — a book is still built, from its own inputs
+            db.rollback()
+            log.info("methodology: %s is not priced on this account's market (%s): its XVA book uses its own inputs", pair, str(e)[:120])
+    return out
 
 
 @router.get("/{product}/replication.xlsx")

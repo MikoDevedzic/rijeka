@@ -175,6 +175,9 @@ class Market:
     fx_vol_quotes: list = field(default_factory=list)   # EURUSD_VOL surface quotes (tenor, quote_type, rate %)
     vol_quotes_by_pair: dict = field(default_factory=dict)   # {pair: surface quotes} for the other pairs (BTCUSD)
     hw1f: Optional[dict] = None                              # the account's stored HW1F calibration: a, sigma_bp, theta, valuation_date
+    # {pair: {"inp": ForwardXvaInput, "settle": date}}: the XVA books' forwards as the ticket's route reads them on the
+    # account's market (api/routes/methodology.market_for); empty for a market with no account behind it
+    fx_tickets: dict = field(default_factory=dict)
 
 
 # ── Shared sheets ───────────────────────────────────────────────────────────

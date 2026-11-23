@@ -330,7 +330,8 @@ def test_xva_fx_workbooks_carry_the_engine_draws_and_a_live_mode():
     for product, case in (("xva_fx", XVA_FX_CASE), ("xva_crypto", XVA_CRYPTO_CASE)):
         fi = forward_inputs(mkt, case)
         eng = engine_runs(fi)
-        assert eng["noise"]["z"].shape == (N_PATHS, eng["T"]) and eng["T"] >= 6 and abs(eng["noise"]["z"].mean()) < 0.1
+        assert eng["noise"]["z"].shape == (N_PATHS, eng["T"]) and eng["T"] in (18, 19) and abs(eng["noise"]["z"].mean()) < 0.1    # eighteen months from the spot date: the ticket's own monthly grid
+        assert fi["ticket"] is False, "a market with no account behind it: the book prices the same trade from its own inputs"
         assert set(eng["runs"]) == {"UNCOLLATERALISED", "BILATERAL", "ON_CHAIN"}
         assert eng["runs"]["BILATERAL"][1].cva > eng["runs"]["UNCOLLATERALISED"][1].cva           # margining cuts the cost (less negative)
         assert fi["inp"].vol_pct is None and fi["pillars"] == []                                    # the test market has no surface: the engine's default, labelled
@@ -361,12 +362,24 @@ def test_xva_fx_workbooks_carry_the_engine_draws_and_a_live_mode():
     mkt.fx_vol_quotes = quotes_from_grid({"1M": {"ATM": 7.2, "RR25": -0.35, "BF25": 0.2}, "6M": {"ATM": 7.6, "RR25": -0.45, "BF25": 0.25}, "1Y": {"ATM": 7.9, "RR25": -0.5, "BF25": 0.28}})
     fi = forward_inputs(mkt, XVA_FX_CASE)
     assert len(fi["pillars"]) == 3 and fi["inp"].vol_pct == pytest.approx(100 * vol_at(fi["pillars"], fi["inp"].t_years, fi["inp"].forward, fi["inp"].forward))
-    assert 7.5 < fi["inp"].vol_pct < 7.7 and fi["inp"].vol_pct != pytest.approx(7.6 + 0.3 * (fi["inp"].t_years - 0.5) / 0.5)   # the smile moves it off the interpolated ATM
+    # eighteen months: beyond the last quoted tenor the ATM is held (7.9), and the smile moves the vol off it
+    assert 7.8 < fi["inp"].vol_pct < 8.1 and fi["inp"].vol_pct != pytest.approx(7.9)
+    # the paths step the surface's ATM term structure (the ticket's SURFACE mode): the book's steps carry their own vols,
+    # whose variances add up to the surface's ATM variance at every grid date
+    eng = engine_runs(fi)
+    from pricing.fx_vol import atm_variance
+    assert fi["inp"].pillars and eng["T"] in (18, 19) and len(set(round(v, 8) for v in eng["sv"])) > 1
+    cum = np.cumsum(np.array(eng["sv"]) ** 2 * eng["dt"])
+    assert cum[11] == pytest.approx(atm_variance(fi["pillars"], 12 * eng["dt"]), rel=1e-9)
     data, _ = rep.build("xva_fx", mkt)
     wb = load_workbook(io.BytesIO(data))
     cal = wb["Calibration"]
     assert cal["A10"].value == "1M" and cal["C10"].value == 7.2 and cal["D11"].value == -0.45 and str(cal["B5"].value).startswith("=F")
     assert any("NORMSDIST(" in str(c.value) for row in cal.iter_rows(min_col=4, max_col=4) for c in row)
+    steps = [c.value for row in cal.iter_rows(min_col=7, max_col=7) for c in row if isinstance(c.value, str) and c.value.startswith("=SQRT(MAX(")]
+    assert len(steps) == eng["T"], "each step's vol is rebuilt from the surface in cells"
+    paths = [c.value for row in wb["Paths"].iter_rows() for c in row if isinstance(c.value, str)]
+    assert any("Model!$F$" in f and "SQRT(Dt)" in f for f in paths), "the path steps at each step's own vol"
 
 
 def test_hw1f_mc_matches_the_route_loop():

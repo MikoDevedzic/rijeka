@@ -88,6 +88,8 @@ def evaluation_copy(wb):
                 v = c.value
                 if isinstance(v, str) and v.startswith("="):
                     v = re.sub(r"ROWS\(([A-Za-z0-9_]+)\)", rows_of, v.replace("NORMSINV(RAND())", "0"))
+                    # ROWS of a range written out (the surface's interpolation: methodology/fx_xva_workbook._lin)
+                    v = re.sub(r"ROWS\(\$?[A-Z]+\$?(\d+):\$?[A-Z]+\$?(\d+)\)", lambda m: str(int(m.group(2)) - int(m.group(1)) + 1), v)
                     c.value = pat.sub(lambda m: names[m.group(1)], v)
     return wb
 
