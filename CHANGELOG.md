@@ -1,7 +1,35 @@
 # Changelog
 
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
-methodology document carries its own version (v1.45). Commits on `main` are the detail.
+methodology document carries its own version (v1.46). Commits on `main` are the detail.
+
+## 0.63.0 · 23 November 2026
+
+**The XVA workbooks of currency and digital-asset tickets are the ticket's own run.** Two are rebuilt and two are
+new. No figure of a ticket changes.
+
+- **A forward's XVA run** (`xva_fx`, `xva_crypto`). The book takes the forward the ticket's route reads from the
+  account's market (the pair's stored spot, curves and points, the spot date) and runs eighteen months, where the
+  ticket's own grid is the monthly one the book is written on. Where the pair has a surface each month steps at the
+  surface's own vol, as the ticket does, and the Calibration sheet rebuilds every step's vol from the quotes. The
+  engine's figures are held to `POST /api/xva/currency` to the cent. Until now the books priced a six-month forward
+  from illustrative inputs at one vol, on monthly steps where a six-month ticket runs weekly ones.
+- **A European option's XVA run** (`xva_fx_option`, `xva_crypto_option`). A bought call struck at the forward,
+  eighteen months, in the ticket's flat-vol mode: one vol, the surface's at the expiry and strike, on every path. The
+  option is valued by its closed form on every path and again on the level a margin period earlier; the capital
+  add-on is at the option's supervisory delta. The engine's figures are held to `POST /api/xva/currency-option` to
+  the cent, for the option as the ticket prices and books it.
+- **Not rebuilt, and said so in the books and in the methodology** (v1.46): the ticket's default mode for an option,
+  in which each path reads the smile; the other option styles; a sold option's checks.
+- `python -m scripts.check_workbook` runs the four currency books under each margin preset, with a surface and
+  without one, on five valuation dates.
+
+- **Found by the option book, and stated, not yet changed.** The value an option's XVA run starts from reads the
+  forward and the discounting at the expiry; the ticket prices the option on the forward to settlement, discounted
+  from the settlement date. On an eighteen-month EURUSD call the run starts 0.09 % below the ticket's price. And an
+  option on a pair with no surface saved and no default level of its own is priced at 10 % flat, a digital asset
+  included, where a forward's XVA run on the same asset defaults to 55 %: two tables for one default. The hosted
+  demo saves a surface for every pair it lists, so neither default is reached there.
 
 ## 0.62.0 · 23 November 2026
 

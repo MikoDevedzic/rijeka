@@ -39,7 +39,12 @@ def _latest(db: Session, user_id: str, curve_id: str):
         {"c": curve_id, "u": user_id}).first()
 
 
-def market_for(db: Session, user_id: str) -> rep.Market:
+FORWARD_XVA_BOOKS, OPTION_XVA_BOOKS = ("xva_fx", "xva_crypto"), ("xva_fx_option", "xva_crypto_option")
+
+
+def market_for(db: Session, user_id: str, product: str | None = None) -> rep.Market:
+    """The account's market for a workbook. The currency XVA books' trades are priced by the ticket's own routes, which
+    costs a curve build each: they are read only for the book that needs them (every one when no product is named)."""
     snap = _latest(db, user_id, "USD_SOFR")
     if snap is None:
         raise HTTPException(status_code=422, detail="No USD_SOFR snapshot loaded for this account. Load a curve under Configurations → Market data first.")
@@ -67,7 +72,8 @@ def market_for(db: Session, user_id: str) -> rep.Market:
                       quotes=snap.quotes or [], curve=curve, vol_quotes=(vol.quotes if vol else []) or [],
                       vol_date=vol.valuation_date if vol else None, fx_vol_quotes=(fxv.quotes if fxv else []) or [],
                       vol_quotes_by_pair={"BTCUSD": (btc.quotes if btc else []) or []}, hw1f=hw1f,
-                      fx_tickets=fx_tickets(db, user_id, val), fx_option_tickets=fx_option_tickets(db, user_id, val))
+                      fx_tickets=fx_tickets(db, user_id, val) if product is None or product in FORWARD_XVA_BOOKS else {},
+                      fx_option_tickets=fx_option_tickets(db, user_id, val) if product is None or product in OPTION_XVA_BOOKS else {})
 
 
 def fx_tickets(db: Session, user_id: str, val) -> dict:
@@ -118,7 +124,7 @@ def replication(product: str, db: Session = Depends(get_db), user: dict = Depend
     if product not in rep.BUILDERS:
         raise HTTPException(status_code=404, detail=f"No Excel replication for '{product}'.")
     heavy(user, "Excel replication", 6)          # the XVA book runs a calibration and a Monte Carlo per download
-    mkt = market_for(db, user["sub"])
+    mkt = market_for(db, user["sub"], product)
     data, _ = rep.build(product, mkt)
     name = f"rijeka_{product}_replication_{mkt.valuation_date.isoformat()}.xlsx"
     return Response(content=data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
