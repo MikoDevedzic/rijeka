@@ -399,7 +399,9 @@ def swaption_flows(item: dict, asof: date) -> dict:
     n is the leg's notional over the option's. With the item's legs these are the swap ccr.valuation.value_swap
     delivers at the expiry: its own start date, each period's end, each payment date. An item without legs (a
     schedule of fixed coupons alone) has the floating leg of a par swap from its start to its last payment date,
-    P(start) − P(last payment). Kept on the item."""
+    P(start) − P(last payment). A floating period that began before the expiry is read as beginning at it (the
+    swaption's own legs are dated from the expiry on, so this is not reached by a ticket; value_swap would carry
+    such a period's accrual). Kept on the item: an item is one trade on one valuation date."""
     got = item.get("_flows")
     if got is not None:
         return got

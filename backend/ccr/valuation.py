@@ -201,7 +201,7 @@ def value_swap(item: dict, paths: Paths, i: int, fx_to_usd: dict[str, float], at
         t_i = float(at)
         x_at = rate_between(paths, key, t_i)
         bond = lambda _p, _k, _i, T: bond_at(paths, key, t_i, x_at, T)             # noqa: E731  this call's bonds, from that state
-        _bond_once = lambda seen, _p, _k, _i, T: seen.setdefault(T, bond_at(paths, key, t_i, x_at, T))   # noqa: E731
+        _bond_once = lambda seen, _p, _k, _i, T: seen[T] if T in seen else seen.setdefault(T, bond_at(paths, key, t_i, x_at, T))   # noqa: E731
     else:
         bond, _bond_once = _grid_bond, _grid_bond_once
     v = np.zeros(paths.n_paths)

@@ -588,6 +588,7 @@ def _option_sheet(wb, eng, periods, idx, dr0):
     t0 = r
     tau_row = {round(q["tp"], 9): q["row"] for q in periods if q["kind"] == "FIXED"}
     cells = []
+    a0_parts = []                                      # τ·P(0, pay) of each fixed coupon: the annuity, whatever the strike
     for m, term in enumerate(hw["terms"]):
         w, bonds = term["w"], term["bonds"]
         refs = [(drow.get(round(T, 9)), sgn) for T, sgn in bonds]                 # a date at the expiry itself is a bond worth one: no row
@@ -596,12 +597,13 @@ def _option_sheet(wb, eng, periods, idx, dr0):
         if fixed:
             what = "a fixed coupon: −K·τ·P(pay)"
             wf = f"=-Kfix*Trade!$F${tau_row[round(bonds[0][0], 9)]}"
+            a0_parts.append(f"Trade!$F${tau_row[round(bonds[0][0], 9)]}*C{refs[0][0]}")
         elif len(bonds) == 3:
             what = "a floating period: P(start)·P(pay)/P(end)"; wf = float(w)
         elif w > 0:
             what = "a floating period: P(start)"; wf = float(w)
         else:
-            what = "a floating period: −P(end)" if abs(w) >= 1 - 1e-12 else "a spread"; wf = float(w)
+            what = "a floating period: −P(end) or −P(pay)"; wf = float(w)
         ws.cell(row=r, column=2, value=what)
         c = ws.cell(row=r, column=3, value=wf); c.number_format = "0.0000000000"
         if not fixed:
@@ -624,7 +626,7 @@ def _option_sheet(wb, eng, periods, idx, dr0):
     sT = "(SigN*SQRT(Texp))"
     lines = [("zero", "Σ of the terms at x*: nothing, so the swap delivered is worth nothing there", f"=SUM(F{t0}:F{t1})", 0.0, "0.000000000000", 1e-9),
              ("price", "the model's price per unit of notional: Σ of the terms' parts", f"=SUM(I{t0}:I{t1})", float(hw["npv"]), "0.000000000000", 1e-9),
-             ("A0", "A₀ = Σ τ·P(0, pay) over the fixed coupons: the annuity today", f"=-SUM(K{t0}:K{t0 + nf - 1})/Kfix", float(hw["A0"]), "0.0000000000", 1e-9),
+             ("A0", "A₀ = Σ τ·P(0, pay) over the fixed coupons: the annuity today", "=" + "+".join(a0_parts), float(hw["A0"]), "0.0000000000", 1e-9),
              ("F0", "F₀ = the floating leg today / A₀: the forward rate of the swap delivered", f"=SUM(K{t0 + nf}:K{t1})/B{{A0}}", float(hw["F0"]), "0.0000000000", 1e-9),
              ("target", "the price per unit of annuity", "=B{price}/B{A0}", float(hw["npv"] / hw["A0"]), "0.000000000000", 1e-7),
              ("sig", "σ_n: the normal vol at which Bachelier's formula gives that price (the engine's root)", None, float(o["sig_n"]), "0.0000000000", None),
@@ -922,8 +924,9 @@ def _paths_sheet(wb, eng, periods, dates, idx, dr0, rB, rA, zrows, vcells=None):
     swaption = eng.get("product") == "swaption"
     if swaption:
         # ccr/options._value_swaption_long: before the expiry N·A·Bachelier(F, K, T_e − t, σ_n) on the path's own annuity and
-        # forward swap rate; from the first grid date at or after the expiry, the swap delivered on the paths where it was
-        # worth having at that date, and nothing on the others. The option's sign for the side that wrote it.
+        # forward (of the swap delivered); from the first grid date at or after the expiry, the swap delivered on the paths
+        # where it was worth having at the expiry itself (ccr/options.exercised), and nothing on the others. The option's
+        # sign for the side that wrote it.
         o = eng["option"]; ie = o["i_exp"]; sg = "-" if o["sign"] < 0 else ""
         fut = [qd for qd in periods if qd["kind"] == "FIXED" and qd["tp"] > o["t_exp"] - 1e-9]
         B["VS"] = _block(ws, top, n, T, lambda q, j, r, c: value(q, j), "#,##0.00",

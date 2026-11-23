@@ -25,14 +25,20 @@ the ticket and in a counterparty's netting set. Swaps, caps, floors and collars 
   - priced on a Friday whose expiry rolls to a Monday (20 November 2026): value today −3.1 %, uncollateralised CVA
     and FCA −1.3 %, DVA and FBA +13 %.
 - **How it is held.** The option's discounted value on the paths is a martingale through its expiry, at one year and
-  three months, with the expiry on a grid date and inside a step (100,000 paths): the test that would have caught
-  all three. Two derivations of the price agree to twelve decimals. The swaption's XVA workbook rebuilds the price,
+  three months, with the expiry on a grid date and inside a step (100,000 paths; over six seeds the mean is within
+  0.26 % of nothing in every case): the test that would have caught all three. Two derivations of the price agree
+  to twelve decimals, and the model validator's own integration of the delivered swap's payoff gives 77,625.0163
+  against the engine's 77,625.0163 (of the 1,908 between old and new: the start date 1,227, each period's own end
+  599, payment after the period's end 82). The swaption's XVA workbook rebuilds the price,
   the forward and the exercise in cells: 167 to 175 checks under each preset on six dates, one with the expiry
   inside a step, and the ticket's route ties to it to the cent.
-- **What is not checked.** Historical sampling spreads the rate inside a step at its calibrated vol, an
-  approximation. A written swaption and a receiver are in the engine's tests and not in the workbook. A Bermudan's
+- **What is not exact.** Before the expiry the option is Bachelier at one implied vol, not the model's own value
+  date by date: on the same paths the value at the expiry stands about a quarter of a per cent above the value a
+  month before. The first floating period of an exercised swap accrues to the next grid date at the forward seen
+  a grid date earlier: 0.01 to 0.11 % of the option's value at that one date. Historical sampling spreads the
+  rate inside a step at its calibrated vol. A written swaption and a receiver are in the engine's tests and not in the workbook. A Bermudan's
   exposure is still run as its European's. The workbook has not been opened in Excel itself.
-- Tests: `tests/test_ccr_swaption_expiry.py` (22), one more workbook test. Methodology v1.49, `docs/ccr.md`,
+- Tests: `tests/test_ccr_swaption_expiry.py` (24), one more workbook test. Methodology v1.49, `docs/ccr.md`,
   `docs/xva.md`, the model inventory.
 
 ## 0.65.0 · 23 November 2026

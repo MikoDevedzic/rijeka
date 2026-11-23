@@ -432,6 +432,11 @@ def price_european_swaption_hw1f_terms(
             raise RuntimeError("swaption on cash flows: the swap's value has no root in the short rate")
     if not f(lo) < 0 < f(hi):
         raise RuntimeError("swaption on cash flows: the payer swap's value does not rise with the short rate")
+    # one root is what the closed form rests on: a look along the bracket, so a swap whose value turns twice is refused
+    # (the model validator scanned payment lags to 180 days: one turn in every case; this is the guard, not a proof)
+    scan = [f(lo + (hi - lo) * k / 64.0) for k in range(65)]
+    if sum(1 for u, w_ in zip(scan, scan[1:]) if (u < 0) != (w_ < 0)) != 1:
+        raise RuntimeError("swaption on cash flows: the swap's value turns more than once in the short rate")
     r_star = brentq(f, lo, hi, xtol=1e-13, rtol=1e-13)
 
     s2 = sigma * sigma * expiry_y if a < 1e-9 else sigma * sigma * (1.0 - math.exp(-2.0 * a * expiry_y)) / (2.0 * a)

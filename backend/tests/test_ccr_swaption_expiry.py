@@ -71,6 +71,40 @@ def test_the_price_on_cash_flows_is_the_sum_of_bond_options_where_the_swap_is_a_
     assert j["start"] == pytest.approx(T0)
 
 
+def test_a_swap_whose_value_turns_twice_is_refused():
+    # a made-up set of terms with two roots in the bracket: the closed form rests on one
+    two_roots = [(1.0, [(3.0, 1)]), (-2.02, [(2.0, 1)]), (1.0195, [(1.5, 1)])]
+    with pytest.raises(RuntimeError):
+        on_cash_flows(two_roots, True, 1.0, A_, SIG, P0)
+
+
+def test_the_validators_own_integration_of_the_payoff_gives_the_same_price():
+    """The model validator, 23 November 2026: the delivered swap's payoff integrated over the factor at the expiry
+    with his own bond formula, on the checks' market: 77,625.0163, and the three steps from the old 79,533.155 (own
+    start 78,305.92; each period to its own end 77,707.33; coupons paid after the period's end 77,625.02). Here the
+    same integration, by quadrature, against the closed form, on a swap with a late start and a late payment."""
+    terms = [(-K_ * t, [(q, 1)]) for q, t in zip(PAY, TAU)]
+    T0, lag = 1.0 + 2 / 365.25, 2 / 365.25
+    ends = [T0 + k for k in range(1, 6)]
+    for s_, e_ in zip([T0] + ends[:-1], ends):
+        terms += [(1.0, [(s_, 1), (e_ + lag, 1), (e_, -1)]), (-1.0, [(e_ + lag, 1)])]
+    from pricing.bermudan_swaption import hw1f_bond_price
+    for payer in (True, False):
+        g = on_cash_flows(terms, payer, 1.0, A_, SIG, P0)
+        r = np.linspace(g["mu"] - 9 * g["s"], g["mu"] + 9 * g["s"], 20001)
+        dens = np.exp(-0.5 * ((r - g["mu"]) / g["s"]) ** 2) / (g["s"] * math.sqrt(2 * math.pi))
+        val = np.zeros_like(r)
+        for w, bonds in terms:
+            v = np.full_like(r, w)
+            for T, sgn in bonds:
+                pb = np.array([hw1f_bond_price(A_, SIG, 1.0, T, float(x), P0) for x in r[::200]])
+                pb = np.exp(np.interp(r, r[::200], np.log(pb)))               # a bond is exp-affine in r: its log is a line
+                v = v * pb if sgn > 0 else v / pb
+            val += v
+        pay = np.maximum(val if payer else -val, 0.0)
+        assert g["P_expiry"] * float(np.trapezoid(pay * dens, r)) == pytest.approx(g["npv"], rel=2e-6)
+
+
 def test_a_payer_less_a_receiver_is_the_forward_swap_and_a_late_start_is_worth_less_to_the_payer():
     terms = lambda T0: [(-K_ * t, [(q, 1)]) for q, t in zip(PAY, TAU)] + [(1.0, [(T0, 1)]), (-1.0, [(PAY[-1], 1)])]    # noqa: E731
     for T0 in (1.0, 1.0 + 2 / 365.25):
@@ -87,9 +121,17 @@ def test_the_cash_flows_are_the_swap_the_paths_deliver():
     expiry = p.grid[12]
     for freq in ("ANNUAL", "QUARTERLY"):
         pay, rec = swaption(expiry, expiry + timedelta(days=2), freq=freq), swaption(expiry, expiry + timedelta(days=2), is_payer=False, freq=freq)
+        own = O.hw_implied_vol(rec, p)                                   # the receiver's own vol, from its own exact price
         for i in (0, 5, 11):
             vp, vr = O.value_swaption(pay, p, i, FX, swap_at), O.value_swaption(rec, p, i, FX, swap_at)
+            # each at its own vol: apart by the convexity of a coupon paid after its period's end, which the price
+            # counts and the swap on the paths does not (a few units on ten million; the model validator, 4 to 7)
             assert float(np.abs(vp - vr - swap_at(pay, p, i)).max()) < 1e-6 * 10e6
+        rec["_hw_vol"] = {id(p): O.hw_implied_vol(pay, p)}               # at one vol the identity is exact: N·A·(F − K) is the swap
+        for i in (0, 5, 11):
+            vp, vr = O.value_swaption(pay, p, i, FX, swap_at), O.value_swaption(rec, p, i, FX, swap_at)
+            assert float(np.abs(vp - vr - swap_at(pay, p, i)).max()) < 1e-4
+        assert abs(own - O.hw_implied_vol(pay, p)) < 1e-6
     fl = O.swaption_flows(pay, ASOF)
     assert len(fl["fixed"]) == 5 and any(len(b) == 3 for _, b in fl["floating"])     # a period paid after its end: P(start)·P(pay)/P(end)
     assert min(T for _, b in fl["floating"] for T, _ in b) == pytest.approx(years(pay["start"]))

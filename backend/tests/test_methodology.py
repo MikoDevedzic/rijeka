@@ -714,10 +714,11 @@ def test_xva_swaption_workbook_is_the_swaption_tickets_own_run_in_cells():
     """0.62.0. A swaption had no XVA book. Its trade is the swaption ticket's booking (the option's terms beside the
     swap it delivers); on the paths it is the option until the expiry (the path's annuity and forward swap rate in
     Bachelier's formula at the vol the paths' own model implies) and the swap delivered after, on the paths where the
-    swap was worth having at the expiry's grid date. The Option sheet rebuilds the model's exact price (Jamshidian)
-    and shows the vol is the one that gives it. Every row of the Checks sheet is evaluated outside Excel under the
-    three presets (skipped where pycel is not installed; scripts/check_workbook.py xva_swaption is the same check
-    from a shell, with typed CSA terms, on five valuation dates)."""
+    swap was worth having at the expiry. The Option sheet rebuilds the model's exact price (on the cash flows of the
+    swap delivered, since 0.66.0) and shows the vol is the one that gives it. Every row of the Checks sheet is
+    evaluated outside Excel under the three presets (skipped where pycel is not installed; scripts/check_workbook.py
+    xva_swaption is the same check from a shell, with typed CSA terms, on six valuation dates, one with the expiry
+    inside a step)."""
     from methodology import workbook as W
     from methodology.xva_workbook import PRESETS, FIXED_RATE, engine_runs, hw1f_fit, swaption_dates, the_trade, trade_body, xva_swaption_workbook
     from scripts.check_workbook import run_checks, test_market
@@ -738,6 +739,8 @@ def test_xva_swaption_workbook_is_the_swaption_tickets_own_run_in_cells():
     assert float(eng["V"][:, :o["i_exp"]].min()) > 0
     after = eng["V"][:, o["i_exp"]]
     took = o["took"]
+    if o["inside"] is None:
+        assert (took == (o["swap"][:, o["i_exp"]] > 0)).all(), "an expiry on a grid date: the swap's own sign there"
     assert took.any() and (~took).any() and (after[~took] == 0).all()
     # exercised at the expiry: on a grid date the swap is then worth having; inside a step it may have turned by the next grid date
     assert (after[took] > 0).all() if o["inside"] is None else (after[took] != 0).all()

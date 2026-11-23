@@ -406,3 +406,13 @@ journey or the owner caught. One line each; the ledger has the day and the case.
 - Fixing one error can uncover the one it was hiding. With the level drawn at the expiry the value stood below the
   price by the carry to settlement, which the old error had more than covered for a call: after a fix, test the
   result against the price itself, not against the error's expected size.
+- When a defect that was written down is mended, the sentence that wrote it down is found and changed in the same
+  commit. The methodology kept "the engine is to be changed to price the option on the swap from its own start" a
+  few lines under the paragraph that said it had been (the independent reviewer): search the documents for the old
+  finding's own words ("is to be", "until then", its figures) before the fix is called documented.
+- A test that is rewritten to pass keeps what it held. Moving two workbook tests to the engine's own exercise mask
+  dropped their independent recomputation of it for an expiry on a grid date (the independent reviewer): where the
+  old assertion is still true in a case, it stays for that case.
+- One finding can be three. The swaption's "start date" was also each period's end and the payment after it, and
+  the exercise a month late: after fixing what was reported, run the test that the whole thing should pass (there,
+  the discounted value through the expiry) before sizing or documenting the one cause.
