@@ -33,8 +33,8 @@ from openpyxl.utils import get_column_letter as L
 from methodology import workbook as W
 from pricing.csa import CSA, BUSINESS_DAYS_PER_YEAR, MPOR_FLOOR_BILATERAL_BD, MPOR_FLOOR_CLEARED_BD
 from pricing.currency_forward import price_currency_forward
-from pricing.fx_vol import TENOR_YEARS, parse_surface, vol_at
-from pricing.fx_xva import ForwardXvaInput, default_vol_pct, exposure_grid, forward_xva, is_crypto
+from pricing.fx_vol import TENOR_YEARS, lookup_vol, parse_surface, vol_at
+from pricing.fx_xva import ForwardXvaInput, OptionXvaInput, default_vol_pct, exposure_grid, forward_xva, is_crypto, option_xva, saccr_rows
 from pricing.sa_ccr import SUPERVISORY
 from pricing.xva_engine import IM_CONFIDENCE
 from pricing.xva_engine import ALPHA, CAP_R, SF_IR
@@ -58,6 +58,10 @@ XVA_CRYPTO_CASE = dict(pair="BTCUSD", base="BTC", quote="USD", spot=65_000.0, ba
                        base_rate_label="BTC funding rate (cont., p.a.)", delta="CRY01", sf_basis="SA-CCR, the cryptoasset class of a Group 2a asset (SCO60.98)",
                        rate_note="The funding (lending or staking) rate is the digital asset's base rate: F = S·e^(−r_c·T)/DF_USD, the cash-and-carry forward.",
                        title="XVA on a crypto NDF: lognormal forward, surface vol, CSA, waterfall")
+# The option books (0.63.0): a European call on the same pair and size, bought, struck at the forward, eighteen months.
+OPTION_TYPE = "CALL"
+XVA_FX_OPTION_CASE = dict(XVA_FX_CASE, option=True, title="XVA on an FX option: the option valued on every path, CSA, waterfall")
+XVA_CRYPTO_OPTION_CASE = dict(XVA_CRYPTO_CASE, option=True, title="XVA on a crypto NDO: the option valued on every path, CSA, waterfall")
 
 
 # ── the engine's own numbers ──────────────────────────────────────────────────
@@ -106,15 +110,69 @@ def forward_inputs(mkt, case: dict) -> dict:
     return {"inp": inp, "pillars": pillars, "settle": T, "vol_source": src, "ticket": False, "spot": case["spot"]}
 
 
+def option_dates(val: date, pair: str = "EURUSD", months: int = MONTHS) -> dict:
+    """The expiry and settlement dates of the book's option, as a ticket takes a tenor (pricing/tenor_dates.option_date)."""
+    from pricing import tenor_dates
+    return tenor_dates.option_date(pair, val, f"{months}M")
+
+
+def option_inputs(mkt, case: dict) -> dict:
+    """The book's option as the XVA route takes it in its FLAT vol mode: the engine's input (OptionXvaInput), the
+    ticket's price of it, and where they came from.
+
+    With an account (api/routes/methodology.market_for hands the ticket's own reading in `mkt.fx_option_tickets`):
+    the option priced by the ticket's route from the pair's stored spot, curves, points and surface: exactly what
+    POST /api/xva/currency-option simulates for this trade with vol_mode FLAT. Without one (a test market): the same
+    trade priced here from the case's spot and flat base rate, the vol by the ticket's own lookup
+    (pricing/fx_vol.lookup_vol) on the market's surface, or the pair's default level where it has none."""
+    val = mkt.valuation_date
+    pair = case["pair"]
+    pillars = parse_surface(surface_for(mkt, pair))
+    tk = (getattr(mkt, "fx_option_tickets", None) or {}).get(pair)
+    if tk:
+        inp = tk["inp"]
+        return {"inp": inp, "pillars": pillars, "expiry": tk["expiry"], "settle": tk["settle"], "vol_source": tk["vol_source"], "ticket": True,
+                "spot": float(inp.spot), "npv": float(tk["npv"])}
+    from pricing import tenor_dates
+    from pricing.fx_exotic import ExoticSpec
+    from pricing.fx_option import price_fx_option
+    d = option_dates(val, pair)
+    crypto = is_crypto(pair)
+    sd = None if crypto else tenor_dates.spot(pair, val)
+    r = price_currency_forward(base_currency=case["base"], quote_currency=case["quote"], base_notional=case["notional"], forward_rate=None,
+                               spot=case["spot"], valuation_date=val, settlement_date=d["settlement"], quote_curve=mkt.curve, base_rate=case["base_rate"],
+                               direction="BUY", spot_date=sd)
+    t_e, t_s = (d["expiry"] - val).days / 365.0, (d["settlement"] - val).days / 365.0
+    vol, _tier, note = lookup_vol(surface_for(mkt, pair) or None, pair, t_e, r.forward, r.forward)
+    q = price_fx_option(base_currency=case["base"], quote_currency=case["quote"], base_notional=case["notional"], option_type=OPTION_TYPE, strike=r.forward,
+                        spot=case["spot"], forward=r.forward, df_quote=r.df_quote, valuation_date=val, expiry_date=d["expiry"], settlement_date=d["settlement"],
+                        vol=vol, direction=DIRECTION, spot_date=sd)
+    inp = OptionXvaInput(pair=pair, base_notional=case["notional"], spot=case["spot"], forward=r.forward, t_expiry=t_e, t_settle=t_s, df_quote_t=r.df_quote,
+                         quote_zero=-np.log(max(r.df_quote, 1e-12)) / max(t_s, 1e-9), vol=float(vol), spec=ExoticSpec("EUROPEAN", OPTION_TYPE, strike=r.forward),
+                         direction=DIRECTION, spot01=float(q.spot01 or 0.0), vol_source=note, pillars=None)
+    inp.quote_zero = float(inp.quote_zero)
+    return {"inp": inp, "pillars": pillars, "expiry": d["expiry"], "settle": d["settlement"], "vol_source": note, "ticket": False, "spot": case["spot"], "npv": float(q.npv)}
+
+
 def engine_runs(fi: dict) -> dict:
     """The simulation on the workbook's trade (seed 42), and the waterfall under each CSA preset (bridge seed 43)."""
     noise: dict = {}
     runs = {}
+    option = hasattr(fi["inp"], "spec")
     for preset in PRESETS:
         csa = CSA.from_request({"preset": preset})
-        wf, meta = forward_xva(fi["inp"], csa, n_paths=N_PATHS, seed=42, noise_out=noise, waterfall_rng=np.random.default_rng(43))
+        wf, meta = (option_xva if option else forward_xva)(fi["inp"], csa, n_paths=N_PATHS, seed=42, noise_out=noise, waterfall_rng=np.random.default_rng(43))
         runs[preset] = (csa, wf, meta)
-    steps, dt = exposure_grid(fi["inp"].t_years, getattr(fi["inp"], "grid_per_year", None))
+    steps, dt = exposure_grid(fi["inp"].t_settle if option else fi["inp"].t_years, getattr(fi["inp"], "grid_per_year", None))
+    extra = {}
+    if option:
+        # the book's sheets are written for an expiry inside the last step (a settlement a few days after it): every
+        # earlier date is valued by the closed form, the last one is the payoff
+        if int(noise["i_exp"]) != steps - 1:
+            raise ValueError("the option workbook is written for an expiry inside the grid's last step")
+        row = saccr_rows([fi["inp"]])[0]
+        extra = {"r_b": float(noise["r_b"]), "s_t": noise["s_t"], "v_paths": runs[DEFAULT_PRESET][2]["_paths"], "sup_delta": float(row.delta),
+                 "sup_vol": float(SUPERVISORY["CRYPTO" if is_crypto(fi["inp"].pair) else "FX"]["vol"])}
     if abs(dt - 1.0 / 12.0) > 0.01:
         raise ValueError("the workbook is written on monthly steps: its forward must run beyond a year")
     # a digital asset's vol regimes (pricing/vol_regimes): the variance each step accumulated on each path, as a
@@ -131,7 +189,7 @@ def engine_runs(fi: dict) -> dict:
     return {"noise": noise, "runs": runs, "T": steps, "dt": dt, "sigma": float(noise["sigma"]), "v0": float(runs[DEFAULT_PRESET][2]["v0"]),
             "sv": [float(x) for x in noise["step_vols"]],
             "u": u, "omega": omega, "regimes": runs[DEFAULT_PRESET][2].get("vol_regimes"),
-            "sf": SUPERVISORY["CRYPTO" if is_crypto(fi["inp"].pair) else "FX"]["sf"], "im_basis": runs[DEFAULT_PRESET][2]["im_basis"]}
+            "sf": SUPERVISORY["CRYPTO" if is_crypto(fi["inp"].pair) else "FX"]["sf"], "im_basis": runs[DEFAULT_PRESET][2]["im_basis"], **extra}
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -236,22 +294,110 @@ def _model_sheet(wb, mkt, case, fi, eng):
     return r0
 
 
-def _calibration_sheet(wb, mkt, case, fi, eng, grid_r0):
+def _option_model_sheet(wb, mkt, case, fi, eng):
+    """The option's Model sheet: the names the other sheets read are the forward book's, with the option's own beside
+    them (Cp, Texp, Rb, SupDelta) and one more grid column, the time left to the expiry."""
+    inp, T = fi["inp"], eng["T"]
+    base, quote = case["base"], case["quote"]
+    call = str(inp.spec.option_type).upper() == "CALL"
+    ws = wb.create_sheet("Model")
+    ws["A1"] = "THE OPTION ON A LOGNORMAL FORWARD"; ws["A1"].font = W.F_TITLE
+    ws["A2"] = ("The forward to settlement F_t is driftless under the settlement-date forward measure and steps the monthly grid at one vol, the option's own (the ticket's FLAT vol mode): "
+                "F_t = F_(t−1)·exp(−½σ²Δ + σ·√Δ·Z). The spot it implies is S_t = F_t·e^(−(r_q−r_b)(T_s−t)), with r_b the carry the forward implies. Before the expiry the option is "
+                "valued on S_t by its closed form with the time left: V = side·N·e^(−r_q·τ)·cp·[F_e·N(cp·d₁) − K·N(cp·d₂)], F_e = S_t·e^((r_q−r_b)τ), τ = T_e − t, d₁ = [ln(F_e/K) + ½σ²τ]/(σ√τ). "
+                "At the last grid date, the settlement date, it is its payoff on the spot there. The forward, its discount factor and the vol are "
+                + ("the ticket's own (POST /api/currency/option/price for this trade on the account's market)" if fi["ticket"] else "priced here from the spot and the rate below, carried from the pair's spot date")
+                + ": the option's own price is the option workbook's."); ws["A2"].font = W.F_SUB
+    took = "the ticket's" if fi["ticket"] else "as priced for this book"
+    ac = "CRYPTO" if is_crypto(case["pair"]) else "FX"
+    rows = [("Pair", case["pair"], "@", False, None),                                                                                             # 4
+            (f"Spot S ({quote} per {base})", fi["spot"], case["spot_fmt"], True, None),                                                         # 5
+            (f"Notional N ({base})", inp.base_notional, "#,##0.####", True, None),                                                              # 6
+            ("Side (bought = +1, sold = −1)", 1 if str(inp.direction).upper() == "BUY" else -1, "0", True, None),                               # 7
+            ("Settlement date", fi["settle"], "yyyy-mm-dd", False, None),                                                                       # 8
+            ("T_s to settlement (ACT/365)", "=(B8-ValDate)/365", "0.000000", False, inp.t_settle),                                             # 9
+            (f"DF_q(0,T_s), {took}: the quote currency's discount factor to settlement", float(inp.df_quote_t), "0.00000000", False, None),    # 10
+            ("DF_q to the settlement date from this book's curve, log-linear (for comparison)", f"={_DF('B8')}", "0.00000000", False, None),   # 11
+            ("Forward points F₀ − S", "=B13-B5", case["spot_fmt"], False, None),                                                               # 12
+            (f"Forward F₀ to settlement ({quote} per {base}), {took}", float(inp.forward), case["spot_fmt"], False, None),                     # 13
+            (f"Strike K ({quote} per {base})", "=B13" if abs(inp.spec.strike - inp.forward) < 1e-15 else float(inp.spec.strike), case["spot_fmt"], True, None),   # 14
+            ("r_q = −ln DF_q(0,T_s)/T_s: the flat quote zero between today and settlement", "=-LN(B10)/B9", "0.000000%", False, inp.quote_zero),   # 15
+            ("σ (decimal; from the Calibration sheet): the option's vol, held along every path", "=Calibration!B5", "0.0000%", False, eng["sigma"]),   # 16
+            ("Steps = max(2, ceiling(12·T_s)) (a value: it sizes the sheets)", T, "0", False, None),                                           # 17
+            ("Δ = T_s/steps (years per step)", "=B9/B17", "0.00000000", False, eng["dt"]),                                                     # 18
+            ("Paths", N_PATHS, "0", False, None),                                                                                              # 19
+            ("Mode (ENGINE: the engine's draws; LIVE: Excel re-rolls)", "ENGINE", "@", True, None),                                            # 20
+            (f"Quote notional N·F₀ ({quote})", "=B6*B13", "#,##0.00", False, abs(inp.base_notional * inp.forward)),                            # 21
+            (f"Call on {base} (+1) or put (−1)", 1 if call else -1, "0", True, None),                                                          # 22
+            ("Expiry date", fi["expiry"], "yyyy-mm-dd", False, None),                                                                          # 23
+            ("T_e to expiry (ACT/365)", "=(B23-ValDate)/365", "0.000000", False, inp.t_expiry),                                                # 24
+            ("r_b = r_q − ln(F₀/S)/T_s: the carry the forward implies", "=B15-LN(B13/B5)/B9", "0.000000%", False, eng["r_b"]),                 # 25
+            ("F_e = S·e^((r_q−r_b)·T_e): the forward to the expiry on that carry", "=B5*EXP((B15-B25)*B24)", case["spot_fmt"], False, None),   # 26
+            ("d₁ = [ln(F_e/K) + ½σ²T_e]/(σ√T_e)", "=(LN(B26/B14)+0.5*B16^2*B24)/(B16*SQRT(B24))", "0.00000000", False, None),                  # 27
+            ("d₂ = d₁ − σ√T_e", "=B27-B16*SQRT(B24)", "0.00000000", False, None),                                                              # 28
+            ("V(0) = side·N·e^(−r_q·T_e)·cp·[F_e·N(cp·d₁) − K·N(cp·d₂)]: the run's value today", "=B7*B6*EXP(-B15*B24)*B22*(B26*NORMSDIST(B22*B27)-B14*NORMSDIST(B22*B28))", "#,##0.00", False, eng["v0"]),   # 29
+            (f"The ticket's NPV, {took}: the same option on the forward to settlement, discounted from the settlement date", float(fi["npv"]), "#,##0.00", False, None),   # 30
+            ("V(0) less the ticket's NPV, as a share of it: the run reads the forward and the discounting at the expiry, the ticket at the settlement a few days later", "=IF(B30<>0,B29/B30-1,0)", "0.0000%", False, None),   # 31
+            (f"Supervisory volatility of the class (SA-CCR: {'SCO60.98' if ac == 'CRYPTO' else 'CRE52.72'})", eng["sup_vol"], "0.00%", False, None),   # 32
+            ("Supervisory delta (CRE52.40) = side·cp·N(cp·[ln(S/K) + ½σ_s²T_e]/(σ_s√T_e)), T_e floored at a day", "=B7*B22*NORMSDIST(B22*(LN(B5/B14)+0.5*B32^2*MAX(B24,1/365))/(B32*SQRT(MAX(B24,1/365))))", "0.00000000", False, eng["sup_delta"]),   # 33
+            ("Steps the engine takes beyond a year: MAX(2, ROUNDUP(12·T_s, 0))", "=MAX(2,ROUNDUP(12*B9,0))", "0", False, float(T))]             # 34
+    for i, (label, v, fmt, inp_, engv) in enumerate(rows, 4):
+        ws.cell(row=i, column=1, value=label)
+        c = ws.cell(row=i, column=2, value=v); c.number_format = fmt
+        if inp_:
+            c.fill = W.FILL_IN
+        if i in (10, 13, 30, 32):
+            c.fill = W.FILL_RJ                                   # the engine's inputs: the option as it was priced
+        if engv is not None:
+            e = ws.cell(row=i, column=3, value=float(engv)); e.fill = W.FILL_RJ; e.number_format = fmt
+            W.check(wb, "Model", label.split(" (")[0].split(":")[0].split(" = ")[0], f"B{i}", f"C{i}", 1e-9 if i != 16 else 1e-8)
+    ws["C3"] = "engine"; ws["C3"].font = Font(color=W.MUTED)
+    W.dropdown(ws, "B20", ["ENGINE", "LIVE"])
+    _names(wb, {"Spot": "Model!B5", "Nbase": "Model!B6", "Sgn": "Model!B7", "Settle": "Model!B8", "Tyrs": "Model!B9", "DFqT": "Model!B10",
+                "F0": "Model!B13", "Kfx": "Model!B14", "Rq": "Model!B15", "Sigma": "Model!B16", "Nsteps": "Model!B17", "Dt": "Model!B18", "Npaths": "Model!B19",
+                "Mode": "Model!B20", "NotlQ": "Model!B21", "Cp": "Model!B22", "Texp": "Model!B24", "Rb": "Model!B25", "V0": "Model!B29", "SupDelta": "Model!B33"})
+    ws["A36"] = "THE GRID"; ws["A36"].font = W.F_SECTION
+    W.header(ws, 37, ["k", "t = k·Δ", "date (valuation + round(t·365), as the engine counts; a value)", "DF_q(0,t) = e^(−r_q·t)", "DF_q(t,T_s) = DF_q(0,T_s)/DF_q(0,t)",
+                      "σ_k: the vol of the step that ends at t_k (one vol: the FLAT mode)", "τ = T_e − t: the time left to the expiry (nothing at the last date: the payoff)"])
+    r0 = 38
+    for k in range(T + 1):
+        r = r0 + k
+        ws.cell(row=r, column=1, value=k)
+        ws.cell(row=r, column=2, value=f"=A{r}*Dt").number_format = "0.000000"
+        c = ws.cell(row=r, column=3, value=mkt.valuation_date + timedelta(days=int(round(k * eng["dt"] * 365.0)))); c.number_format = "yyyy-mm-dd"; c.fill = W.FILL_RJ
+        ws.cell(row=r, column=4, value=f"=EXP(-Rq*B{r})").number_format = "0.00000000"
+        ws.cell(row=r, column=5, value=f"=DFqT/D{r}").number_format = "0.00000000"
+        if k >= 1:
+            ws.cell(row=r, column=6, value="=Sigma").number_format = "0.000000%"
+        ws.cell(row=r, column=7, value=f"=MAX(Texp-B{r},0)").number_format = "0.000000"
+    ws.cell(row=r0 + T + 2, column=1, value=("The grid dates are information only: the engine discounts between today and settlement on the flat quote zero, not on the curve, "
+                                             "so DF_q(0,t) here is e^(−r_q·t) by construction. " + case["rate_note"])).font = Font(color=W.MUTED)
+    W.widths(ws, [64, 18, 14, 22, 28, 30, 30])
+    ws.freeze_panes = "A38"
+    return r0
+
+
+def _calibration_sheet(wb, mkt, case, fi, eng, grid_r0, opt: bool = False):
     pair, pillars, inp = case["pair"], fi["pillars"], fi["inp"]
     ws = wb.create_sheet("Calibration")
     ws["A1"] = "THE VOL FROM THE PAIR'S SURFACE"; ws["A1"].font = W.F_TITLE
     ws["A2"] = ("pricing/fx_vol.vol_at at the forward's tenor and K = F: ATM, RR25 and BF25 each linear in time between the quoted tenors and flat beyond them (RR and BF "
                 "over the tenors that quote a smile), then the Malz smile σ(Δ) = ATM − 2·RR·(Δ − ½) + 16·BF·(Δ − ½)² at the call's forward delta Δ = N(d₁), d₁ = ½σ√T at the forward, "
                 "by fixed point from the ATM. This σ drives every path."); ws["A2"].font = W.F_SUB
+    if opt:
+        ws["A2"] = ("pricing/fx_vol.vol_at at the option's expiry and strike, as the ticket prices it: ATM, RR25 and BF25 each linear in time between the quoted tenors and flat beyond them (RR and BF "
+                    "over the tenors that quote a smile), then the Malz smile σ(Δ) = ATM − 2·RR·(Δ − ½) + 16·BF·(Δ − ½)² at the call's forward delta Δ = N(d₁), d₁ = [ln(F₀/K) + ½σ²T_e]/(σ√T_e), "
+                    "by fixed point from the ATM. In the ticket's FLAT vol mode this one σ drives every path and values the option on every path.")
     ws["A4"] = "Source"; ws["B4"] = fi["vol_source"]
     ws["A5"] = "σ (decimal): the sheet's result"; ws["B5"].number_format = "0.0000%"
     ws["A6"] = "σ: the engine's (pricing/fx_xva, what the paths were simulated at)"; c = ws["C6"]; c.value = eng["sigma"]; c.fill = W.FILL_RJ; c.number_format = "0.0000%"
     ws["B6"] = "=B5"; ws["B6"].number_format = "0.0000%"
     # a forward that fixes a day before it settles is read at the fixing date: the ticket's reported vol is the surface's there
-    W.check(wb, "Calibration", "σ at the forward's tenor and strike", "B6", "C6", 1e-8 if not (fi["ticket"] and is_crypto(pair)) else 2e-3)
+    W.check(wb, "Calibration", "σ at the option's expiry and strike" if opt else "σ at the forward's tenor and strike", "B6", "C6", 1e-8 if opt or not (fi["ticket"] and is_crypto(pair)) else 2e-3)
     if not pillars:
-        ws["B5"] = (inp.vol_pct if inp.vol_pct is not None else default_vol_pct(pair)) / 100.0; ws["B5"].fill = W.FILL_IN
-        ws["A8"] = (f"No {pair}_VOL surface is saved for this account, so the engine used its default of {default_vol_pct(pair):g}% flat (pricing/fx_xva.DEFAULT_VOL_PCT) and said so on the ticket. "
+        ws["B5"] = float(inp.vol) if opt else (inp.vol_pct if inp.vol_pct is not None else default_vol_pct(pair)) / 100.0; ws["B5"].fill = W.FILL_IN
+        ws["A8"] = ((f"No {pair}_VOL surface is saved for this account, so the ticket priced the option at the pair's default level ({float(inp.vol):.2%} flat, pricing/fx_vol.lookup_vol) and said so. " if opt else
+                     f"No {pair}_VOL surface is saved for this account, so the engine used its default of {default_vol_pct(pair):g}% flat (pricing/fx_xva.DEFAULT_VOL_PCT) and said so on the ticket. ") +
                     "Save a surface under Market data and this sheet shows the interpolation instead; or change the yellow cell to see the XVA at another vol.")
         ws["A8"].font = Font(color=W.MUTED)
         W.widths(ws, [64, 16, 16])
@@ -281,29 +427,36 @@ def _calibration_sheet(wb, mkt, case, fi, eng, grid_r0):
     rs1 = rs0 + max(len(smiled), 1)
     # the interpolation at the forward's tenor
     ri = rs1 + 3
-    ws.cell(row=ri - 1, column=1, value="AT THE FORWARD'S TENOR").font = W.F_SECTION
+    ws.cell(row=ri - 1, column=1, value="AT THE OPTION'S EXPIRY" if opt else "AT THE FORWARD'S TENOR").font = W.F_SECTION
     xs, atm_ys = f"$B${r0 + 1}:$B${r1}", f"$C${r0 + 1}:$C${r1}"
     sx, rr_ys, bf_ys = f"$B${rs0 + 1}:$B${rs1}", f"$C${rs0 + 1}:$C${rs1}", f"$D${rs0 + 1}:$D${rs1}"
-    ws.cell(row=ri, column=1, value="T (years to settlement, the forward's tenor)"); ws.cell(row=ri, column=2, value="=Tyrs").number_format = "0.000000"
+    ws.cell(row=ri, column=1, value="T_e (years to the expiry)" if opt else "T (years to settlement, the forward's tenor)"); ws.cell(row=ri, column=2, value="=Texp" if opt else "=Tyrs").number_format = "0.000000"
     ws.cell(row=ri + 1, column=1, value="ATM at T (%, linear in time over every tenor, flat beyond)"); ws.cell(row=ri + 1, column=2, value=f"={_lin(f'$B${ri}', xs, atm_ys)}").number_format = "0.0000"
     ws.cell(row=ri + 2, column=1, value="RR25 at T (%, over the smiled tenors)"); ws.cell(row=ri + 2, column=2, value=(f"={_lin(f'$B${ri}', sx, rr_ys)}" if smiled else 0)).number_format = "0.0000"
     ws.cell(row=ri + 3, column=1, value="BF25 at T (%, over the smiled tenors)"); ws.cell(row=ri + 3, column=2, value=(f"={_lin(f'$B${ri}', sx, bf_ys)}" if smiled else 0)).number_format = "0.0000"
     ws.cell(row=ri + 4, column=1, value="√T"); ws.cell(row=ri + 4, column=2, value=f"=SQRT(B{ri})").number_format = "0.000000"
     # the fixed point σ = smile(Δ_call(σ)) at K = F
     rf = ri + 7
-    ws.cell(row=rf - 1, column=1, value=f"THE SMILE FIXED POINT AT K = F ({SMILE_ITERATIONS} iterations from the ATM, as the engine; it converges in two or three)").font = W.F_SECTION
-    W.header(ws, rf, ["iteration", "σ in (decimal)", "d₁ = ½σ√T", "Δ = N(d₁)", "x = Δ − ½", "σ out = max(ATM − 2·RR·x + 16·BF·x², 1e-4)", "|σ out − σ in|"])
+    ws.cell(row=rf - 1, column=1, value=f"THE SMILE FIXED POINT AT {'THE STRIKE' if opt else 'K = F'} ({SMILE_ITERATIONS} iterations from the ATM, as the engine; it converges in two or three)").font = W.F_SECTION
+    W.header(ws, rf, ["iteration", "σ in (decimal)", "d₁ = [ln(F₀/K) + ½σ²T]/(σ√T)" if opt else "d₁ = ½σ√T", "Δ = N(d₁)", "x = Δ − ½", "σ out = max(ATM − 2·RR·x + 16·BF·x², 1e-4)", "|σ out − σ in|"])
     for it in range(SMILE_ITERATIONS):
         r = rf + 1 + it
         ws.cell(row=r, column=1, value=it)
         ws.cell(row=r, column=2, value=(f"=B{ri + 1}/100" if it == 0 else f"=F{r - 1}")).number_format = "0.000000%"
-        ws.cell(row=r, column=3, value=f"=0.5*B{r}*$B${ri + 4}").number_format = "0.00000000"
+        ws.cell(row=r, column=3, value=(f"=(LN(F0/Kfx)+0.5*B{r}^2*$B${ri})/(B{r}*$B${ri + 4})" if opt else f"=0.5*B{r}*$B${ri + 4}")).number_format = "0.00000000"
         ws.cell(row=r, column=4, value=f"=NORMSDIST(C{r})").number_format = "0.00000000"
         ws.cell(row=r, column=5, value=f"=D{r}-0.5").number_format = "0.00000000"
         ws.cell(row=r, column=6, value=f"=MAX(($B${ri + 1}-2*$B${ri + 2}*E{r}+16*$B${ri + 3}*E{r}^2)/100,0.0001)").number_format = "0.000000%"
         ws.cell(row=r, column=7, value=f"=ABS(F{r}-B{r})").number_format = "0.0E+00"
     rlast = rf + SMILE_ITERATIONS
     ws["B5"] = f"=F{rlast}"
+    if opt:
+        ws.cell(row=rlast + 2, column=1, value=("The engine iterates until the step is below 1e-10, this sheet runs the full count, and the two agree to rounding (Checks). Premium-excluded forward delta, as the surface "
+                                                "is quoted (methodology §13). In the ticket's SURFACE mode the paths would instead step the surface's term structure and each path would read the smile at its own "
+                                                "moneyness: that mode is not rebuilt in this book.")).font = Font(color=W.MUTED)
+        W.widths(ws, [64, 16, 30, 26, 20, 22, 30, 14])
+        ws.freeze_panes = "A4"
+        return rlast
     ws.cell(row=rlast + 2, column=1, value=("At the forward the delta is a shade above ½ (d₁ = ½σ√T > 0), so the smile vol at K = F differs from the ATM quote by a few thousandths of a point; "
                                             "the engine iterates until the step is below 1e-10, this sheet runs the full count, and the two agree to rounding (Checks). "
                                             "Premium-excluded forward delta, as the surface is quoted (methodology §13).")).font = Font(color=W.MUTED)
@@ -359,7 +512,25 @@ def _normals_sheet(wb, eng, wf_noise):
     return (z0, z1), (n0, n1)
 
 
-def _paths_sheet(wb, case, eng, grid_r0, zrows):
+def _option_value_blocks(ws, case, eng, grid_r0, fb, top):
+    """Below the forward's block: the spot each path implies, d₁, and the option's value from our side. Before the
+    last date the closed form with the time left; at the last date, the settlement date, the payoff on the spot there."""
+    T = eng["T"]
+    g = lambda j: grid_r0 + j                                                                                               # noqa: E731
+    sb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"={L(c)}{fb[0] + p}*EXP(-(Rq-Rb)*(Tyrs-Model!$B${g(j)}))", case["spot_fmt"],
+                "S_t = F_t·e^(−(r_q−r_b)(T_s−t)): the spot the forward implies with the carry held")
+    top = sb[1] + 3
+    db = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"=(LN({L(c)}{sb[0] + p}*EXP((Rq-Rb)*Model!$G${g(j)})/Kfx)+0.5*Model!$F${g(j)}^2*Model!$G${g(j)})/(Model!$F${g(j)}*SQRT(Model!$G${g(j)}))" if j < T else "—"),
+                "0.000000", "d₁ = [ln(F_e/K) + ½σ²τ]/(σ√τ), F_e = S_t·e^((r_q−r_b)τ) the forward to the expiry, τ the time left (Model sheet); nothing at the last date")
+    top = db[1] + 3
+    vb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (
+        f"=Sgn*Nbase*EXP(-Rq*Model!$G${g(j)})*Cp*({L(c)}{sb[0] + p}*EXP((Rq-Rb)*Model!$G${g(j)})*NORMSDIST(Cp*{L(c)}{db[0] + p})-Kfx*NORMSDIST(Cp*({L(c)}{db[0] + p}-Model!$F${g(j)}*SQRT(Model!$G${g(j)}))))" if j < T
+        else f"=Sgn*Nbase*MAX(Cp*({L(c)}{sb[0] + p}-Kfx),0)*Model!$E${g(j)}"), case["mtm_fmt"],
+        "V = side·N·e^(−r_q·τ)·cp·[F_e·N(cp·d₁) − K·N(cp·d₂)] before the expiry; at the last date the payoff side·N·max(cp·(S − K), 0)·DF_q(t,T_s)")
+    return sb, db, vb
+
+
+def _paths_sheet(wb, case, eng, grid_r0, zrows, opt: bool = False):
     T = eng["T"]; z0, z1 = zrows
     ws = wb.create_sheet("Paths")
     ws["A1"] = "THE PATHS"; ws["A1"].font = W.F_TITLE
@@ -376,8 +547,11 @@ def _paths_sheet(wb, case, eng, grid_r0, zrows):
                                                              f"+Model!$F${grid_r0 + j}*SQRT(Dt*Normals!{L(c)}{u0 + p})*{L(c)}{zb[0] + p})"),
                     case["spot_fmt"], "F_t = F_prev·exp(−½σ²Δ·U + σ·√(Δ·U)·Z): the forward on the path, lognormal over the step given the variance the step accumulated")
         blocks["F"] = fb; top = fb[1] + 3
-        vb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=Sgn*Nbase*({L(c)}{fb[0] + p}-Kfx)*Model!$E${grid_r0 + j}", case["mtm_fmt"], "V = side·N·(F_t − K)·DF_q(t,T): the forward's value from our side")
-        blocks["V"] = vb
+        if opt:
+            ws["A2"] = "Z and U (the step's variance on the path, the asset's vol regimes) → F_t = F_prev·exp(−½σ²Δ·U + σ·√(Δ·U)·Z) → the spot it implies → the option's value on it, by its closed form at σ. Every cell is a formula."
+            blocks["S"], blocks["D1"], blocks["V"] = _option_value_blocks(ws, case, eng, grid_r0, fb, top)
+        else:
+            blocks["V"] = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=Sgn*Nbase*({L(c)}{fb[0] + p}-Kfx)*Model!$E${grid_r0 + j}", case["mtm_fmt"], "V = side·N·(F_t − K)·DF_q(t,T): the forward's value from our side")
         W.widths(ws, [10] + [13] * T)
         ws.freeze_panes = "B6"
         return blocks
@@ -387,14 +561,17 @@ def _paths_sheet(wb, case, eng, grid_r0, zrows):
                                                          f"+Model!$F${grid_r0 + j}*SQRT(Dt)*{L(c)}{zb[0] + p})"),
                 case["spot_fmt"], "F_t = F_(t−1)·exp(−½σ_k²Δ + σ_k·√Δ·Z): the forward on the path, each step at its own vol")
     blocks["F"] = fb; top = fb[1] + 3
-    vb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=Sgn*Nbase*({L(c)}{fb[0] + p}-Kfx)*Model!$E${grid_r0 + j}", case["mtm_fmt"], "V = side·N·(F_t − K)·DF_q(t,T): the forward's value from our side")
-    blocks["V"] = vb
+    if opt:
+        ws["A2"] = "Z → F_t = F_(t−1)·exp(−½σ²Δ + σ·√Δ·Z) → the spot it implies → the option's value on it, by its closed form with the time left. Every cell is a formula."
+        blocks["S"], blocks["D1"], blocks["V"] = _option_value_blocks(ws, case, eng, grid_r0, fb, top)
+    else:
+        blocks["V"] = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=Sgn*Nbase*({L(c)}{fb[0] + p}-Kfx)*Model!$E${grid_r0 + j}", case["mtm_fmt"], "V = side·N·(F_t − K)·DF_q(t,T): the forward's value from our side")
     W.widths(ws, [10] + [13] * T)
     ws.freeze_panes = "B6"
     return blocks
 
 
-def _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0):
+def _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0, opt: bool = False):
     T = eng["T"]; vb = blocks["V"]; n0, n1 = nrows
     ws = wb.create_sheet("Exposure")
     ws["A1"] = "THE CSA AND THE EXPOSURE"; ws["A1"].font = W.F_TITLE
@@ -438,8 +615,24 @@ def _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0):
                                                               f"+Normals!{L(c)}{n0 + p}*Model!$F${grid_r0 + j}*SQRT(Wlag*(1-Wlag)*Dt)),Paths!{L(c)}{fb[0] + p})"),
                      case["spot_fmt"], "F(t − δ): exp(ln F_lo + w·(ln F_hi − ln F_lo) + N·σ·√(w(1−w)·Δ)), the forward a margin period earlier (LIVE mode re-rolls N too)")
     top = dvb[1] + 3
-    lagb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=IF(Coll=1,Sgn*Nbase*({L(c)}{dvb[0] + p}-Kfx)*DFqT/EXP(-Rq*$C${rs + j}),Paths!{L(c)}{vb[0] + p})",
-                  "#,##0", "V(t − δ) = side·N·(F(t − δ) − K)·DF_q(t − δ, T): the forward valued on that level")
+    if opt:
+        # the option a margin period earlier: its closed form on the spot there with the time left. In the step that ends
+        # on the expiry's grid date (the last) the time left runs to that date, where the paths fix the payoff
+        ws["A2"] = ("V a margin period earlier (the forward bridged between grid dates where it is lognormal, the option valued on the spot it implies there by its closed form with the time left), "
+                    "the collateral it calls, the residual, and EE / ENE / PFE per step. Choose a preset or set the terms.")
+        tau = lambda j: f"($B${rs + j}-$C${rs + j})" if j == T else f"(Texp-$C${rs + j})"                                     # noqa: E731
+        slb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"={L(c)}{dvb[0] + p}*EXP(-(Rq-Rb)*(Tyrs-$C${rs + j}))", case["spot_fmt"],
+                     "S(t − δ) = F(t − δ)·e^(−(r_q−r_b)(T_s−(t−δ))): the spot a margin period earlier")
+        top = slb[1] + 3
+        dlb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=(LN({L(c)}{slb[0] + p}*EXP((Rq-Rb)*{tau(j)})/Kfx)+0.5*Model!$F${grid_r0 + j}^2*{tau(j)})/(Model!$F${grid_r0 + j}*SQRT({tau(j)}))", "0.000000",
+                     "d₁ at t − δ: the time left is T_e − (t − δ); in the last step it runs to the last grid date, where the paths fix the payoff (the engine's own reading, stated in docs/xva.md)")
+        top = dlb[1] + 3
+        lagb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: (f"=IF(Coll=1,Sgn*Nbase*EXP(-Rq*{tau(j)})*Cp*({L(c)}{slb[0] + p}*EXP((Rq-Rb)*{tau(j)})*NORMSDIST(Cp*{L(c)}{dlb[0] + p})"
+                                                               f"-Kfx*NORMSDIST(Cp*({L(c)}{dlb[0] + p}-Model!$F${grid_r0 + j}*SQRT({tau(j)})))),Paths!{L(c)}{vb[0] + p})"),
+                      "#,##0", "V(t − δ) = side·N·e^(−r_q·τ)·cp·[F_e·N(cp·d₁) − K·N(cp·d₂)] on the spot at t − δ: the option valued on that level")
+    else:
+        lagb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=IF(Coll=1,Sgn*Nbase*({L(c)}{dvb[0] + p}-Kfx)*DFqT/EXP(-Rq*$C${rs + j}),Paths!{L(c)}{vb[0] + p})",
+                      "#,##0", "V(t − δ) = side·N·(F(t − δ) − K)·DF_q(t − δ, T): the forward valued on that level")
     top = lagb[1] + 3
     mvb = _block(ws, top, N_PATHS, T, lambda p, j, r, c: f"=Paths!{L(c)}{vb[0] + p}-{L(c)}{lagb[0] + p}", "#,##0",
                  "Move over the margin period: V(t) − V(t − δ). Initial margin is its 99th percentile rise (what we call) and fall (what we post), about its mean")
@@ -471,8 +664,9 @@ def _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0):
     return rs, {"DV": dvb, "LAG": lagb, "MV": mvb, "C": cb, "RES": resb}
 
 
-def _waterfall_sheet(wb, case, eng, rs, grid_r0):
+def _waterfall_sheet(wb, case, eng, rs, grid_r0, opt: bool = False):
     T = eng["T"]
+    dl = "*ABS(SupDelta)" if opt else ""            # an option enters its class at the supervisory delta of its strike (CRE52.40), held along the grid
     ws = wb.create_sheet("Waterfall")
     ws["A1"] = "THE WATERFALL"; ws["A1"].font = W.F_TITLE
     ws["A2"] = ("Per step: survival from the credit triangle, then CVA and DVA (a party's default in the step, counted while the other survives to the middle of it: first to default), FCA (the funding cost, on the whole funding spread) and FBA (the funding benefit, on the funding basis alone, since DVA already carries our own credit spread; FVA is the two together; both run only while the two parties are alive), the SA-CCR exposure at default and the capital it needs (KVA), the initial margin funded (MVA). "
@@ -528,7 +722,7 @@ def _waterfall_sheet(wb, case, eng, rs, grid_r0):
         # CRE52.48 (unmargined: sqrt(min(M, 1)), M floored at ten business days) and CRE52.52 (margined)
         ws.cell(row=r, column=16, value=f"=IF(Coll=1,1.5*SQRT(MAX(MPoR,IF(Preset=\"ON_CHAIN\",{MPOR_FLOOR_CLEARED_BD},{MPOR_FLOOR_BILATERAL_BD}))/{BUSINESS_DAYS_PER_YEAR}),SQRT(MIN(MAX(N{r},1/25),1)))").number_format = "0.0000"
         # the class's add-on for one trade at δ = ±1: supervisory factor × the notional in the quote currency at spot × the maturity factor
-        ws.cell(row=r, column=17, value=f"=IF(N{r}>0,SFsa*ABS(Nbase)*Spot*P{r},0)").number_format = "#,##0.00"
+        ws.cell(row=r, column=17, value=f"=IF(N{r}>0,SFsa*ABS(Nbase)*Spot{dl}*P{r},0)").number_format = "#,##0.00"
         ws.cell(row=r, column=18, value=f"=IF(Coll=1,Exposure!K{e},0)").number_format = "#,##0.00"
         ws.cell(row=r, column=19, value=f"=IF(Coll=1,MAX(Exposure!J{e},THcp+MTA-R{r},0),MAX(Exposure!J{e},0))").number_format = "#,##0.00"
         ws.cell(row=r, column=20, value=f"=IF(Q{r}>0,MIN(1,0.05+0.95*EXP(MIN((Exposure!J{e}-R{r})/(1.9*Q{r}),50))),1)").number_format = "0.0000"
@@ -539,7 +733,7 @@ def _waterfall_sheet(wb, case, eng, rs, grid_r0):
         ws.cell(row=r, column=25, value=f"=IF(N{r}>0,X{r}*MAX(FTP/10000-Pickup/10000,0)*Dt*C{r},0)").number_format = "#,##0.00"
         # CRE52.2: the same set unmargined (the collateral held, the unmargined maturity factor, RC = max(V − C, 0)); the EAD is capped at it
         ws.cell(row=r, column=26, value=f"=SQRT(MIN(MAX(MAX(N{r},0),1/25),1))").number_format = "0.0000"
-        ws.cell(row=r, column=27, value=f"=IF(N{r}>0,SFsa*ABS(Nbase)*Spot*Z{r},0)").number_format = "#,##0.00"
+        ws.cell(row=r, column=27, value=f"=IF(N{r}>0,SFsa*ABS(Nbase)*Spot{dl}*Z{r},0)").number_format = "#,##0.00"
         ws.cell(row=r, column=28, value=f"=MAX(Exposure!J{e}-R{r},0)").number_format = "#,##0.00"
         ws.cell(row=r, column=29, value=f"=IF(AA{r}>0,MIN(1,0.05+0.95*EXP(MIN((Exposure!J{e}-R{r})/(1.9*AA{r}),50))),1)").number_format = "0.0000"
         ws.cell(row=r, column=30, value=f"=AlphaSA*(AB{r}+AC{r}*AA{r})").number_format = "#,##0.00"
@@ -553,17 +747,18 @@ def _waterfall_sheet(wb, case, eng, rs, grid_r0):
     for i, (label, f) in enumerate(totals):
         ws.cell(row=rt + i, column=1, value=label).font = Font(bold=True)
         ws.cell(row=rt + i, column=2, value=f).number_format = "#,##0.00"
-    ws.cell(row=rt + len(totals) + 1, column=1, value="Capital and initial margin are held through a step, so the remaining life m is read at the middle of it (t − Δ/2): the step that ends on settlement is charged like the others; the add-on is SA-CCR's for the pair's class: the supervisory factor × the notional in the quote currency at spot × the maturity factor (one trade, δ = ±1).").font = Font(color=W.MUTED)
+    ws.cell(row=rt + len(totals) + 1, column=1, value=("Capital and initial margin are held through a step, so the remaining life m is read at the middle of it (t − Δ/2): the step that ends on settlement is charged like the others; the add-on is SA-CCR's for the pair's class: the supervisory factor × the notional in the quote currency at spot × the maturity factor " + ("× the option's supervisory delta (Model sheet), held along the grid." if opt else "(one trade, δ = ±1)."))).font = Font(color=W.MUTED)
     W.widths(ws, [44, 10, 12, 10, 10, 10, 10, 13, 13, 11, 11, 11, 11, 10, 10, 8, 12, 12, 12, 10, 13, 12, 11, 12, 11, 11])
     ws.freeze_panes = "C20"
     return r0, r1, rt
 
 
-def _engine_sheet(wb, case, eng, blocks, rs, rt):
+def _engine_sheet(wb, case, eng, blocks, rs, rt, opt: bool = False):
     T = eng["T"]; fb = blocks["F"]
     ws = wb.create_sheet("Engine")
     ws["A1"] = "WHAT THE ENGINE COMPUTED ON THE SAME DRAWS"; ws["A1"].font = W.F_TITLE
-    ws["A2"] = "pricing/fx_xva.forward_xva (simulate_paths, then pricing/xva_engine.run_waterfall) under each CSA preset, written at export. The 'selected' column follows the preset chosen on the Exposure sheet and feeds the Checks."; ws["A2"].font = W.F_SUB
+    ws["A2"] = (f"pricing/fx_xva.{'option_xva (simulate_option_paths' if opt else 'forward_xva (simulate_paths'}, then pricing/xva_engine.run_waterfall) under each CSA preset, written at export. "
+                "The 'selected' column follows the preset chosen on the Exposure sheet and feeds the Checks."); ws["A2"].font = W.F_SUB
     W.header(ws, 4, ["Metric"] + list(PRESETS) + ["selected"])
     metrics = [("CVA", "cva"), ("DVA", "dva"), ("FCA", "fca"), ("FBA", "fba"), ("KVA", "kva"), ("MVA", "mva"), ("ColVA", "colva"), ("XVA total", "xva_total"),
                ("EAD over the first step", "ead_0"), ("Capital over the first step", "capital_0"), ("IM₀", "im_0"), ("Peak EE", None), ("Peak PFE", None)]
@@ -603,6 +798,17 @@ def _engine_sheet(wb, case, eng, blocks, rs, rt):
         W.check(wb, "Paths", f"F_t on path {p + 1} at step {j}", f"Paths!{L(1 + j)}{fb[0] + p}", f"Engine!C{r}", 1e-9)
         r += 1
     r += 1
+    if opt:
+        ws.cell(row=r, column=1, value="THE OPTION'S VALUE ON A FEW PATHS (simulate_option_paths' values)").font = W.F_SECTION; r += 1
+        W.header(ws, r, ["path", "step", "V (engine)", "V (Paths sheet)"]); r += 1
+        vb, vp = blocks["V"], eng["v_paths"]
+        for p, j in sorted({(0, 1), (0, T), (0, T - 1), (N_PATHS // 2 - 1, max(1, T // 2)), (N_PATHS - 1, 1), (N_PATHS - 1, T - 1), (N_PATHS - 1, T)}):
+            ws.cell(row=r, column=1, value=p + 1); ws.cell(row=r, column=2, value=j)
+            c = ws.cell(row=r, column=3, value=float(vp[p, j - 1])); c.fill = W.FILL_RJ; c.number_format = "#,##0.00"
+            ws.cell(row=r, column=4, value=f"=Paths!{L(1 + j)}{vb[0] + p}").number_format = "#,##0.00"
+            W.check(wb, "Paths", f"V on path {p + 1} at step {j}", f"Paths!{L(1 + j)}{vb[0] + p}", f"Engine!C{r}", 1e-8)
+            r += 1
+        r += 1
     ws.cell(row=r, column=1, value="Simulation").font = W.F_SECTION
     ws.cell(row=r + 1, column=1, value="σ (decimal)"); c = ws.cell(row=r + 1, column=2, value=eng["sigma"]); c.fill = W.FILL_RJ; c.number_format = "0.0000%"
     ws.cell(row=r + 2, column=1, value="V(0)"); c = ws.cell(row=r + 2, column=2, value=eng["v0"]); c.fill = W.FILL_RJ; c.number_format = "#,##0.00"
@@ -710,6 +916,101 @@ def _xva_forward_workbook(mkt, case: dict):
     ]:
         W.derive(wb, sym, notn, ref, note, fmt)
     return wb, eng["runs"][DEFAULT_PRESET][1].xva_total
+
+
+def _xva_option_workbook(mkt, case: dict):
+    """The XVA book of a European option on a currency pair or a digital asset: the forward book's sheets with the
+    option's value on every path in place of the forward's, in the ticket's FLAT vol mode."""
+    from methodology.replicate import _curve_sheet, _readme
+    base, quote, crypto = case["base"], case["quote"], case["pair"] != "EURUSD"
+    fi = option_inputs(mkt, case)
+    eng = engine_runs(fi)
+    inp, T = fi["inp"], eng["T"]
+    kind = "call" if str(inp.spec.option_type).upper() == "CALL" else "put"
+    wb = Workbook()
+    _readme(wb, case["title"], [
+        f"Default trade: buy a European {base} {kind} on {case['notional']:,.10g} {base} against {quote}, struck at the forward, expiring in {MONTHS} months "
+        f"({'cash-settled in USD against the settlement price source the business day after the expiry, a non-deliverable option' if crypto else 'delivered the spot lag after the expiry'}); "
+        f"monthly grid (the grid of a ticket beyond a year, which this trade is), {N_PATHS} paths; the engine's own random draws on the Normals sheet.",
+        "This is the ticket's XVA run in its FLAT vol mode (the switch beside the vol on the XVA tab): one vol, the surface's at the option's expiry and strike (Calibration sheet), "
+        "drives every path and values the option on every path. In the ticket's SURFACE mode, its default, the paths step the surface's term structure and each path reads the smile at its "
+        "own moneyness, eight groups of paths each valued at its group's vol: that mode is not rebuilt here, and neither are the other styles (American, digital, barrier, touch).",
+        "Model: the forward to settlement is lognormal and driftless under the settlement-date forward measure; the spot it implies carries the forward's own carry; before the expiry the option is valued on "
+        "each path by its closed form with the time left (Garman–Kohlhagen), at the settlement date it is its payoff (pricing/fx_xva.option_xva, docs/xva.md). The run's value today reads the forward and the "
+        "discounting at the expiry, where the ticket's price reads them at the settlement a few days later: the Model sheet shows both and the difference.",
+        *([f"Vol regimes: a digital asset's vol is not one level. On each path a day's vol is σ × a fast state (calm or stressed, {eng['regimes']['fast']['stressed_spell_days']:g} days of stress at a time) × a slow state "
+           f"(low or high, about {eng['regimes']['slow']['high_spell_days']:g} days at a time), scaled so the variance expected over any period is σ²: between {eng['regimes']['lowest_vol_pct']:g} % and "
+           f"{eng['regimes']['highest_vol_pct']:g} % here. The spot moves on that clock (U on the Normals sheet, the engine's own); the option is still marked at σ on every path. "
+           f"Fitted to {eng['regimes']['days']} public daily closes to {eng['regimes']['as_of']} (pricing/vol_regimes.py). LIVE mode re-rolls the normals and keeps the engine's U and Ω."] if eng.get("regimes") else []),
+        "ENGINE mode (Model sheet) reproduces the engine to rounding: the Checks sheet compares the vol, the forward and the option's value on a few paths, V(0), every EE, ENE and PFE and every XVA. LIVE mode re-rolls the normals "
+        "with NORMSINV(RAND()) on each recalculation; the Convergence sheet shows the Monte Carlo error and the Checks read LIVE instead of PASS. Switch Excel to manual calculation before going LIVE.",
+        "CSA: a preset (UNCOLLATERALISED, BILATERAL with a 10-day margin period, ON_CHAIN with a 5-day one) or your own thresholds and MTA; the Engine sheet holds the engine's run under each preset. "
+        "The value a margin period earlier is the option's closed form on the level drawn there, not a straight line between two grid values. Initial margin is the engine's own estimate from these paths: "
+        "at each date the 99th percentile rise (what we call) and fall (what we post) of V over the margin period, about its mean. It is not an industry margin model; a desk with its own figure types it on the ticket.",
+        f"The capital add-on is {case['sf_basis']}: the supervisory factor on the notional in the quote currency at spot, at the option's supervisory delta (CRE52.40: the Black delta of its strike at the class's supervisory volatility).",
+        "A bought option is an asset on every path: uncollateralised it has no negative exposure, so DVA and FBA are nothing; under a CSA the collateral held against it leaves a residual of either sign. "
+        "Change the side on the Model sheet to see the sold option (the Checks then read against a bought one).",
+        case["rate_note"],
+    ], mkt, summary=[("Model", f"European {kind} on a lognormal forward{' on the clock of its vol regimes' if eng.get('regimes') else ''}, σ = {eng['sigma']:.4%} from {fi['vol_source']}"),
+                     ("Paths", f"{N_PATHS} on {T} monthly steps (Δ = {eng['dt']:.5f}y)")])
+    _curve_sheet(wb, mkt)
+    grid_r0 = _option_model_sheet(wb, mkt, case, fi, eng)
+    _calibration_sheet(wb, mkt, case, fi, eng, grid_r0, opt=True)
+    wf_noise = eng["runs"]["BILATERAL"][1].bridge_noise
+    zrows, nrows = _normals_sheet(wb, eng, wf_noise)
+    blocks = _paths_sheet(wb, case, eng, grid_r0, zrows, opt=True)
+    rs, blocks_exp = _exposure_sheet(wb, case, eng, blocks, nrows, grid_r0, opt=True)
+    r0, r1, rt = _waterfall_sheet(wb, case, eng, rs, grid_r0, opt=True)
+    _engine_sheet(wb, case, eng, blocks, rs, rt, opt=True)
+    _convergence_sheet(wb, eng, blocks_exp, rs)
+    W.live(wb, "Mode")
+    W.ticket(wb, "XVA (the ticket's XVA tab, FLAT vol mode)", [("CVA", f"Waterfall!B{rt}", "#,##0.00", "cost"), ("DVA", f"Waterfall!B{rt + 1}", "#,##0.00", "benefit"), ("FCA", f"Waterfall!B{rt + 2}", "#,##0.00", ""),
+                                                              ("FBA", f"Waterfall!B{rt + 3}", "#,##0.00", ""), ("KVA", f"Waterfall!B{rt + 4}", "#,##0.00", ""), ("MVA", f"Waterfall!B{rt + 5}", "#,##0.00", ""), ("ColVA", f"Waterfall!B{rt + 6}", "#,##0.00", "carry of the VM held, against cash at OIS"),
+                                                              ("XVA TOTAL", f"Waterfall!B{rt + 7}", "#,##0.00", "all-in = NPV + XVA on the ticket"),
+                                                              ("EAD₀ / CAPITAL₀", f"Waterfall!B{rt + 8}", "#,##0.00", "SA-CCR at t = 0; capital on the next row"), ("IM₀", f"Waterfall!B{rt + 10}", "#,##0.00", "the margin we post at the first date: the engine's estimate, not an industry margin model"),
+                                                              ("PEAK EE", f"Waterfall!B{rt + 11}", "#,##0.00", ""), ("PEAK PFE 95%", f"Waterfall!B{rt + 12}", "#,##0.00", "")])
+    W.ticket(wb, "THE OPTION AND THE CSA", [("PAIR", "Model!B4", "@", ""), ("NOTIONAL", "Model!B6", "#,##0.####", base), ("SIDE", "Model!B7", '"BOUGHT";"SOLD";"FLAT"', "+1 = bought"),
+                                            ("TYPE", "Model!B22", '"CALL";"PUT";"—"', f"on {base}"), ("EXPIRY", "Model!B23", "yyyy-mm-dd", f"T_e = {inp.t_expiry:.4f}y"),
+                                            ("SETTLEMENT", "Model!B8", "yyyy-mm-dd", f"T_s = {inp.t_settle:.4f}y"), ("FORWARD", "Model!B13", case["spot_fmt"], f"{quote} per {base}, to settlement, as priced"),
+                                            ("STRIKE K", "Model!B14", case["spot_fmt"], "the forward"), ("NPV", "Model!B30", "#,##0.00", f"{quote}; the ticket's price"), ("V(0)", "Model!B29", "#,##0.00", "the run's value today"),
+                                            ("VOL σ", "Model!B16", "0.0000%", fi["vol_source"]), ("CSA PRESET", "Exposure!B4", "@", ""), ("MPoR", "Exposure!B9", "0", "business days"), ("MODE", "Model!B20", "@", "ENGINE or LIVE")])
+    cr = eng.get("clock_rows")
+    for sym, notn, ref, note, fmt in [
+        ("F₀", "the forward to settlement as the ticket priced it" if fi["ticket"] else "covered interest parity from the pair's spot date", "Model!B13", "its derivation is the forward workbook's", case["spot_fmt"]),
+        ("r_q", "−ln DF_q(0,T_s)/T_s", "Model!B15", "the flat quote zero between today and settlement: the engine's proxy for the curve", "0.000000%"),
+        ("r_b", "r_q − ln(F₀/S)/T_s", "Model!B25", "the carry the forward implies, held along the path", "0.000000%"),
+        ("σ", "the smile vol at the option's expiry and strike: the fixed point of σ = ATM − 2·RR·x + 16·BF·x², x = N(d₁) − ½", "Calibration!B5", "ATM, RR25, BF25 linear in time between quoted tenors, flat beyond; held on every path (FLAT)", "0.0000%"),
+        ("V(0)", "side·N·e^(−r_q·T_e)·cp·[F_e·N(cp·d₁) − K·N(cp·d₂)], F_e = S·e^((r_q−r_b)T_e)", "Model!B29", "the run's value today", "#,##0.00"),
+        ("Δ, steps", "steps = max(2, ⌈12T_s⌉), Δ = T_s/steps", "Model!B18", "monthly steps: the grid of a ticket beyond a year, which this trade is", "0.00000000"),
+        *([("U", "the variance a step accumulated on the path, as a multiple of σ²Δ", f"Normals!B{cr['U'][0]}", "path 1, step 1: the asset's vol regimes, day by day (pricing/vol_regimes.py)", "0.000000"),
+           ("F_t", "F_prev·exp(−½σ²Δ·U + σ·√(Δ·U)·Z)", f"Paths!B{blocks['F'][0]}", "the forward on path 1 at step 1", case["spot_fmt"])] if cr else
+          [("F_t", "F_prev·exp(−½σ²Δ + σ·√Δ·Z)", f"Paths!B{blocks['F'][0]}", "the forward on path 1 at step 1", case["spot_fmt"])]),
+        ("S_t", "F_t·e^(−(r_q−r_b)(T_s−t))", f"Paths!B{blocks['S'][0]}", "the spot the forward implies on path 1 at step 1", case["spot_fmt"]),
+        ("d₁", "[ln(F_e/K) + ½σ²τ]/(σ√τ), F_e = S_t·e^((r_q−r_b)τ), τ = T_e − t", f"Paths!B{blocks['D1'][0]}", "path 1 at step 1", "0.000000"),
+        ("V", "side·N·e^(−r_q·τ)·cp·[F_e·N(cp·d₁) − K·N(cp·d₂)]; at the last date side·N·max(cp·(S − K), 0)", f"Paths!B{blocks['V'][0]}", "the option's value on path 1 at step 1", "#,##0"),
+        ("F(t−δ)", "exp(ln F_lo + Ω·(ln F_hi − ln F_lo) + N·σ·√(Ω(1−Ω)·Δ·U)), Ω the share of the step's variance before the date" if cr else "exp(ln F_lo + w·(ln F_hi − ln F_lo) + N·σ·√(w(1−w)·Δ))", f"Exposure!B{blocks_exp['DV'][0]}", "the forward a margin period earlier: ln F is a Brownian bridge between two grid dates", case["spot_fmt"]),
+        ("V(t−δ)", "the closed form on S(t−δ) with the time left there", f"Exposure!B{blocks_exp['LAG'][0]}", "the option valued on that level", "#,##0"),
+        ("C", "max(V_lag − TH_cp, 0) − max(−V_lag − TH_own, 0), zeroed under the MTA", f"Exposure!B{blocks_exp['C'][0]}", "", "#,##0"),
+        ("IM₀", "99th percentile fall of V over the margin period, about its mean", "Exposure!B18", "the first date; not an industry margin model", "#,##0.00"),
+        ("EE, ENE, PFE", "mean(max(V−C−IM,0)), mean(min(V−C+IM,0)), 95th percentile of V−C", f"Exposure!D{rs + 1}", "step 1", "#,##0.00"),
+        ("Q(t)", "exp(−s/LGD·t)", f"Waterfall!D{r0}", "the credit triangle", "0.000000"),
+        ("CVA", "−LGD·Σ EE·ΔQ·Q_own(mid)·P(0,t)·WWR", f"Waterfall!B{rt}", "", "#,##0.00"), ("DVA", "+LGD_own·Σ |ENE|·ΔQ_own·Q_cp(mid)·P(0,t)", f"Waterfall!B{rt + 1}", "", "#,##0.00"),
+        ("FCA, FBA (FVA is their sum)", "−Σ ftp·EE·S·Δ·P, +Σ max(ftp − s_own, 0)·|ENE|·S·Δ·P; S = both parties alive", f"Waterfall!B{rt + 2}", "", "#,##0.00"),
+        ("δ_s", "side·cp·N(cp·[ln(S/K) + ½σ_s²T_e]/(σ_s√T_e))", "Model!B33", "the supervisory delta of the strike (CRE52.40), held along the grid", "0.00000000"),
+        ("EAD", "α·[RC + multiplier·add-on], add-on = SF·N·S·|δ_s|·MF", f"Waterfall!U{r0}", "SA-CCR, step 1", "#,##0.00"),
+        ("KVA", "−hurdle·Σ 8%·RW·EAD·Δ·P", f"Waterfall!B{rt + 4}", "", "#,##0.00"), ("MVA", "−Σ IM(t)·max(ftp − pickup, 0)·Δ·P", f"Waterfall!B{rt + 5}", "", "#,##0.00"),
+        ("ColVA", "Σ (VM posted·s_post + VM received·s_recv)·Δ·P, the carries over OIS of what the margin is held in", f"Waterfall!B{rt + 6}", "zero for cash", "#,##0.00"),
+    ]:
+        W.derive(wb, sym, notn, ref, note, fmt)
+    return wb, eng["runs"][DEFAULT_PRESET][1].xva_total
+
+
+def xva_fx_option_workbook(mkt):
+    return _xva_option_workbook(mkt, XVA_FX_OPTION_CASE)
+
+
+def xva_crypto_option_workbook(mkt):
+    return _xva_option_workbook(mkt, XVA_CRYPTO_OPTION_CASE)
 
 
 def xva_fx_workbook(mkt):

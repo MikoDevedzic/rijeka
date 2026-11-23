@@ -382,6 +382,82 @@ def test_xva_fx_workbooks_carry_the_engine_draws_and_a_live_mode():
     assert any("Model!$F$" in f and "SQRT(Dt)" in f for f in paths), "the path steps at each step's own vol"
 
 
+def test_xva_option_workbooks_value_the_option_on_every_path_in_the_tickets_flat_mode():
+    """0.63.0. The XVA book of a European option on a currency pair and on a digital asset: the ticket's run in its
+    FLAT vol mode. Its value today against the closed form written out here (not the engine's), the supervisory delta
+    against CRE52.40 written out here, the mean of the discounted values on many paths against the value today (a
+    bought option's value is a martingale under the measure the paths are drawn in), and the book's shape."""
+    import math
+    import numpy as np
+    from methodology.fx_xva_workbook import N_PATHS, XVA_CRYPTO_OPTION_CASE, XVA_FX_OPTION_CASE, engine_runs, option_inputs
+    from pricing.csa import CSA
+    from pricing.fx_vol import vol_at
+    from pricing.fx_xva import option_xva, simulate_option_paths
+    from scripts.check_workbook import with_surfaces
+    Phi = lambda x: 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))        # noqa: E731
+    mkt = _mkt()
+    for product, case, sup_vol in (("xva_fx_option", XVA_FX_OPTION_CASE, 0.15), ("xva_crypto_option", XVA_CRYPTO_OPTION_CASE, 1.20)):
+        fi = option_inputs(mkt, case)
+        inp = fi["inp"]
+        eng = engine_runs(fi)
+        assert fi["ticket"] is False and inp.pillars is None and fi["pillars"] == [], "no account and no surface: one default vol, the FLAT mode"
+        assert eng["T"] in (18, 19) and eng["dt"] == pytest.approx(inp.t_settle / eng["T"]) and 0 < inp.t_settle - inp.t_expiry < eng["dt"]
+        # the value today, from the formula: the forward to the expiry on the carry the forward to settlement implies
+        r_q = -math.log(inp.df_quote_t) / inp.t_settle
+        r_b = r_q - math.log(inp.forward / inp.spot) / inp.t_settle
+        f_e = inp.spot * math.exp((r_q - r_b) * inp.t_expiry)
+        sT = inp.vol * math.sqrt(inp.t_expiry)
+        d1 = (math.log(f_e / inp.spec.strike) + 0.5 * sT * sT) / sT
+        v0 = inp.base_notional * math.exp(-r_q * inp.t_expiry) * (f_e * Phi(d1) - inp.spec.strike * Phi(d1 - sT))
+        assert eng["v0"] == pytest.approx(v0, rel=1e-10)
+        assert abs(eng["v0"] / fi["npv"] - 1.0) < 2e-3 and eng["v0"] != pytest.approx(fi["npv"], rel=1e-6), "the run reads the forward and the discounting at the expiry, the ticket at the settlement: close, not equal"
+        # the supervisory delta of the strike, with the class's supervisory volatility
+        ds = (math.log(inp.spot / inp.spec.strike) + 0.5 * sup_vol ** 2 * inp.t_expiry) / (sup_vol * math.sqrt(inp.t_expiry))
+        assert eng["sup_delta"] == pytest.approx(Phi(ds), rel=1e-12) and 0.3 < eng["sup_delta"] < 1.0
+        # a martingale: the mean discounted value at a date in the middle and at the last date, on many paths
+        V, p0, _ = simulate_option_paths(inp, n_paths=20000, seed=7)
+        for k in (eng["T"] // 2, eng["T"] - 1):
+            assert float(V[:, k].mean()) * p0[k + 1] == pytest.approx(v0, rel=0.05), k
+        # a bought option is an asset on every path: nothing owed, so no DVA and no funding benefit without collateral
+        unc = eng["runs"]["UNCOLLATERALISED"][1]
+        assert unc.dva == 0.0 and unc.fba == 0.0 and unc.cva < 0 and all(v == 0.0 for v in unc.ene)
+        assert eng["runs"]["BILATERAL"][1].cva > unc.cva and eng["runs"]["BILATERAL"][1].mva < 0
+        data, total = rep.build(product, mkt)
+        wb = load_workbook(io.BytesIO(data))
+        for s_ in ("Model", "Calibration", "Normals", "Paths", "Exposure", "Waterfall", "Engine", "Convergence", "Checks"):
+            assert s_ in wb.sheetnames
+        wf, _ = option_xva(inp, CSA.from_request({"preset": "BILATERAL"}), n_paths=N_PATHS, waterfall_rng=np.random.default_rng(43))
+        es = wb["Engine"]
+        got = {es.cell(row=r, column=1).value: es.cell(row=r, column=3).value for r in range(5, 17)}
+        for label, attr in (("CVA", "cva"), ("DVA", "dva"), ("FCA", "fca"), ("FBA", "fba"), ("KVA", "kva"), ("MVA", "mva"), ("XVA total", "xva_total"), ("IM₀", "im_0"), ("EAD over the first step", "ead_0")):
+            assert got[label] == pytest.approx(getattr(wf, attr))
+        assert total == pytest.approx(wf.xva_total)
+        m = wb["Model"]
+        assert m["B29"].value.startswith("=B7*B6*EXP(-B15*B24)*B22*(B26*NORMSDIST(B22*B27)") and m["C29"].value == pytest.approx(v0, rel=1e-10)
+        assert m["B30"].value == pytest.approx(fi["npv"]) and m["B33"].value.startswith("=B7*B22*NORMSDIST(")
+        paths = [c.value for row in wb["Paths"].iter_rows() for c in row if isinstance(c.value, str) and c.value.startswith("=")]
+        assert sum("NORMSDIST(Cp*" in f for f in paths) == N_PATHS * (eng["T"] - 1), "the closed form on every path at every date before the last"
+        assert sum("MAX(Cp*(" in f for f in paths) == N_PATHS, "the payoff at the last date"
+        lag = [c.value for row in wb["Exposure"].iter_rows() for c in row if isinstance(c.value, str) and "NORMSDIST(Cp*" in c.value]
+        assert len(lag) == N_PATHS * eng["T"] and all(f.startswith("=IF(Coll=1,") for f in lag), "a margin period earlier the option is valued by its closed form at every date"
+        assert sum("ABS(SupDelta)" in str(c.value) for row in wb["Waterfall"].iter_rows() for c in row) == 2 * eng["T"]
+        assert "not rebuilt" in " ".join(str(c.value) for row in wb.worksheets[0].iter_rows() for c in row if c.value), "the first sheet says which mode the book is"
+        formulas = [c.value for ws in wb.worksheets for row in ws.iter_rows() for c in row if isinstance(c.value, str) and c.value.startswith("=")]
+        assert not any("NORM.S.DIST" in f or "_xlfn" in f for f in formulas)
+    # with a surface saved: the vol is the smile's at the option's expiry and strike, and it is still one vol on every path
+    with_surfaces(mkt)
+    fi = option_inputs(mkt, XVA_FX_OPTION_CASE)
+    inp = fi["inp"]
+    assert len(fi["pillars"]) == 4 and inp.pillars is None and inp.vol == pytest.approx(vol_at(fi["pillars"], inp.t_expiry, inp.forward, inp.spec.strike))
+    eng = engine_runs(fi)
+    assert len(set(eng["sv"])) == 1 and eng["sv"][0] == pytest.approx(inp.vol)
+    data, _ = rep.build("xva_fx_option", mkt)
+    wb = load_workbook(io.BytesIO(data))
+    cal = wb["Calibration"]
+    assert str(cal["B5"].value).startswith("=F") and any("LN(F0/Kfx)" in str(c.value) for row in cal.iter_rows(min_col=3, max_col=3) for c in row)
+    assert not any(str(c.value).startswith("=SQRT(MAX(") for row in cal.iter_rows() for c in row), "no step vols in the FLAT mode"
+
+
 def test_hw1f_mc_matches_the_route_loop():
     """The extracted simulation is the route's loop: same rng order, same reconstitution. Checked against a
     re-implementation here at a few points, and the par-swap anchor near zero on a flat curve."""

@@ -67,7 +67,7 @@ def market_for(db: Session, user_id: str) -> rep.Market:
                       quotes=snap.quotes or [], curve=curve, vol_quotes=(vol.quotes if vol else []) or [],
                       vol_date=vol.valuation_date if vol else None, fx_vol_quotes=(fxv.quotes if fxv else []) or [],
                       vol_quotes_by_pair={"BTCUSD": (btc.quotes if btc else []) or []}, hw1f=hw1f,
-                      fx_tickets=fx_tickets(db, user_id, val))
+                      fx_tickets=fx_tickets(db, user_id, val), fx_option_tickets=fx_option_tickets(db, user_id, val))
 
 
 def fx_tickets(db: Session, user_id: str, val) -> dict:
@@ -88,6 +88,28 @@ def fx_tickets(db: Session, user_id: str, val) -> dict:
         except Exception as e:      # noqa: BLE001 — a book is still built, from its own inputs
             db.rollback()
             log.info("methodology: %s is not priced on this account's market (%s): its XVA book uses its own inputs", pair, str(e)[:120])
+    return out
+
+
+def fx_option_tickets(db: Session, user_id: str, val) -> dict:
+    """The options of the two currency option XVA books as a ticket's XVA run reads them on this account's market in
+    its FLAT vol mode: the route's own reader (api/routes/xva.option_xva_input: the option priced by the ticket's
+    pricer from the pair's stored spot, curves, points and surface), for the book's trade, struck at the forward. A
+    pair the account cannot price is left out, and its book prices the same trade from its own illustrative inputs."""
+    from api.routes.xva import option_xva_input
+    from methodology.fx_xva_workbook import DIRECTION, OPTION_TYPE, XVA_CRYPTO_OPTION_CASE, XVA_FX_OPTION_CASE, option_dates
+    out = {}
+    for case in (XVA_FX_OPTION_CASE, XVA_CRYPTO_OPTION_CASE):
+        pair = case["pair"]
+        try:
+            d = option_dates(val, pair)
+            terms = {"notional": case["notional"], "K": None, "shape": "OPTION", "option_type": OPTION_TYPE, "expiry": d["expiry"], "settle": d["settlement"],
+                     "settlement_type": "NON_DELIVERABLE" if case["pair"] != "EURUSD" else "DELIVERABLE", "style_fields": {}, "direction": DIRECTION}
+            inp, q = option_xva_input(db, user_id, pair, terms, val_date=val, vol_pct=None, vol_mode="FLAT")
+            out[pair] = {"inp": inp, "expiry": d["expiry"], "settle": d["settlement"], "npv": float(q["npv"]), "vol_source": str(q.get("vol_source") or inp.vol_source)}
+        except Exception as e:      # noqa: BLE001 — a book is still built, from its own inputs
+            db.rollback()
+            log.info("methodology: an option on %s is not priced on this account's market (%s): its XVA book uses its own inputs", pair, str(e)[:120])
     return out
 
 

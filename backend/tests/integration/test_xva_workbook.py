@@ -205,3 +205,77 @@ def test_the_currency_forward_xva_workbooks_cells_reproduce_the_engine_on_the_ac
         assert len(res) > 90 and any(x["label"].startswith("the vol of step") for x in res), "the surface's step vols are in the book"
         bad = [(x["label"], x["rel"]) for x in res if not x["ok"]]
         assert not bad, (preset, bad[:5])
+
+
+@pytest.mark.parametrize("product,case_name,crypto", [("xva_fx_option", "XVA_FX_OPTION_CASE", False), ("xva_crypto_option", "XVA_CRYPTO_OPTION_CASE", True)])
+def test_the_currency_option_xva_workbooks_run_what_the_tickets_route_runs(client, auth_a, ids, pairs, product, case_name, crypto):
+    """0.63.0. The XVA book of a European option on a currency pair and on a digital asset takes its trade from the
+    ticket's own reading of the account's market and runs the ticket's FLAT vol mode: the option is priced by the
+    ticket's route, booked in the ticket's body, and POST /api/xva/currency-option with vol_mode FLAT answers, for the
+    same paths and seed and under each CSA preset, what the book's engine side holds (which its cells reproduce): to
+    the cent."""
+    from api.routes.methodology import market_for
+    from db.session import SessionLocal
+    from methodology import fx_xva_workbook as F
+    from tests.integration import bodies as B
+    case = getattr(F, case_name)
+    pair = case["pair"]
+    db = SessionLocal()
+    try:
+        mkt = market_for(db, USER_A)
+    finally:
+        db.close()
+    assert pair in mkt.fx_option_tickets, "the stack's account prices this pair: the book takes the ticket's option"
+    fi = F.option_inputs(mkt, case)
+    assert fi["ticket"] is True and fi["inp"].t_settle > 1.02 and fi["inp"].pillars is None
+    eng = F.engine_runs(fi)
+    val = mkt.valuation_date.isoformat()
+    q = client.post("/api/currency/option/price", json={"pair": pair, "option_type": F.OPTION_TYPE, "base_notional": case["notional"], "expiry_date": fi["expiry"].isoformat(),
+                                                        "direction": F.DIRECTION, "settlement_type": "NON_DELIVERABLE" if crypto else "DELIVERABLE", "valuation_date": val}, headers=auth_a)
+    assert q.status_code == 200, q.text[:300]
+    quote = q.json()
+    assert quote["settlement_date"] == fi["settle"].isoformat() and quote["strike"] == pytest.approx(fi["inp"].spec.strike, rel=1e-12)
+    assert quote["npv"] == pytest.approx(fi["npv"], rel=1e-9), "the ticket's price is the NPV the book shows beside the run's value today"
+    trade = (B.crypto_option if crypto else B.fx_option)(ids["a"], f"XVA-BOOK-{pair}", pairs[pair], quote, "EUROPEAN")
+    for preset in F.PRESETS:
+        r = client.post("/api/xva/currency-option", json={"trade": trade, "paths": F.N_PATHS, "seed": 42, "vol_mode": "FLAT", "valuation_date": val, "csa": {"preset": preset}}, headers=auth_a)
+        assert r.status_code == 200, (preset, r.text[:300])
+        out = r.json()
+        assert out["steps"] == eng["T"] and out["dt"] == pytest.approx(eng["dt"]) and out["params"]["vol_mode"].upper().startswith("FLAT")
+        wf = eng["runs"][preset][1]
+        for k in ("cva", "dva", "fca", "fba", "kva", "mva", "colva", "xva_total"):
+            assert out["xva"][k] == pytest.approx(getattr(wf, k), abs=0.0051), (preset, k)
+        assert out["ee"] == pytest.approx([round(v, 2) for v in wf.ee], abs=0.0051), preset
+        assert out["ene"] == pytest.approx([round(v, 2) for v in wf.ene], abs=0.0051), preset
+        assert out["xva"]["npv"] == pytest.approx(fi["npv"], abs=0.0051)
+    data, total = rep_build(product, mkt)
+    assert total == pytest.approx(eng["runs"][F.DEFAULT_PRESET][1].xva_total)
+    from openpyxl import load_workbook
+    import io
+    assert "the ticket's" in load_workbook(io.BytesIO(data))["Model"]["A13"].value
+
+
+@pytest.mark.parametrize("product", ["xva_fx_option", "xva_crypto_option"])
+def test_the_currency_option_xva_workbooks_cells_reproduce_the_engine_on_the_accounts_market(product):
+    """The same two books, built from the account's market (the ticket's option, the stored surface's vol at its expiry
+    and strike, a digital asset's vol regimes): every row of the Checks sheet evaluated outside Excel under the three
+    presets. Skipped where pycel is not installed."""
+    pytest.importorskip("pycel")
+    import io
+    from openpyxl import load_workbook
+    from api.routes.methodology import market_for
+    from db.session import SessionLocal
+    from methodology.fx_xva_workbook import PRESETS
+    from scripts.check_workbook import run_checks
+    db = SessionLocal()
+    try:
+        mkt = market_for(db, USER_A)
+    finally:
+        db.close()
+    data, _ = rep_build(product, mkt)
+    for preset in PRESETS:
+        res = run_checks(load_workbook(io.BytesIO(data)), "Exposure!B4", preset)
+        assert len(res) >= 85 and sum(x["label"].startswith("V on path") for x in res) >= 6, "the option's value on a few paths is among the checks"
+        bad = [(x["label"], x["rel"]) for x in res if not x["ok"]]
+        assert not bad, (preset, bad[:5])
+

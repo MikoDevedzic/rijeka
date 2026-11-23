@@ -107,12 +107,21 @@ PRODUCTS = [
      "formula": "V = Σ N·P(t, pay)·U_cap − Σ N·P(t, pay)·U_floor: a written option's periods count against us, so the set's value takes both signs and DVA and FBA are not nil",
      "replication": "xlsx"},
     {"id": "xva_fx", "name": "XVA on an FX forward: lognormal forward from the pair's surface, CSA, waterfall", "group": "Valuation adjustments (XVA)", "section": "9-10",
-     "default": "Buy EUR 10m six months forward at the fair forward · monthly grid · 200 paths with the engine's own draws (ENGINE) or Excel's (LIVE) · σ from the EURUSD surface at K = F · presets uncollateralised / bilateral 10bd / on-chain 5bd",
-     "formula": "F_t = F₀·exp(−σ²t/2 + σ·W); V = side·N·(F_t − K)·DF_q(t,T); σ = ATM/RR/BF interpolated to T, Malz smile at Δ = N(½σ√T); C from V(t−δ), the forward bridged in logs a margin period earlier and the trade valued on it; EE/ENE/PFE; CVA, DVA, FCA, FBA, SA-CCR EAD on the FX class (4 %) → KVA, IM (the 99th percentile move over the margin period) → MVA",
+     "default": "Buy EUR 10m eighteen months forward at the fair forward, as the forward ticket prices it on the account's market · the ticket's own monthly grid · 200 paths with the engine's own draws (ENGINE) or Excel's (LIVE) · each step at the EURUSD surface's own vol · presets uncollateralised / bilateral 10bd / on-chain 5bd",
+     "formula": "F_t = F_(t−1)·exp(−½σ_k²Δ + σ_k√Δ·Z), σ_k the step's vol from the surface's ATM term structure; V = side·N·(F_t − K)·DF_q(t,T); the reported σ = ATM/RR/BF interpolated to T, Malz smile at Δ = N(½σ√T); C from V(t−δ), the forward bridged in logs a margin period earlier and the trade valued on it; EE/ENE/PFE; CVA, DVA, FCA, FBA, SA-CCR EAD on the FX class (4 %) → KVA, IM (the 99th percentile move over the margin period) → MVA",
      "replication": "xlsx"},
     {"id": "xva_crypto", "name": "XVA on a crypto NDF: lognormal forward from the pair's surface, CSA, waterfall", "group": "Valuation adjustments (XVA)", "section": "9-10",
-     "default": "Buy 10 BTC six months forward, USD-settled, at the fair forward · monthly grid · 200 paths (ENGINE or LIVE) · σ from the BTCUSD surface at K = F, or the engine's default without one · presets uncollateralised / bilateral 10bd / on-chain 5bd",
+     "default": "Buy 10 BTC eighteen months forward, USD-settled, at the fair forward, as the forward ticket prices it · the ticket's own monthly grid · 200 paths (ENGINE or LIVE) · each step at the BTCUSD surface's own vol on the clock of the asset's vol regimes, or the engine's default without a surface · presets uncollateralised / bilateral 10bd / on-chain 5bd",
      "formula": "the FX forward's book with the funding rate as the base rate; the add-on of a Group 2a cryptoasset (SCO60.98, 32 %); IM as the percentile move over the margin period",
+     "replication": "xlsx"},
+    {"id": "xva_fx_option", "name": "XVA on an FX option: the option valued on every path of a lognormal forward, CSA, waterfall", "group": "Valuation adjustments (XVA)", "section": "9-10",
+     "default": "Buy a European EUR call on EUR 10m struck at the forward, eighteen months, as the option ticket prices it · the ticket's FLAT vol mode: one vol, the surface's at the expiry and strike · monthly grid · 200 paths (ENGINE or LIVE) · presets uncollateralised / bilateral 10bd / on-chain 5bd",
+     "formula": "F_t = F_(t−1)·exp(−½σ²Δ + σ√Δ·Z); S_t = F_t·e^(−(r_q−r_b)(T_s−t)); V = side·N·e^(−r_q·τ)·[F_e·N(d₁) − K·N(d₂)] with the time left τ, the payoff at the last date; V(t−δ) the same closed form on the level bridged a margin period earlier; "
+                "EE/ENE/PFE; CVA, DVA, FCA, FBA; SA-CCR on the FX class at the option's supervisory delta → KVA; IM (the 99th percentile move over the margin period) → MVA. The SURFACE mode (a smile on every path) and the other styles are not rebuilt",
+     "replication": "xlsx"},
+    {"id": "xva_crypto_option", "name": "XVA on a crypto NDO: the option valued on every path, the spot on the clock of the asset's vol regimes, CSA, waterfall", "group": "Valuation adjustments (XVA)", "section": "9-10",
+     "default": "Buy a European BTC call on 10 BTC struck at the forward, eighteen months, USD-settled, as the option ticket prices it · the ticket's FLAT vol mode · monthly grid · 200 paths (ENGINE or LIVE) · presets uncollateralised / bilateral 10bd / on-chain 5bd",
+     "formula": "the FX option's book with the funding rate as the base rate and each step's variance the path's own (the vol regimes); the option still marked at σ on every path; the add-on of a Group 2a cryptoasset (SCO60.98, 32 %) at the supervisory delta with the class's 120 % volatility",
      "replication": "xlsx"},
     {"id": "xva", "name": "XVA under a CSA: exposure and collateral", "group": "Valuation adjustments (XVA)", "section": "9-10",
      "default": "Monte Carlo MtM paths (HW1F for rates, lognormal forward for FX and digital assets); VM lagged by the MPoR, IM exchanged; E⁺ = max(V − C − IM, 0), E⁻ = min(V − C + IM, 0), PFE 95%",
@@ -178,6 +187,7 @@ class Market:
     # {pair: {"inp": ForwardXvaInput, "settle": date}}: the XVA books' forwards as the ticket's route reads them on the
     # account's market (api/routes/methodology.market_for); empty for a market with no account behind it
     fx_tickets: dict = field(default_factory=dict)
+    fx_option_tickets: dict = field(default_factory=dict)   # {pair: the option XVA book's trade as the ticket's route reads it (api/routes/methodology.fx_option_tickets)}
 
 
 # ── Shared sheets ───────────────────────────────────────────────────────────
@@ -1125,6 +1135,16 @@ def xva_fx_workbook(mkt):
     return _b(mkt)
 
 
+def xva_fx_option_workbook(mkt):
+    from methodology.fx_xva_workbook import xva_fx_option_workbook as _b
+    return _b(mkt)
+
+
+def xva_crypto_option_workbook(mkt):
+    from methodology.fx_xva_workbook import xva_crypto_option_workbook as _b
+    return _b(mkt)
+
+
 def xva_crypto_workbook(mkt):
     from methodology.fx_xva_workbook import xva_crypto_workbook as _b
     return _b(mkt)
@@ -1135,7 +1155,8 @@ BUILDERS = {"irs": irs_workbook, "ois": ois_workbook, "swaption": swaption_workb
             "xva_swaption": xva_swaption_workbook,
             "fx_forward": fx_forward_workbook, "fx_option": fx_option_workbook, "fx_option_styles": fx_option_styles_workbook,
             "crypto_ndf": crypto_ndf_workbook, "crypto_ndo": crypto_ndo_workbook, "crypto_option_styles": crypto_option_styles_workbook,
-            "xva_fx": xva_fx_workbook, "xva_crypto": xva_crypto_workbook}
+            "xva_fx": xva_fx_workbook, "xva_crypto": xva_crypto_workbook,
+            "xva_fx_option": xva_fx_option_workbook, "xva_crypto_option": xva_crypto_option_workbook}
 
 
 def build(product: str, mkt: Market) -> tuple[bytes, float]:

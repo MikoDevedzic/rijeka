@@ -1,6 +1,7 @@
 """Evaluate a replication workbook's Checks sheet outside Excel: every formula against the engine's value.
 
     python -m scripts.check_workbook xva_rates|xva_cap|xva_floor|xva_collar|xva_swaption [--paths 12] [--presets UNCOLLATERALISED BILATERAL ON_CHAIN] [--dates 2026-08-03 ...]
+    python -m scripts.check_workbook xva_fx|xva_crypto|xva_fx_option|xva_crypto_option [--presets ...] [--dates ...]     (200 paths, with and without a surface)
 
 The book is built on a stated test market (a sloped curve, the demo's parametric swaption grid) on five valuation
 dates, not on an account's: nothing is read from a database. For the XVA book it also types non-zero CSA terms into the
@@ -163,6 +164,16 @@ def typed_terms(mkt, n_paths: int = 12, product: str = "swap") -> list[dict]:
     return out
 
 
+def with_surfaces(mkt):
+    """A EURUSD and a BTCUSD surface on a test market: ATM, RR25 and BF25 at a few tenors (illustrative levels)."""
+    from pricing.fx_vol import quotes_from_grid
+    mkt.fx_vol_quotes = quotes_from_grid({"1M": {"ATM": 7.2, "RR25": -0.35, "BF25": 0.2}, "6M": {"ATM": 7.6, "RR25": -0.45, "BF25": 0.25},
+                                          "1Y": {"ATM": 7.9, "RR25": -0.5, "BF25": 0.28}, "2Y": {"ATM": 8.3, "RR25": -0.55, "BF25": 0.3}})
+    mkt.vol_quotes_by_pair = {"BTCUSD": quotes_from_grid({"1M": {"ATM": 48, "RR25": -2, "BF25": 1.5}, "6M": {"ATM": 55, "RR25": -1, "BF25": 2},
+                                                          "1Y": {"ATM": 60, "RR25": 0.5, "BF25": 2.2}})}
+    return mkt
+
+
 def main(argv: list[str]) -> int:
     import argparse
     from openpyxl import load_workbook
@@ -184,6 +195,17 @@ def main(argv: list[str]) -> int:
             runs = [(p, lambda p=p, raw=bio.getvalue(): run_checks(load_workbook(io.BytesIO(raw)), "Exposure!B4", p)) for p in (a.presets or PRESETS)]
             if not a.presets:
                 runs.append(("typed CSA terms, each capital model", lambda mkt=mkt, product=product: typed_terms(mkt, a.paths, product)))
+        elif a.product in ("xva_fx", "xva_crypto", "xva_fx_option", "xva_crypto_option"):
+            # the currency books: each CSA preset, on the test market as it is (no surface: the default vol) and with a
+            # surface saved for both pairs (the smile at the strike; for a forward, each step at the surface's own vol)
+            from methodology.fx_xva_workbook import PRESETS
+            runs = []
+            for label, surface in (("no surface", False), ("surface", True)):
+                m = test_market(date.fromisoformat(d))
+                if surface:
+                    with_surfaces(m)
+                data, _ = rep.build(a.product, m)
+                runs += [(f"{label}, {p}", lambda p=p, data=data: run_checks(load_workbook(io.BytesIO(data)), "Exposure!B4", p)) for p in (a.presets or PRESETS)]
         else:
             data, _ = rep.build(a.product, mkt)
             runs = [("", lambda data=data: run_checks(load_workbook(io.BytesIO(data))))]
