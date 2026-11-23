@@ -395,3 +395,14 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   a hedge no longer netted (found by both reviewers). Anything random a leg needs is put on the one path every leg
   and every lagged value reads, and a package that should net is a test.
 
+- A sentence that lists cases is held by a test of each case. The changelog for the counterparty engine's expiry
+  said the value averaged to the price "at one, three and twelve months, EURUSD and BTC" on the strength of a
+  measuring script; the suite held one case (the independent reviewer). A measurement that the text quotes becomes a
+  parametrised test in the same change, or the text names the one case the suite holds (23 November 2026).
+- A figure quoted from a reviewer's run is of the code the reviewer read. After the review's fixes changed the
+  draw, the engine's number beside the validator's was no longer the engine's: measure again on the final tree
+  before a figure goes into the changelog, and say what the same fix did to the neighbouring case (there, the
+  carry also moved an option that expires on a grid date, and the scope sentence had left it out).
+- Fixing one error can uncover the one it was hiding. With the level drawn at the expiry the value stood below the
+  price by the carry to settlement, which the old error had more than covered for a call: after a fix, test the
+  result against the price itself, not against the error's expected size.
