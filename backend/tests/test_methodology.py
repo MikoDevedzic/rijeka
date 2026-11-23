@@ -570,6 +570,57 @@ def test_xva_floor_and_collar_workbooks_are_their_tickets_own_runs_in_cells(prod
         assert max(x["rel"] for x in res) < 1e-9, preset
 
 
+def test_xva_swaption_workbook_is_the_swaption_tickets_own_run_in_cells():
+    """0.62.0. A swaption had no XVA book. Its trade is the swaption ticket's booking (the option's terms beside the
+    swap it delivers); on the paths it is the option until the expiry (the path's annuity and forward swap rate in
+    Bachelier's formula at the vol the paths' own model implies) and the swap delivered after, on the paths where the
+    swap was worth having at the expiry's grid date. The Option sheet rebuilds the model's exact price (Jamshidian)
+    and shows the vol is the one that gives it. Every row of the Checks sheet is evaluated outside Excel under the
+    three presets (skipped where pycel is not installed; scripts/check_workbook.py xva_swaption is the same check
+    from a shell, with typed CSA terms, on five valuation dates)."""
+    from methodology import workbook as W
+    from methodology.xva_workbook import PRESETS, FIXED_RATE, engine_runs, hw1f_fit, swaption_dates, the_trade, trade_body, xva_swaption_workbook
+    from scripts.check_workbook import run_checks, test_market
+    mkt = test_market()
+    val = mkt.valuation_date
+    expiry, start, end = swaption_dates(val)
+    body = trade_body(val, "swaption")
+    assert body["instrument_type"] == "IR_SWAPTION" and body["terms"]["side"] == "BUY" and body["terms"]["is_payer"] is True
+    assert body["terms"]["expiry_date"] == expiry.isoformat() and body["terms"]["strike"] == FIXED_RATE
+    assert {(l["leg_type"], l["direction"], l["effective_date"], l["maturity_date"]) for l in body["legs"]} == {
+        ("FIXED", "PAY", start.isoformat(), end.isoformat()), ("FLOAT", "RECEIVE", start.isoformat(), end.isoformat())}
+    assert expiry.weekday() < 5 and (start - expiry).days >= 2
+    item, _ = the_trade(val, "swaption")
+    assert item["kind"] == "SWAPTION" and item["expiry"] == expiry and item["K"] == pytest.approx(FIXED_RATE) and item["is_payer"]
+    eng = engine_runs(mkt, hw1f_fit(mkt), 12, "swaption")
+    o = eng["option"]
+    # the option is worth something on every path until the expiry; from it the trade is the swap on some paths and nothing on the others
+    assert float(eng["V"][:, :o["i_exp"]].min()) > 0
+    after = eng["V"][:, o["i_exp"]]
+    took = o["swap"][:, o["i_exp"]] > 0
+    assert took.any() and (~took).any() and (after[~took] == 0).all() and (after[took] > 0).all()
+    assert eng["v0"] == pytest.approx(10_000_000.0 * o["jam"]["npv"], rel=1e-6), "the value today is the model's exact price"
+    wb, total = xva_swaption_workbook(mkt, 12)
+    assert {"Model", "Trade", "Option", "Bonds", "Normals", "Paths", "Exposure", "Waterfall", "Engine"} <= set(wb.sheetnames) and isinstance(total, float)
+    assert wb["Model"]["A9"].value.startswith("Strike K") and {"Texp", "SigN", "Xstar"} <= set(wb.defined_names)
+    paths = [c.value for row in wb["Paths"].iter_rows() for c in row if isinstance(c.value, str)]
+    assert any("SigN*SQRT(Texp-" in f and "NORMSDIST(" in f for f in paths), "until the expiry: Bachelier at the model's vol on the time left"
+    assert any(f.startswith("=IF(") and ">0," in f for f in paths), "from the expiry: the swap delivered where it was worth having"
+    pytest.importorskip("pycel")
+    W.finish(wb)
+    bio = io.BytesIO(); wb.save(bio)
+    for preset in PRESETS:
+        res = run_checks(load_workbook(io.BytesIO(bio.getvalue())), "Exposure!B4", preset)
+        labels = [x["label"] for x in res]
+        assert len(res) > 150
+        for want in ("the model's price per unit of notional", "Bachelier per unit of annuity at σ_n", "the annuity on path 1", "the forward swap rate on path 1"):
+            assert any(l.startswith(want) for l in labels), want
+        assert any("(exercised)" in l for l in labels) and any("(not exercised)" in l for l in labels)
+        bad = [(x["label"], x["rel"]) for x in res if not x["ok"]]
+        assert not bad, (preset, bad[:5])
+        assert max(x["rel"] for x in res) < 1e-6, preset
+
+
 def test_the_fx_forward_workbook_is_the_ticket_as_it_opens_carried_from_the_spot_date():
     """0.62.0. The book's forward settles three months from the pair's spot date and is carried from the spot date,
     as the ticket's is (pricing/currency_forward.py, spot_date). Until then it settled three calendar months from the

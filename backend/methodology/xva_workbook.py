@@ -53,6 +53,19 @@ GRID_R0 = 24            # Model: the grid's row for k = 0
 CAP_LIKE = ("cap", "floor", "collar")      # the products valued period by period on the paths (ccr/options.value_caplets)
 COLLAR_HALF_WIDTH = 0.005                  # the collar's strikes: FIXED_RATE plus (the cap, bought) and minus (the floor, sold) 50bp
 OPTION_WORD = {"cap": "cap", "floor": "floor", "collar": "collar"}
+SWAPTION_EXPIRY_MONTHS, SWAPTION_TENOR_YEARS = 12, 2      # the swaption book: a one-year option on a two-year swap
+
+
+def swaption_dates(val: date) -> tuple:
+    """(expiry, start, end) of the swaption book's trade, as the swaption ticket takes them: the expiry a tenor in
+    calendar months from the valuation date, off a weekend; the swap delivered starts as many calendar days after the
+    spot-starting swap as the expiry is after the valuation date, and ends its tenor later by the calendar."""
+    from ccr.simulate import add_months
+    expiry = add_months(val, SWAPTION_EXPIRY_MONTHS)
+    while expiry.weekday() >= 5:
+        expiry += timedelta(days=1)
+    start = spot_date(val) + timedelta(days=(expiry - val).days)
+    return expiry, start, add_months(start, 12 * SWAPTION_TENOR_YEARS)
 
 
 def strikes_of(product: str) -> dict:
@@ -128,6 +141,16 @@ def trade_body(val: date, product: str = "swap") -> dict:
                           "embedded_options": [{"type": t, "direction": "SELL" if (product == "collar" and t == "FLOOR") else "BUY", "default_strike": k, "strike_schedule": []}
                                                for t, k in ks.items()]}]}
     pay, rec = ("PAY", "RECEIVE") if DIRECTION == "PAY" else ("RECEIVE", "PAY")
+    if product == "swaption":
+        # a bought payer swaption (0.62.0), as the swaption ticket books it: the option's terms beside the swap it delivers
+        expiry, start, end = swaption_dates(val)
+        dated = {"effective_date": start.isoformat(), "maturity_date": end.isoformat()}
+        return {"instrument_type": "IR_SWAPTION", "asset_class": "RATES", "structure": "EUROPEAN", "notional": NOTIONAL, "notional_ccy": "USD",
+                "trade_date": val.isoformat(), "effective_date": eff.isoformat(), "maturity_date": add_months(eff, 12 * SWAPTION_TENOR_YEARS).isoformat(),
+                "terms": {"direction": "PAY", "float_direction": "RECEIVE", "fixed_rate": FIXED_RATE, "option": "SWAPTION", "side": "BUY", "is_payer": True,
+                          "expiry_date": expiry.isoformat(), "exercise_type": "EUROPEAN", "strike": FIXED_RATE},
+                "legs": [{"leg_ref": "FIXED-1", "leg_seq": 1, "leg_type": "FIXED", "direction": "PAY", "currency": "USD", "notional": NOTIONAL, "fixed_rate": FIXED_RATE, **dated},
+                         {"leg_ref": "FLOAT-1", "leg_seq": 2, "leg_type": "FLOAT", "direction": "RECEIVE", "currency": "USD", "notional": NOTIONAL, **dated}]}
     return {"instrument_type": "IR_SWAP", "asset_class": "RATES", "structure": "VANILLA", "notional": NOTIONAL, "notional_ccy": "USD",
             "trade_date": val.isoformat(), "effective_date": eff.isoformat(), "maturity_date": mat.isoformat(),
             "legs": [{"leg_ref": "FIXED-1", "leg_seq": 1, "leg_type": "FIXED", "direction": pay, "currency": "USD", "notional": NOTIONAL, "fixed_rate": FIXED_RATE},
@@ -143,12 +166,13 @@ def the_trade(val: date, product: str = "swap"):
     body = trade_body(val, product)
     who = "00000000-0000-4000-8000-000000000000"
     ns = NettingSet(None, {"sub": who}, [hypothetical_trade(body, None, who)], val, mkt=None)
-    if len(ns.items) != 1 or ns.items[0]["kind"] != "SWAP":
-        raise ValueError(f"the workbook's trade was not taken as a swap: {ns.skipped}")
+    want = "SWAPTION" if product == "swaption" else "SWAP"
+    if len(ns.items) != 1 or ns.items[0]["kind"] != want:
+        raise ValueError(f"the workbook's trade was not taken as a {want.lower()}: {ns.skipped}")
     if product in CAP_LIKE and [c["type"] for c in ns.items[0].get("caplets") or []] != list(strikes_of(product)):
         raise ValueError(f"the workbook's {product} was not taken as its strips of caplets and floorlets")
     item = dict(ns.items[0])
-    item["effective"] = date.fromisoformat(body["effective_date"])
+    item["effective"] = item["start"] if product == "swaption" else date.fromisoformat(body["effective_date"])      # a swaption: the swap delivered starts here
     return item, ns.months
 
 
@@ -179,7 +203,12 @@ def engine_runs(mkt, fit: dict, n_paths: int = N_PATHS, product: str = "swap") -
     own = {"USD": 1.0}
     from ccr import options as O
     # as ccr.valuation.netted_paths values the item: its legs, and the caps and floors on them
-    V = np.stack([value_swap(item, p, i, own) + (O.value_caplets(item, p, i, own) if item.get("caplets") else 0.0) for i in range(T + 1)], axis=1)
+    swap_at = lambda it, pp, j: value_swap(it, pp, j, own)
+    if item["kind"] == "SWAPTION":
+        # ccr.valuation.netted_paths: an option until its expiry (Bachelier at the vol the paths' own model implies), the swap after on the paths that exercised
+        V = np.stack([O.value_swaption(item, p, i, own, swap_at) for i in range(T + 1)], axis=1)
+    else:
+        V = np.stack([value_swap(item, p, i, own) + (O.value_caplets(item, p, i, own) if item.get("caplets") else 0.0) for i in range(T + 1)], axis=1)
     fl = flows_per_step(SimpleNamespace(items=[item]), p, own)
     # the waterfall's `settled`: the cash that has left or come into the set by each date, the payments' jumps in V with
     # the sign turned, exactly as the ticket's route passes it (api/routes/xva.py, simulate)
@@ -199,7 +228,17 @@ def engine_runs(mkt, fit: dict, n_paths: int = N_PATHS, product: str = "swap") -
     params = WaterfallParams(notional=NOTIONAL, maturity_y=maturity_y, dt=dt, theta=fit["theta"])
     eng = {"V": V, "v0": v0, "p0_grid": p0_grid, "paid": paid, "w": w, "params": params}
     runs = {preset: waterfall_for(eng, {"preset": preset}) for preset in PRESETS}
-    return {"product": product, "params": params, "n": n_paths, "item": item, "p": p, "key": key, "a": a, "sig": sig, "T": T, "dt": dt, "V": V, "v0": v0, "flows": fl, "paid": paid, "w": w,
+    opt = {}
+    if item["kind"] == "SWAPTION":
+        from pricing.bermudan_swaption import price_european_swaption_hw1f_jamshidian
+        t_exp = years(val, item["expiry"])
+        i_exp = min(j for j in range(T + 1) if float(p.t[j]) >= t_exp - 1e-9)
+        future = [(pay, tau) for (_, _, pay, tau) in item["fixed_sched"] if years(val, pay) > t_exp - 1e-9]
+        jam = price_european_swaption_hw1f_jamshidian(1.0, item["K"], item["is_payer"], t_exp, [years(val, pay) for pay, _ in future], [tau for _, tau in future],
+                                                      a, sig, discount_fn=p.p0[key])
+        opt = {"t_exp": t_exp, "i_exp": i_exp, "future": future, "jam": jam, "sig_n": float(O.hw_implied_vol(item, p)), "is_payer": bool(item["is_payer"]),
+               "sign": float(item.get("sign", 1.0)), "swap": np.stack([swap_at(item, p, i) for i in range(T + 1)], axis=1)}
+    return {"option": opt, "product": product, "params": params, "n": n_paths, "item": item, "p": p, "key": key, "a": a, "sig": sig, "T": T, "dt": dt, "V": V, "v0": v0, "flows": fl, "paid": paid, "w": w,
             "z": z, "x": x, "A": account(p, key), "p0_grid": p0_grid, "maturity_y": maturity_y, "runs": runs, "sim": SimpleNamespace(z=z)}
 
 
@@ -243,7 +282,8 @@ def _model_sheet(wb, mkt, fit, eng):
     rows = [("Mean reversion a", eng["a"], "0.000000", True), ("σ (short-rate vol, decimal)", eng["sig"], "0.000000", True),
             ("Δ: the mean step in years (the waterfall's one step length)", f"=C{GRID_R0 + T}/Nsteps", "0.00000000", False),
             ("Steps T (monthly dates to the first on or after the maturity)", T, "0", False), ("Notional", NOTIONAL, "#,##0", True),
-            ({"cap": "Cap strike K", "floor": "Floor strike K", "collar": "Cap strike K (the collar's cap, bought)"}.get(eng.get("product"), "Fixed rate K"),
+            ({"cap": "Cap strike K", "floor": "Floor strike K", "collar": "Cap strike K (the collar's cap, bought)",
+              "swaption": "Strike K (the fixed rate of the swap delivered)"}.get(eng.get("product"), "Fixed rate K"),
              next(iter(strikes_of(eng["product"]).values())) if eng.get("product") in CAP_LIKE else FIXED_RATE, "0.0000%", True),
             ("Paths", eng["n"], "0", False),
             ("Mode (ENGINE: the engine's draws; LIVE: Excel re-rolls)", "ENGINE", "@", True),
@@ -257,6 +297,12 @@ def _model_sheet(wb, mkt, fit, eng):
         if label.startswith(("Mean reversion", "σ (short")):
             c.fill = W.FILL_RJ
     W.dropdown(ws, "B11", ["ENGINE", "LIVE"])
+    if eng.get("product") == "swaption":
+        ws["A15"] = "Expiry date"
+        c = ws["B15"]; c.value = eng["item"]["expiry"]; c.number_format = "yyyy-mm-dd"; c.fill = W.FILL_RJ
+        ws["A16"] = "T_e = (expiry − valuation date)/365.25"
+        ws["B16"] = "=(B15-ValDate)/365.25"; ws["B16"].number_format = "0.000000"
+        _names(wb, {"Texp": "Model!B16"})
     if eng.get("product") == "collar":
         ws["A15"] = "Floor strike (the collar's floor, sold)"
         c = ws["B15"]; c.value = strikes_of("collar")["FLOOR"]; c.number_format = "0.0000%"; c.fill = W.FILL_IN
@@ -310,6 +356,14 @@ def _trade_sheet(wb, eng):
         ws["D4"] = (f"The book is of this {product}" + (", the cap held (column B: +1) and the floor written (−1)" if product == "collar" else ", bought (column B: +1, held)")
                     + ": the Engine sheet's figures are this trade's, so the side is not an input.")
         ws.cell(row=8, column=12, value="X = 1 + τ·K").font = W.F_SUB
+    if product == "swaption":
+        o = eng["option"]
+        ws["A1"] = "THE SWAP THE OPTION DELIVERS, AS THE SWAPTION TICKET BOOKS IT"
+        ws["A2"] = (f"A bought {'payer' if o['is_payer'] else 'receiver'} swaption: the right, on the expiry date (Model sheet), to enter this swap {'paying' if o['is_payer'] else 'receiving'} the strike. "
+                    "The swap starts as many days after a spot-starting swap as the expiry is after the valuation date; both legs yearly, ACT/360, modified following. Until the "
+                    "expiry the trade is the option (Option and Paths sheets); from the expiry it is this swap on the paths where it was worth exercising, and nothing on the others. "
+                    "The dates are the production schedule generator's (values); every amount below them is a formula.")
+        ws["D4"] = "The book is of this swaption, bought: column B is the holder's side of each leg of the swap delivered. The Engine sheet's figures are this trade's, so the side is not an input."
     # a swap: every period of each leg. A cap, a floor, a collar: the periods of each strip (the leg itself pays nothing)
     legs = [({"leg_type": c["type"], "direction": "RECEIVE" if c["sign"] > 0 else "PAY"}, c["periods"]) for c in item["caplets"]] if cap else item["legs"]
     for lg, sched in legs:
@@ -473,6 +527,98 @@ def _bonds_sheet(wb, eng, dates, dr0):
     W.widths(ws, [6, 16] + [14] * len(dates))
     ws.freeze_panes = "B6"
     return rB + 1, rA + 1          # the rows of k = 0
+
+
+def _option_sheet(wb, eng, periods, idx, dr0):
+    """The normal vol the paths' own model implies for the swaption (ccr/options.hw_implied_vol), in cells. The model
+    prices a European swaption exactly (Jamshidian: at one level of the factor the swap delivered is worth nothing,
+    and the option on the swap is a sum of options on the bonds its fixed leg pays, each struck at that bond's price
+    at that level). The vol is the one at which Bachelier's formula on today's forward swap rate gives that price: with
+    it the option's value before the expiry and its exercise on the paths at the expiry are one model. The level x*
+    and the vol are the engine's roots (values); the sheet shows that each is a root. Returns the cells Paths reads."""
+    o = eng["option"]; p, key = eng["p"], eng["key"]
+    a, sig, te = eng["a"], eng["sig"], o["t_exp"]
+    val = p.grid[0]
+    ws = wb.create_sheet("Option")
+    ws["A1"] = "THE SWAPTION IN THE PATHS' OWN MODEL: ITS EXACT PRICE AND THE NORMAL VOL THAT GIVES IT"; ws["A1"].font = W.F_TITLE
+    ws["A2"] = ("Jamshidian: at the expiry every bond is P(T_e, T) = exp(ln A − B·x), falling in x. At one level x* the fixed leg's payments c_k (K·τ_k, and one more unit at the "
+                "last) are worth one unit, so the swap delivered is worth nothing; a payer swaption is then Σ c_k × a put on the bond to T_k struck at its price at x* "
+                "(a receiver: calls). σ_n is the vol at which Bachelier's formula on today's forward swap rate gives that price per unit of annuity: the Paths sheet values "
+                "the option at it until the expiry, so the value today is the model's own price and not the ticket's."); ws["A2"].font = W.F_SUB
+    rows = [("T_e", "=Texp", "0.000000"), ("P(0, T_e) from the curve", f"={_DF('Model!$B$15')}", "0.00000000"),
+            ("φ(T_e) = σ²/2a²·(1 − e^(−a·T_e))²", "=SigA2*(1-EXP(-HW_a*Texp))^2", "0.0000000000"),
+            ("the factor's variance at T_e: σ²/2a·(1 − e^(−2a·T_e))", "=HW_sig^2/(2*HW_a)*(1-EXP(-2*HW_a*Texp))", "0.000000000000")]
+    for i, (lab, f, fmt) in enumerate(rows, 4):
+        ws.cell(row=i, column=1, value=lab); ws.cell(row=i, column=2, value=f).number_format = fmt
+    # x*: the engine's root, as the factor level of this book's bond formula (taken from the first bond's strike)
+    p0 = p.p0[key]
+    fixed = [q for q in periods if q["kind"] == "FIXED" and q["tp"] > te - 1e-9]
+    Bk = lambda T: (1 - math.exp(-a * (T - te))) / a
+    lnA = lambda T: math.log(p0(T) / p0(te)) - Bk(T) * (sig * sig / (2 * a * a)) * (1 - math.exp(-a * te)) ** 2 - sig * sig / (4 * a) * Bk(T) ** 2 * (1 - math.exp(-2 * a * te))
+    T1 = fixed[0]["tp"]
+    xstar = (lnA(T1) - math.log(o["jam"]["zcb_strikes"][0])) / Bk(T1)
+    ws["A8"] = "x*: the factor level at the expiry where the swap delivered is worth nothing (the engine's root)"
+    c = ws["B8"]; c.value = xstar; c.fill = W.FILL_RJ; c.number_format = "0.000000000000"
+    _names(wb, {"Xstar": "Option!B8"})
+    W.header(ws, 10, ["k", "T_k (the fixed leg pays)", "τ_k", "c_k = K·τ_k (+1 at the last)", "P(0, T_k)", "B_k = (1 − e^(−a(T_k − T_e)))/a",
+                      "ln A_k", "X_k = exp(ln A_k − B_k·x*)", "X_k (engine)", "σ_p,k = √(variance at T_e)·B_k", "h_k = ln(P_k/(P_e·X_k))/σ_p + σ_p/2",
+                      "the put on the bond" if o["is_payer"] else "the call on the bond", "c_k × that option"])
+    r0 = 11
+    for k, q in enumerate(fixed):
+        r = r0 + k
+        ws.cell(row=r, column=1, value=k + 1)
+        ws.cell(row=r, column=2, value=f"=Trade!$J${q['row']}").number_format = "0.000000"
+        ws.cell(row=r, column=3, value=f"=Trade!$F${q['row']}").number_format = "0.00000000"
+        ws.cell(row=r, column=4, value=f"=Kfix*C{r}" + ("+1" if k == len(fixed) - 1 else "")).number_format = "0.0000000000"
+        ws.cell(row=r, column=5, value=f"=Trade!$D${dr0 + idx[q['pay']]}").number_format = "0.00000000"
+        ws.cell(row=r, column=6, value=f"=(1-EXP(-HW_a*(B{r}-Texp)))/HW_a").number_format = "0.00000000"
+        ws.cell(row=r, column=7, value=f"=LN(E{r}/$B$5)-F{r}*$B$6-SigA4*F{r}^2*(1-EXP(-2*HW_a*Texp))").number_format = "0.0000000000"
+        ws.cell(row=r, column=8, value=f"=EXP(G{r}-F{r}*Xstar)").number_format = "0.0000000000"
+        c = ws.cell(row=r, column=9, value=float(o["jam"]["zcb_strikes"][k])); c.fill = W.FILL_RJ; c.number_format = "0.0000000000"
+        ws.cell(row=r, column=10, value=f"=SQRT($B$7)*F{r}").number_format = "0.0000000000"
+        ws.cell(row=r, column=11, value=f"=LN(E{r}/($B$5*H{r}))/J{r}+J{r}/2").number_format = "0.00000000"
+        ws.cell(row=r, column=12, value=(f"=H{r}*$B$5*NORMSDIST(J{r}-K{r})-E{r}*NORMSDIST(-K{r})" if o["is_payer"]
+                                         else f"=E{r}*NORMSDIST(K{r})-H{r}*$B$5*NORMSDIST(K{r}-J{r})")).number_format = "0.000000000000"
+        ws.cell(row=r, column=13, value=f"=D{r}*L{r}").number_format = "0.000000000000"
+        W.check(wb, "Option", f"the bond's price at x*, payment {k + 1}", f"H{r}", f"I{r}", 1e-7)
+    r1 = r0 + len(fixed) - 1
+    r = r1 + 2
+    out = {}
+    start = eng["item"]["start"]
+    A0 = sum(tau * p0((pay - val).days / 365.25) for pay, tau in o["future"])
+    F0 = (p0((start - val).days / 365.25) - p0((o["future"][-1][0] - val).days / 365.25)) / A0
+    sT = "(SigN*SQRT(Texp))"
+    lines = [("one", "Σ c_k·X_k: one unit, so the swap delivered is worth nothing at x*", f"=SUMPRODUCT(D{r0}:D{r1},H{r0}:H{r1})", 1.0, "0.000000000000", 1e-9),
+             ("jam", "the model's price per unit of notional: Σ c_k × option on the bond", f"=SUM(M{r0}:M{r1})", float(o["jam"]["npv"]), "0.000000000000", 1e-7),
+             ("A0", "A₀ = Σ τ_k·P(0, T_k): the annuity today", f"=SUMPRODUCT(C{r0}:C{r1},E{r0}:E{r1})", float(A0), "0.0000000000", 1e-9),
+             ("F0", "F₀ = (P(0, start) − P(0, T_n))/A₀: the forward swap rate today", None, float(F0), "0.0000000000", 1e-9),
+             ("target", "the price per unit of annuity", None, float(o["jam"]["npv"] / A0), "0.000000000000", 1e-7),
+             ("sig", "σ_n: the normal vol at which Bachelier's formula gives that price (the engine's root)", None, float(o["sig_n"]), "0.0000000000", None),
+             ("bach", "Bachelier per unit of annuity at σ_n: σ_n√T_e·[d·Φ(d) + φ(d)], d = (F₀ − K)/(σ_n√T_e)" + ("" if o["is_payer"] else ", less (F₀ − K) for a receiver"), None,
+              float(o["jam"]["npv"] / A0), "0.000000000000", 1e-6)]
+    W.header(ws, r, ["", "in cells", "the engine's"]); r += 1
+    for name, lab, f, engine, fmt, tol in lines:
+        out[name] = r
+        ws.cell(row=r, column=1, value=lab)
+        if name == "F0":
+            f = f"=(Trade!$D${dr0 + idx[start]}-E{r1})/B{out['A0']}"
+        elif name == "target":
+            f = f"=B{out['jam']}/B{out['A0']}"
+        elif name == "bach":
+            d = f"((B{out['F0']}-Kfix)/{sT})"
+            f = f"={sT}*({d}*NORMSDIST({d})+EXP(-{d}^2/2)/SQRT(2*PI()))" + ("" if o["is_payer"] else f"-(B{out['F0']}-Kfix)")
+        if name == "sig":
+            c = ws.cell(row=r, column=2, value=engine); c.fill = W.FILL_RJ; c.number_format = fmt
+        else:
+            ws.cell(row=r, column=2, value=f).number_format = fmt
+            c = ws.cell(row=r, column=3, value=engine); c.fill = W.FILL_RJ; c.number_format = fmt
+            W.check(wb, "Option", lab.split(":")[0], f"B{r}", f"C{r}", tol)
+        r += 1
+    _names(wb, {"SigN": f"Option!B{out['sig']}"})
+    ws.cell(row=r + 1, column=1, value=("The last row is the vol's own check: Bachelier at σ_n against the model's price. They agree to the tolerance the engine's root-finder stops at. "
+                                        "The model's vol is not the market's quote for this swaption; the ticket prices at the quote, so the run starts from the model's price.")).font = W.F_SUB
+    W.widths(ws, [84, 22, 16, 22, 14, 26, 16, 26, 16, 26, 30, 22, 20])
+    return {"A0": f"Option!$B${out['A0']}", "F0": f"Option!$B${out['F0']}", "bach": f"Option!$B${out['bach']}", "sig": f"Option!$B${out['sig']}"}
 
 
 def _variance_sheet(wb, eng, periods):
@@ -705,8 +851,36 @@ def _paths_sheet(wb, eng, periods, dates, idx, dr0, rB, rA, zrows, vcells=None):
                 terms.append(f"{s}Notl*({grown}/{bond(q, j, qd['pe'])}-1)*{bond(q, j, qd['pay'])}")
         return "=" + ("".join(terms) if terms else "0")
 
-    B["V"] = _block(ws, top, n, T, lambda q, j, r, c: value(q, j), "#,##0.00",
-                    "V: fixed coupons still to pay at their bonds; each floating period ended (its amount known), running (accrued so far over the bond to its end) or not begun")
+    swaption = eng.get("product") == "swaption"
+    if swaption:
+        # ccr/options._value_swaption_long: before the expiry N·A·Bachelier(F, K, T_e − t, σ_n) on the path's own annuity and
+        # forward swap rate; from the first grid date at or after the expiry, the swap delivered on the paths where it was
+        # worth having at that date, and nothing on the others. The option's sign for the side that wrote it.
+        o = eng["option"]; ie = o["i_exp"]; sg = "-" if o["sign"] < 0 else ""
+        fut = [qd for qd in periods if qd["kind"] == "FIXED" and qd["tp"] > o["t_exp"] - 1e-9]
+        start = eng["item"]["start"]
+        B["VS"] = _block(ws, top, n, T, lambda q, j, r, c: (value(q, j) if j >= ie else None), "#,##0.00",
+                         f"VS: the swap delivered, on its own schedule, from the expiry (step {ie}); empty before it. Its sign at step {ie} is the exercise")
+        sb = B["VS"]; top = sb[1] + 3
+        B["ANN"] = _block(ws, top, n, T, lambda q, j, r, c: ("=" + "+".join(f"Trade!$F${qd['row']}*{bond(q, j, qd['pay'])}" for qd in fut) if j < ie else None), "0.0000000000",
+                          "A: the annuity on the path, Σ τ·P(t, payment) over the fixed leg; empty from the expiry")
+        nb = B["ANN"]; top = nb[1] + 3
+        B["FWD"] = _block(ws, top, n, T, lambda q, j, r, c: (f"=({bond(q, j, start)}-{bond(q, j, fut[-1]['pay'])})/{L(c)}{nb[0] + q}" if j < ie else None), "0.0000000000",
+                          "F: the forward swap rate on the path, (P(t, start) − P(t, T_n))/A; empty from the expiry")
+        fb = B["FWD"]; top = fb[1] + 3
+
+        def opt(q, j, r, c):
+            if j >= ie:
+                return f"={sg}IF({L(1 + ie)}{sb[0] + q}>0,{L(c)}{sb[0] + q},0)"
+            sT = f"(SigN*SQRT(Texp-Model!$C${GRID_R0 + j}))"
+            d = f"(({L(c)}{fb[0] + q}-Kfix)/{sT})"
+            unit = f"{sT}*({d}*NORMSDIST({d})+EXP(-{d}^2/2)/SQRT(2*PI()))" + ("" if o["is_payer"] else f"-({L(c)}{fb[0] + q}-Kfix)")
+            return f"={sg}Notl*{L(c)}{nb[0] + q}*({unit})"
+        B["V"] = _block(ws, top, n, T, opt, "#,##0.00",
+                        f"V: until the expiry N·A·Bachelier(F, K, T_e − t, σ_n), σ_n the model's own (Option sheet); from step {ie} the swap delivered where VS at step {ie} is positive, nothing where it is not")
+    else:
+        B["V"] = _block(ws, top, n, T, lambda q, j, r, c: value(q, j), "#,##0.00",
+                        "V: fixed coupons still to pay at their bonds; each floating period ended (its amount known), running (accrued so far over the bond to its end) or not begun")
     vb = B["V"]; top = vb[1] + 3
 
     def flow(q, j):
@@ -718,12 +892,18 @@ def _paths_sheet(wb, eng, periods, dates, idx, dr0, rB, rA, zrows, vcells=None):
             out.append(f"{s}Notl*Kfix*Trade!$F${qd['row']}" if qd["kind"] == "FIXED" else f"{s}Notl*({L(2 + floats.index(qd))}{gb[0] + q}-1)")
         return "".join(out)
 
-    B["PAID"] = _block(ws, top, n, T, lambda q, j, r, c: "=" + ("0" if j == 1 else f"{L(c - 1)}{r}") + flow(q, j), "#,##0.00",
-                       "PAID: the net cash the trade has paid us by each date (a coupon we paid is negative): V + PAID is the value with its payments still in it, which has no jump at a payment")
+    if swaption:
+        # the swap's coupons, on the paths that exercised, from the option's side (ccr.valuation.flows_per_step)
+        B["PAID"] = _block(ws, top, n, T, lambda q, j, r, c: "=" + ("0" if j == 1 else f"{L(c - 1)}{r}")
+                           + (f"+{sg}IF({L(1 + ie)}{sb[0] + q}>0,1,0)*(0{flow(q, j)})" if flow(q, j) else ""), "#,##0.00",
+                           "PAID: the net cash the swap delivered has paid us by each date, on the paths that exercised: V + PAID is the value with its payments still in it")
+    else:
+        B["PAID"] = _block(ws, top, n, T, lambda q, j, r, c: "=" + ("0" if j == 1 else f"{L(c - 1)}{r}") + flow(q, j), "#,##0.00",
+                           "PAID: the net cash the trade has paid us by each date (a coupon we paid is negative): V + PAID is the value with its payments still in it, which has no jump at a payment")
     top = B["PAID"][1] + 3
     B["W"] = _block(ws, top, n, T, lambda q, j, r, c: f"=(1/{L(c)}{ab[0] + q})/(SUMPRODUCT(1/{L(c)}${ab[0]}:{L(c)}${ab[1]})/Npaths)", "0.00000000",
                     "w: the path's discount factor over the paths' mean one, (1/A) / mean(1/A): what each path's discounting is over the curve's")
-    B["value0"] = value(0, 0)
+    B["value0"] = (f"={sg}Notl*{vcells['A0']}*{vcells['bach']}" if swaption else value(0, 0))     # a swaption today: N·A₀·Bachelier at σ_n, the model's price
     W.widths(ws, [10] + [13] * max(T, len(floats)))
     ws.freeze_panes = "B6"
     return B
@@ -948,6 +1128,24 @@ def _engine_paths(wb, eng, B):
                 (O.bond(eng["p"], eng["key"], mid, yrs(last_[0])) / O.bond(eng["p"], eng["key"], mid, yrs(last_[1])))[:1], 1.0 + last_[3] * strip["K"],
                 math.sqrt(O.growth_variance(eng["p"], eng["key"], mid, yrs(last_[0]), yrs(last_[1]))), strip["type"] == "CAP")[0]),
                 f"Paths!{midc}{B['U'][(n_ + 1) * len(caps) - 1][0]}"))
+    if eng.get("product") == "swaption":
+        # where the option's value comes from: the annuity and the forward swap rate on a path before the expiry, the
+        # swap delivered at the expiry (its sign is the exercise) and after it, on a path that exercised and one that did not
+        from ccr import options as O
+        from ccr.valuation import years as _yrs
+        o = eng["option"]; ie = o["i_exp"]; h = max(1, ie // 2); hc = L(1 + h); val_ = eng["p"].grid[0]
+        bd = lambda i, d: O.bond(eng["p"], eng["key"], i, _yrs(val_, d))
+        ann = sum(tau * bd(h, pay) for pay, tau in o["future"])
+        fwd = (bd(h, eng["item"]["start"]) - bd(h, o["future"][-1][0])) / ann
+        yes = int(np.argmax(o["swap"][:, ie] > 0)); no = int(np.argmax(~(o["swap"][:, ie] > 0)))
+        rows += [(f"the annuity on path 1 at step {h}", float(ann[0]), f"Paths!{hc}{B['ANN'][0]}"),
+                 (f"the forward swap rate on path 1 at step {h}", float(fwd[0]), f"Paths!{hc}{B['FWD'][0]}"),
+                 (f"the option on path 2 at step {h}", float(eng["V"][1, h]), f"Paths!{hc}{B['V'][0] + 1}"),
+                 (f"the swap delivered on path {yes + 1} at the expiry step {ie} (exercised)", float(o["swap"][yes, ie]), f"Paths!{L(1 + ie)}{B['VS'][0] + yes}"),
+                 (f"the swap delivered on path {no + 1} at the expiry step {ie} (not exercised)", float(o["swap"][no, ie]), f"Paths!{L(1 + ie)}{B['VS'][0] + no}"),
+                 (f"V on path {yes + 1} at step {T - 1} (exercised)", float(eng["V"][yes, T - 1]), f"Paths!{L(T)}{B['V'][0] + yes}"),
+                 (f"V on path {no + 1} at step {T - 1} (not exercised)", float(eng["V"][no, T - 1]), f"Paths!{L(T)}{B['V'][0] + no}"),
+                 (f"the net cash path {yes + 1} has been paid by step {T}", float(eng["paid"][yes, T - 1]), f"Paths!{last}{B['PAID'][0] + yes}")]
     for label, v, ref in rows:
         ws.cell(row=r, column=1, value=label)
         c = ws.cell(row=r, column=2, value=v); c.fill = W.FILL_RJ; c.number_format = "#,##0.00000000"
@@ -987,6 +1185,11 @@ def xva_cap_workbook(mkt, n_paths: int = N_PATHS):
     return xva_rates_workbook(mkt, n_paths, product="cap")
 
 
+def xva_swaption_workbook(mkt, n_paths: int = N_PATHS):
+    """The swaption's book (0.62.0): an option until its expiry, the swap it delivers after, on the paths that exercised."""
+    return xva_rates_workbook(mkt, n_paths, product="swaption")
+
+
 def xva_floor_workbook(mkt, n_paths: int = N_PATHS):
     """The floor's book (0.62.0): the cap's, with each period the put on the growth."""
     return xva_rates_workbook(mkt, n_paths, product="floor")
@@ -1000,6 +1203,7 @@ def xva_collar_workbook(mkt, n_paths: int = N_PATHS):
 def xva_rates_workbook(mkt, n_paths: int = N_PATHS, product: str = "swap"):
     from methodology.replicate import _curve_sheet, _readme
     cap = product in CAP_LIKE
+    swn = product == "swaption"
     word = OPTION_WORD.get(product, "swap")
     ks = strikes_of(product) if cap else {}
     trade_words = {"cap": f"a bought cap struck at {FIXED_RATE:.3%}", "floor": f"a bought floor struck at {FIXED_RATE:.3%}",
@@ -1008,9 +1212,14 @@ def xva_rates_workbook(mkt, n_paths: int = N_PATHS, product: str = "swap"):
     eng = engine_runs(mkt, fit, n_paths, product)
     T = eng["T"]
     wb = Workbook()
-    _readme(wb, f"XVA on a {word}: each period valued on Hull-White paths, CSA, waterfall" if cap else "XVA on a swap: the trade's own schedule on Hull-White paths, CSA, waterfall", [
+    _readme(wb, f"XVA on a {word}: each period valued on Hull-White paths, CSA, waterfall" if cap
+            else "XVA on a swaption: an option until its expiry, the swap it delivers after, on Hull-White paths, CSA, waterfall" if swn
+            else "XVA on a swap: the trade's own schedule on Hull-White paths, CSA, waterfall", [
         (f"Default trade: {trade_words} on USD {NOTIONAL:,.0f} for {TENOR_YEARS} years from spot, quarterly, as the {word} ticket books it; "
          if cap else
+         f"Default trade: a bought payer swaption on USD {NOTIONAL:,.0f}, expiring in {SWAPTION_EXPIRY_MONTHS // 12} year into a {SWAPTION_TENOR_YEARS}-year swap paying {FIXED_RATE:.3%}, "
+         "both legs yearly, as the swaption ticket books it; "
+         if swn else
          f"Default trade: {'pay' if DIRECTION == 'PAY' else 'receive'} fixed {FIXED_RATE:.3%} on USD {NOTIONAL:,.0f} for {TENOR_YEARS} years from spot, both legs yearly, as a ticket books it; ") +
         f"a monthly grid from the valuation date, {n_paths} paths; the engine's own random draws on the Normals sheet.",
         (f"This is the run of a {word} ticket's XVA tab: each period valued on every path at every date by Black's formula on what one unit grows to over the period "
@@ -1019,6 +1228,11 @@ def xva_rates_workbook(mkt, n_paths: int = N_PATHS, product: str = "swap"):
          "and differs from the ticket's price by that."
          + (" The floor is written: its periods count against us, so the set's value can be negative and DVA and FBA are not nil as they are for a bought option." if product == "collar" else "")
          if cap else
+         "This is the run of a swaption ticket's XVA tab. Until the expiry the trade is the option: on every path, the annuity and the forward swap rate the path's own bonds give, "
+         "in Bachelier's formula at the normal vol the paths' own model implies for this swaption (the Option sheet rebuilds it from the model's exact price). At the first grid date "
+         "on or after the expiry the swap is delivered on the paths where it is worth having and the trade is that swap from there, on its own schedule; on the other paths it is "
+         "nothing. The option is valued at the model's vol, not at the market's quote the ticket prices it at: the value today on the Exposure sheet is the model's own price."
+         if swn else
          "This is the run of a rates ticket's XVA tab: the trade's own legs valued on every path at every date (each fixed coupon at its bond, each floating period with its accrued "
          "interest), and CVA, DVA, FCA and FBA on the exposure discounted on its own path."),
         "Model: Hull-White one factor, a and σ calibrated to the swaption surface (Calibration sheet); every bond on a path reprices today's curve in expectation.",
@@ -1036,7 +1250,7 @@ def xva_rates_workbook(mkt, n_paths: int = N_PATHS, product: str = "swap"):
     rB, rA = _bonds_sheet(wb, eng, dates, dr0)
     wf_noise = eng["runs"]["BILATERAL"][1].bridge_noise
     zrows, nrows = _normals_sheet(wb, eng, wf_noise)
-    vcells = _variance_sheet(wb, eng, periods) if cap else None
+    vcells = _variance_sheet(wb, eng, periods) if cap else (_option_sheet(wb, eng, periods, idx, dr0) if swn else None)
     B = _paths_sheet(wb, eng, periods, dates, idx, dr0, rB, rA, zrows, vcells)
     B["VAR"] = vcells
     rs, blocks_exp = _exposure_sheet(wb, eng, B, nrows)
@@ -1045,7 +1259,8 @@ def xva_rates_workbook(mkt, n_paths: int = N_PATHS, product: str = "swap"):
     _engine_paths(wb, eng, B)
     _convergence_sheet(wb, eng, blocks_exp, rs)
     W.live(wb, "Mode")
-    W.ticket(wb, f"XVA of the workbook's {word}, each period valued on the paths as a {word} ticket's XVA tab values it" if cap else "XVA of the workbook's swap, valued on its own schedule as a ticket's XVA tab values it", [
+    W.ticket(wb, f"XVA of the workbook's {word}, each period valued on the paths as a {word} ticket's XVA tab values it" if cap
+             else "XVA of the workbook's swaption: an option until its expiry, the swap delivered after, as a swaption ticket's XVA tab values it" if swn else "XVA of the workbook's swap, valued on its own schedule as a ticket's XVA tab values it", [
         ("CVA", f"Waterfall!B{rt}", "#,##0.00", "cost"), ("DVA", f"Waterfall!B{rt + 1}", "#,##0.00", "benefit"), ("FCA", f"Waterfall!B{rt + 2}", "#,##0.00", "funding cost"),
         ("FBA", f"Waterfall!B{rt + 3}", "#,##0.00", ""), ("KVA", f"Waterfall!B{rt + 4}", "#,##0.00", ""), ("MVA", f"Waterfall!B{rt + 5}", "#,##0.00", ""),
         ("ColVA", f"Waterfall!B{rt + 6}", "#,##0.00", "carry of the variation margin; zero for cash"),
@@ -1072,6 +1287,14 @@ def xva_rates_workbook(mkt, n_paths: int = N_PATHS, product: str = "swap"):
                   + ("; a floor's period the put, X·Φ(v − d₁) − M·Φ(−d₁)" if product == "collar" else ""), f"Paths!B{B['U'][0][0]}", "the caplet per unit, before discounting", "0.0000000000")),
            ("V", "Σ over the periods not yet paid of ±N·P(t, pay)·U: plus for an option held, minus for one written", f"Paths!B{vb[0]}", f"the {word}'s value on path 1 at step 1", "#,##0.00")]
           if cap else
+          [("x*", "the factor level at the expiry where Σ c_k·P(T_e, T_k) = 1: the swap delivered is worth nothing", "Option!B8", "the engine's root", "0.0000000000"),
+           ("the model's price", "Σ c_k × the option on the bond to T_k struck at its price at x* (Jamshidian)", vcells["bach"].replace("$", "").replace("Option!B", "Option!C"), "per unit of annuity", "0.000000000000"),
+           ("σ_n", "the normal vol at which Bachelier on F₀ gives the model's price", vcells["sig"].replace("$", ""), "the paths' own, not the market's quote", "0.0000000000"),
+           ("A", "Σ τ·P(t, payment) over the fixed leg, on the path", f"Paths!B{B['ANN'][0]}", "path 1, step 1", "0.0000000000"),
+           ("F", "(P(t, start) − P(t, T_n))/A, on the path", f"Paths!B{B['FWD'][0]}", "path 1, step 1", "0.0000000000"),
+           ("V before the expiry", "N·A·σ_n√(T_e − t)·[d·Φ(d) + φ(d)], d = (F − K)/(σ_n√(T_e − t))", f"Paths!B{vb[0]}", "the option on path 1 at step 1", "#,##0.00"),
+           ("V from the expiry", "the swap delivered where it was worth having at the expiry's grid date, nothing where it was not", f"Paths!{L(1 + eng['option']['i_exp'])}{vb[0]}", "path 1 at the expiry step", "#,##0.00")]
+          if swn else
           [("V", "−N·K·Σ τ·P(t, pay) on the fixed leg; per floating period N·(G − P(t, end)), or N·(G/P(t,end) − 1)·P(t, pay) where it pays after its end", f"Paths!B{vb[0]}", "the trade's value on path 1 at step 1", "#,##0.00")]),
         ("V(0)", "the same formula today: every bond is the curve's", "Exposure!B15", "", "#,##0.00"),
         ("w", "(1/A) / mean over the paths of (1/A): the path's discount factor over the curve's, mean one at every date", f"Paths!B{B['W'][0]}", "path 1, step 1", "0.00000000"),
