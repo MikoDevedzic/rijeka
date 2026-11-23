@@ -3,6 +3,14 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.44). Commits on `main` are the detail.
 
+## 0.61.2 · 23 November 2026
+
+**The model inventory points at the findings as they stand.** The six public validation issues were read against the
+code and brought up to date. The list of four conventions (#35) is closed: the cap's schedule was fixed in 0.59.0,
+and the curve's gap fill and a swap's unadjusted accrual dates are stated conventions with their measured
+differences. The one with a price effect, a caplet's option time to the middle of its period, has its own record
+(#241). The inventory, and the evidence beside the methodology in the app, name them so. No figure changes.
+
 ## 0.61.1 · 20 November 2026
 
 **A forward that fixes on a weekend no longer pushes the ticket's TRADE tab into a scroll.** On a day whose
