@@ -317,8 +317,8 @@ def _option_lag(inp: OptionXvaInput, vi: np.ndarray, v0: float, x: dict, steps: 
         s_lag = inp.forward * m_lag[:, i] * math.exp(-(r_q - r_b) * (inp.t_settle - tl))
         tau = (float(t[i_exp]) if j - 1 == i_exp else inp.t_expiry) - tl       # in the expiry's own step: to the date the paths fix the payoff on
         # before the expiry's own step: the forward and the discounting to settlement, as the grid values read them
-        r_l, rb_l = (r_q, r_b) if j - 1 == i_exp or tau <= 1e-9 else rates_to_settlement(r_q, r_b, inp.t_settle - tl, tau)
-        if tau <= 1e-9:
+        r_l, rb_l = (r_q, r_b) if j - 1 == i_exp or tau <= AT_EXPIRY else rates_to_settlement(r_q, r_b, inp.t_settle - tl, tau)
+        if tau <= AT_EXPIRY:
             out[:, i] = sign * scale * _payoff_at_expiry(spec, s_lag, knocked) * df
         elif inp.pillars:
             f_exp = s_lag * math.exp((r_l - rb_l) * tau)
@@ -434,6 +434,13 @@ class OptionXvaInput:
     watch_between: bool = True       # a barrier is watched between the grid dates as well as on them (knocked_by); False: on the dates alone
 
 
+# A date within this of the expiry (years: about an hour) is read as the expiry's: the payoff, not a closed form.
+# The closed forms lose their arithmetic there: a one-touch far from its level read tens of thousands, of either sign,
+# at five minutes left whatever its rates, and with the rates scaled to settlement over a few seconds a corridor read a
+# quarter low and an up-and-out nothing (the model validator, 23 November 2026). The tolerance was 1e-9 until 0.63.0.
+AT_EXPIRY = 1e-4
+
+
 def rates_to_settlement(r_q: float, r_b: float, to_settle: float, tau: float) -> tuple[float, float]:
     """The ticket's reading of an option, carried along a path. The pricer takes the forward and the discount factor
     to the SETTLEMENT date and implies the rate and the carry from them over the time to the EXPIRY
@@ -441,7 +448,13 @@ def rates_to_settlement(r_q: float, r_b: float, to_settle: float, tau: float) ->
     ccr/options.value_fx_option). At a date with `tau` left to the expiry and `to_settle` to the settlement that is
     (r, r_base) with e^(−r·τ) = DF_q(t, T_s) and S_t·e^((r − r_base)·τ) = F_t, the forward to settlement: the flat
     rates scaled by to_settle/τ. Until 0.63.0 the paths read both at the expiry: a value today a few days' carry and
-    discounting off the ticket's price (0.09 % of the premium on an eighteen-month EURUSD call, 0.27 % on a three-month one)."""
+    discounting off the ticket's price (0.04 to 0.09 % of the premium on an eighteen-month EURUSD call and 0.09 to
+    0.18 % on a three-month one, by the two or four days between its expiry and its settlement).
+
+    What the scaling does to a style that reads the path between the two dates: a barrier sees the carry of the days
+    to settlement inside the option's life (a drift of k times the carry, the same total), and a payment at a hit is
+    discounted at k times the rate; both are the pricer's own reading. It is never asked for less than AT_EXPIRY of
+    time left: a date that close to the expiry is read as the expiry's (the payoff)."""
     k = max(to_settle, tau) / tau
     return r_q * k, r_b * k
 
@@ -521,7 +534,7 @@ def _option_values(inp: OptionXvaInput, steps: int, dt: float, m: np.ndarray, sv
     spec = inp.spec
     scale = inp.base_notional if spec.style in ("EUROPEAN", "AMERICAN", "BARRIER", "DOUBLE_BARRIER") else 1.0
     barrier_like = spec.style in ("BARRIER", "DOUBLE_BARRIER", "TOUCH")
-    i_exp = next((k for k in range(steps) if t[k] >= inp.t_expiry - 1e-9), steps - 1)
+    i_exp = next((k for k in range(steps) if t[k] >= inp.t_expiry - AT_EXPIRY), steps - 1)
     k_set = _settle_step(t, inp.t_settle)
     V = np.zeros((n_paths, steps))
     # which paths have touched the barrier by each grid point, watched between the dates as well (knocked_by)
@@ -530,7 +543,7 @@ def _option_values(inp: OptionXvaInput, steps: int, dt: float, m: np.ndarray, sv
     seen = knocked_by(spec, inp.spot, s_t, var, i_exp, seed, getattr(inp, "watch_between", True)) if barrier_like else np.zeros((n_paths, steps + 1), dtype=bool)
     for k in range(k_set + 1):                                                  # nothing after it has settled
         knocked = seen[:, min(k, i_exp) + 1]
-        if t[k] < inp.t_expiry - 1e-9:
+        if t[k] < inp.t_expiry - AT_EXPIRY:
             tau = inp.t_expiry - t[k]
             r_k, rb_k = rates_to_settlement(r_q, r_b, inp.t_settle - float(t[k]), tau)     # the forward and the discounting to settlement
             if inp.pillars:

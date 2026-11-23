@@ -169,12 +169,12 @@ def engine_runs(fi: dict) -> dict:
         # the book's sheets are written for an expiry inside the last step (a settlement a few days after it): every
         # earlier date is valued by the closed form, the last one is the payoff
         if int(noise["i_exp"]) != steps - 1:
-            raise ValueError("the option workbook is written for an expiry inside the grid's last step")
+            raise W.DoesNotFit("the option workbook is written for an expiry inside the grid's last step")
         row = saccr_rows([fi["inp"]])[0]
         extra = {"r_b": float(noise["r_b"]), "s_t": noise["s_t"], "v_paths": runs[DEFAULT_PRESET][2]["_paths"], "sup_delta": float(row.delta),
                  "sup_vol": float(SUPERVISORY["CRYPTO" if is_crypto(fi["inp"].pair) else "FX"]["vol"])}
     if abs(dt - 1.0 / 12.0) > 0.01:
-        raise ValueError("the workbook is written on monthly steps: its forward must run beyond a year")
+        raise W.DoesNotFit("the workbook is written on monthly steps: its forward must run beyond a year")
     # a digital asset's vol regimes (pricing/vol_regimes): the variance each step accumulated on each path, as a
     # multiple of σ²Δ, and the share of it that came before the date a margin period earlier, for each preset's period
     ck, u, omega = noise.get("clock"), None, {}
@@ -183,7 +183,7 @@ def engine_runs(fi: dict) -> dict:
         u = step_variance(ck)
         for preset in ("BILATERAL", "ON_CHAIN"):
             if runs[preset][0].mpor_years >= dt:
-                raise ValueError("the workbook's bridge is written for a margin period shorter than a grid step")
+                raise W.DoesNotFit("the workbook's bridge is written for a margin period shorter than a grid step")
             w = 1.0 - runs[preset][0].mpor_years / dt
             omega[preset] = np.stack([share_before(ck, k, w) for k in range(steps)], axis=1)
     return {"noise": noise, "runs": runs, "T": steps, "dt": dt, "sigma": float(noise["sigma"]), "v0": float(runs[DEFAULT_PRESET][2]["v0"]),

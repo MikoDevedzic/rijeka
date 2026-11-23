@@ -15,6 +15,12 @@ macros, no external links, so the file opens clean in Excel, Numbers and Google 
 """
 from __future__ import annotations
 
+
+class DoesNotFit(ValueError):
+    """A workbook written for one shape of trade (an XVA book's monthly grid, an option's expiry in the last step) was
+    asked to build on a market that does not give it that shape. The download answers 422 with the reason; any other
+    error in a builder is a fault and stays one."""
+
 from typing import Any, Optional
 
 from openpyxl import Workbook

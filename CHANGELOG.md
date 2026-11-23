@@ -10,17 +10,28 @@ workbook showed are fixed.** Two workbooks are rebuilt and two are new. Two figu
 
 - **Changed: an option's XVA run starts from the ticket's price.** The exposure of an option on a currency pair or a
   digital asset read the forward and the discounting at the expiry, where the ticket prices the option on the forward
-  to settlement, discounted from the settlement date. The run's value today stood 0.09 % below the ticket's
-  price on an eighteen-month EURUSD call and 0.27 % below on a three-month one (four days from expiry to
-  settlement), and every exposure carried that. The paths now read both at the settlement, on every path and a
-  margin period earlier, for every style; the value the exposure starts from is the ticket's price to rounding.
-  Measured before against after at 5,000 paths: an uncollateralised EURUSD call's CVA and FCA rise 0.09 % at
-  eighteen months and 0.27 % at three; margined, every charge moves under 0.1 %; a BTC option's, under 0.01 %.
+  to settlement, discounted from the settlement date. The run's value today stood below the ticket's price
+  by 0.04 to 0.09 % on an eighteen-month EURUSD call and by 0.09 to 0.18 % on a three-month one (two or four days
+  from expiry to settlement), and every exposure carried that. The paths now read both at the settlement, on every
+  path and a margin period earlier, for every style; the value the exposure starts from is the ticket's price to
+  rounding (an American option's is its tree price, and it is run as its European on the paths, as before).
+  Measured before against after: an uncollateralised EURUSD call's CVA and FCA rise by those amounts; margined,
+  every charge moves under 0.1 %; a BTC option's, under 0.01 %.
+- **Not changed, and now measured: the last step of an option's run.** The paths fix the payoff on the grid date at
+  or after the expiry, which for a single option is the settlement date, so the level has diffused for the days
+  between the two. The expected value at that one date stands above the ticket's price by about √(T_s/T_e) − 1:
+  0.1 to 0.4 % at eighteen months, 2 % at three months with four days between, and 8 % or more on a one-week
+  option. It is the next fix.
 - **Changed: one default for the vol of a pair with no surface.** The option's price and the XVA runs each had a
   table. An option on a digital asset with no surface saved was priced at the currencies' 10 %, where a forward's
   XVA run on the same asset used 55 %; GBPUSD, USDCHF and USDCAD stood half a point apart in the two. One table now
   (`pricing/fx_vol.DEFAULT_VOL_PCT`): the price's levels for the currency pairs, 55, 70 and 90 % for BTC, ETH and
-  SOL. Nothing changes for a pair with a surface saved, which on the hosted demo is every pair it lists.
+  SOL; 10 % for a pair of two major currencies that is not in it (a forward's run used 9 %), 60 % for any other
+  base (an option was priced at 10 %). What it reaches: an option's price, its valuation in P&L and in the credit
+  engine, a forward's XVA run, each for a pair with no surface saved; and the credit engine's factor for a pair
+  with fewer than thirty days of history, surface or not (GBPUSD 8.0 to 8.5, USDCHF 8.0 to 7.5, USDCAD 7.0 to
+  6.5). On a ticket nothing changes for a pair with a surface saved, which on the hosted demo is every pair it
+  lists.
 
 - **A forward's XVA run** (`xva_fx`, `xva_crypto`). The book takes the forward the ticket's route reads from the
   account's market (the pair's stored spot, curves and points, the spot date) and runs eighteen months, where the

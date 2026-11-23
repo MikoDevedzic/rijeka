@@ -142,9 +142,10 @@ def replication(product: str, db: Session = Depends(get_db), user: dict = Depend
     mkt = market_for(db, user["sub"], product)
     try:
         data, _ = rep.build(product, mkt)
-    except ValueError as e:
+    except rep.W.DoesNotFit as e:
         # a book written for one shape of trade (an XVA book's grid, an option's expiry in the last step) says when the
-        # account's market does not give it that shape: an answer, not a server error
+        # account's market does not give it that shape: an answer, not a server error. Any other error in a builder
+        # is a fault and is left to be one
         log.warning("methodology: %s could not be built on this account's market: %s", product, str(e)[:200])
         raise HTTPException(status_code=422, detail=f"This workbook cannot be built from this account's market today: {str(e)[:200]}")
     name = f"rijeka_{product}_replication_{mkt.valuation_date.isoformat()}.xlsx"

@@ -96,12 +96,75 @@ def test_the_value_on_a_path_is_the_tickets_pricer_at_that_date(style):
             assert V[p, k] == pytest.approx(x.npv, rel=1e-10, abs=1e-6), (style, k, p)
 
 
-def test_the_discounted_value_is_a_martingale_from_the_tickets_price():
-    inp = _inp(SPECS["EUROPEAN"])
-    V, p0, v0 = fx_xva.simulate_option_paths(inp, n_paths=200_000, seed=5)
-    steps = V.shape[1]
-    for k in (steps // 3, steps - 2, steps - 1):
-        assert float(V[:, k].mean()) * p0[k + 1] == pytest.approx(v0, rel=0.012), k       # about three standard errors at this vol
+@pytest.mark.parametrize("style", ["BARRIER", "DOUBLE_BARRIER", "TOUCH", "AMERICAN"])
+def test_a_style_that_reads_the_path_is_the_tickets_pricer_on_the_paths_that_have_not_knocked(style):
+    """A barrier, a corridor and a touch on a path that has not touched, and an American (run as its European on the
+    paths, a stated lower bound): the ticket's pricer at that date. Reverted to the expiry's reading these fail."""
+    spec = SPECS[style]
+    inp = _inp(spec)
+    nz: dict = {}
+    fx_xva.simulate_option_paths(inp, n_paths=100, seed=3, noise_out=nz)
+    V, _, x = fx_xva._option_values(inp, nz["steps"], nz["dt"], nz["f_t"] / F0, nz["step_vols"], nz["clock"], 3)
+    as_priced = ExoticSpec("EUROPEAN", spec.option_type, strike=spec.strike) if style == "AMERICAN" else spec
+    from pricing.fx_exotic import value_on_paths
+    dt, seen, differs = nz["dt"], 0, 0
+    scale = N if style != "TOUCH" else 1.0
+    for k in (1, nz["steps"] // 2):
+        t = (k + 1) * dt
+        df, tau = DFQ / math.exp(-inp.quote_zero * t), T_E - t
+        # the reading, exactly: the paths' own routine on the whole column, given the rate and the carry implied HERE from
+        # the discount factor and the forward to settlement (the routine values a column on one grid, so it is handed
+        # the column the engine hands it)
+        r_here = -math.log(df) / tau
+        b_here = math.log(float(nz["f_t"][0, k]) / float(nz["s_t"][0, k])) / tau
+        col = scale * value_on_paths(spec, nz["s_t"][:, k], r_here, r_here - b_here, VOL, tau, x["knocked"][:, k + 1], 1.0)
+        assert np.allclose(V[:, k], col, rtol=1e-10, atol=1e-6), (style, k)
+        at_expiry = scale * value_on_paths(spec, nz["s_t"][:, k], inp.quote_zero, x["r_b"], VOL, tau, x["knocked"][:, k + 1], 1.0)
+        alive = ~x["knocked"][:, k + 1] & (np.abs(col) > 1.0)
+        differs += int((np.abs(at_expiry - col)[alive] > 1e-7 * np.abs(col)[alive]).sum()); seen += int(alive.sum())
+        # and the ticket's pricer, on single paths that have not touched. Its routine (value) and the paths' (on a grid) are
+        # two pieces of arithmetic for one formula: on identical inputs they part by up to 1.3e-3 on a barrier and 4e-4
+        # on a corridor, 1e-5 on a touch, so the pricer is held that loosely for those two
+        for p in range(0, 100, 7):
+            s_p = float(nz["s_t"][p, k])
+            if x["knocked"][p, k + 1] or (style != "AMERICAN" and not (0.97 < s_p < 1.26)):      # the pricer refuses a spot at or beyond a level
+                continue
+            q = price_exotic(as_priced, base_notional=N, spot=s_p, forward=float(nz["f_t"][p, k]), df_quote=df, t_expiry=tau, vol=VOL, direction="BUY")
+            assert V[p, k] == pytest.approx(q.npv, rel=3e-3 if style in ("BARRIER", "DOUBLE_BARRIER") else 3e-5, abs=1e-6), (style, k, p)
+    assert seen > 50 and differs > 0.8 * seen, "the reading at the expiry, which this replaced, gives other figures on these paths"
+
+
+def test_a_package_carries_the_same_reading_for_its_option_leg():
+    """An option inside a package runs on the package's longer grid, where its expiry and its settlement fall between
+    grid dates: it starts from the ticket's price there too, and every value is finite."""
+    opt = _inp(SPECS["EUROPEAN"], t_expiry=0.40, t_settle=0.411, df_quote_t=math.exp(-0.041 * 0.411), quote_zero=0.041, forward=1.105)
+    opt.spec = ExoticSpec("EUROPEAN", "CALL", strike=1.105)
+    fwd = fx_xva.ForwardXvaInput(pair="EURUSD", base_notional=N, forward=1.13, strike=1.13, t_years=2.0, df_quote_t=math.exp(-0.041 * 2.0), quote_zero=0.041,
+                                 direction="SELL", vol_pct=9.0, spot=S0)
+    paths, _, v0, rows = fx_xva.simulate_package_paths([fwd, opt], n_paths=300)
+    ticket = price_exotic(opt.spec, base_notional=N, spot=S0, forward=1.105, df_quote=opt.df_quote_t, t_expiry=0.40, vol=VOL, direction="BUY").npv
+    assert np.isfinite(paths).all() and v0 == pytest.approx(ticket, rel=1e-10, abs=1e-6), "the forward is dealt at its fair rate: the package starts from the option's price"
+    alone, _, v0_alone = fx_xva.simulate_option_paths(opt, n_paths=300)
+    assert v0_alone == pytest.approx(ticket, rel=1e-12)
+
+
+@pytest.mark.parametrize("style", ["BARRIER", "DOUBLE_BARRIER", "TOUCH", "DIGITAL", "EUROPEAN"])
+def test_a_grid_date_seconds_before_the_expiry_is_read_as_the_expirys(style):
+    """A date within an hour of the expiry is the payoff (fx_xva.AT_EXPIRY), not a closed form asked for seconds of
+    time left: there a one-touch far from its level read tens of thousands of either sign, and with the rates scaled
+    to settlement a corridor read a quarter low. The same option expiring ON the grid date gives the same values."""
+    spec = SPECS[style]
+    steps_at = 12
+    probe = _inp(spec, grid_per_year=12)
+    steps, dt = fx_xva.exposure_grid(probe.t_settle, 12)
+    t_k = steps_at * dt
+    nz: dict = {}
+    on, _, _ = fx_xva.simulate_option_paths(_inp(spec, grid_per_year=12, t_expiry=t_k), n_paths=300, seed=4, noise_out=nz)
+    near, _, _ = fx_xva.simulate_option_paths(_inp(spec, grid_per_year=12, t_expiry=t_k + 1e-7), n_paths=300, seed=4)
+    assert nz["i_exp"] == steps_at - 1
+    assert np.isfinite(near).all() and (near >= -1e-9).all(), style
+    assert np.allclose(near[:, steps_at - 1:], on[:, steps_at - 1:], rtol=1e-9, atol=1e-6), (style, "the date three seconds before the expiry, and every date after")
+    assert fx_xva.rates_to_settlement(0.06, 0.04, 0.02, 0.01) == pytest.approx((0.12, 0.08))
 
 
 def test_the_value_a_margin_period_earlier_reads_settlement_too():
@@ -137,3 +200,8 @@ def test_one_table_for_the_vol_of_a_pair_with_no_surface():
         assert vol == pytest.approx(lvl / 100.0) and tier == "DEFAULT" and f"{lvl:.1f}%" in note, pair
     # an option on a digital asset with no surface is no longer priced at the currency fallback
     assert fx_vol.lookup_vol([], "BTCUSD", 0.25, 70_000.0, 70_000.0)[0] == pytest.approx(0.55)
+    # every reader of the table reads this one: the forward's run, the credit engine's factors, P&L and the credit
+    # engine's revaluation through lookup_vol
+    import inspect
+    from ccr import calibration
+    assert "from pricing.fx_xva import default_vol_pct" in inspect.getsource(calibration)

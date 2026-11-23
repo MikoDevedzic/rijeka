@@ -493,13 +493,20 @@ def test_a_workbook_that_cannot_be_built_is_answered_not_a_server_error(monkeypa
     from api.routes import _limits, methodology as M
 
     def refuse(product, mkt):
-        raise ValueError("the workbook is written on monthly steps: its forward must run beyond a year")
+        raise M.rep.W.DoesNotFit("the workbook is written on monthly steps: its forward must run beyond a year")
     monkeypatch.setattr(M, "market_for", lambda db, uid, product=None: None)
     monkeypatch.setattr(M.rep, "build", refuse)
     _limits._buckets.clear()
     with pytest.raises(HTTPException) as e:
         M.replication("xva_fx", db=None, user={"sub": "someone"})
     assert e.value.status_code == 422 and "monthly steps" in e.value.detail and "cannot be built" in e.value.detail
+
+    def fault(product, mkt):
+        raise ValueError("could not convert string to float")
+    monkeypatch.setattr(M.rep, "build", fault)
+    _limits._buckets.clear()
+    with pytest.raises(ValueError):                 # a fault in a builder is not dressed as the market's
+        M.replication("irs", db=None, user={"sub": "someone"})
 
 
 def test_hw1f_mc_matches_the_route_loop():
