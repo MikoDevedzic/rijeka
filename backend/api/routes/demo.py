@@ -71,6 +71,7 @@ _LICENSED_SOURCE_SQL = "upper(coalesce(source, '')) NOT LIKE 'BLOOMBERG%' AND up
 # The desk and the book a new workspace starts with. They name no asset class: the workspace books rates, currencies
 # and digital assets on its one ticket, and a desk called RATES put the last two under a rates desk in every roll-up.
 # Only a new workspace gets them; an existing one keeps what it has, and its owner renames either under Configurations.
+LOCK_WAIT = "10s"        # how long a second provision of one account waits for the first before it gives up
 FIRST_DESK = "TRADING"
 FIRST_BOOK = "MAIN"
 
@@ -192,6 +193,14 @@ def provision(db: Session = Depends(get_db), user: dict = Depends(verify_token))
     if not enabled():
         return {"enabled": False}
     uid = uuid.UUID(user["sub"])
+    # One provision of an account at a time. A new account is often signed in twice at the same moment (the tab that
+    # signed up and the tab the email link opened), and both requests found nothing and both inserted: the second
+    # answered 500 on the entity's unique key. The lock is the transaction's, so the second waits for the first to
+    # commit, then finds everything there and creates nothing. Other accounts are not held up: the key is the account.
+    # The wait has an end (Machado, 24 November 2026): were the first request to stall, each one waiting behind it
+    # would hold a connection of the pool for as long; past LOCK_WAIT a waiter fails alone and the pool is not spent.
+    db.execute(text("SELECT set_config('lock_timeout', :w, true)"), {"w": LOCK_WAIT})        # true: this transaction only
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:k))"), {"k": f"demo-provision:{uid}"})
     trader = _trader_id(db, user)
     my_lei = demo_lei_for(uid)
     created = {}

@@ -3,6 +3,27 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.50). Commits on `main` are the detail.
 
+## 0.66.5 · 24 November 2026
+
+**A new account set up twice at the same moment no longer gets an error.** No figure changes; nothing on screen
+changes.
+
+- **What happened.** A new account is often signed in twice at once: in the tab that signed up, and in the tab the
+  email link opens. Both asked the API to make the account's workspace (its entity, the demo counterparty, its firm,
+  desk and book, its market data); both found nothing there and both created it, and the second request was answered
+  with a server error on the entity's unique key. The workspace itself was made once and correctly; the tab that
+  lost had no result until it was reloaded. Seen once on the operator's Problems panel, then reproduced on a local
+  database: four tries, four errors.
+- **The mend.** `POST /api/demo/provision` takes a lock on the account for the length of its transaction before it
+  reads anything. A second request for the same account waits for the first to commit, finds the workspace there
+  and creates nothing. Other accounts are not held up: the key is the account.
+- **The wait has an end.** Behind a request that does not finish, a second one gives up after ten seconds and
+  fails by itself, so requests waiting on one account cannot use up the API's database connections (the security
+  review's point, added before release).
+- **Checked by** `tests/integration/test_provision_twice.py`: two requests for one new account released at the same
+  instant, three rounds, both answered, one workspace; and a request behind one that does not finish gives up,
+  makes nothing, and the next one goes through.
+
 ## 0.66.4 · 23 November 2026
 
 **Four small faults on the ticket,** seen in the pictures of 0.66.3 and mended. No figure changes; nothing sent

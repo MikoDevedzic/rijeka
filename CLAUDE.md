@@ -420,3 +420,12 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   the methodology and a line of the inventory written on 23 November 2026 said "his" of the model validator and
   reached the public site before the security reviewer noticed: before a document is built, search what was added
   for he, his, she and her and read each hit (the owner's own words are his; a role's are the role's).
+- A width rule on a row that several products draw is looked at on every product that draws that row. In 0.66.4 the
+  direction's wider column was right for a swap and left a cap, a floor and a collar, which have a side and no
+  direction, with uneven columns until the reviews: before the pictures, list the products that share the row and
+  take one picture of each.
+- A route that creates what it does not find is run twice at the same moment before it ships. `POST
+  /api/demo/provision` read, found nothing and inserted, and was called idempotent because a second call after the
+  first did nothing; two calls at once (two tabs of one new account) both found nothing, and the second answered
+  500 on launch morning (0.66.5). Calling a route twice in a row does not show this: release two calls from a gate
+  on a real database, and where they collide take the owner's transaction lock first, with an end to its wait.
