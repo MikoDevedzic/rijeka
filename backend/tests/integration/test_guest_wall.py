@@ -133,6 +133,22 @@ def test_a_guest_leaves_no_row_and_is_no_account(client, guest, pass_):
                 client.get(_url(template), headers=pass_)
         client.post("/api/xva/simulate", headers=pass_, json={"notional": 10_000_000, "maturity_y": 3, "fixed_rate": 0.04, "paths": 300})
         assert counts() == before
-        assert client.get("/api/me/role", headers=pass_).json()["self_service"] is False
+        role = client.get("/api/me/role", headers=pass_).json()
+        assert role["role"] == "viewer" and role["self_service"] is False and role["roles"] == []         # the desk's owner is a trader: a guest is not
+        assert client.get("/api/me/booking-defaults", headers=pass_).json()["role"] == "viewer"
+        mods = client.get("/api/modules", headers=pass_).json()
+        assert mods["guest"] is True and mods["can_edit"] is False and mods["firm_id"] is None and mods["events"] == []
+        assert {k for k, on in mods["modules"].items() if on} == {"XVA"}
     finally:
         eng.dispose()
+
+
+def test_an_administrator_is_never_the_guest_desk(client, guest):
+    from tests.integration.conftest import USER_A, set_role
+    try:
+        set_role(USER_A, "admin"); guest.forget_account()
+        assert guest.account_id() is None
+        assert client.post("/api/public/guest").status_code == 503
+    finally:
+        set_role(USER_A, "trader"); guest.forget_account()
+    assert guest.account_id() == USER_A

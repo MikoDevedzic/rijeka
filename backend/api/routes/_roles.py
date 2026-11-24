@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 
 
 def role_of(db: Session, user: dict) -> str:
+    if user.get("is_guest"):        # a guest acts as the guest desk's account and is never read as its owner (middleware/guest.py)
+        return "viewer"
     from api.routes.me import db_role
     return str(db_role(db, user["sub"]) or (user.get("user_metadata") or {}).get("role") or "viewer").lower()
 

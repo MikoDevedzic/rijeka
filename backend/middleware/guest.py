@@ -142,13 +142,18 @@ def account_id() -> Optional[str]:
         from db.session import SessionLocal
         db = SessionLocal()
         try:
-            row = db.execute(text("SELECT id FROM auth.users WHERE lower(email) = lower(:e)"), {"e": email}).first()
+            row = db.execute(text("SELECT u.id, lower(coalesce(p.role, '')) FROM auth.users u LEFT JOIN profiles p ON p.id = u.id "
+                                  "WHERE lower(u.email) = lower(:e)"), {"e": email}).first()
         finally:
             db.close()
     except Exception as e:                  # noqa: BLE001 — no guests for this request; the failure is logged
         log.warning("guest desk lookup failed: %s", type(e).__name__)
         return None
     if not row:
+        return None
+    if row[1] == "admin":
+        # every guest acts as this account: it is an ordinary one, never the instance's administrator
+        log.error("the guest desk's account is an administrator: guests are refused until it is not")
         return None
     _account.update(at=now, id=str(row[0]))
     return _account["id"]

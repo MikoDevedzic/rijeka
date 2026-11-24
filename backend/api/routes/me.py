@@ -44,8 +44,8 @@ def get_defaults(db: Session = Depends(get_db), user: dict = Depends(verify_toke
     uid = user["sub"]
     md = metadata(db, uid)
     desks, books = _nodes(db, uid)
-    return {"default_desk": md.get("default_desk"), "default_book": md.get("default_book"),
-            "role": db_role(db, uid) or (user.get("user_metadata") or {}).get("role") or "viewer", "desks": desks, "books": books}
+    role = "viewer" if user.get("is_guest") else (db_role(db, uid) or (user.get("user_metadata") or {}).get("role") or "viewer")
+    return {"default_desk": md.get("default_desk"), "default_book": md.get("default_book"), "role": role, "desks": desks, "books": books}
 
 
 class DefaultsBody(BaseModel):
@@ -78,6 +78,8 @@ class RoleBody(BaseModel):
 @router.get("/role")
 def get_role(db: Session = Depends(get_db), user: dict = Depends(verify_token)):
     from api.routes.demo import enabled as demo_enabled
+    if user.get("is_guest"):        # a viewer, whatever the guest desk's owner is, and with no switch to offer
+        return {"role": "viewer", "self_service": False, "roles": [], "guest": True}
     role = db_role(db, user["sub"]) or (user.get("user_metadata") or {}).get("role") or "viewer"
     # an administrator is not offered the switch: it cannot give the role back (put_role)
     return {"role": role, "self_service": bool(demo_enabled()) and role != "admin", "roles": list(SELF_ROLES)}

@@ -33,7 +33,21 @@ class ModulesBody(BaseModel):
     note: Optional[str] = Field(None, max_length=500)
 
 
+GUEST_MODULES = ("XVA",)       # what a guest's ticket shows beside the price; the rest needs an account
+
+
+def _guest_view(db: Session, user: dict) -> dict:
+    """A guest's modules: the same for every guest and on every instance, and nothing of the guest desk's own firm
+    (its id, who changed what and when). Confirmation on chain, the assistant and the news room are an account's."""
+    cur = M.for_firm(db, None)
+    mods = {k: (k in GUEST_MODULES) for k in cur["modules"]}
+    return {**cur, "modules": mods, "firm_id": None, "writable": False, "can_edit": False, "view": None, **M.catalogue(()),
+            "on_request": [], "contact": M.CONTACT, "events": [], "planned": list(M.PLANNED), "guest": True}
+
+
 def _view(db: Session, user: dict) -> dict:
+    if user.get("is_guest"):
+        return _guest_view(db, user)
     uid = user["sub"]
     firm_id = M.firm_of_user(db, uid)
     cur = M.for_firm(db, firm_id)
