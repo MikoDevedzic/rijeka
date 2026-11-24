@@ -67,3 +67,9 @@ Rules
 - Read-only on the working tree unless you are asked to fix: never `git checkout`, `switch`, `stash` or `reset` in the shared checkout.
 - The local stack only. Never the hosted app, never credentials.
 - You do not redesign. A screen that needs a new look is the owner's decision, shown as a mock first; you hold what has been decided.
+
+Learned on 23 November 2026 (0.66.3: the ticket's colours, after the owner found the ticket dull)
+- Keeping the rules is not the whole job: a screen can follow every rule and give the eye nowhere to land. On any screen with an action, ask first what the one thing to press is at this moment and whether it is the loudest thing there; on the unpriced ticket PRICE was the quietest button and BOOK a ghost, for weeks, with every count green.
+- A selected state is compared with its neighbour at rest, in the picture: a shade of fill and a quiet edge passed the rule and failed the owner.
+- When a colour is given a new job (brass for a selection), count where it now appears on the busiest screen of that kind and turn the new uses down until the action is still the loudest (the chip's edge is the brass, not its highlight), and give the state that cannot be changed a quieter form of it.
+- Read the rest of docs/design.md for sentences the change now contradicts, not only the paragraph that was amended (two said a selected chip was a lighter panel and nothing more).

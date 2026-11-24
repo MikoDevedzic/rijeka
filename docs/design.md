@@ -15,7 +15,7 @@ code that draws on a canvas, and `theme.test.js` holds the two together.
 | `--text-hi`, `--text`, `--text-dim`, `--text-mute`, `--text-faint` | limestone, in five steps. Contrast on `--bg` / `--panel` / `--panel-2`: `--text-mute` 6.2 / 5.6 / 4.8, `--text-faint` 5.3 / 4.8 / 4.1 | `--text-faint` on `--panel-2` or lighter |
 | `--panel`, `--panel-2`, `--panel-3` | a surface one step up; `--panel-3` is the fill of a selected chip | |
 
-A selected chip or segment is a lighter panel and the full text colour, not a colour. A status takes a colour only
+A selected chip or segment is a lighter panel and the full text colour, with a brass edge and rule on a ticket (the mark of the selected tab); its face is not a colour, unless it is a side, which is solid in the side's own. A status takes a colour only
 when it says something: confirmed is brass, live is green, pending is a hollow dot, anything over is faint.
 
 Brass, the on-chain gold, amber and the coral of a negative number are all warm. `--down` is set toward rose so a
@@ -27,7 +27,7 @@ PFE on Risk → Counterparty credit) the page has not been read yet, and that is
 bar), and since 0.30.4 on the pages behind CONFIGURATIONS a first user opens: the curve, swaption, cap and floor and
 pair pages, the HW1F calibration, counterparties and legal entities. There a figure (in a list, in a table, at the head of the page, or typed into a field) is limestone whatever its
 curve's class, a convention's value is a value and not a colour by kind, a row's own label (a tenor, an expiry, a strike) is a label, a state that is good in itself (saved, loaded,
-connected, quoted, a close fit) is green, a selected chip is the lighter panel, and brass is left to the page's
+connected, quoted, a close fit) is green, a selected chip is the lighter panel (with the brass edge and rule where it is a ticket's), and brass is left to the page's
 actions and the selected rule. Elsewhere brass still colours what the teal accent did: about three hundred and
 twenty uses remain, among them the DETAILS tab, P&L and Risk. Two things on those pages are
 not decided and were left as they were: the colour a curve's CLASS takes in its badge (OIS brass, basis blue,

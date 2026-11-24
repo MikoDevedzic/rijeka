@@ -190,7 +190,7 @@ test('on a ticket the brass is the next step, a chosen side is solid, and what i
   expect(await css(book, 'backgroundColor'), 'and BOOK is not lit beside it').not.toBe(BRASS)
 
   // what is selected: the instrument's chip and the tab, in the brass of a selection; a heading has its bar
-  expect(await css(rates, 'borderTopColor'), 'a selected chip has a brass edge').toBe(BRASS_HI)
+  expect(await css(rates, 'borderTopColor'), 'a selected chip has a brass edge').toBe(BRASS)
   expect(await css(rates, 'boxShadow'), 'and a brass rule under it').toContain(BRASS)
   const tab = win.locator('.tbw-tab.is-active')
   expect(await css(tab, 'color')).toBe(BRASS_HI)
