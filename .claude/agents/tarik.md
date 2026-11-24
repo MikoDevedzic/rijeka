@@ -109,3 +109,6 @@ Rules
 - Never run journeys against app.rijeka.app or the hosted API. Never enter real credentials anywhere.
 - Do not edit product code to make a journey pass. You may fix a journey whose selector went stale because the product legitimately changed, and say so.
 - Report plainly: what passed, what failed, what you could not test and why.
+
+Learned on 23 November 2026 (0.66.3: a colour read mid-fade)
+- A computed colour read straight after a press is read while it fades: the app's buttons and chips change colour over 120 ms. A journey that asserts a colour after a click polls for it (`expect.poll`) and moves the pointer off the control first, or it passes on a fast machine and fails in CI, as the new brass journey did on its first run there (the edge read 209, 174, 93 on its way to 217, 178, 92). Run a new journey with `--repeat-each=3` before it is pushed.

@@ -190,11 +190,12 @@ test('on a ticket the brass is the next step, a chosen side is solid, and what i
   expect(await css(book, 'backgroundColor'), 'and BOOK is not lit beside it').not.toBe(BRASS)
 
   // what is selected: the instrument's chip and the tab, in the brass of a selection; a heading has its bar
-  expect(await css(rates, 'borderTopColor'), 'a selected chip has a brass edge').toBe(BRASS)
-  expect(await css(rates, 'boxShadow'), 'and a brass rule under it').toContain(BRASS)
+  // a colour fades over 120 ms after a press: each is read until it has settled (CI read the edge mid-fade)
+  await expect.poll(() => css(rates, 'borderTopColor'), { message: 'a selected chip has a brass edge' }).toBe(BRASS)
+  await expect.poll(() => css(rates, 'boxShadow'), { message: 'and a brass rule under it' }).toContain(BRASS)
   const tab = win.locator('.tbw-tab.is-active')
-  expect(await css(tab, 'color')).toBe(BRASS_HI)
-  expect(await css(tab, 'borderBottomColor')).toBe(BRASS)
+  await expect.poll(() => css(tab, 'color')).toBe(BRASS_HI)
+  await expect.poll(() => css(tab, 'borderBottomColor')).toBe(BRASS)
   const heading = win.locator('.tbw-sec > .tbw-lbl:first-child, .tbw-sec > .tbw-sec-header > .tbw-lbl').first()
   expect(await css(heading, 'borderLeftColor'), 'a section heading carries a bar').toBe(BRASS_DIM)
   expect(await css(heading, 'color'), 'and its words are not brass').not.toBe(BRASS)
@@ -204,8 +205,8 @@ test('on a ticket the brass is the next step, a chosen side is solid, and what i
   const on = sides.locator('xpath=self::*[contains(@class,"is-on")]').first()
   await expect(on).toBeVisible()
   const isPay = await on.evaluate(el => el.classList.contains('tbw-chip-dir-pay'))
-  expect(await css(on, 'backgroundColor'), 'the chosen side is filled').toBe(isPay ? DOWN : UP)
-  expect(await css(on, 'color')).toBe(INK)
+  await expect.poll(() => css(on, 'backgroundColor'), { message: 'the chosen side is filled' }).toBe(isPay ? DOWN : UP)
+  await expect.poll(() => css(on, 'color')).toBe(INK)
   const off = win.locator('.tbw-chip.tbw-chip-dir-pay:not(.is-on), .tbw-chip.tbw-chip-dir-rec:not(.is-on)').first()
   expect(await css(off, 'backgroundColor'), 'the side not chosen has no fill').not.toBe(isPay ? UP : DOWN)
 
@@ -215,8 +216,8 @@ test('on a ticket the brass is the next step, a chosen side is solid, and what i
   await expect(book, 'priced, and waiting for a counterparty').toHaveClass(/is-waiting/, { timeout: 60_000 })
   await expect(price).not.toHaveClass(/is-next/)
   await expect.poll(() => css(price, 'backgroundColor'), { message: 'PRICE is an ordinary button once a price is held' }).toBe(RAISED)   // the face fades over 120 ms
-  expect(await css(book, 'color')).toBe(BRASS)
-  expect(await css(book, 'borderTopColor')).toBe(BRASS_DIM)
+  await expect.poll(() => css(book, 'color')).toBe(BRASS)
+  await expect.poll(() => css(book, 'borderTopColor')).toBe(BRASS_DIM)
   expect(await css(book, 'backgroundColor'), 'it cannot be pressed, so it has no face').not.toBe(BRASS)
 
   // a counterparty chosen: BOOK TRADE takes the brass, and PRICE does not have it
