@@ -7,6 +7,7 @@
 // that file is not what the sources now give: the page, the PDF and the inventory cannot drift apart unseen.
 // The HTML in that file is ours, made at build time from our own source; nothing a user typed is ever in it.
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { guestStopsHere } from '../../store/useGuestStore'
 import { useNavigate, useParams } from 'react-router-dom'
 import 'katex/dist/katex.min.css'
 import { getSessionMaybe } from '../../lib/session'
@@ -136,6 +137,7 @@ export default function Methodology() {
   }, [id, doc])
 
   const download = async (p) => {
+    if (guestStopsHere('excel')) return          // reading is a guest's; the workbook is an account's (store/useGuestStore)
     setBusy(p.id); setErr(null)
     try {
       const r = await authed(`/api/methodology/${p.id}/replication.xlsx`)
@@ -244,7 +246,7 @@ export default function Methodology() {
                         <div className="doc-row"><span>FORMULA</span><p className="doc-formula">{p.formula}</p></div>
                         <div className="doc-actions">
                           {p.replication === 'xlsx' && <button className="doc-btn" disabled={busy === p.id} onClick={() => download(p)}>{busy === p.id ? 'BUILDING…' : '⬇ EXPORT EXCEL REPLICATION'}</button>}
-                          {p.replication === 'xlsx-static' && <a className="doc-btn" href={p.doc} target="_blank" rel="noopener noreferrer">⬇ TRACE WORKBOOK</a>}
+                          {p.replication === 'xlsx-static' && <a className="doc-btn" href={p.doc} target="_blank" rel="noopener noreferrer" onClick={e => { if (guestStopsHere('excel')) e.preventDefault() }}>⬇ TRACE WORKBOOK</a>}
                           {p.replication === 'doc' && <a className="doc-btn" href={`${GITHUB}${p.doc}`} target="_blank" rel="noopener noreferrer">VALIDATION REPORT ↗</a>}
                           {p.replication === 'verifier' && <a className="doc-btn" href={p.doc} target="_blank" rel="noopener noreferrer">OPEN THE VERIFIER ↗</a>}
                           {sectionsOf(p).length > 0 && <button type="button" className="doc-link" onClick={() => go(sectionsOf(p)[0])}>§{p.section} OF THE DOCUMENT</button>}

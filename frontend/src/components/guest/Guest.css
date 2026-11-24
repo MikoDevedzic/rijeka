@@ -1,0 +1,39 @@
+/* A guest's page, strip and question (components/guest). Tokens only; sizes in px (docs/design.md). */
+.gst-page { max-width: 760px; margin: 0 auto; padding: 56px 24px 40px; color: var(--text); font-family: var(--sans); }
+.gst-eyebrow { font-size: 12px; letter-spacing: 0.14em; color: var(--accent); font-weight: 600; margin: 0 0 10px; }
+.gst-title { font-size: 20px; line-height: 1.25; font-weight: 600; color: var(--text-hi); margin: 0 0 12px; text-wrap: balance; }
+.gst-lead { font-size: 14px; line-height: 1.6; color: var(--text-dim); margin: 0 0 24px; max-width: 62ch; }
+.gst-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 28px; }
+.gst-row { border: 1px solid var(--border); border-radius: var(--r-2); padding: 14px 16px; background: var(--bg-deep); }
+.gst-row h3 { font-size: 12px; letter-spacing: 0.1em; font-weight: 600; margin: 0 0 8px; color: var(--text-hi); }
+.gst-row ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 14px; line-height: 1.45; color: var(--text-dim); }
+.gst-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.gst-go { background: var(--accent); border: 1px solid var(--accent); color: var(--accent-ink); font-family: var(--sans); font-size: 14px;
+  font-weight: 600; letter-spacing: 0.06em; padding: 10px 18px; border-radius: var(--r-2); cursor: pointer; transition: background 0.12s; }
+.gst-go:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+.gst-go:focus-visible, .gst-quiet:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
+.gst-quiet { background: transparent; border: 1px solid var(--border); color: var(--text); font-family: var(--sans); font-size: 14px;
+  font-weight: 500; letter-spacing: 0.06em; padding: 10px 18px; border-radius: var(--r-2); cursor: pointer; }
+.gst-quiet:hover { border-color: var(--text-dim); color: var(--text-hi); }
+.gst-note { font-size: 13px; color: var(--text-dim); margin: 18px 0 0; line-height: 1.5; }
+
+.gst-tag { color: var(--accent); border: 1px solid var(--accent); font-weight: 600; font-size: 12px; letter-spacing: 0.1em; padding: 2px 8px; border-radius: var(--r-1); }
+.gst-bar-go { background: var(--accent); border: 1px solid var(--accent); color: var(--accent-ink); font-family: var(--sans); font-size: 13px;
+  font-weight: 600; letter-spacing: 0.08em; padding: 5px 12px; border-radius: var(--r-2); cursor: pointer; }
+.gst-bar-go:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+.gst-bar-quiet { background: transparent; border: 1px solid var(--border); color: var(--text-dim); font-family: var(--sans); font-size: 13px;
+  font-weight: 500; letter-spacing: 0.08em; padding: 5px 11px; border-radius: var(--r-2); cursor: pointer; }
+.gst-bar-quiet:hover { color: var(--text-hi); border-color: var(--text-dim); }
+
+.gst-veil { position: fixed; inset: 0; z-index: 4000; display: flex; align-items: center; justify-content: center; padding: 16px;
+  background: color-mix(in srgb, var(--bg-deep) 72%, transparent); }
+.gst-ask { width: min(460px, 100%); background: var(--bg); border: 1px solid var(--accent); border-radius: var(--r-2); padding: 22px 22px 18px;
+  box-shadow: 0 18px 60px color-mix(in srgb, var(--bg-deep) 80%, transparent); font-family: var(--sans); color: var(--text); }
+.gst-ask h2 { font-size: 16px; font-weight: 600; color: var(--text-hi); margin: 0 0 8px; text-wrap: balance; }
+.gst-ask p { font-size: 14px; line-height: 1.55; color: var(--text-dim); margin: 0 0 16px; }
+.gst-ask .gst-actions { justify-content: flex-end; }
+
+@media (max-width: 640px) {
+  .gst-page { padding: 28px 16px 96px; }
+  .gst-rows { grid-template-columns: 1fr; }
+}

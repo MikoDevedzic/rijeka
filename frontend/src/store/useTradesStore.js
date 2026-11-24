@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { passesFilters } from '../lib/blotter-filter'
+import { isGuest } from '../lib/guest'
 import { supabase } from '../lib/supabase'
 import { getSessionMaybe } from '../lib/session'
 import { onBroadcast, isSoloTicket, TRADES_CHANGED } from '../lib/windows'
@@ -32,6 +33,7 @@ export const useTradesStore = create((set, get) => ({
 
   // quiet: a background refresh keeps the table on screen instead of showing the loading state.
   fetchTrades: async ({ quiet = false } = {}) => {
+    if (isGuest()) { set({ trades: [], loading: false, error: null }); return }      // a guest has no book, and no sign-in to read one with (lib/guest.js)
     if (!quiet) set({ loading: true, error: null })
     const { data, error } = await supabase
       .from('trades')

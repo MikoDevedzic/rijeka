@@ -9,6 +9,8 @@
 // `sheetModel` is the content, as plain rows, and is what the tests read; `exportCashflows` writes it with
 // ExcelJS (bundled; nothing is fetched at run time) and hands the file to the browser.
 
+import { guestStopsHere } from '../../store/useGuestStore'
+
 // A cell: a plain value, or { v, fmt, f } where f(row) is a formula for the Excel row it lands on.
 const money = '#,##0;[Red]-#,##0', df6 = '0.000000'
 
@@ -161,11 +163,13 @@ async function save(model, name) {
 }
 
 export async function exportCashflows(args) {
+  if (guestStopsHere('excel')) return
   const q = args.quote
   await save(sheetModel(args), `rijeka_${q.pair || q.base_currency + q.quote_currency}_${q.settlement_date || 'cashflows'}_cashflows.xlsx`)
 }
 
 export async function exportPackageCashflows(args) {
+  if (guestStopsHere('excel')) return
   const q = args.quotes[0]
   await save(packageSheetModel(args), `rijeka_${q.pair || q.base_currency + q.quote_currency}_package_${args.flows.legs.length}_legs_cashflows.xlsx`)
 }

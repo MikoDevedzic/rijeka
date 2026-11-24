@@ -1,4 +1,5 @@
 import { createClient, processLock } from '@supabase/supabase-js'
+import { isGuest, freshGuestSession } from './guest'
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY
@@ -24,3 +25,12 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
     detectSessionInUrl: true,
   }
 })
+
+// A guest (lib/guest.js) has no sign-in here. While the tab is a guest's, "the session" the app asks this client
+// for is the guest's pass in a session's shape, so every call that sends the session's token to the API sends the
+// pass. Nothing else about the client changes: it holds no session of its own, and a table read made in a guest's
+// name would carry a token the database does not know and be refused, so guest pages make none.
+const accountSession = supabase.auth.getSession.bind(supabase.auth)
+supabase.auth.getSession = async () => (isGuest()
+  ? { data: { session: await freshGuestSession() }, error: null }
+  : accountSession())

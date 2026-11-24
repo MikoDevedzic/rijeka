@@ -1,12 +1,24 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
 import { supabase } from '../../lib/supabase'
 import AuthScene, { Field, SubmitBtn } from './AuthScene'
+import { guestsTaken, GUEST_HOME } from '../../lib/guest'
 
 export default function LoginPage() {
   const { signIn } = useAuthStore()
+  const enterAsGuest = useAuthStore(s => s.enterAsGuest)
   const navigate   = useNavigate()
+
+  // The way in with no account, offered where the instance takes guests (lib/guest.js): asked once, shown when yes.
+  const [guests, setGuests] = useState(false)
+  const [entering, setEntering] = useState(false)
+  useEffect(() => { let on = true; guestsTaken().then(y => { if (on) setGuests(y) }); return () => { on = false } }, [])
+  const lookAround = async () => {
+    setError(''); setNotice(''); setEntering(true)
+    try { await enterAsGuest(); navigate(GUEST_HOME, { replace: true }) }
+    catch (e) { setEntering(false); setError(e?.message || 'The guest desk is not available just now.') }
+  }
 
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
@@ -49,6 +61,15 @@ export default function LoginPage() {
 
   return (
     <AuthScene eyebrow="SIGN IN" mode="in">
+      {guests && (
+        <div className="au-guest" data-testid="guest-door">
+          <button type="button" className="au-btn" data-action="guest-enter" disabled={entering} onClick={lookAround}>
+            {entering ? 'OPENING THE GUEST DESK…' : 'PRICE A TRADE · NO ACCOUNT'}
+          </button>
+          <p className="au-alt">Price a swap, an option or a forward and see its XVA. Booking it asks for an account.</p>
+          <div className="au-or"><span>or sign in</span></div>
+        </div>
+      )}
       <h2 className="au-title">Enter the desk</h2>
       <p className="au-lead">Your blotter, market data and confirmations are private to your account.</p>
       <form onSubmit={handleSubmit} className="au-form">

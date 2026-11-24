@@ -13,9 +13,12 @@
 //
 // Signed in only: without a session nothing is sent. Never throws, never waits, never shows an error: the record
 // is the operator's, and the desk must not notice it.
+import { isGuest } from './guest'
+
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 let last = ''
 let bearer = ''
+
 
 export function signedIn(token) { bearer = token || '' }
 /** The session's token, for the one other thing that says whose it is: an error report (lib/errors.js). */
@@ -23,6 +26,7 @@ export const sessionToken = () => bearer
 
 export function say(event, fields = {}, { token, send = globalThis.fetch } = {}) {
   try {
+    if (isGuest()) return false          // a guest is not an account: nothing of a guest's goes on an account's record (lib/guest.js)
     const auth = token ?? bearer
     if (!auth || typeof send !== 'function') return false
     Promise.resolve(send(`${API}/api/me/activity`, {

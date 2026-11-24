@@ -8,6 +8,8 @@ import { signedIn, viewed } from './lib/activity'
 import { useModulesStore, ROUTE_MODULES } from './store/useModulesStore'
 import { useAuthStore } from './store/useAuthStore'
 import AuthGuard        from './components/auth/AuthGuard'
+import GuestDesk        from './components/guest/GuestDesk'
+import GuestAsk         from './components/guest/GuestAsk'
 import LoginPage        from './components/auth/LoginPage'
 import PhoneNav from './components/layout/PhoneNav'
 import LaunchMark from './components/brand/LaunchMark'
@@ -178,6 +180,7 @@ function PageBoundary({ children }) {
 
 export default function App() {
   const { initAuth, loading } = useAuthStore()
+  const guest = useAuthStore(st => !!st.session?.is_guest)
   useEffect(() => { initAuth() }, [])
   if (loading) return (
     <div style={{height:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--bg)',color:'var(--accent)',fontFamily: 'var(--mono)',fontSize:'0.875rem',letterSpacing:'0.15em'}}>
@@ -214,6 +217,8 @@ export default function App() {
             {gated('/risk/collateral', <CollateralPage />)}
           </Route>
           <Route element={<DocLayout />}>
+            {/* where a visitor with no account lands: the ticket, and what an account adds (lib/guest.js) */}
+            <Route path="/guest"       element={<GuestDesk />} />
             <Route path="/methodology" element={<Methodology />} />
             <Route path="/methodology/:section" element={<Methodology />} />
             <Route path="/roadmap"     element={<Roadmap />} />
@@ -248,8 +253,9 @@ export default function App() {
       </PageBoundary>
       <PersistentBookingWindow />
       <Shortcuts />
-      {/* One messenger for every tab: private Prometheus, support, and rooms. */}
-      <ErrorBoundary scope="widget"><Messenger /></ErrorBoundary>
+      {/* One messenger for every tab: private Prometheus, support, and rooms. An account's: a guest has none. */}
+      {!guest && <ErrorBoundary scope="widget"><Messenger /></ErrorBoundary>}
+      <GuestAsk />
       {/* a phone's navigation, at the foot of the screen (layout/PhoneNav.jsx); nothing on a larger screen */}
       <PhoneNav />
       {/* opened from a phone's home screen: the icon's mark comes alive once, then the app (brand/LaunchMark.jsx) */}

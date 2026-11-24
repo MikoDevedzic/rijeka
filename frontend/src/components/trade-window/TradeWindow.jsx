@@ -66,6 +66,7 @@ import FxXvaPanel from './FxXvaPanel'
 import { FxDetailsPanel, FxCashflowsPanel, FxScenarioPanel } from './FxTabs'
 import { packageGap, packageRisk, packageView, valueBeforeFees } from './fx-package'
 import FxLegs from './FxLegs'
+import { guestStopsHere } from '../../store/useGuestStore'
 import { LEG_TERMS, structureOf, packageOf } from './fx-legs'
 
 const NO_LEGS = []          // one empty list, so "no legs" is the same value at every render
@@ -858,6 +859,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
   // Sprint 10 Patch 6 — booking handlers
   const handleBook = useCallback(async () => {
     if (booking || pricing) return
+    if (guestStopsHere('book')) return          // a guest prices; booking is an account's (store/useGuestStore)
     setBookErr(''); setBooking(true)
     try {
       // A trade with no counterparty cannot be confirmed (on-chain or
@@ -906,6 +908,7 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
 
   const handleBookCurrency = useCallback(async () => {
     if (booking || pricing) return
+    if (guestStopsHere('book')) return          // a guest prices; booking is an account's (store/useGuestStore)
     setBookErr(''); setBooking(true)
     try {
       if (!economics.counterpartyId) throw new Error('Select a COUNTERPARTY on the TRADE tab before booking.')

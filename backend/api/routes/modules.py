@@ -33,7 +33,9 @@ class ModulesBody(BaseModel):
     note: Optional[str] = Field(None, max_length=500)
 
 
-GUEST_MODULES = ("XVA",)       # what a guest's ticket shows beside the price; the rest needs an account
+# What a guest's ticket shows beside the price: the XVA, and with it what confirming on chain would save (a second run
+# of the same simulation). Confirming itself needs a booked trade and an account; the chain's routes refuse a guest.
+GUEST_MODULES = ("XVA", "CHAIN_CONFIRM")
 
 
 def _guest_view(db: Session, user: dict) -> dict:

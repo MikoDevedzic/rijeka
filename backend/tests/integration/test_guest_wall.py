@@ -138,7 +138,7 @@ def test_a_guest_leaves_no_row_and_is_no_account(client, guest, pass_):
         assert client.get("/api/me/booking-defaults", headers=pass_).json()["role"] == "viewer"
         mods = client.get("/api/modules", headers=pass_).json()
         assert mods["guest"] is True and mods["can_edit"] is False and mods["firm_id"] is None and mods["events"] == []
-        assert {k for k, on in mods["modules"].items() if on} == {"XVA"}
+        assert {k for k, on in mods["modules"].items() if on} == {"XVA", "CHAIN_CONFIRM"}
     finally:
         eng.dispose()
 

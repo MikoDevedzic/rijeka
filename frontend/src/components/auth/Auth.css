@@ -224,3 +224,11 @@
   .au-alt .au-inline { padding:5px 2px; }
   .au-install { min-height:40px; padding:6px 14px; }
 }
+
+/* the way in with no account (LoginPage, lib/guest.js): above the sign-in, with a rule between them */
+.au-guest { display:flex; flex-direction:column; gap:8px; margin:0 0 6px; }
+.au-or { display:flex; align-items:center; gap:10px; margin:8px 0 2px; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-dim); }
+.au-or::before, .au-or::after { content:""; flex:1; height:1px; background:var(--border); }
+/* A phone's door is one screen with nothing to scroll (e2e/door.spec.js), and the guest's page and ticket have not
+   been set for a phone yet: the way in with no account is a monitor's until they are. */
+@media (max-width: 640px) { .au-guest { display:none; } }

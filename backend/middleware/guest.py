@@ -62,6 +62,7 @@ ALLOWED: frozenset[tuple[str, str]] = frozenset({
     ("GET", "/api/me/booking-defaults"),
     ("GET", "/api/counterparties/"),
     ("GET", "/api/legal-entities/"),
+    ("GET", "/nodes"),                                  # the desks and books the ticket offers (the guest desk's own)
     ("GET", "/api/currency/pairs"),
     ("GET", "/api/crypto/spot"),
     ("GET", "/api/market-data/demo/sources"),

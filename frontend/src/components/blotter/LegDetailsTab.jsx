@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { atRest, plain } from './schedule-format'
+import { guestStopsHere } from '../../store/useGuestStore'
 import { parseNumber } from '../trade-window/fx-ticket'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
@@ -91,6 +92,7 @@ async function loadExcelJS() {
 }
 
 async function exportToExcel(fixedRows, floatRows, tradeRef='TRADE', dir='PAY', floatDir='RECEIVE', ccy='USD', index='SOFR') {
+  if (guestStopsHere('excel')) return          // the workbook is an account's (store/useGuestStore)
   const ExcelJS = await loadExcelJS()
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Rijeka'; wb.created = new Date()

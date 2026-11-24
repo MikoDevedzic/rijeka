@@ -6,6 +6,7 @@
 // (trade-window/sections.jsx TAB_MODULE) and the Configurations items (layout/CfgNav `module`) name their own.
 import { useMemo } from 'react'
 import { useModulesStore, ROUTE_MODULES } from '../../store/useModulesStore'
+import { GUEST_HOME, isGuest } from '../../lib/guest'
 
 const NAV = [
   { label: 'HOME',           path: '/command-center', exact: true  },
@@ -28,7 +29,15 @@ export function visibleNav(modules, routes = ROUTE_MODULES) {
   })
 }
 
+// A guest's three places (lib/guest.js guestMayOpen): the ticket on its own page, and the two documents.
+export const GUEST_NAV = [
+  { label: 'PRICE A TRADE', path: GUEST_HOME,     exact: true,  to: GUEST_HOME     },
+  { label: 'METHODOLOGY',   path: '/methodology', exact: false, to: '/methodology' },
+  { label: 'ROADMAP',       path: '/roadmap',     exact: true,  to: '/roadmap'     },
+]
+
 export function useVisibleNav() {
   const modules = useModulesStore(s => s.modules)
-  return useMemo(() => visibleNav(modules), [modules])
+  const guest = isGuest()          // read as the bar renders: the bar follows the session, and a tab becomes a guest's or an account's with it
+  return useMemo(() => guest ? GUEST_NAV : visibleNav(modules), [modules, guest])
 }

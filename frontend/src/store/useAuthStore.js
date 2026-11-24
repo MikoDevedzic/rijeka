@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { supabase } from '../lib/supabase'
+import { isGuest, guestSession, enterAsGuest, leaveGuest, GUEST_PROFILE } from '../lib/guest'
 
 export const useAuthStore = create((set, get) => ({
   session:     null,
@@ -9,10 +10,15 @@ export const useAuthStore = create((set, get) => ({
   demo:        null,   // result of POST /api/demo/provision (hosted demo), see lib/demo.js
 
   initAuth: () => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      set({ session, loading: false })
-      if (session) { get().fetchProfile(session.user.id); get().provision(session) }
-    })
+    if (isGuest()) {
+      // a guest's tab (lib/guest.js): no profile to read, no workspace to set up; a sign-in below takes over from it
+      set({ session: guestSession(), profile: GUEST_PROFILE, loading: false })
+    } else {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        set({ session, loading: false })
+        if (session) { get().fetchProfile(session.user.id); get().provision(session) }
+      })
+    }
 
     // Never await a supabase call inside this callback: signInWithPassword()
     // resolves only after every subscriber returns, and a query in here waits
@@ -20,6 +26,8 @@ export const useAuthStore = create((set, get) => ({
     // login button sat on AUTHENTICATING for 10s+. Defer the work instead.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
+        if (!session && isGuest()) return                 // the client has no sign-in of its own while the tab is a guest's
+        if (session) leaveGuest()                         // an account signed in: the tab is the account's from here
         set({ session, loading: false })
         if (event === 'SIGNED_IN' && session) {
           setTimeout(async () => {
@@ -78,8 +86,21 @@ export const useAuthStore = create((set, get) => ({
     return { data, error }
   },
 
+  // The way in with no account: a pass from the API, and the app shown as a guest sees it (components/guest).
+  enterAsGuest: async () => {
+    const session = await enterAsGuest()
+    set({ session, profile: GUEST_PROFILE, loading: false, demo: null, isNewSignup: false })
+    return session
+  },
+
   signOut: async () => {
     try { sessionStorage.removeItem('rijeka.booted') } catch { /* ignore: sessionStorage unavailable */ }
+    if (isGuest()) {
+      leaveGuest()
+      set({ session: null, profile: null, isNewSignup: false })
+      window.location.href = '/'
+      return
+    }
     await supabase.auth.signOut()
     set({ session: null, profile: null, isNewSignup: false })
     window.location.href = '/'
