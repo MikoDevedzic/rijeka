@@ -173,6 +173,13 @@ test('both sides on one line, the premium line closed by a rule, and a leverage 
   })
   expect(room, 'the longest day rule fits its field on the floating leg').toBeGreaterThanOrEqual(0)
   await app.screenshot({ path: 'e2e/.out/shots/polish-sides-one-line.png' })
+  // a cap has a side, not a direction: its row keeps the even columns, the tenor under the trade date
+  await win.getByRole('button', { name: /^INTEREST RATE CAP$/i }).click()
+  await expect(win.locator('.tbw-grid-econ')).toHaveCount(0)
+  expect(await left('TENOR'), 'a cap\'s TENOR under TRADE DATE').toBe(await left('TRADE DATE'))
+  expect(await left('CCY'), 'a cap\'s CCY under COUNTERPARTY').toBe(await left('COUNTERPARTY'))
+  await win.getByRole('button', { name: /^IR SWAP$/i }).click()
+  await oneLine('PAY FIXED', 'RECEIVE FIXED')
 
   // a new ticket writes its leverage 1.0; booked and opened again from the blotter, the stored 1 is written the same
   const leverage = (w) => w.getByText('LEVERAGE', { exact: true }).locator('xpath=following-sibling::input[1]')

@@ -88,6 +88,11 @@ well: it cannot be typed over), a field that shows its default (a brass rule und
 in place of a number that is not there yet), an option's
 premium line and the notes that say why there is no price. A stored currency trade opened from the blotter has
 no valuation block (it never had).
+A note under a section's fields begins where the section's fields do (22px, 14px on a phone); the last note of
+a section closes it with 12px of room and a rule, as every section ends (0.66.4: the premium line had run into FEES).
+A row gives width to the field whose words need it from a field that holds a few characters, and the columns
+still add to the row's count, so the fields after them stay under the fields of the row above (the direction's two
+sides from the currency; the floating leg's day rule from the leverage).
 A new ticket opens on a digital-asset forward; the asset classes read CRYPTO, FX, RATES.
 
 **A booked ticket's terms are locked**, in the window it was booked in as in one opened from the blotter: TRADE's

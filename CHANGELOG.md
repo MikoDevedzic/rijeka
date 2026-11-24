@@ -11,7 +11,8 @@ to the API changes.
 - **Both sides on one line.** PAY FIXED and RECEIVE FIXED (PAY LEG 1 and RECEIVE LEG 1 on a basis swap) stood one
   over the other: their column was a sixth of the row and their words wider than it. The currency, three letters,
   gives the direction its spare width. The two columns together are as wide as before, so the tenor and the dates
-  stay under the fields of the row above.
+  stay under the fields of the row above. A cap, a floor and a collar have a side and no direction: their row
+  keeps its even columns.
 - **An option's premium line closes its section.** On a currency or digital-asset option the premium line ran
   straight into FEES, with no room and no rule under it. The last line under the terms (the premium, a warning,
   why there is no price) now has the room and the rule every section ends with, and begins where the fields
