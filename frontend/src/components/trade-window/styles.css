@@ -274,6 +274,11 @@
   grid-template-columns: repeat(6, 1fr);
   gap: 10px;
 }
+/* PRIMARY ECONOMICS: a currency is three letters and the two sides are two words each, so the currency's column
+   gives width to the direction's and both sides stand on one line. The two columns together are as wide as two
+   of the six, so the fields after them stay under the fields of the row above. (A phone sets its own two across.) */
+.tbw-grid-6.tbw-grid-econ { grid-template-columns: 1fr 0.6fr 1.4fr repeat(3, 1fr); }
+.tbw-grid-econ .tbw-chip-row { margin-bottom: 0; }
 
 /* ── Metric cards ──────────────────────────────────────────────────────── */
 
@@ -767,11 +772,15 @@
   color: var(--text-mute);
   pointer-events: none;
 }
-.tbw-fx-note { padding: 12px 18px 0; font-size: 12px; letter-spacing: 0.05em; color: var(--text-mute); }
+/* a note begins where the fields above it begin (the section's own side padding) */
+.tbw-fx-note { padding: 12px 22px 0; font-size: 12px; letter-spacing: 0.05em; color: var(--text-mute); }
 .tbw-fx-note.is-error { color: var(--red); }
 .tbw-fx-note.is-warning { color: var(--amber); }
 /* the option's premium, one line in the normal colour under the notes and above the tiles */
 .tbw-fx-note.tbw-fx-premium { color: var(--text); font-family: var(--mono); }
+/* the last line under the terms (the premium, a warning, why there is no price) closes its section as every
+   section closes: room under it and a rule, so it is not read as the first line of FEES below */
+.tbw-fx-valuation > .tbw-fx-note:last-child { padding-bottom: 12px; border-bottom: 1px solid var(--border); }
 
 /* A sensitivity's unit after its name ("CRY01 · 1 % spot"): smaller, muted, written as it is (no capitals). */
 .tbw-fx-unit { font-size: 0.85em; letter-spacing: 0.02em; color: var(--text-mute); text-transform: none; }

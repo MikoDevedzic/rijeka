@@ -85,6 +85,14 @@ function parseLev(v) {
   return isNaN(n) ? 1.0 : n
 }
 
+/** A leverage as the ticket writes it: a multiplier, so a whole number keeps its decimal ("1.0", "2.0") and any
+ *  other is written as it is ("1.5"). A booked trade's stored 1 reads as a new ticket's 1.0 does. */
+export function leverageText(v) {
+  const n = typeof v === 'number' ? v : parseFloat(String(v ?? ''))
+  if (!Number.isFinite(n)) return '1.0'
+  return Number.isInteger(n) ? n.toFixed(1) : String(n)
+}
+
 function curveObj(curveId) {
   return { curve_id: curveId, quotes: [], interp_method: 'LogLinearDiscount' }
 }

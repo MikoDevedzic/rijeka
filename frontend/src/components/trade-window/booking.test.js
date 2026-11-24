@@ -297,3 +297,20 @@ describe('the request a cap, a floor and a collar ticket sends', () => {
     expect(() => capLikePayload({ ...state, effDate: '' }, 'CAP')).toThrow(/still loading/)
   })
 })
+
+describe('a leverage is written one way on the ticket', () => {
+  it('a booked trade\'s stored 1 reads as a new ticket\'s 1.0 does; a fraction is written as it is', async () => {
+    const { leverageText } = await import('./booking')
+    expect(leverageText(1)).toBe('1.0')
+    expect(leverageText('1')).toBe('1.0')
+    expect(leverageText('1.0')).toBe('1.0')
+    expect(leverageText(2)).toBe('2.0')
+    expect(leverageText(1.5)).toBe('1.5')
+    expect(leverageText('0.25')).toBe('0.25')
+    expect(leverageText(0)).toBe('0.0')
+    expect(leverageText(-1)).toBe('-1.0')
+    expect(leverageText(undefined)).toBe('1.0')
+    expect(leverageText(null)).toBe('1.0')
+    expect(leverageText('')).toBe('1.0')
+  })
+})

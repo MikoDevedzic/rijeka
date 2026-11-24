@@ -131,3 +131,82 @@ test('XVA: nothing scrolls inside the tab, every assumption is in view, and the 
   await app.screenshot({ path: 'e2e/.out/shots/polish-xva.png' })
   expectClean(problems)
 })
+
+// Three things the owner's ticket showed on 23 November 2026 (0.66.4): the two sides of a swap stood one over the
+// other, because their column was a sixth of the row and their words wider than it; the option's premium line ran
+// straight into FEES; and a booked trade opened again wrote its leverage "1" where a new ticket writes "1.0".
+test('both sides on one line, the premium line closed by a rule, and a leverage written one way', async ({ app, problems }) => {
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  const win = app.locator('.tbw-window')
+  await win.waitFor()
+  await win.getByRole('button', { name: 'RATES', exact: true }).click()
+  await selectDemoBank(app, win)
+  const box = async (loc) => { const b = await loc.boundingBox(); return { x: Math.round(b.x), y: Math.round(b.y), r: Math.round(b.x + b.width), b: Math.round(b.y + b.height) } }
+  const sides = win.locator('.tbw-grid-econ .tbw-chip')
+  const oneLine = async (pay, receive) => {
+    await expect(sides).toHaveText([pay, receive])
+    const [a, b] = [await box(sides.nth(0)), await box(sides.nth(1))]
+    expect(b.y, `${receive} stands beside ${pay}, not under it`).toBe(a.y)
+    expect(b.x, 'and after it').toBeGreaterThan(a.r)
+    const field = await box(win.locator('.tbw-grid-econ > div').nth(2))
+    expect(b.r, 'inside its own column').toBeLessThanOrEqual(field.r)
+  }
+  await oneLine('PAY FIXED', 'RECEIVE FIXED')
+  // the fields after the two sides stay under the fields of the row above
+  const left = async (label) => (await box(win.getByText(label, { exact: true }).first())).x
+  expect(await left('TENOR'), 'TENOR under DESK').toBe(await left('DESK'))
+  expect(await left('EFF DATE'), 'EFF DATE under BOOK').toBe(await left('BOOK'))
+  await win.getByRole('button', { name: 'BASIS', exact: true }).click()
+  await oneLine('PAY LEG 1', 'RECEIVE LEG 1')
+  await win.getByRole('button', { name: 'VANILLA', exact: true }).click()
+  await oneLine('PAY FIXED', 'RECEIVE FIXED')
+  // the floating leg's day rule is read whole: its field is wider than its longest word and the arrow beside it
+  const bdc = win.getByText('BDC', { exact: true }).last().locator('xpath=following-sibling::select[1]')
+  await expect(bdc).toHaveValue('MOD_FOLLOWING')
+  const room = await bdc.evaluate(el => {
+    const cs = getComputedStyle(el), s = document.createElement('span')
+    s.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font:${cs.font};letter-spacing:${cs.letterSpacing}`
+    s.textContent = [...el.options].map(o => o.text).sort((a, b) => b.length - a.length)[0]
+    document.body.append(s); const w = s.getBoundingClientRect().width; s.remove()
+    return el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 20 - w      // 20: the arrow
+  })
+  expect(room, 'the longest day rule fits its field on the floating leg').toBeGreaterThanOrEqual(0)
+  await app.screenshot({ path: 'e2e/.out/shots/polish-sides-one-line.png' })
+
+  // a new ticket writes its leverage 1.0; booked and opened again from the blotter, the stored 1 is written the same
+  const leverage = (w) => w.getByText('LEVERAGE', { exact: true }).locator('xpath=following-sibling::input[1]')
+  await expect(leverage(win)).toHaveValue('1.0')
+  const priced = app.waitForResponse(r => r.url().endsWith('/price/preview') && r.request().method() === 'POST')
+  await win.getByRole('button', { name: '▶ PRICE' }).click()
+  await priced
+  const booked = app.waitForResponse(r => r.url().includes('/api/book/trade') && r.request().method() === 'POST')
+  await win.getByRole('button', { name: /BOOK TRADE/ }).click()
+  const res = await booked
+  expect(res.status()).toBe(201)
+  const trade = (await res.json()).trade
+  await app.goto(`/blotter?trade=${trade.id}`)
+  const again = app.locator('.tbw-window')
+  await again.waitFor({ timeout: 60_000 })
+  await expect(leverage(again), 'the booked leverage as a new ticket writes it').toHaveValue('1.0')
+  await app.screenshot({ path: 'e2e/.out/shots/polish-leverage-reopened.png' })
+
+  // an option's premium line is the last line of its section: room under it and a rule, then FEES
+  await app.goto('/blotter')
+  await app.getByText('+ NEW TRADE').first().click()
+  await win.waitFor()
+  await win.getByRole('button', { name: 'CRYPTO', exact: true }).click()
+  await win.getByRole('button', { name: /^CRYPTO OPTION$/i }).click()
+  await expect.poll(async () => Number(await win.getByTestId('fx-forward-rate').getAttribute('data-value'))).toBeGreaterThan(0)
+  const premium = win.getByTestId('fx-premium')
+  await expect(premium).toContainText(/Premium [\d,]+\.\d\d USD/)
+  expect(await css(premium, 'paddingBottom')).toBe('12px')
+  expect(await css(premium, 'borderBottomWidth')).toBe('1px')
+  const sec = win.locator('.tbw-sec').first()
+  expect(await css(premium, 'borderBottomColor'), 'the rule every section closes with').toBe(await css(sec, 'borderBottomColor'))
+  const fees = win.getByTestId('fees-summary')
+  await fees.scrollIntoViewIfNeeded()
+  expect((await box(fees)).y, 'FEES begins under the premium line\'s rule').toBeGreaterThan((await box(premium)).b)
+  await app.screenshot({ path: 'e2e/.out/shots/polish-premium-line.png' })
+  expectClean(problems)
+})

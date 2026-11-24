@@ -46,7 +46,7 @@ import XvaPanel      from './xva-panel'
 import RatesScenario from './RatesScenario'
 // Sprint 12 item 3: CONFIRM tab panel + lifecycle client
 import { ConfirmPanel } from './ConfirmPanel'
-import { executeBooking, buildBookingBody, buildLegs, confirmTrade, cancelTrade, confirmTradeOnChain, bookPackage, confirmPackageOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, partialTerminate, amendTerms, amendable, recordKnock, INDEX_CURVE } from './booking'
+import { executeBooking, buildBookingBody, buildLegs, confirmTrade, cancelTrade, confirmTradeOnChain, bookPackage, confirmPackageOnChain, getAttestation, verifyTradeOnChain, getProofPack, terminateOnChain, partialTerminate, amendTerms, amendable, recordKnock, INDEX_CURVE, leverageText } from './booking'
 import { TENOR_Y, EXPIRY_Y, EXPIRY_DATE, swaptionExpiry, capStrike } from './product-defaults'
 // Sprint 13 follow-up — lifecycle cache refresh
 import { useTradesStore, shortUti } from '../../store/useTradesStore'
@@ -171,7 +171,7 @@ function viewProductState(trade, legs = []) {
     floatBdc:        t.float_bdc        || float?.bdc               || 'MOD_FOLLOWING',
     floatCal:        t.float_calendar   || float?.payment_calendar  || undefined,
     spread:          bp(t.spread ?? float?.spread) ?? '0',
-    leverage:        String(t.leverage ?? float?.leverage ?? '1.0'),
+    leverage:        leverageText(t.leverage ?? float?.leverage),
   }
   if (trade.structure === 'BASIS') {
     Object.assign(s, {

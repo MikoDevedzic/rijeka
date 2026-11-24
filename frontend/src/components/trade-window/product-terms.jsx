@@ -108,11 +108,16 @@ async function getSession() {
 
 // ── Shared helpers ─────────────────────────────────────────────────────────
 
-function Row({ cols = 6, children }) {
+// A floating leg's eight fields: a leverage is a few digits, a business-day convention is the longest word in the
+// row ("MOD_FOLLOWING" was cut in an eighth of the row), so the leverage gives it its spare width. The columns
+// still add to eight, so the row ends where the others end.
+const FLOAT_LEG_COLS = '1fr 1fr 0.7fr 1fr 1fr 1fr 1.3fr 1fr'
+
+function Row({ cols = 6, template, children }) {
   return (
     <div className="tbw-grid" style={{
       display: 'grid',
-      gridTemplateColumns: `repeat(${cols}, 1fr)`,
+      gridTemplateColumns: template || `repeat(${cols}, 1fr)`,
       gap: 10,
       marginBottom: 12,
     }}>{children}</div>
@@ -419,7 +424,7 @@ export function SwapTermsBody({ state, update, underlying = false }) {
         dirLabel={isBasis ? (direction === 'PAY' ? '\u2192 PAY FLOAT 1' : '\u2190 RECEIVE FLOAT 1') : floatDirLabel}
         dirColor={isBasis ? fixedDirColor : floatDirColor}
       />
-      <Row cols={8}>
+      <Row cols={8} template={FLOAT_LEG_COLS}>
         <Field label="INDEX">
           <select style={selStyle} value={index}
                   onChange={e => onIndexChange(e.target.value)}>
@@ -481,7 +486,7 @@ export function SwapTermsBody({ state, update, underlying = false }) {
       {isBasis && (
         <>
           <LegHeader label="FLOAT LEG 2" dirLabel={floatDirLabel + ' 2'} dirColor={floatDirColor} />
-          <Row cols={8}>
+          <Row cols={8} template={FLOAT_LEG_COLS}>
             <Field label="INDEX">
               <select style={selStyle} value={index2}
                       onChange={e => update({ index2: e.target.value })}>

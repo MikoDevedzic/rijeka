@@ -178,6 +178,7 @@
   /* a line that runs on under the cells beside it on a monitor has no cells beside it here: it wraps in its own */
   .tbw-window .tbw-fx-tag-run > span { white-space: normal; min-width: 0; }
   .tbw-window .tbw-sec { padding-left: 14px; padding-right: 14px; }
+  .tbw-window .tbw-fx-note { padding-left: 14px; padding-right: 14px; }      /* a note begins where the section's fields do, here too */
   .tbw-tabbar { padding-left: 10px; padding-right: 10px; }
   /* the XVA tab and the scenario tab: the inputs, then the results under them */
   .xva-row { flex-direction: column !important; overflow: visible !important; }

@@ -3,6 +3,29 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.50). Commits on `main` are the detail.
 
+## 0.66.4 · 23 November 2026
+
+**Four small faults on the ticket,** seen in the pictures of 0.66.3 and mended. No figure changes; nothing sent
+to the API changes.
+
+- **Both sides on one line.** PAY FIXED and RECEIVE FIXED (PAY LEG 1 and RECEIVE LEG 1 on a basis swap) stood one
+  over the other: their column was a sixth of the row and their words wider than it. The currency, three letters,
+  gives the direction its spare width. The two columns together are as wide as before, so the tenor and the dates
+  stay under the fields of the row above.
+- **An option's premium line closes its section.** On a currency or digital-asset option the premium line ran
+  straight into FEES, with no room and no rule under it. The last line under the terms (the premium, a warning,
+  why there is no price) now has the room and the rule every section ends with, and begins where the fields
+  above it begin.
+- **A leverage is written one way.** A booked swap opened again from the blotter wrote its leverage "1" where a
+  new ticket writes "1.0". Both write "1.0" (a whole multiplier keeps its decimal, any other is written as it
+  is). What is booked was and is the number.
+- **The floating leg's day rule is read whole.** "MOD_FOLLOWING" was cut in its field. The leverage beside it,
+  a few digits, gives it width; the row still ends where the others end.
+
+A journey holds each of the four (`ticket-polish.spec.js`), and a unit test the leverage's text. Not checked on
+a phone by eye: a phone sets these rows two across by its own rule, which this change does not touch; the
+phone journeys run with the rest.
+
 ## 0.66.3 · 23 November 2026
 
 **The ticket's colours.** The owner, looking at the new-trade window: the chosen side too faint, the rest dull.

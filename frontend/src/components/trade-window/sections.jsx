@@ -166,7 +166,7 @@ export function PrimaryEconomics({
   return (
     <div className="tbw-sec">
       <div className="tbw-lbl">PRIMARY ECONOMICS</div>
-      <div className="tbw-grid-6">
+      <div className="tbw-grid-6 tbw-grid-econ">
         <Field label="NOTIONAL">
           <input className="tbw-mono" value={state.notional?.toLocaleString() ?? ''}
                  onChange={e => onChange({ notional: parseNum(e.target.value) })} />
