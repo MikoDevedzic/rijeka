@@ -1,0 +1,301 @@
+"""A guest: a visitor with no account, who may price a trade and read, and nothing else.
+
+A guest never holds a Supabase session, so the database's own interface never sees one as a signed-in role. The
+API gives the browser a pass of its own (`POST /api/public/guest`): a token signed HS256 with RIJEKA_GUEST_SECRET,
+half an hour long, written nowhere. Every guest acts as ONE account, the guest desk (RIJEKA_GUEST_EMAIL: an
+ordinary demo account its owner signed up once, holding its entity, the demo counterparty and market data, and no
+trades), with the role of a viewer. Nothing is stored per guest.
+
+Three rules hold the design up, and `tests/test_guest.py` holds them:
+
+  1. The two kinds of token never meet. A pass is recognised by its unverified header (`alg` HS256 and `kid`
+     "guest", both exactly) and is then verified with the guest secret and HS256 only; it is never tried against
+     the key set. Every other token takes the ES256 path of middleware/auth.py, which refuses HS256 as it always did.
+  2. Deny by default. A guest's request is answered only when its method and path are on ALLOWED; a route added
+     tomorrow refuses a guest without anyone remembering to close it. No request to look at is a refusal.
+  3. Nothing on ALLOWED writes for its caller. All guests are one account: a route that stored a calibration, a
+     snapshot or a cashflow for "the caller" would let one guest change another's prices. Such routes stay off the
+     list by name (NEVER).
+
+Volume is limited by address (the caller's, as the trusted proxy saw it: never a forwarded header the client wrote)
+and, on the routes that burn the CPU, for all guests together (api/routes/_limits.py). Guests are off unless both
+settings are present; a secret shorter than 32 bytes is no secret and leaves them off."""
+from __future__ import annotations
+
+import logging
+import os
+import re
+import secrets
+import time
+from collections import deque
+from typing import Optional
+
+import jwt
+from fastapi import HTTPException, Request
+from jwt import PyJWTError
+
+log = logging.getLogger("rijeka.guest")
+
+ALG = "HS256"
+KID = "guest"
+ISSUER = "rijeka-guest"
+AUDIENCE = "rijeka-guest"
+KIND = "guest"
+TTL = 1800                      # seconds a pass lasts; the app asks for another when it has run out
+MIN_SECRET = 32                 # bytes
+ACCOUNT_TTL = 300.0             # how long the guest desk's id is remembered once found (a miss is never remembered)
+
+PER_MINUTE = 120                # a guest address's requests a minute, all allowed routes together
+PRICINGS_PER_MINUTE = 60        # of which the ones that price (the POSTs): a person dragging a scenario, not a script
+ALL_PRICINGS_PER_MINUTE = 300   # every guest together: the one CPU is the accounts' too
+PASSES_PER_HOUR = 20            # passes one address may take in an hour
+MAX_PATHS = 2000                # the ticket's own default: a guest's simulation is no larger
+
+ASK = "A guest can price a trade and read. To book, confirm or export, create an account: it is free."
+
+# What a guest may call: (method, route as the router declares it). Reads the ticket and the two document pages
+# need, and the routes that price what is in the request and store nothing.
+ALLOWED: frozenset[tuple[str, str]] = frozenset({
+    ("GET", "/api/demo/status"),
+    ("GET", "/api/modules"),
+    ("GET", "/api/me/role"),
+    ("GET", "/api/me/booking-defaults"),
+    ("GET", "/api/counterparties/"),
+    ("GET", "/api/legal-entities/"),
+    ("GET", "/api/currency/pairs"),
+    ("GET", "/api/crypto/spot"),
+    ("GET", "/api/market-data/demo/sources"),
+    ("GET", "/api/market-data/snapshots/{curve_id}/latest"),
+    ("GET", "/api/market-data/vol-skew/latest"),
+    ("GET", "/api/price/swaption/vol"),
+    ("GET", "/api/xva/calibration/latest"),
+    ("GET", "/api/collateral/instruments"),
+    ("GET", "/api/collateral/schedule/{cp_id}"),
+    ("GET", "/api/methodology/products"),
+    ("POST", "/price/preview"),
+    ("POST", "/api/price/swaption"),
+    ("POST", "/api/price/cap"),
+    ("POST", "/api/price/floor"),
+    ("POST", "/api/price/collar"),
+    ("POST", "/api/price/par-rate"),
+    ("POST", "/api/price/fees"),
+    ("POST", "/api/schedules/preview"),
+    ("POST", "/api/schedules/advance-date"),
+    ("POST", "/api/currency/forward/price"),
+    ("POST", "/api/currency/forward/scenario"),
+    ("POST", "/api/currency/option/price"),
+    ("POST", "/api/currency/option/scenario"),
+    ("POST", "/api/crypto/forward/price"),
+    ("POST", "/api/xva/simulate"),
+    ("POST", "/api/xva/incremental"),
+    ("POST", "/api/xva/currency"),
+    ("POST", "/api/xva/currency-option"),
+    ("POST", "/api/xva/currency-package"),
+})
+
+# Routes that write for their caller, or spend the desk's money, or hand out a file: named here so that a test can
+# say none of them is ever allowed, whatever is added to the list above.
+NEVER: frozenset[tuple[str, str]] = frozenset({
+    ("POST", "/api/xva/calibrate"),
+    ("POST", "/api/crypto/spot/snap"), ("POST", "/api/crypto/funding"),
+    ("POST", "/api/currency/spot/snap"), ("POST", "/api/currency/fixings"), ("POST", "/api/currency/vol-surface"),
+    ("POST", "/api/currency/forward-curve"),
+    ("POST", "/api/market-data/snapshots"), ("POST", "/api/market-data/vol-skew"), ("POST", "/api/market-data/cap-vol"),
+    ("POST", "/api/demo/provision"),
+    ("PUT", "/api/me/role"), ("PUT", "/api/me/booking-defaults"), ("PUT", "/api/modules"),
+    ("POST", "/api/trades/"), ("POST", "/api/book/trade"), ("POST", "/api/book/package"),
+    ("POST", "/api/analyse/"), ("GET", "/api/prometheus/brief"),
+    ("GET", "/api/methodology/{product}/replication.xlsx"),
+    ("POST", "/api/counterparties/"), ("POST", "/api/legal-entities/"),
+})
+
+
+# ── settings ─────────────────────────────────────────────────────────────────
+def _secret() -> Optional[bytes]:
+    s = os.environ.get("RIJEKA_GUEST_SECRET", "").strip().encode()
+    return s if len(s) >= MIN_SECRET else None
+
+
+def _email() -> str:
+    return os.environ.get("RIJEKA_GUEST_EMAIL", "").strip()
+
+
+def enabled() -> bool:
+    """Whether this instance takes guests: both settings present. The desk's account is looked for when a pass is used."""
+    return _secret() is not None and bool(_email())
+
+
+_account: dict = {"at": 0.0, "id": None}
+
+
+def account_id() -> Optional[str]:
+    """The guest desk's account id, found by its sign-in address. None when there is no such account (or the
+    database did not answer): that is asked again on the next request, never remembered."""
+    now = time.time()
+    if _account["id"] and now - _account["at"] < ACCOUNT_TTL:
+        return _account["id"]
+    email = _email()
+    if not email:
+        return None
+    try:
+        from sqlalchemy import text
+        from db.session import SessionLocal
+        db = SessionLocal()
+        try:
+            row = db.execute(text("SELECT id FROM auth.users WHERE lower(email) = lower(:e)"), {"e": email}).first()
+        finally:
+            db.close()
+    except Exception as e:                  # noqa: BLE001 — no guests for this request; the failure is logged
+        log.warning("guest desk lookup failed: %s", type(e).__name__)
+        return None
+    if not row:
+        return None
+    _account.update(at=now, id=str(row[0]))
+    return _account["id"]
+
+
+def forget_account() -> None:
+    _account.update(at=0.0, id=None)
+
+
+# ── the pass ─────────────────────────────────────────────────────────────────
+def mint(now: Optional[float] = None) -> tuple[str, int]:
+    """A pass and the second it ends. Raises LookupError when guests are off."""
+    key = _secret()
+    if key is None or not _email():
+        raise LookupError("guests are off")
+    iat = int(now if now is not None else time.time())
+    exp = iat + TTL
+    token = jwt.encode({"iss": ISSUER, "aud": AUDIENCE, "kind": KIND, "jti": secrets.token_urlsafe(12), "iat": iat, "exp": exp},
+                       key, algorithm=ALG, headers={"kid": KID, "typ": "rijeka-guest+jwt"})
+    return token, exp
+
+
+def _token_of(authorization: Optional[str]) -> Optional[str]:
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    return authorization.split(" ", 1)[1].strip() or None
+
+
+def is_pass(authorization: Optional[str]) -> bool:
+    """Whether this bearer SAYS it is a guest's pass (its unverified header). True sends it to `user` below and
+    nowhere else; False leaves it to the ES256 path, which refuses HS256 by itself."""
+    token = _token_of(authorization)
+    if not token:
+        return False
+    try:
+        header = jwt.get_unverified_header(token)
+    except PyJWTError:
+        return False
+    return header.get("alg") == ALG and header.get("kid") == KID
+
+
+def _claims(token: str) -> dict:
+    key = _secret()
+    if key is None:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    try:
+        claims = jwt.decode(token, key, algorithms=[ALG], audience=AUDIENCE, issuer=ISSUER,
+                            options={"require": ["exp", "iat", "iss", "aud", "jti"]})
+    except PyJWTError as e:
+        log.info("guest pass rejected: %s", type(e).__name__)
+        raise HTTPException(status_code=401, detail="Invalid token")
+    if claims.get("kind") != KIND:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return dict(claims)
+
+
+# ── volume, by address ───────────────────────────────────────────────────────
+_requests: dict[str, deque] = {}
+_pricings: dict[str, deque] = {}
+_passes: dict[str, deque] = {}
+
+
+def address(request: Optional[Request]) -> str:
+    # uvicorn runs with --proxy-headers, so request.client is the address the trusted proxy saw; a forwarded
+    # header read here would be whatever the client chose to write
+    return request.client.host if request is not None and request.client else "unknown"
+
+
+def _limits_off() -> bool:
+    from api.routes._limits import _off
+    return _off()
+
+
+def _take(buckets: dict[str, deque], key: str, window: float, most: int, what: str) -> None:
+    now = time.time()
+    q = buckets.setdefault(key, deque())
+    while q and now - q[0] > window:
+        q.popleft()
+    if len(q) >= most:
+        wait = max(1, int(window - (now - q[0])) + 1)
+        raise HTTPException(status_code=429, headers={"Retry-After": str(wait)},
+                            detail=f"Too many {what}; the next is taken in {wait} s. An account has a limit of its own.")
+    q.append(now)
+    if len(buckets) > 20000:
+        for k in [k for k, v in buckets.items() if not v or now - v[-1] > window]:
+            buckets.pop(k, None)
+
+
+def take_pass(request: Optional[Request]) -> None:
+    """Counts a pass against its address: at most PASSES_PER_HOUR an hour."""
+    if not _limits_off():
+        _take(_passes, address(request), 3600.0, PASSES_PER_HOUR, "guest sessions")
+
+
+# ── the wall ─────────────────────────────────────────────────────────────────
+def _pattern(template: str) -> re.Pattern[str]:
+    """The paths a route's template takes: each {name} is one segment, everything else is itself."""
+    return re.compile("^" + "".join("[^/]+" if part.startswith("{") else re.escape(part)
+                                    for part in re.split(r"(\{[^}]+\})", template)) + "$")
+
+
+_PATTERNS: tuple = tuple((m, _pattern(t)) for m, t in sorted(ALLOWED))
+
+
+def allowed(method: str, path: Optional[str]) -> bool:
+    """Whether a guest may call this: the request's own path against the list. Not the matched route's name: a router
+    included under a prefix knows its routes by their short path ("/" for a dozen of them), so only the path the
+    request came in on says which route it is. A path that differs by a slash is another path, and is refused."""
+    if not path:
+        return False
+    m = method.upper()
+    return any(mm == m and pat.match(path) for mm, pat in _PATTERNS)
+
+
+def user(authorization: Optional[str], request: Optional[Request]) -> dict:
+    """The verified guest of this request, as the routes see a user: the guest desk's id, a viewer, `is_guest`.
+    401 for a pass that does not verify; 403 for anything a guest may not call; 429 past the address's limit;
+    503 when the guest desk's account is not there."""
+    claims = _claims(_token_of(authorization) or "")
+    if request is None:
+        raise HTTPException(status_code=403, detail=ASK)
+    path = request.scope.get("path")
+    if not allowed(request.method, path):
+        log.info("guest refused: %s %s", request.method, str(path)[:120])
+        raise HTTPException(status_code=403, detail=ASK)
+    addr = address(request)
+    if not _limits_off():
+        _take(_requests, addr, 60.0, PER_MINUTE, "requests")
+        if request.method == "POST":
+            _take(_pricings, addr, 60.0, PRICINGS_PER_MINUTE, "pricing requests")
+            _take(_pricings, "*", 60.0, ALL_PRICINGS_PER_MINUTE, "pricing requests by guests")
+    desk = account_id()
+    if desk is None:
+        raise HTTPException(status_code=503, detail="The guest desk is not set up on this instance.")
+    request.state.rijeka_guest = True                 # the activity record keeps accounts, and a guest is not one
+    return {"sub": desk, "role": "viewer", "user_metadata": {"role": "viewer"}, "email": None,
+            "is_guest": True, "guest_address": addr, "jti": claims.get("jti"), "exp": claims.get("exp")}
+
+
+def size(user_: Optional[dict], body) -> None:
+    """A guest's simulation is no larger than the ticket's own default. An account's own cap is the route's."""
+    if not is_guest(user_):
+        return
+    n = getattr(body, "paths", None) or getattr(body, "n_paths", None) or 0
+    if n > MAX_PATHS:
+        raise HTTPException(status_code=403, detail=f"A guest's simulation runs up to {MAX_PATHS:,} paths. For more, create an account: it is free.")
+
+
+def is_guest(user_: Optional[dict]) -> bool:
+    return bool((user_ or {}).get("is_guest"))

@@ -162,6 +162,12 @@ async def account_of(authorization: Optional[str]) -> Optional[str]:
 
 
 async def verify_token(authorization: Optional[str] = Header(None), request: Request = None) -> dict:
+    # A guest's pass (middleware/guest.py) is told by its header and goes to its own check and to nothing else: it is
+    # never tried against the key set below, and a token that is not a pass never reaches the guest's secret. What
+    # comes back is the guest desk as a viewer, and only on the routes a guest is allowed; everything else is refused there.
+    from middleware import guest
+    if guest.is_pass(authorization):
+        return guest.user(authorization, request)
     payload = await verified_claims(authorization)
     meta = dict(payload.get("user_metadata") or {})
     role = db_role_for(str(payload["sub"])) or "viewer"       # never the token's own claim: the client writes it

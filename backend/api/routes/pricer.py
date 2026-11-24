@@ -240,6 +240,14 @@ def _require_trader(user: dict) -> None:
         raise HTTPException(status_code=403, detail="Trader or Admin role required")
 
 
+def _may_price(user: dict) -> None:
+    """A trader, an admin, or a guest (middleware/guest.py): for the three routes that price what is in the request and
+    store nothing. Only they call this; every other route of the desk keeps `_require_trader`, which no guest passes."""
+    if user.get("is_guest"):
+        return
+    _require_trader(user)
+
+
 _BOOTSTRAP_CACHE: dict = {}
 _BOOTSTRAP_CACHE_MAX = 4096
 
@@ -505,7 +513,7 @@ def compute_par_rate(
     db: Session = Depends(get_db),
     user: dict = Depends(verify_token),
 ):
-    _require_trader(user)
+    _may_price(user)
     val_date = req.valuation_date or date.today()
     ci = CurveInput(curve_id=req.curve_id, quotes=[])
     try:
@@ -830,7 +838,7 @@ def price_preview(
     Returns identical response shape as POST /price.
     Used by the PRICE button in TradeBookingWindow.
     """
-    _require_trader(user)
+    _may_price(user)
     val_date = request.valuation_date or date.today()
 
     # Build curves
@@ -1144,7 +1152,7 @@ def _price_swaption_held(req: SwaptionRequest, db: Session, user: dict) -> dict:
     Optionally cross-checks against HW1F model vol from latest calibration.
     The figures are the holder's.
     """
-    _require_trader(user)
+    _may_price(user)
     val_date = req.valuation_date or date.today()
     # the vol: the request's, or the desk's market's for this expiry and tenor (and then the answer says where from)
     surface = None

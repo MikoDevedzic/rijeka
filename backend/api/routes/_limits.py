@@ -35,9 +35,34 @@ def demo_line() -> str:
             f" To run Rijeka for your own desk, write to {CONTACT}.")
 
 
+GUEST_SHARE = 2          # all guests together may run this many times what one account may, each minute
+
+
+def _guest(user: dict, key: str, per_minute: int) -> None:
+    """A guest has no account to count against: every guest is the one guest desk. So a guest is counted by address
+    (half an account's allowance, never under two a minute), and all guests together against a ceiling, because the
+    one CPU they share is also the one the accounts use."""
+    now = time.time()
+    own = max(2, per_minute // 2)
+    for bucket, most, whose in ((f"{key}:guest:{user.get('guest_address') or 'unknown'}", own, "This address"),
+                                (f"{key}:guests", per_minute * GUEST_SHARE, "Guests together")):
+        q = _buckets.setdefault(bucket, deque())
+        while q and now - q[0] > 60:
+            q.popleft()
+        if len(q) >= most:
+            wait = max(1, int(60 - (now - q[0])) + 1)
+            raise HTTPException(status_code=429, headers={"Retry-After": str(wait)},
+                                detail=(f"Too many {key} requests; wait a minute. {whose} ran {most} in the last minute; the next is "
+                                        f"taken in {wait} s. An account has a limit of its own.{demo_line()}"))
+    for bucket in (f"{key}:guest:{user.get('guest_address') or 'unknown'}", f"{key}:guests"):
+        _buckets[bucket].append(now)
+
+
 def heavy(user: dict, key: str, per_minute: int) -> None:
     if _off():
         return
+    if (user or {}).get("is_guest"):
+        return _guest(user, key, per_minute)
     sub = str((user or {}).get("sub") or "anon")
     now = time.time()
     q = _buckets.setdefault(f"{key}:{sub}", deque())

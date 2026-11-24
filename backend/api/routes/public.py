@@ -17,7 +17,7 @@ import threading
 import time
 from typing import Any, Optional
 
-from fastapi import HTTPException, APIRouter, Depends
+from fastapi import HTTPException, APIRouter, Depends, Request
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -35,6 +35,28 @@ router = APIRouter(prefix="/api/public", tags=["public"])
 
 TTL_SECONDS = 60
 _cache: dict[str, Any] = {"at": 0.0, "body": None}
+
+
+@router.get("/guest")
+def guest_status():
+    """Whether this instance takes guests (visitors who price and read with no account): the door asks before it
+    offers the way in. Nothing else is said: not the desk's account, not a limit."""
+    from middleware import guest
+    return {"enabled": guest.enabled()}
+
+
+@router.post("/guest")
+def guest_pass(request: Request):
+    """A guest's pass: half an hour, signed by this API, written nowhere (middleware/guest.py). Limited by address.
+    404 where guests are off, 503 where the guest desk's account is not there yet."""
+    from middleware import guest
+    if not guest.enabled():
+        raise HTTPException(status_code=404, detail="This instance does not take guests.")
+    guest.take_pass(request)
+    if guest.account_id() is None:
+        raise HTTPException(status_code=503, detail="The guest desk is not set up on this instance.")
+    token, exp = guest.mint()
+    return {"token": token, "expires_at": exp, "allowed": guest.ASK}
 
 
 def _scalar(db: Session, sql: str, **p) -> Optional[int]:

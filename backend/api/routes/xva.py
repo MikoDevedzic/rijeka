@@ -33,6 +33,7 @@ from sqlalchemy.orm import Session
 from db.session import get_db
 from middleware.auth import verify_token
 from api.routes._limits import heavy
+from middleware.guest import size as guest_size
 from api.routes._errors import internal
 from pricing.calibration import calibrate_hw1f, tenor_to_years, hw1f_swaption_vol_normal
 from pricing.hw1f_mc import simulate_swap_paths
@@ -645,6 +646,7 @@ def simulate(
     user: dict = Depends(verify_token),
 ):
     heavy(user, "XVA simulation", 6)
+    guest_size(user, body)
     # Load HW1F params — from request override or latest calibration
     a        = body.a
     sigma_bp = body.sigma_bp
@@ -1078,6 +1080,7 @@ def currency_xva(body: CurrencyXvaRequest, db: Session = Depends(get_db), user: 
     """XVA for an FX or crypto forward through the rates waterfall (pricing/fx_xva.py)."""
     one_wrong_way(body)                 # before the limiter: a refused request does not use the allowance
     heavy(user, "XVA simulation", 6)
+    guest_size(user, body)
     from pricing import fx_xva
     pair = body.pair.upper()
     val_date = body.valuation_date or date.today()
@@ -1213,6 +1216,7 @@ def currency_option_xva(body: CurrencyOptionXvaRequest, db: Session = Depends(ge
     simulated spot paths with the credit engine's model (pricing/fx_xva.option_xva)."""
     one_wrong_way(body)                 # before the limiter: a refused request does not use the allowance
     heavy(user, "XVA simulation", 6)
+    guest_size(user, body)
     from pricing import fx_xva
     d = dict(body.trade or {})
     itype = str(d.get("instrument_type") or "").upper()
@@ -1337,6 +1341,7 @@ def currency_package_xva(body: CurrencyPackageXvaRequest, db: Session = Depends(
     (pricing/fx_xva.package_xva). The answer has the shape of POST /currency, plus a row per leg."""
     one_wrong_way(body)                 # before the limiter: a refused request does not use the allowance
     heavy(user, "XVA simulation", 6)
+    guest_size(user, body)
     from pricing import fx_xva
     val_date = body.valuation_date or date.today()
     inputs, quotes, pair = package_inputs(db, user["sub"], body.trades, val_date=val_date, vol_pct=body.vol_pct, vol_mode=body.vol_mode)
@@ -1496,6 +1501,7 @@ def incremental_xva(body: IncrementalXvaRequest, db: Session = Depends(get_db), 
     if not body.trade and not body.trade_id and not body.trades:
         raise HTTPException(status_code=422, detail="trade, trades or trade_id is required")
     heavy(user, "counterparty run", 4)
+    guest_size(user, body)
     import time as _time
     from ccr.report import LIVE, counterparty_report, settings
     from db.models import Counterparty, Trade
