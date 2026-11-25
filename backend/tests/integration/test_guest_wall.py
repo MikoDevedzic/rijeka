@@ -123,7 +123,7 @@ def test_a_guest_prices_a_swap_runs_its_xva_and_cannot_book_it(client, guest, pa
         assert r.status_code == 403 and guest.ASK in r.text, (method, url, r.status_code)
 
 
-def test_guests_are_counted_for_the_operator_as_people_who_came_and_people_who_pressed_price(client, guest, auth_a):
+def test_guests_are_counted_for_the_operator_as_people_who_came_and_people_who_pressed_price(client, guest, auth_a, monkeypatch):
     """The usage panel's two columns: recorded by the API when it gives a pass, and when the app says with that pass
     that its guest pressed PRICE. A pricing request alone is not a count: the ticket prices as it is typed."""
     import sqlalchemy as sa
@@ -134,9 +134,13 @@ def test_guests_are_counted_for_the_operator_as_people_who_came_and_people_who_p
     def rows():
         with eng.connect() as c:
             return dict(c.execute(sa.text("SELECT event, count(*) FROM usage_hits WHERE event LIKE 'guest_%' AND at >= now() - interval '5 minutes' GROUP BY 1")).all())
-    def activity():
-        with eng.connect() as c:
-            return c.execute(sa.text("SELECT count(*) FROM activity_daily")).scalar()
+    # What goes on an account's activity record goes through activity.store.add: it is watched here, for the calls
+    # made while the guest speaks. (Counting the table's rows instead counted what earlier tests' accounts had done
+    # and the store had not yet written: the test passed or failed by the order and the timing of the others.)
+    from activity import store
+    kept_for = []
+    real_add = store.add
+    monkeypatch.setattr(store, "add", lambda user_id, *a, **k: (kept_for.append(str(user_id)), real_add(user_id, *a, **k))[1])
     try:
         with eng.begin() as c:
             c.execute(sa.text("DELETE FROM usage_hits WHERE event LIKE 'guest_%'"))
@@ -147,7 +151,7 @@ def test_guests_are_counted_for_the_operator_as_people_who_came_and_people_who_p
         for h in (first, first, again):
             assert client.post("/price/preview", headers=h, json=body).status_code == 200
         assert rows() == {"guest_entered": 2}                                              # pricing is not PRICE pressed
-        kept = activity()
+        kept_for.clear()
         said = {"event": "priced", "detail": "rates"}
         for h in (first, first, again):
             r = client.post("/api/me/activity", headers=h, json=said)
@@ -156,9 +160,9 @@ def test_guests_are_counted_for_the_operator_as_people_who_came_and_people_who_p
         for other in ({"event": "view", "route": "/blotter"}, {"event": "priced", "detail": "not-an-asset"}, {"event": "booked"}):
             assert client.post("/api/me/activity", headers=first, json=other).json() == {"accepted": False}
         assert rows() == {"guest_entered": 2, "guest_priced": 2}
-        from activity import store
-        store.flush() if hasattr(store, "flush") else None
-        assert activity() == kept                                                          # nothing of a guest's on the guest desk's record
+        assert kept_for == []                                                              # nothing of a guest's on the guest desk's record, or on anyone's
+        assert client.post("/api/me/activity", headers=auth_a, json=said).json() == {"accepted": True}
+        assert kept_for == [USER_A]                                                        # ...and an account's own PRICE is kept as it was
         refused = client.post("/api/public/hit", json={"event": "guest_entered", "route": "/guest"})
         assert refused.json() == {"accepted": False}                                       # the beacon cannot say a guest came
         set_role(USER_A, "admin")

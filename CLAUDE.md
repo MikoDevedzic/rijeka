@@ -440,4 +440,14 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   one ("/" for a dozen routes); a toy app with the prefix on the router itself had shown the full path. The walk of
   every real route with a pass caught it the first time it ran: a rule about "every route" is tested on every route
   of the real application, not on an example of one.
+- Nothing that waits goes in the token check, and what a request means is asked before it is counted. The first
+  guest count (0.67.2) wrote a row from inside `verify_token`, which runs on the event loop for every request: a
+  slow database would have held all of them. It also counted any request as "priced", when a ticket prices as it is
+  typed and `lib/activity.js` already says so for accounts. The independent review caught both. Before adding to
+  the token check, ask what it does when the database takes thirty seconds; before counting an action, find where
+  the app already tells that action apart from the requests it makes by itself.
+- A test asserts what the code under test did, not the size of a table everyone writes to. The guest count's
+  integration test counted the rows of `activity_daily` before and after, and flushed the shared store between:
+  it passed on the pull request and failed on `main` an hour later, by what the tests before it had left unwritten.
+  Watch the call (a spy on the one function that writes) or count only the rows that carry the test's own mark.
 
