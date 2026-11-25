@@ -11,9 +11,9 @@
 //
 //   signedIn(token)          the session's token, told by the app's shell (App.jsx) whenever it changes; '' signs out
 //
-// Signed in only: without a session nothing is sent. Never throws, never waits, never shows an error: the record
+// Signed in only: without a session nothing is sent (a guest says one thing, that PRICE was pressed: see `say`). Never throws, never waits, never shows an error: the record
 // is the operator's, and the desk must not notice it.
-import { isGuest } from './guest'
+import { isGuest, guestSession } from './guest'
 
 const API = import.meta.env?.VITE_API_URL || 'http://localhost:8000'
 let last = ''
@@ -26,8 +26,12 @@ export const sessionToken = () => bearer
 
 export function say(event, fields = {}, { token, send = globalThis.fetch } = {}) {
   try {
-    if (isGuest()) return false          // a guest is not an account: nothing of a guest's goes on an account's record (lib/guest.js)
-    const auth = token ?? bearer
+    // A guest is not an account: nothing of a guest's goes on an account's record (lib/guest.js). One thing is said, with
+    // the guest's own pass as it is now (it is renewed every half hour): that PRICE was pressed, which the API counts
+    // once for a pass, for the operator's usage panel.
+    const guest = isGuest()
+    if (guest && event !== 'priced') return false
+    const auth = guest ? guestSession()?.access_token : (token ?? bearer)
     if (!auth || typeof send !== 'function') return false
     Promise.resolve(send(`${API}/api/me/activity`, {
       method: 'POST', keepalive: true,

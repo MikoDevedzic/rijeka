@@ -98,6 +98,9 @@ def test_a_guest_is_counted_by_the_api_and_a_failure_to_count_is_nobodys_error(m
     monkeypatch.setattr(_DB, "close", lambda self: None, raising=False)
     req = SimpleNamespace(headers={"user-agent": "a browser"}, client=SimpleNamespace(host="198.51.100.1"))
     U.record_guest("guest_entered", req)
+    given = _DB(table=False)
+    U.record_guest("guest_priced", req, given)                   # a route's own session is used when it has one
+    assert [r["event"] for r in U._memory] == ["guest_entered", "guest_priced"]; U._memory.pop()
     U.record_guest("view", req)                                  # not one of the API's two: not recorded
     assert [(r["event"], r["route"]) for r in U._memory] == [("guest_entered", "/guest")]
     assert U._memory[0]["visitor"] == U.visitor_id("198.51.100.1", "a browser", date.today())

@@ -48,7 +48,7 @@ def guest_status():
 
 
 @router.post("/guest")
-def guest_pass(request: Request):
+def guest_pass(request: Request, db: Session = Depends(get_db)):
     """A guest's pass: half an hour, signed by this API, written nowhere (middleware/guest.py). Limited by address.
     404 where guests are off, 503 where the guest desk's account is not there yet."""
     from middleware import guest
@@ -59,7 +59,7 @@ def guest_pass(request: Request):
         raise HTTPException(status_code=503, detail="The guest desk is not set up on this instance.")
     token, exp = guest.mint()
     from api.routes.usage import record_guest
-    record_guest("guest_entered", request)          # for the operator's usage panel: a count, as a view is
+    record_guest("guest_entered", request, db)      # for the operator's usage panel: a count, as a view is
     return {"token": token, "expires_at": exp, "allowed": guest.ASK}
 
 

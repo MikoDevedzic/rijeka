@@ -507,8 +507,11 @@ confirming on chain, the Excel workbooks, the assistant and chat are an account'
   Excel export open one question that leads to the ordinary sign-up (`store/useGuestStore`, `guest/GuestAsk`). A
   guest's ticket is not carried across the sign-up. A guest is not an account: nothing of a guest's goes on the
   activity record. The usage panel counts guests as it counts visitors (`api/routes/usage.py: record_guest`): the API
-  records that a guest came in when it gives a pass and that one priced when a pass first prices, as rows of
-  `usage_hits` with the daily visitor hash, and the panel shows the people, not the passes. The beacon cannot record either.
+  records that a guest came in when it gives a pass, and that one priced when the app says with that pass that
+  PRICE was pressed (`POST /api/me/activity`, the one thing a guest says there; a pricing request alone is not a
+  count, since a ticket prices as it is typed), as rows of `usage_hits` with the daily visitor hash. The panel shows
+  the people, not the passes. The beacon cannot record either, and neither is written from the token check, which
+  runs on the event loop.
 
 ## What an account does: the activity record
 

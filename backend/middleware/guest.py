@@ -76,6 +76,7 @@ ALLOWED: frozenset[tuple[str, str]] = frozenset({
     ("GET", "/api/collateral/instruments"),
     ("GET", "/api/collateral/schedule/{cp_id}"),
     ("GET", "/api/methodology/products"),
+    ("POST", "/api/me/activity"),                       # only to say that PRICE was pressed, for the usage panel's count; nothing goes on an account's record
     ("POST", "/price/preview"),
     ("POST", "/api/price/swaption"),
     ("POST", "/api/price/cap"),
@@ -235,18 +236,27 @@ def _claims(token: str) -> dict:
 _source = {"last": None}
 
 
-def address(request: Optional[Request]) -> str:
+def client_address(request) -> tuple[str, str]:
+    """(address, where it was read from) for a request: the edge's own header when it is there and is an address
+    ("cf-connecting-ip"), else what the server read from the forwarded headers ("proxy"). Also what the usage beacon
+    makes its visitor from (api/routes/usage.py), so that a guest and a visitor are the same person to the panel."""
     if request is None:
-        return "unknown"
+        return "unknown", "none"
     cf = (request.headers.get("cf-connecting-ip") or "").strip() if hasattr(request, "headers") else ""
     if cf:
         try:
-            _source["last"] = "cf-connecting-ip"
-            return str(ipaddress.ip_address(cf))
+            return str(ipaddress.ip_address(cf)), "cf-connecting-ip"
         except ValueError:
-            pass                                    # not an address: not Cloudflare's, and not used
-    _source["last"] = "proxy"
-    return (request.client.host if request.client else "unknown")[:64]
+            pass                                    # not an address: not the edge's, and not used
+    client = getattr(request, "client", None)
+    return (client.host if client else "unknown")[:64], "proxy"
+
+
+def address(request: Optional[Request]) -> str:
+    addr, source = client_address(request)
+    if source != "none":
+        _source["last"] = source
+    return addr
 
 
 def address_source() -> Optional[str]:
@@ -303,8 +313,6 @@ def user(authorization: Optional[str], request: Optional[Request]) -> dict:
     desk = account_id()
     if desk is None:
         raise HTTPException(status_code=503, detail="The guest desk is not set up on this instance.")
-    if request.method == "POST":
-        _count_priced(claims.get("jti"), request)
     # (the activity record keeps what `request.state.rijeka_account` names, which verify_token sets for an account
     # and nothing sets for a guest: a guest is not on it)
     return {"sub": desk, "role": "viewer", "user_metadata": {"role": "viewer"}, "email": None,
@@ -329,16 +337,16 @@ def paths(user_: Optional[dict], n: int) -> int:
 _priced: set = set()
 
 
-def _count_priced(jti: Optional[str], request: Request) -> None:
-    """The first pricing of a pass is counted for the operator's usage panel (api/routes/usage.py record_guest): once
-    for a pass, so a guest dragging a scenario is one guest who priced, and one row."""
+def first_priced(jti: Optional[str]) -> bool:
+    """Whether this is the first time this pass says its guest pressed PRICE: True once for a pass. For the usage
+    panel's count (api/routes/usage.py), so a guest who prices twenty times is one guest who priced, and one row.
+    Held in this process: after a restart a pass may be counted again, and the panel counts the person, not the row."""
     if not jti or jti in _priced:
-        return
+        return False
     if len(_priced) > 20000:
         _priced.clear()
     _priced.add(jti)
-    from api.routes.usage import record_guest
-    record_guest("guest_priced", request)
+    return True
 
 
 def is_guest(user_: Optional[dict]) -> bool:

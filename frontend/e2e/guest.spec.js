@@ -40,7 +40,12 @@ test('a guest prices a swap and runs its XVA with no account, and is asked for o
   const cp = win.locator('select').filter({ has: page.locator('option', { hasText: 'RIJEKA DEMO BANK AG' }) }).first()
   await expect(cp.locator('option:checked'), 'the guest desk\'s one counterparty is already chosen').toHaveText('RIJEKA DEMO BANK AG')
   const priced = page.waitForResponse(r => r.url().startsWith(API) && r.url().endsWith('/price/preview') && r.request().method() === 'POST')
+  // PRICE pressed is said to the API with the guest's pass, for the operator's count of guests who priced; nothing else is said
+  const told = []
+  page.on('request', r => { if (r.url() === `${API}/api/me/activity` && r.method() === 'POST') told.push(JSON.parse(r.postData())) })
+  const counted = page.waitForResponse(r => r.url() === `${API}/api/me/activity` && r.request().method() === 'POST')
   await win.getByRole('button', { name: '▶ PRICE' }).click()
+  expect(await (await counted).json(), 'the API took the guest\'s PRICE').toEqual({ accepted: true })
   const quote = await priced
   expect(quote.status(), 'a guest prices').toBe(200)
   expect((await quote.json()).npv).toEqual(expect.any(Number))
@@ -111,6 +116,8 @@ test('a guest prices a swap and runs its XVA with no account, and is asked for o
   await expect(page).toHaveURL(/\/guest$/)
 
   expect(direct, 'no table was read or watched in a guest\'s name').toEqual([])
+  expect(told.every(t => t.event === 'priced'), `a guest says only that PRICE was pressed: ${JSON.stringify(told)}`).toBe(true)
+  expect(told.length).toBeGreaterThan(0)
   expect(refused, 'the app asked the API for nothing a guest is refused').toEqual([])
   await page.unrouteAll({ behavior: 'ignoreErrors' })
   // the one refusal this journey made itself (the pass that "ended"), and the browser's echo of it, are not problems
@@ -216,11 +223,11 @@ test('the usage panel counts the guests of each day, and those who priced, besid
   await app.goto('/configurations/system')
   const panel = app.getByTestId('sys-usage')
   await expect(panel).toBeVisible({ timeout: 30_000 })
-  await expect(panel.getByTestId('sys-usage-guests')).toHaveText('Guests in these 2 days: 12, of whom 7 priced a trade.')
+  await expect(panel.getByTestId('sys-usage-guests')).toContainText('Guests in these 2 days: 12, of whom 7 pressed PRICE')
   const title = await panel.locator('header').evaluate(el => el.getBoundingClientRect().height)
   expect(title, 'the panel\'s heading is one line').toBeLessThan(40)
   const head = panel.locator('.rk-row.dim').first()
-  await expect(head.locator('span')).toHaveText(['DAY', 'VISITORS', 'VIEWS', 'GUESTS', 'PRICED', 'SIGN-UP STARTED', 'ACCOUNTS', 'TRADES', 'CONFIRMED', 'ANCHORED'])
+  await expect(head.locator('span')).toHaveText(['DAY', 'VISITORS', 'VIEWS', 'GUESTS', 'GUESTS PRICED', 'SIGN-UP STARTED', 'ACCOUNTS', 'TRADES', 'CONFIRMED', 'ANCHORED'])
   const today = panel.locator('.rk-row:not(.dim)').first()                    // newest first
   await expect(today.locator('span.pnl-tv').nth(2)).toContainText('12')
   await expect(today.locator('span.pnl-tv').nth(3)).toContainText('7')

@@ -1,5 +1,5 @@
 // What the browser says a person did: a page opened, PRICE pressed. Signed in only, and never an error of the desk's.
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { _forgetForTests, priced, say, signedIn, viewed } from './activity'
 
 const sent = []
@@ -35,5 +35,25 @@ describe('activity', () => {
     expect(say('view', { route: '/blotter' }, { token: 't', send: async () => { throw new Error('down') } })).toBe(true)
     expect(say('view', { route: '/blotter' }, { token: 't', send: null })).toBe(false)
     await Promise.resolve()
+  })
+})
+
+// A guest (lib/guest.js) is not an account. One thing is said for a guest, with the guest's own pass: PRICE pressed.
+describe('a guest', () => {
+  it('says that PRICE was pressed, with the pass as it is now, and nothing else', async () => {
+    const kept = new Map()
+    globalThis.sessionStorage = { getItem: k => (kept.has(k) ? kept.get(k) : null), setItem: (k, v) => kept.set(k, String(v)), removeItem: k => kept.delete(k) }
+    kept.set('rijeka.guest', JSON.stringify({ token: 'pass-now', expires_at: Math.floor(Date.now() / 1000) + 1800 }))
+    vi.resetModules()
+    const a = await import('./activity')
+    const sent = []
+    const send = vi.fn(async (url, init) => { sent.push({ url, auth: init.headers.Authorization, body: JSON.parse(init.body) }); return { ok: true } })
+    a.signedIn('an-older-pass-the-shell-was-told')
+    expect(a.viewed('/guest', 'guest', { send })).toBe(false)
+    expect(a.say('view', { route: '/methodology' }, { send })).toBe(false)
+    expect(a.priced('RATES', { send })).toBe(true)
+    expect(sent).toEqual([{ url: expect.stringMatching(/\/api\/me\/activity$/), auth: 'Bearer pass-now', body: { event: 'priced', detail: 'rates' } }])
+    kept.clear(); vi.resetModules()
+    delete globalThis.sessionStorage
   })
 })

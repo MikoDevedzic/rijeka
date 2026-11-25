@@ -6,16 +6,21 @@ methodology document carries its own version (v1.50). Commits on `main` are the 
 ## 0.67.2 · 25 November 2026
 
 **Guests are counted on the operator's usage panel.** Two columns beside VISITORS and VIEWS: GUESTS, the visitors
-who came in with no account that day, and PRICED, those of them who priced a trade. Until now a guest was one of
-the day's visitors and nothing said how many there were.
+who came in with no account that day, and GUESTS PRICED, those of them who pressed PRICE. Until now a guest was one
+of the day's visitors and nothing said how many there were.
 
 - **Counted by the API, as people.** The API records that a guest came in when it gives a pass, and that one
-  priced when a pass prices for the first time: the same row a page view makes (the event, the day, the release
-  and the daily-rotating visitor hash, no address and nothing the guest entered). A pass is taken again every
-  half hour and a guest prices many times, so the day counts the visitor once for each column. The public beacon
-  cannot record either: only the API does.
+  priced when the app says, with that pass, that PRICE was pressed (a ticket also prices as it is typed, so a
+  pricing request is not a count, as it is not for an account). Each is the row a page view makes: the event, the
+  day, the release and the daily-rotating visitor hash, no address and nothing the guest entered. A pass is taken
+  again every half hour and a guest prices many times, so the day counts the visitor once for each column. The
+  public beacon cannot record either, and nothing of a guest's goes on the guest desk's own activity record.
+- **One reading of the address.** The visitor of a page view is made from the address the guest's limits use
+  (the edge's own header where the host passes it on), so a guest and a visitor are the same person to the panel.
+  A visitor who was counted earlier today may be counted once more today for that reason.
 - **No migration:** the rows go in the table the views are kept in. The privacy notice (1.4) says so.
-- **Checked by** `tests/test_usage.py`, `tests/test_guest.py` and `tests/integration/test_guest_wall.py`.
+- **Checked by** `tests/test_usage.py`, `tests/test_guest.py`, `tests/integration/test_guest_wall.py` and
+  `e2e/guest.spec.js`.
 
 ## 0.67.1 · 25 November 2026
 

@@ -40,8 +40,8 @@ log = logging.getLogger("rijeka.usage")
 router = APIRouter(tags=["usage"])
 
 EVENTS = {"view", "signup_started", "trade_booked_ui", "confirm_clicked"}
-# What the API itself records when a guest (middleware/guest.py) is given a pass and when that pass first prices: never
-# taken from the beacon, which anyone can post to. The same row as a view (the day, a daily-rotating visitor, no person).
+# What the API itself records when a guest (middleware/guest.py) is given a pass, and when the app says with that
+# pass that its guest pressed PRICE (POST /api/me/activity): never taken from the beacon, which anyone can post to. The same row as a view (the day, a daily-rotating visitor, no person).
 GUEST_EVENTS = {"guest_entered", "guest_priced"}
 HIT_PER_MINUTE = 120
 MEMORY_KEEP = 5000
@@ -58,7 +58,10 @@ def visitor_id(ip: str, ua: str, day: date, secret: Optional[str] = None) -> str
 
 
 def _client_ip(request: Request) -> str:
-    return request.client.host if request.client else "unknown"      # resolved by uvicorn's proxy-header handling
+    # the same reading the guest's limits use (middleware/guest.py client_address): the edge's own header when it is
+    # there, else what the server read from the forwarded headers. A guest and a visitor are then the same person here.
+    from middleware.guest import client_address
+    return client_address(request)[0]
 
 
 def _allow(ip: str, now: float) -> bool:
@@ -100,23 +103,26 @@ def record_hit(db: Session, event: str, route: str, visitor: str, release: str, 
     return "memory"
 
 
-def record_guest(event: str, request) -> None:
-    """A guest was given a pass, or a pass priced for the first time: counted like a view, by the API itself. The
-    visitor is the same daily hash, made from the address the guest's limits count by. Never an error for the guest:
-    a count that cannot be kept is not kept."""
+def record_guest(event: str, request, db: Optional[Session] = None) -> None:
+    """A guest came in, or pressed PRICE for the first time: counted like a view, by the API itself. The visitor is
+    the same daily hash a view makes. Never an error for the guest: a count that cannot be kept is not kept.
+    Blocking (a database write): called from a route that runs in the thread pool, with that route's session, or
+    through `run_in_threadpool`; never from the token check, which runs on the event loop."""
     if event not in GUEST_EVENTS:
         return
     try:
-        from db.session import SessionLocal
-        from middleware import guest
         from version import VERSION
         ua = request.headers.get("user-agent", "") if request is not None and hasattr(request, "headers") else ""
-        vid = visitor_id(guest.address(request), ua, date.today())
-        db = SessionLocal()
-        try:
+        vid = visitor_id(_client_ip(request), ua, date.today())
+        if db is not None:
             record_hit(db, event, "/guest", vid, VERSION)
+            return
+        from db.session import SessionLocal
+        own = SessionLocal()
+        try:
+            record_hit(own, event, "/guest", vid, VERSION)
         finally:
-            db.close()
+            own.close()
     except Exception as e:                # noqa: BLE001
         log.debug("guest count not kept: %s", type(e).__name__)
 
@@ -202,7 +208,7 @@ def usage(db: Session, today: Optional[date] = None, days: int = DAYS) -> dict[s
     return {"days": days, "from": since.isoformat(), "to": today.isoformat(), "series": series, "totals": totals,
             "hits_stored_in": "usage_hits" if table_present(db) else "memory (apply docs/migrations/2026-10-31_usage.sql to keep them)",
             "note": "Visitors are a daily-rotating hash of address, user agent and a server secret: no cookie, nothing stored in the browser. "
-                    "Guests are visitors who came in with no account, and those of them who priced a trade, counted by the API when it gives a pass and when a pass first prices. "
+                    "Guests are visitors who came in with no account, and those of them who pressed PRICE, counted by the API when it gives a pass and when the app says a guest's PRICE was pressed. "
                     "Sign-ups, trades, confirmations and anchors are counted from the tables themselves; test accounts and test trades are excluded."}
 
 
@@ -235,6 +241,17 @@ async def me_activity(request: Request, user: dict = Depends(verify_token)):
     if not isinstance(body, dict):
         return {"accepted": False}
     kind = told(str(body.get("event") or ""), str(body.get("detail") or ""), str(body.get("route") or ""))
+    if user.get("is_guest"):
+        # A guest is no account: nothing here goes on the activity record (the guest desk's would then be every
+        # guest's). One thing is counted, for the usage panel: that this guest pressed PRICE, once for a pass.
+        from activity.events import PRICED
+        from middleware import guest
+        if not kind or kind[0] != PRICED:
+            return {"accepted": False}
+        if guest.first_priced(user.get("jti")):
+            from starlette.concurrency import run_in_threadpool
+            await run_in_threadpool(record_guest, "guest_priced", request)
+        return {"accepted": True}
     if not kind:
         return {"accepted": False}
     return {"accepted": store.add(str(user["sub"]), kind[0], kind[1])}

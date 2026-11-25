@@ -338,18 +338,25 @@ def test_the_pricing_routes_admit_a_guest_and_no_other_viewer():
         _require_trader({"is_guest": True, "user_metadata": {"role": "viewer"}})         # the shared helper admits no guest
 
 
-def test_a_pass_that_prices_is_counted_once_and_reading_is_not(guest):
+def test_pricing_is_not_counted_by_the_token_check_and_a_pass_says_priced_once(guest):
+    """The ticket prices as it is typed, so a pricing request is not a person pressing PRICE; and the token check runs
+    on the event loop, where a database write would hold every request. The count is the app's to ask for, once a pass."""
     token, _ = guest.mint()
-    guest.user(_bearer(token), _request("GET", "/api/modules"))
-    assert counted == []
-    for _ in range(4):
+    for _ in range(3):
         guest.user(_bearer(token), _request("POST", "/price/preview"))
-    guest.user(_bearer(token), _request("POST", "/api/xva/simulate"))
-    assert counted == [("guest_priced", "203.0.113.7")]
-    other, _ = guest.mint()
-    guest.user(_bearer(other), _request("POST", "/price/preview", host="198.51.100.5"))
-    assert counted[1:] == [("guest_priced", "198.51.100.5")]
-    with pytest.raises(HTTPException):
-        guest.user(_bearer(other), _request("POST", "/api/book/trade"))             # refused: nothing counted for it
-    assert len(counted) == 2
+    assert counted == []
+    assert guest.allowed("POST", "/api/me/activity")
+    u = guest.user(_bearer(token), _request("POST", "/api/me/activity"))
+    assert guest.first_priced(u["jti"]) is True and guest.first_priced(u["jti"]) is False
+    other = guest.user(_bearer(guest.mint()[0]), _request("POST", "/api/me/activity"))
+    assert guest.first_priced(other["jti"]) is True and guest.first_priced(None) is False
 
+
+def test_the_address_is_read_one_way_for_a_guest_and_for_a_visitor(guest):
+    from api.routes import usage
+    req = _request("GET", "/api/modules", host="198.51.100.1")
+    req.headers = {"cf-connecting-ip": "203.0.113.9"}
+    assert usage._client_ip(req) == guest.address(req) == "203.0.113.9"
+    req.headers = {}
+    assert usage._client_ip(req) == guest.address(req) == "198.51.100.1"
+    assert guest.client_address(None) == ("unknown", "none")
