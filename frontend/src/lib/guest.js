@@ -50,7 +50,7 @@ function shaped(p) {
   return { access_token: p.token, token_type: 'bearer', expires_at: p.expires_at, user: GUEST_USER, is_guest: true }
 }
 
-export function guestSession() { const p = read(); return p ? shaped(p) : null }
+export function guestSession() { const p = read(); if (p) watchForAnEndedPass(); return p ? shaped(p) : null }
 
 // The guest's session with a pass that has time on it. One renewal at a time; if it fails the old pass is used
 // until it ends, and the API then says so.
@@ -64,7 +64,40 @@ export async function freshGuestSession() {
   return guestSession()
 }
 
-export async function enterAsGuest() { await take(); return guestSession() }
+// A pass is signed by the API process that gave it, with a secret that process made when it started. When the API
+// restarts (a release), every pass ends before its time and the next call is answered 401. A guest should not meet
+// that: the call that was refused takes one new pass and is sent once more. This watches the page's own requests
+// only while the tab is a guest's, and only an API call that carried the guest's pass and came back 401 is touched.
+let watching = false
+function authOf(input, init) {
+  const h = init?.headers ?? (typeof input === 'object' ? input?.headers : null)
+  if (!h) return ''
+  if (typeof h.get === 'function') return h.get('Authorization') || ''
+  return h.Authorization || h.authorization || ''
+}
+function withAuth(init, value) {
+  const headers = new Headers(init?.headers || {})
+  headers.set('Authorization', value)
+  return { ...(init || {}), headers }
+}
+export function watchForAnEndedPass(target = globalThis) {
+  if (watching || typeof target.fetch !== 'function') return
+  watching = true
+  const send = target.fetch.bind(target)
+  target.fetch = async (input, init) => {
+    const res = await send(input, init)
+    const mine = pass && res.status === 401 && typeof input === 'string' && input.startsWith(API)
+      && authOf(input, init) === 'Bearer ' + pass.token && (init?.body == null || typeof init.body === 'string')
+    if (!mine) return res
+    try {
+      taking = taking || take().finally(() => { taking = null })
+      await taking
+    } catch { return res }                               // no new pass to be had: the refusal stands, and is shown
+    return send(input, withAuth(init, 'Bearer ' + pass.token))
+  }
+}
+
+export async function enterAsGuest() { await take(); watchForAnEndedPass(); return guestSession() }
 
 export function leaveGuest() {
   pass = null

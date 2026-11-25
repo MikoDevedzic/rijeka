@@ -470,9 +470,12 @@ confirming on chain, the Excel workbooks, the assistant and chat are an account'
 - **No Supabase session.** A guest is not a user of the sign-in service and holds none of its tokens, so the
   database's own interface (PostgREST, Realtime) never sees a guest as a signed-in role. (A design with anonymous
   Supabase sessions was reviewed and dropped for that reason: such a session reaches the tables past the API.)
-- **A pass of the API's own.** `POST /api/public/guest` (limited by address) answers a token signed HS256 with
-  `RIJEKA_GUEST_SECRET`, half an hour long, written nowhere; `GET /api/public/guest` says whether the instance takes
-  guests. `middleware/auth.py: verify_token` tells a pass by its header (`alg` HS256 and `kid` `guest`, both exactly)
+- **A pass of the API's own.** `POST /api/public/guest` (limited by address) answers a token signed HS256, half an
+  hour long, written nowhere; `GET /api/public/guest` says whether the instance takes guests (the guest desk is
+  named and its account exists). The secret is the API process's own, made when it starts and held nowhere else,
+  so there is nothing to set and a restart ends every pass: the app takes another when a guest's call is answered
+  401 and sends the call once more (`lib/guest.js: watchForAnEndedPass`). Where several processes serve the API,
+  `RIJEKA_GUEST_SECRET` gives them one secret. `middleware/auth.py: verify_token` tells a pass by its header (`alg` HS256 and `kid` `guest`, both exactly)
   and hands it to `middleware/guest.py`, which verifies it with the guest secret and HS256 only. A pass is never
   tried against the sign-in service's key set, and every other token takes the ES256 path, which refuses HS256.
 - **One guest desk.** Every guest acts as one ordinary demo account (`RIJEKA_GUEST_EMAIL`), signed up once by the

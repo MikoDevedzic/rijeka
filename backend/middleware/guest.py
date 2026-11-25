@@ -1,8 +1,8 @@
 """A guest: a visitor with no account, who may price a trade and read, and nothing else.
 
 A guest never holds a Supabase session, so the database's own interface never sees one as a signed-in role. The
-API gives the browser a pass of its own (`POST /api/public/guest`): a token signed HS256 with RIJEKA_GUEST_SECRET,
-half an hour long, written nowhere. Every guest acts as ONE account, the guest desk (RIJEKA_GUEST_EMAIL: an
+API gives the browser a pass of its own (`POST /api/public/guest`): a token signed HS256 with a secret this process
+makes for itself, half an hour long, written nowhere. Every guest acts as ONE account, the guest desk (RIJEKA_GUEST_EMAIL: an
 ordinary demo account its owner signed up once, holding its entity, the demo counterparty and market data, and no
 trades), with the role of a viewer. Nothing is stored per guest.
 
@@ -18,8 +18,8 @@ Three rules hold the design up, and `tests/test_guest.py` holds them:
      list by name (NEVER).
 
 Volume is limited by address (the caller's, as the trusted proxy saw it: never a forwarded header the client wrote)
-and, on the routes that burn the CPU, for all guests together (api/routes/_limits.py). Guests are off unless both
-settings are present; a secret shorter than 32 bytes is no secret and leaves them off."""
+and, on the routes that burn the CPU, for all guests together (api/routes/_limits.py). Guests are off until the
+guest desk is named (RIJEKA_GUEST_EMAIL) and its account exists."""
 from __future__ import annotations
 
 import logging
@@ -112,7 +112,16 @@ NEVER: frozenset[tuple[str, str]] = frozenset({
 
 
 # ── settings ─────────────────────────────────────────────────────────────────
+# The secret a pass is signed with is this process's own, made when it starts and held nowhere else: there is nothing
+# to set, nothing to leak from a settings page, and a restart ends every pass (the app then takes another, lib/guest.js).
+# One process serves the API (render.yaml: one instance, one uvicorn). Where several do, a pass signed by one would
+# be refused by the next: RIJEKA_GUEST_SECRET then gives them one secret, and a value under 32 bytes is no secret.
+_PROCESS_SECRET = secrets.token_bytes(48)
+
+
 def _secret() -> Optional[bytes]:
+    if "RIJEKA_GUEST_SECRET" not in os.environ:
+        return _PROCESS_SECRET
     s = os.environ.get("RIJEKA_GUEST_SECRET", "").strip().encode()
     return s if len(s) >= MIN_SECRET else None
 
@@ -122,7 +131,8 @@ def _email() -> str:
 
 
 def enabled() -> bool:
-    """Whether this instance takes guests: both settings present. The desk's account is looked for when a pass is used."""
+    """Whether this instance is set to take guests: the guest desk is named (and a secret that was set is a real one).
+    The desk's account is looked for when a pass is asked for or used."""
     return _secret() is not None and bool(_email())
 
 

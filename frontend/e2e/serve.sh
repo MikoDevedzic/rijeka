@@ -81,8 +81,8 @@ fi
 unset RIJEKA_STACK_ASSISTANT_KEY RIJEKA_STACK_ASSISTANT_MODEL
 
 # 3. the API on the stack's environment. Guests are taken (backend/middleware/guest.py): the stack's template account
-#    stands in for the guest desk, and the secret is the stack's own, good for nothing else.
-RIJEKA_GUEST_SECRET="the-local-stack-guest-secret-not-used-anywhere-else" RIJEKA_GUEST_EMAIL="user_a@rijeka.test" \
+#    stands in for the guest desk; a pass is signed with the API process's own secret, as on the hosted app.
+RIJEKA_GUEST_EMAIL="user_a@rijeka.test" \
 RIJEKA_NO_DOTENV=1 CORS_ORIGINS="http://127.0.0.1:$WEB_PORT,http://localhost:$WEB_PORT" RIJEKA_RATE_LIMITS=0 \
   "$PY" -m uvicorn main:app --host 127.0.0.1 --port $API_PORT --log-level warning > "$OUT/api.log" 2>&1 &
 pids+=($!)

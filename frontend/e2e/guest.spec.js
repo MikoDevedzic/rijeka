@@ -46,6 +46,22 @@ test('a guest prices a swap and runs its XVA with no account, and is asked for o
   expect((await quote.json()).npv).toEqual(expect.any(Number))
   await page.screenshot({ path: `${SHOTS}/2-priced.png` })
 
+  // the API restarted (a release): the pass ended before its time. The next call is refused once, a new pass is
+  // taken, and the guest sees a price, not an error
+  let refusedOnce = false, passes = 0
+  page.on('request', r => { if (r.url() === `${API}/api/public/guest` && r.method() === 'POST') passes += 1 })
+  await page.route(`${API}/price/preview`, async r => {
+    if (refusedOnce) return r.continue()
+    refusedOnce = true
+    await r.fulfill({ status: 401, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: '{"detail":"Invalid token"}' })
+  })
+  const again = page.waitForResponse(r => r.url().endsWith('/price/preview') && r.status() === 200)
+  await win.getByRole('button', { name: '▶ PRICE' }).click()
+  expect((await (await again).json()).npv, 'priced again on a new pass').toEqual(expect.any(Number))
+  expect(passes, 'one new pass was taken').toBe(1)
+  await expect(win.getByTestId('tbw-footer-error'), 'no error was shown for it').toHaveCount(0)
+  await page.unroute(`${API}/price/preview`)
+
   // its XVA
   await win.getByRole('button', { name: 'XVA', exact: true }).click()
   const one = await simulateWithComparison(page, win, '/api/xva/simulate')
@@ -97,7 +113,10 @@ test('a guest prices a swap and runs its XVA with no account, and is asked for o
   expect(direct, 'no table was read or watched in a guest\'s name').toEqual([])
   expect(refused, 'the app asked the API for nothing a guest is refused').toEqual([])
   await page.unrouteAll({ behavior: 'ignoreErrors' })
-  expectClean(problems)
+  // the one refusal this journey made itself (the pass that "ended"), and the browser's echo of it, are not problems
+  const made = problems.filter(p => /401/.test(p) && (/price\/preview/.test(p) || /Failed to load resource/.test(p)))
+  expect(made.length, 'the refusal the journey made was seen').toBeGreaterThan(0)
+  expectClean(problems.filter(p => !made.includes(p)))
 })
 
 // A phone (390 by 844, and the door at two smaller ones): the way in is the door's button, the guest's page is one

@@ -38,21 +38,41 @@ def _bearer(token: str) -> str:
 
 # ── on and off ───────────────────────────────────────────────────────────────
 
-def test_guests_are_off_without_both_settings(monkeypatch):
+def test_guests_are_off_until_the_guest_desk_is_named(monkeypatch):
     from middleware import guest as g
     monkeypatch.delenv("RIJEKA_GUEST_SECRET", raising=False)
-    monkeypatch.setenv("RIJEKA_GUEST_EMAIL", "desk@rijeka.test")
-    assert not g.enabled()
-    monkeypatch.setenv("RIJEKA_GUEST_SECRET", SECRET)
-    assert g.enabled()
-    monkeypatch.delenv("RIJEKA_GUEST_EMAIL")
+    monkeypatch.delenv("RIJEKA_GUEST_EMAIL", raising=False)
     assert not g.enabled()
     with pytest.raises(LookupError):
         g.mint()
+    monkeypatch.setenv("RIJEKA_GUEST_EMAIL", "desk@rijeka.test")
+    assert g.enabled()                                             # the secret is the process's own: nothing else to set
+
+
+def test_the_process_makes_its_own_secret_and_another_process_refuses_its_passes(monkeypatch):
+    """No setting: a pass is signed with a secret made when the process starts. It verifies here, and nowhere else."""
+    from middleware import guest as g
+    monkeypatch.delenv("RIJEKA_GUEST_SECRET", raising=False)
+    monkeypatch.setenv("RIJEKA_GUEST_EMAIL", "desk@rijeka.test")
+    monkeypatch.setattr(g, "account_id", lambda: DESK)
+    assert len(g._PROCESS_SECRET) >= 32
+    token, _ = g.mint()
+    assert g.user(_bearer(token), _request("POST", "/price/preview"))["is_guest"] is True
+    import secrets as _s
+    monkeypatch.setattr(g, "_PROCESS_SECRET", _s.token_bytes(48))             # the process restarted, or it is another one
+    with pytest.raises(HTTPException) as e:
+        g.user(_bearer(token), _request("POST", "/price/preview"))
+    assert e.value.status_code == 401
+    # a secret that is set is the one used, by every process that has it
+    monkeypatch.setenv("RIJEKA_GUEST_SECRET", SECRET)
+    shared, _ = g.mint()
+    monkeypatch.setattr(g, "_PROCESS_SECRET", _s.token_bytes(48))
+    assert g.user(_bearer(shared), _request("POST", "/price/preview"))["is_guest"] is True
 
 
 def test_a_short_secret_is_no_secret(monkeypatch):
-    """An empty or short secret would make passes anyone can sign: guests are off, and a pass signed with it is refused."""
+    """A secret set to nothing, or to something short, would make passes anyone can sign: guests are off, and a pass
+    signed with it is refused. The process's own secret is not fallen back to: a setting that is wrong is said, not mended."""
     from middleware import guest as g
     monkeypatch.setenv("RIJEKA_GUEST_EMAIL", "desk@rijeka.test")
     for short in ("", "x" * 31):

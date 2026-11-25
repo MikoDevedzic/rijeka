@@ -59,10 +59,12 @@ def test_the_door_gives_a_pass_and_says_whether_guests_are_taken(client, guest, 
     assert r.status_code == 200, r.text
     body = r.json()
     assert guest.is_pass("Bearer " + body["token"]) and body["expires_at"] > 0
-    monkeypatch.delenv("RIJEKA_GUEST_SECRET")
+    monkeypatch.delenv("RIJEKA_GUEST_EMAIL"); guest.forget_account()           # the guest desk is not named: guests are off
     assert client.get("/api/public/guest").json() == {"enabled": False}
     assert client.post("/api/public/guest").status_code == 404
-    monkeypatch.setenv("RIJEKA_GUEST_SECRET", SECRET)
+    monkeypatch.setenv("RIJEKA_GUEST_EMAIL", EMAIL_A); monkeypatch.delenv("RIJEKA_GUEST_SECRET"); guest.forget_account()
+    own = client.post("/api/public/guest")                                      # no secret set: the process's own signs the pass
+    assert own.status_code == 200 and client.get("/api/modules", headers={"Authorization": "Bearer " + own.json()["token"]}).status_code == 200
     monkeypatch.setenv("RIJEKA_GUEST_EMAIL", "nobody-of-this-name@rijeka.test"); guest.forget_account()
     assert client.post("/api/public/guest").status_code == 503       # the settings are there, the desk's account is not
     assert client.get("/api/public/guest").json() == {"enabled": False}      # and the door is not told to offer a way in that fails

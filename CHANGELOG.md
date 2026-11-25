@@ -8,7 +8,7 @@ methodology document carries its own version (v1.50). Commits on `main` are the 
 **A guest: price a trade and read with no account.** Until now the app asked for an account before it showed
 anything. A visitor may now price a trade, run its XVA and read the methodology and the roadmap as a guest;
 booking, confirming on chain and the Excel workbooks ask for an account, which is free. Off until an instance is
-given a guest desk (two settings); no figure changes, and nothing changes for an account.
+given a guest desk (one setting and one account); no figure changes, and nothing changes for an account.
 
 - **The way in.** Where the instance takes guests, the door carries PRICE A TRADE · NO ACCOUNT above the sign-in.
   A guest lands on a page of their own with the ticket open and the demo counterparty chosen. Signing in becomes
@@ -24,8 +24,9 @@ given a guest desk (two settings); no figure changes, and nothing changes for an
   never sees a guest as signed in. The API answers a guest only on a short list of routes (deny by default; a route
   added later refuses a guest unless it is put on the list), none of which stores anything for its caller. Volume
   is limited by address and for all guests together, and a guest's simulation is no larger than the ticket's
-  default (2,000 paths). `docs/architecture.md` has the design; `docs/ops/environment.md` the two settings
-  (`RIJEKA_GUEST_SECRET`, `RIJEKA_GUEST_EMAIL`).
+  default (2,000 paths). The pass is signed with a secret the API process makes for itself, so a release ends
+  every pass; the app takes a new one and the guest does not notice. `docs/architecture.md` has the design;
+  `docs/ops/environment.md` the setting (`RIJEKA_GUEST_EMAIL`).
 - **Not done.** The ticket is not kept across the sign-up; guests are not counted apart from visitors on the
   operator's usage panel.
 - **Checked by** `tests/test_guest.py` (the pass: what makes one and what does not; the limits),
