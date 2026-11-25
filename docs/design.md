@@ -630,3 +630,27 @@ capital. Those pages still open by their address but are not in the phone's navi
   mark comes alive once (`brand/LaunchMark.jsx`), not at all with "reduce motion" set.
 - Checked by `e2e/phone.spec.js` at 390 by 844 on Chromium, Firefox and WebKit; pictures by
   `PHONE_TAG=x npx playwright test -c playwright.perf.config.js phone.spec.js`.
+
+## A guest
+
+A visitor with no account (`lib/guest.js`) meets four things, all set in the app's own tokens and scale
+(`components/guest/Guest.css`):
+
+- **The door's first action.** Where the instance takes guests the door carries PRICE A TRADE · NO ACCOUNT above
+  the sign-in, in brass: it is what a new visitor presses. Signing in is then the door's second action and its
+  button is outlined (`.au-form-second`), so the view keeps one brass thing. On a phone the entry is its button
+  alone, in the place of the card's title, and the door is still one screen; on a phone under 600px tall the
+  door is as it was.
+- **The guest's page** (`/guest`): what a guest can do, what an account adds, and the ways on; it opens the ticket
+  and stays behind it. On a phone it is one column with buttons the width of the screen, and the methodology (laid
+  out for a monitor) is not offered.
+- **The top bar and the foot.** A guest's top bar has three places (PRICE A TRADE, METHODOLOGY, ROADMAP), the word
+  GUEST in a brass outline, and CREATE ACCOUNT in brass beside a quiet SIGN IN; a phone keeps the logo and CREATE
+  ACCOUNT. A phone's bar at the foot has a guest's three things: GUEST, NEW, ACCOUNT.
+- **The question.** BOOK and every Excel export open one dialog over everything, the ticket included: what an
+  account gives, CREATE AN ACCOUNT in brass, KEEP LOOKING beside it; Escape or a press outside closes it. It says
+  plainly that a guest's ticket is not kept.
+
+Checked by `e2e/guest.spec.js` on a monitor and at 390 by 844, with the door at 375 by 667 and 320 by 568; looked
+at in Safari on the iPhone simulator (25 November 2026).
+

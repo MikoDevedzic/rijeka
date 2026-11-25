@@ -65,6 +65,7 @@ def test_the_door_gives_a_pass_and_says_whether_guests_are_taken(client, guest, 
     monkeypatch.setenv("RIJEKA_GUEST_SECRET", SECRET)
     monkeypatch.setenv("RIJEKA_GUEST_EMAIL", "nobody-of-this-name@rijeka.test"); guest.forget_account()
     assert client.post("/api/public/guest").status_code == 503       # the settings are there, the desk's account is not
+    assert client.get("/api/public/guest").json() == {"enabled": False}      # and the door is not told to offer a way in that fails
 
 
 def test_every_route_refuses_a_guest_unless_it_is_on_the_list(client, guest, pass_):
@@ -149,6 +150,7 @@ def test_an_administrator_is_never_the_guest_desk(client, guest):
         set_role(USER_A, "admin"); guest.forget_account()
         assert guest.account_id() is None
         assert client.post("/api/public/guest").status_code == 503
+        assert client.get("/api/public/guest").json() == {"enabled": False}
     finally:
         set_role(USER_A, "trader"); guest.forget_account()
     assert guest.account_id() == USER_A

@@ -3,6 +3,35 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.50). Commits on `main` are the detail.
 
+## 0.67.0 · 25 November 2026
+
+**A guest: price a trade and read with no account.** Until now the app asked for an account before it showed
+anything. A visitor may now price a trade, run its XVA and read the methodology and the roadmap as a guest;
+booking, confirming on chain and the Excel workbooks ask for an account, which is free. Off until an instance is
+given a guest desk (two settings); no figure changes, and nothing changes for an account.
+
+- **The way in.** Where the instance takes guests, the door carries PRICE A TRADE · NO ACCOUNT above the sign-in.
+  A guest lands on a page of their own with the ticket open and the demo counterparty chosen. Signing in becomes
+  the door's second, outlined, button.
+- **What a guest can do.** Every product on the ticket prices, the XVA runs with what confirming on chain would
+  save beside it, and the methodology and the roadmap open. BOOK, and every Excel export, open one question that
+  leads to the ordinary sign-up. A guest's ticket is not carried across the sign-up: the question says so.
+- **On a phone.** The door's button, a ticket that is the whole screen, and a bar at the foot with a guest's three
+  things. The methodology, laid out for a monitor, is not offered there; a phone under 600px tall keeps the door
+  as it was.
+- **How it is held.** A guest holds no sign-in at all: the API gives the browser a half-hour pass of its own, and
+  every guest acts as one read-only guest desk, so nothing is stored per guest and the database's own interface
+  never sees a guest as signed in. The API answers a guest only on a short list of routes (deny by default; a route
+  added later refuses a guest unless it is put on the list), none of which stores anything for its caller. Volume
+  is limited by address and for all guests together, and a guest's simulation is no larger than the ticket's
+  default (2,000 paths). `docs/architecture.md` has the design; `docs/ops/environment.md` the two settings
+  (`RIJEKA_GUEST_SECRET`, `RIJEKA_GUEST_EMAIL`).
+- **Not done.** The ticket is not kept across the sign-up; guests are not counted apart from visitors on the
+  operator's usage panel.
+- **Checked by** `tests/test_guest.py` (the pass: what makes one and what does not; the limits),
+  `tests/integration/test_guest_wall.py` (every route of the API called with a pass), `src/lib/guest.test.js`, and
+  `e2e/guest.spec.js` on a monitor and at phone sizes; looked at in Safari on the iPhone simulator.
+
 ## 0.66.5 · 24 November 2026
 
 **A new account set up twice at the same moment no longer gets an error.** No figure changes; nothing on screen

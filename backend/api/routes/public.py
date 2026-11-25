@@ -40,9 +40,11 @@ _cache: dict[str, Any] = {"at": 0.0, "body": None}
 @router.get("/guest")
 def guest_status():
     """Whether this instance takes guests (visitors who price and read with no account): the door asks before it
-    offers the way in. Nothing else is said: not the desk's account, not a limit."""
+    offers the way in. Nothing else is said: not the desk's account, not a limit, not which of the two is missing."""
     from middleware import guest
-    return {"enabled": guest.enabled()}
+    # yes only when a pass would be answered: the settings are there AND the guest desk's account is. A door that
+    # offered the way in on the settings alone would offer one that fails until the account is signed up.
+    return {"enabled": bool(guest.enabled() and guest.account_id())}
 
 
 @router.post("/guest")

@@ -462,6 +462,41 @@ before it the trigger took the role from the client's sign-up metadata); provisi
 `RIJEKA_DEMO_PROVISION` is on a user may switch their own role among trader, controller, risk and management
 (`api/routes/me.py`), and only an admin assigns the admin role, or any role on a firm deployment.
 
+## A guest: pricing with no account
+
+A visitor may price a trade, run its XVA and read the methodology and the roadmap without an account; booking,
+confirming on chain, the Excel workbooks, the assistant and chat are an account's. The pieces:
+
+- **No Supabase session.** A guest is not a user of the sign-in service and holds none of its tokens, so the
+  database's own interface (PostgREST, Realtime) never sees a guest as a signed-in role. (A design with anonymous
+  Supabase sessions was reviewed and dropped for that reason: such a session reaches the tables past the API.)
+- **A pass of the API's own.** `POST /api/public/guest` (limited by address) answers a token signed HS256 with
+  `RIJEKA_GUEST_SECRET`, half an hour long, written nowhere; `GET /api/public/guest` says whether the instance takes
+  guests. `middleware/auth.py: verify_token` tells a pass by its header (`alg` HS256 and `kid` `guest`, both exactly)
+  and hands it to `middleware/guest.py`, which verifies it with the guest secret and HS256 only. A pass is never
+  tried against the sign-in service's key set, and every other token takes the ES256 path, which refuses HS256.
+- **One guest desk.** Every guest acts as one ordinary demo account (`RIJEKA_GUEST_EMAIL`), signed up once by the
+  operator: its own entity, the demo counterparty, the market data every demo account is given, and no trades.
+  A guest is a viewer whatever that account's role is (`api/routes/_roles.py`, `me.py`), is answered one fixed set
+  of modules (`api/routes/modules.py`), and the account may not be an administrator. Nothing is stored per guest.
+- **Deny by default.** A guest's request is answered only when its method and its own path are on
+  `guest.ALLOWED`: the reads the ticket and the two documents need, and the routes that price what is in the
+  request and store nothing. The request's path is matched, not the matched route's name (a router included under a
+  prefix knows its routes by their short path). A route that stores for its caller (a calibration, a snapshot, a
+  cashflow) is never put on the list, because all guests are one account and one would move another's prices
+  (`guest.NEVER` names them). `tests/integration/test_guest_wall.py` calls every route of the API with a pass.
+- **Volume.** A guest is counted by address (`request.client.host`, as the trusted proxy saw it): passes an hour,
+  requests a minute, pricings a minute, and every guest's pricings together; on the routes that burn the CPU
+  `_limits.heavy` counts a guest by address at half an account's allowance and all guests against a ceiling. A
+  guest's simulation is no larger than the ticket's default (2,000 paths).
+- **In the app** (`lib/guest.js`): the pass is kept for the tab and given in a session's shape, so every call
+  that sends "the session's token" to the API sends it (`lib/supabase.js`); no table is read in a guest's name. The
+  door offers the way in where the instance takes guests; a guest's place is `/guest` (the ticket, and what an
+  account adds), `/methodology` and `/roadmap`, and any other page sends a guest back (`AuthGuard`). BOOK and every
+  Excel export open one question that leads to the ordinary sign-up (`store/useGuestStore`, `guest/GuestAsk`). A
+  guest's ticket is not carried across the sign-up. A guest is not an account: nothing of a guest's goes on the
+  activity record, and the usage panel does not count guests apart from the visitors and views it already counts.
+
 ## What an account does: the activity record
 
 Usage counts (`api/routes/usage.py`, `usage_hits`) say how many visitors came, under a hash that changes every day
