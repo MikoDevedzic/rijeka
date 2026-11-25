@@ -33,7 +33,13 @@
 .gst-ask p { font-size: 14px; line-height: 1.55; color: var(--text-dim); margin: 0 0 16px; }
 .gst-ask .gst-actions { justify-content: flex-end; }
 
+/* a phone: one column, thumb-high buttons the width of the screen; the methodology is laid out for a monitor and is not offered */
 @media (max-width: 640px) {
-  .gst-page { padding: 28px 16px 96px; }
+  .gst-page { padding: 24px 16px 32px; }
+  .gst-desk { display: none; }
+  .gst-actions { flex-direction: column; align-items: stretch; }
+  .gst-go, .gst-quiet { padding: 13px 16px; text-align: center; }
+  .gst-ask .gst-actions { flex-direction: column-reverse; }
+  .gst-bar-go { padding: 8px 12px; }
   .gst-rows { grid-template-columns: 1fr; }
 }

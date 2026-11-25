@@ -67,6 +67,7 @@ import { FxDetailsPanel, FxCashflowsPanel, FxScenarioPanel } from './FxTabs'
 import { packageGap, packageRisk, packageView, valueBeforeFees } from './fx-package'
 import FxLegs from './FxLegs'
 import { guestStopsHere } from '../../store/useGuestStore'
+import { isGuest } from '../../lib/guest'
 import { LEG_TERMS, structureOf, packageOf } from './fx-legs'
 
 const NO_LEGS = []          // one empty list, so "no legs" is the same value at every render
@@ -498,6 +499,9 @@ export default function TradeWindow({ onClose, onBook, onViewTrade, initialProdu
         // trade shows what it was booked with, defaults or not.
         if (viewMode) return
         if (own.length) setEconomics(e => (e.ownEntityId ? e : { ...e, ownEntityId: own[0].id }))
+        // A guest's desk has the one demo counterparty: it is chosen, so that PRICE has its credit and its margin
+        // terms and BOOK is there to press (and asks for the account). An account chooses its own, as before.
+        if (isGuest() && counterparties.length === 1) setEconomics(e => (e.counterpartyId ? e : { ...e, counterpartyId: counterparties[0].id }))
         // The trader's default desk and book (Configurations › P&L & Control), when the ticket has none yet.
         const df = dfR && dfR.ok ? await dfR.json() : null
         if (df) setEconomics(e => ({ ...e, desk: e.desk || df.default_desk || '', book: e.book || df.default_book || '' }))

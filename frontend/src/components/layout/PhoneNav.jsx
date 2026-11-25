@@ -1,11 +1,13 @@
 // The phone's navigation: a bar at the foot of the screen with the five things the phone view offers. Home and the
 // trades are pages; NEW opens the trade window; CHAT opens the messenger over whatever is showing; NEWS is the
 // headlines. P&L, risk, configurations and the methodology are not offered here: they are laid out for a monitor.
+// A guest (no account) has three: its page, a new ticket, and the way to an account.
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
 import useBookingStore from '../../store/useBookingStore'
 import { useChatStore, selectUnreadTotal, badge } from '../../store/useChatStore'
 import { usePhone } from '../../lib/phone'
+import { GUEST_HOME } from '../../lib/guest'
 
 const OFF = ['/login', '/signup', '/confirm', '/reset', '/terms', '/privacy', '/messenger']
 
@@ -18,6 +20,14 @@ export default function PhoneNav() {
   const unread = useChatStore(selectUnreadTotal)
   const alerting = useChatStore(s => s.alertAt > 0)
   if (!phone || !session || OFF.includes(pathname)) return null
+  // a guest's phone (lib/guest.js): its page, a new ticket, and the way to an account; the rest is an account's
+  if (session.is_guest) return (
+    <nav className="ph-nav ph-nav-guest" aria-label="Rijeka">
+      <button className={pathname === GUEST_HOME ? 'on' : ''} aria-current={pathname === GUEST_HOME ? 'page' : undefined} onClick={() => navigate(GUEST_HOME)}><i aria-hidden="true">⌂</i>GUEST</button>
+      <button className="new" onClick={() => useBookingStore.getState().open()} aria-label="New trade"><i aria-hidden="true">+</i>NEW</button>
+      <button data-action="guest-phone-signup" onClick={() => navigate('/signup')}><i aria-hidden="true">→</i>ACCOUNT</button>
+    </nav>
+  )
   const closeChat = () => { if (useChatStore.getState().open) useChatStore.getState().close() }
   const go = (to) => () => { closeChat(); navigate(to) }
   const at = (p) => !chatOpen && pathname === p

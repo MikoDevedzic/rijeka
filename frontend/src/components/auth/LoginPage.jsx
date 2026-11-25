@@ -70,9 +70,9 @@ export default function LoginPage() {
           <div className="au-or"><span>or sign in</span></div>
         </div>
       )}
-      <h2 className="au-title">Enter the desk</h2>
+      <h2 className={'au-title' + (guests ? ' au-title-guest' : '')}>Enter the desk</h2>
       <p className="au-lead">Your blotter, market data and confirmations are private to your account.</p>
-      <form onSubmit={handleSubmit} className="au-form">
+      <form onSubmit={handleSubmit} className={'au-form' + (guests ? ' au-form-second' : '')}>
         <Field label="Email">
           <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required autoFocus autoComplete="email" />
         </Field>

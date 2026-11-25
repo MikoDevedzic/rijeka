@@ -229,6 +229,19 @@
 .au-guest { display:flex; flex-direction:column; gap:8px; margin:0 0 6px; }
 .au-or { display:flex; align-items:center; gap:10px; margin:8px 0 2px; font-size:11px; letter-spacing:0.14em; text-transform:uppercase; color:var(--text-dim); }
 .au-or::before, .au-or::after { content:""; flex:1; height:1px; background:var(--border); }
-/* A phone's door is one screen with nothing to scroll (e2e/door.spec.js), and the guest's page and ticket have not
-   been set for a phone yet: the way in with no account is a monitor's until they are. */
-@media (max-width: 640px) { .au-guest { display:none; } }
+
+/* With the way in for a guest above it, signing in is the door's second action: brass stays with the one a new
+   visitor presses (docs/design.md: brass for the one thing to press). */
+.au-form-second .au-btn:not(.success) { background:transparent; border:1px solid var(--accent); color:var(--accent-hi); box-shadow:none; }
+.au-form-second .au-btn:not(.success):hover:not(:disabled) { background:rgb(var(--accent-hi-rgb) / 0.10); box-shadow:none; }
+
+/* A phone's door is one screen with nothing to scroll (e2e/door.spec.js). There the guest's way in is its button
+   alone, and it takes the place of the card's title (the switch above already says which form this is). On the
+   shortest phones the card has no room to give, and the door is as it was. */
+@media (max-width: 640px) {
+  .au-guest { margin:0; gap:0; }
+  .au-guest .au-alt, .au-guest .au-or { display:none; }
+  .au-guest .au-btn { margin-top:0; padding:10px 12px; font-size:12px; }
+  .au-title-guest { display:none; }
+}
+@media (max-width: 640px) and (max-height: 600px) { .au-guest { display:none; } }
