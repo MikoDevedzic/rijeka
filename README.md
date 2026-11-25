@@ -18,9 +18,39 @@ Named after a village in Bosnia (*rijeka* means "river" in Bosnian, Croatian and
 
 *A swap ticket's XVA tab: the exposure paths, the waterfall under a bilateral CSA, and what confirming on chain saves.*
 
-**Try it** at [app.rijeka.app](https://app.rijeka.app) (sign up, a sandbox desk is created for you) · **run it** with one `docker compose` command ([SELF-HOSTING.md](SELF-HOSTING.md)) · **read it**: the [methodology](docs/methodology/rijeka_methodology.pdf), the [validation](docs/VALIDATION.md), the [map of the system](docs/architecture.md) · **check it**: [contribute or validate](CONTRIBUTING.md).
+**Try it** at [app.rijeka.app](https://app.rijeka.app) (price a trade with no account; sign up and a sandbox desk is created for you) · **run it** with one `docker compose` command ([SELF-HOSTING.md](SELF-HOSTING.md)) · **read it**: the [methodology](docs/methodology/rijeka_methodology.pdf), the [validation](docs/VALIDATION.md), the [map of the system](docs/architecture.md) · **check it**: [contribute or validate](CONTRIBUTING.md).
 
 ---
+
+## How it is built
+
+Rijeka is built by one person, a derivatives pricing and model validation practitioner, working with an
+AI coding assistant (Claude Code). Most of the code was typed by the assistant. What it computes, and
+what counts as correct, was not left to it.
+
+The rule of the project is that no number is trusted because the code produced it:
+
+- **An independent reference.** Every product is repriced in QuantLib on every commit: more than 400
+  comparisons in `backend/tests/reference`, each with a tolerance that fails the build when exceeded.
+- **A second implementation you can read.** Each priced product has an Excel workbook that rebuilds
+  the trade in cells with live formulas and compares every figure with the engine's. The XVA of a
+  swap, and of a currency or digital-asset forward or option, has one too, with the simulation
+  rebuilt path by path. The app exports them from your own market data.
+- **A written method.** The [methodology](docs/methodology/rijeka_methodology.pdf) states each formula
+  and names the module that implements it. The [model inventory](docs/model_inventory.md) lists every
+  model, how it is checked, and what is still open.
+- **Gates on every change.** About 2,000 Python tests, 900 frontend tests and 230 browser journeys run
+  on every pull request. A change that moves a pinned figure has to explain the movement. Each change
+  is also read cold by separate reviewers (independent, security, model, database, design), which are
+  AI reviewers given the change and none of the author's reasoning. Their briefs are in
+  `.claude/agents/` and the rules they hold are in `CLAUDE.md`.
+
+What this does not make it: the hosted demo runs on synthetic rates, several inputs are stated proxies,
+and no outside party has validated the models yet. [docs/VALIDATION.md](docs/VALIDATION.md) says what
+is checked against what.
+
+If you think a number is wrong, open an issue with the trade. That is the most useful thing anyone can
+send, and whoever finds one is credited by name.
 
 ## What is live
 
@@ -88,7 +118,7 @@ cd ../frontend && npm install && npm test
 ```
 
 **Hosted demo.** [app.rijeka.app](https://app.rijeka.app) runs this code on the
-Sepolia testnet. Sign up and a sandbox workspace is created for you: your own
+Sepolia testnet. Price a trade and run its XVA as a guest, with no account. Sign up and a sandbox workspace is created for you: your own
 entity, RIJEKA DEMO BANK AG as counterparty, the demo market data, trader role.
 Book a swap, confirm it on-chain, and check the proof pack at
 [rijeka.app/verify](https://rijeka.app/verify) — nothing in that check trusts
