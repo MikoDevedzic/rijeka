@@ -3,6 +3,13 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.50). Commits on `main` are the detail.
 
+## 0.67.1 · 25 November 2026
+
+**A link to the app is shown with today's picture.** Telegram showed a link to `app.rijeka.app` with the picture
+the site had in October (other colours, other words), because apps that show a link's picture keep their own copy
+by its address and the address had never changed. The picture's address now carries a version, which changes when
+the picture does, and is the app's own. Nothing in the app changes.
+
 ## 0.67.0 · 25 November 2026
 
 **A guest: price a trade and read with no account.** Until now the app asked for an account before it showed
