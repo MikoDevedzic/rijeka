@@ -11,6 +11,7 @@ import pytest
 from fastapi import HTTPException
 
 SECRET = "s" * 40
+counted: list = []          # what a test's guest had counted for the usage panel (the fixture stands in for the store)
 DESK = "0000000a-0000-4000-8000-0000000000aa"
 
 
@@ -25,6 +26,10 @@ def guest(monkeypatch):
     monkeypatch.setattr(_limits, "_off", lambda: False)
     _limits._windows.clear(); _limits._buckets.clear()
     g._source["last"] = None
+    g._priced.clear()
+    from api.routes import usage
+    counted.clear()
+    monkeypatch.setattr(usage, "record_guest", lambda event, request: counted.append((event, g.address(request))))
     return g
 
 
@@ -331,3 +336,20 @@ def test_the_pricing_routes_admit_a_guest_and_no_other_viewer():
         _may_price({"user_metadata": {"role": "viewer"}})
     with pytest.raises(HTTPException):
         _require_trader({"is_guest": True, "user_metadata": {"role": "viewer"}})         # the shared helper admits no guest
+
+
+def test_a_pass_that_prices_is_counted_once_and_reading_is_not(guest):
+    token, _ = guest.mint()
+    guest.user(_bearer(token), _request("GET", "/api/modules"))
+    assert counted == []
+    for _ in range(4):
+        guest.user(_bearer(token), _request("POST", "/price/preview"))
+    guest.user(_bearer(token), _request("POST", "/api/xva/simulate"))
+    assert counted == [("guest_priced", "203.0.113.7")]
+    other, _ = guest.mint()
+    guest.user(_bearer(other), _request("POST", "/price/preview", host="198.51.100.5"))
+    assert counted[1:] == [("guest_priced", "198.51.100.5")]
+    with pytest.raises(HTTPException):
+        guest.user(_bearer(other), _request("POST", "/api/book/trade"))             # refused: nothing counted for it
+    assert len(counted) == 2
+

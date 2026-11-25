@@ -58,6 +58,8 @@ def guest_pass(request: Request):
     if guest.account_id() is None:
         raise HTTPException(status_code=503, detail="The guest desk is not set up on this instance.")
     token, exp = guest.mint()
+    from api.routes.usage import record_guest
+    record_guest("guest_entered", request)          # for the operator's usage panel: a count, as a view is
     return {"token": token, "expires_at": exp, "allowed": guest.ASK}
 
 

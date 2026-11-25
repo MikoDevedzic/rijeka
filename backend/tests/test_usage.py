@@ -68,3 +68,42 @@ def test_hits_go_to_the_table_when_it_exists():
     assert U.record_hit(db, "view", "/risk", "v1", "abc") == "db"
     assert db.inserted and db.inserted[0]["route"] == "/risk" and len(U._memory) == 0
     U._table.update(at=0.0, present=None)
+
+
+def test_guests_are_people_not_passes_and_the_beacon_cannot_say_one_came():
+    """A guest takes a pass again every half hour and prices many times: the day counts the visitor once for each.
+    The two events are the API's own to record: the public beacon does not take them."""
+    U._memory.clear(); U._table.update(at=0.0, present=None)
+    db = _DB(table=False)
+    t = datetime(2026, 11, 25, 9, 0, tzinfo=timezone.utc)
+    for _ in range(3):
+        U.record_hit(db, "guest_entered", "/guest", "g1", "0.67.2", now=t)
+    U.record_hit(db, "guest_entered", "/guest", "g2", "0.67.2", now=t)
+    U.record_hit(db, "guest_priced", "/guest", "g1", "0.67.2", now=t)
+    U.record_hit(db, "guest_entered", "/guest", "g1", "0.67.2", now=t - timedelta(days=1))
+    U.record_hit(db, "view", "/guest", "g1", "x", now=t)
+    out = U.usage(db, today=date(2026, 11, 25), days=2)
+    by = {r["date"]: r for r in out["series"]}
+    assert by["2026-11-25"]["guests"] == 2 and by["2026-11-25"]["guests_priced"] == 1 and by["2026-11-25"]["views"] == 1
+    assert by["2026-11-24"]["guests"] == 1 and by["2026-11-24"]["guests_priced"] == 0
+    assert out["totals"]["guests"] == 2 and out["totals"]["guests_priced"] == 1
+    assert not (U.GUEST_EVENTS & U.EVENTS)                       # the beacon's list does not hold them
+
+
+def test_a_guest_is_counted_by_the_api_and_a_failure_to_count_is_nobodys_error(monkeypatch):
+    from types import SimpleNamespace
+    U._memory.clear(); U._table.update(at=0.0, present=None)
+    import db.session as S
+    monkeypatch.setattr(S, "SessionLocal", lambda: _DB(table=False))
+    monkeypatch.setattr(_DB, "close", lambda self: None, raising=False)
+    req = SimpleNamespace(headers={"user-agent": "a browser"}, client=SimpleNamespace(host="198.51.100.1"))
+    U.record_guest("guest_entered", req)
+    U.record_guest("view", req)                                  # not one of the API's two: not recorded
+    assert [(r["event"], r["route"]) for r in U._memory] == [("guest_entered", "/guest")]
+    assert U._memory[0]["visitor"] == U.visitor_id("198.51.100.1", "a browser", date.today())
+    def boom():
+        raise RuntimeError("no database")
+    monkeypatch.setattr(S, "SessionLocal", boom)
+    U.record_guest("guest_priced", req)                          # says nothing, raises nothing
+    assert len(U._memory) == 1
+

@@ -201,3 +201,41 @@ for (const [width, height, shown] of [[375, 667, true], [320, 568, false]]) {
     await page.screenshot({ path: `${SHOTS}/phone-door-${width}.png` })
   })
 }
+
+// The operator's side of it: Configurations → SYSTEM, the usage panel. Two columns say how many of the day's visitors
+// came in with no account and how many of those priced a trade (the API records both: backend/api/routes/usage.py).
+test('the usage panel counts the guests of each day, and those who priced, beside the visitors', async ({ app, problems }) => {
+  const { asAdmin, USAGE } = await import('./admin.js')
+  const day = (date, o) => ({ date, visitors: 0, views: 0, guests: 0, guests_priced: 0, signup_started: 0, signups: 0, trades: 0, confirms: 0, anchors: 0, ...o })
+  const usage = { ...USAGE, from: '2026-11-24', to: '2026-11-25', days: 2,
+    series: [day('2026-11-24', { visitors: 19, views: 113, signup_started: 1, signups: 1, trades: 1, confirms: 1, anchors: 1 }),
+             day('2026-11-25', { visitors: 31, views: 240, guests: 12, guests_priced: 7, signup_started: 2, signups: 1 })],
+    totals: { visitors: 50, views: 353, guests: 12, guests_priced: 7, signup_started: 3, signups: 2, trades: 1, confirms: 1, anchors: 1 },
+    note: 'Guests are visitors who came in with no account, and those of them who priced a trade.' }
+  await asAdmin(app, { usage })
+  await app.goto('/configurations/system')
+  const panel = app.getByTestId('sys-usage')
+  await expect(panel).toBeVisible({ timeout: 30_000 })
+  await expect(panel.getByTestId('sys-usage-guests')).toHaveText('Guests in these 2 days: 12, of whom 7 priced a trade.')
+  const title = await panel.locator('header').evaluate(el => el.getBoundingClientRect().height)
+  expect(title, 'the panel\'s heading is one line').toBeLessThan(40)
+  const head = panel.locator('.rk-row.dim').first()
+  await expect(head.locator('span')).toHaveText(['DAY', 'VISITORS', 'VIEWS', 'GUESTS', 'PRICED', 'SIGN-UP STARTED', 'ACCOUNTS', 'TRADES', 'CONFIRMED', 'ANCHORED'])
+  const today = panel.locator('.rk-row:not(.dim)').first()                    // newest first
+  await expect(today.locator('span.pnl-tv').nth(2)).toContainText('12')
+  await expect(today.locator('span.pnl-tv').nth(3)).toContainText('7')
+  const before = panel.locator('.rk-row:not(.dim)').nth(1)
+  await expect(before.locator('span.pnl-tv').nth(2), 'a day with no guest shows the dot the other empty cells show').toHaveText('·')
+  // every heading is whole and on one line, and the table is not wider than its panel
+  for (const cell of await head.locator('span').all()) {
+    const box = await cell.evaluate(el => { const r = document.createRange(); r.selectNodeContents(el); return { sw: el.scrollWidth, cw: el.clientWidth, lines: r.getClientRects().length } })
+    expect(box.sw, `${await cell.textContent()} is cut`).toBeLessThanOrEqual(box.cw + 1)
+    expect(box.lines, `${await cell.textContent()} is on one line`).toBe(1)
+  }
+  const over = await panel.evaluate(el => el.scrollWidth - el.clientWidth)
+  expect(over, 'the panel does not scroll across').toBeLessThanOrEqual(1)
+  await panel.scrollIntoViewIfNeeded()
+  await panel.screenshot({ path: `${SHOTS}/usage-panel.png` })
+  await app.unrouteAll({ behavior: 'ignoreErrors' })
+  expectClean(problems)
+})

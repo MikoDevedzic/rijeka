@@ -5,7 +5,8 @@ POST /api/public/hit        the app's beacon: {event, route, release}. Public, �
                             minute per address. The visitor is a hash of address + user agent +
                             day + a server secret: it rotates daily, is never written back to
                             the browser, and cannot be reversed. No cookie is set.
-GET  /api/ops/usage         signed-in: the last 14 days per day — visitors, views, sign-ups
+GET  /api/ops/usage         signed-in: the last 14 days per day — visitors, views, guests and
+                            the guests who priced (recorded by the API, record_guest), sign-ups
                             started (beacon), accounts created (auth.users), trades booked,
                             confirmations, anchors (trade_events) — and totals.
 POST /api/me/activity       signed-in: what only the browser knows a person did: {event: "view", route} when a
@@ -39,6 +40,9 @@ log = logging.getLogger("rijeka.usage")
 router = APIRouter(tags=["usage"])
 
 EVENTS = {"view", "signup_started", "trade_booked_ui", "confirm_clicked"}
+# What the API itself records when a guest (middleware/guest.py) is given a pass and when that pass first prices: never
+# taken from the beacon, which anyone can post to. The same row as a view (the day, a daily-rotating visitor, no person).
+GUEST_EVENTS = {"guest_entered", "guest_priced"}
 HIT_PER_MINUTE = 120
 MEMORY_KEEP = 5000
 DAYS = 14
@@ -96,6 +100,27 @@ def record_hit(db: Session, event: str, route: str, visitor: str, release: str, 
     return "memory"
 
 
+def record_guest(event: str, request) -> None:
+    """A guest was given a pass, or a pass priced for the first time: counted like a view, by the API itself. The
+    visitor is the same daily hash, made from the address the guest's limits count by. Never an error for the guest:
+    a count that cannot be kept is not kept."""
+    if event not in GUEST_EVENTS:
+        return
+    try:
+        from db.session import SessionLocal
+        from middleware import guest
+        from version import VERSION
+        ua = request.headers.get("user-agent", "") if request is not None and hasattr(request, "headers") else ""
+        vid = visitor_id(guest.address(request), ua, date.today())
+        db = SessionLocal()
+        try:
+            record_hit(db, event, "/guest", vid, VERSION)
+        finally:
+            db.close()
+    except Exception as e:                # noqa: BLE001
+        log.debug("guest count not kept: %s", type(e).__name__)
+
+
 @router.post("/api/public/hit", status_code=202)
 async def hit(request: Request, db: Session = Depends(get_db)):
     raw = await request.body()
@@ -127,10 +152,15 @@ def _hits_by_day(db: Session, since: date) -> dict[date, dict[str, Any]]:
     rows = list(rows) + [(r["at"], r["event"], r["visitor"]) for r in _memory if r["at"].date() >= since]
     for at, event, visitor in rows:
         d = at.date() if isinstance(at, datetime) else at
-        day = out.setdefault(d, {"views": 0, "visitors": set(), "signup_started": 0, "trade_booked_ui": 0, "confirm_clicked": 0})
+        day = out.setdefault(d, {"views": 0, "visitors": set(), "signup_started": 0, "trade_booked_ui": 0, "confirm_clicked": 0,
+                                 "guests": set(), "guests_priced": set()})
         if event == "view":
             day["views"] += 1; day["visitors"].add(visitor)
-        elif event in day:
+        elif event == "guest_entered":
+            day["guests"].add(visitor)                 # a person, not a pass: a pass is taken again every half hour
+        elif event == "guest_priced":
+            day["guests_priced"].add(visitor)
+        elif isinstance(day.get(event), int):
             day[event] += 1
     return out
 
@@ -161,13 +191,18 @@ def usage(db: Session, today: Optional[date] = None, days: int = DAYS) -> dict[s
     for i in range(days):
         d = since + timedelta(days=i)
         h = hits.get(d, {})
-        series.append({"date": d.isoformat(), "visitors": len(h.get("visitors", ())), "views": h.get("views", 0), "signup_started": h.get("signup_started", 0),
+        series.append({"date": d.isoformat(), "visitors": len(h.get("visitors", ())), "views": h.get("views", 0),
+                       "guests": len(h.get("guests", ())), "guests_priced": len(h.get("guests_priced", ())), "signup_started": h.get("signup_started", 0),
                        "signups": signups.get(d, 0), "trades": trades.get(d, 0), "confirms": confirms.get(d, 0), "anchors": anchors.get(d, 0)})
-    totals = {k: sum(r[k] for r in series) for k in ("visitors", "views", "signup_started", "signups", "trades", "confirms", "anchors")}
-    totals["visitors"] = len(set().union(*(h.get("visitors", set()) for h in hits.values()))) if hits else 0   # distinct over the window, not a sum of days
+    totals = {k: sum(r[k] for r in series) for k in ("visitors", "views", "guests", "guests_priced", "signup_started", "signups", "trades", "confirms", "anchors")}
+    # a visitor's hash changes each day, so "distinct over the window" is the days' visitors put together: a person
+    # who came on two days is two (as they always were for visitors)
+    for k in ("visitors", "guests", "guests_priced"):
+        totals[k] = len(set().union(*(h.get(k, set()) for h in hits.values()))) if hits else 0
     return {"days": days, "from": since.isoformat(), "to": today.isoformat(), "series": series, "totals": totals,
             "hits_stored_in": "usage_hits" if table_present(db) else "memory (apply docs/migrations/2026-10-31_usage.sql to keep them)",
             "note": "Visitors are a daily-rotating hash of address, user agent and a server secret: no cookie, nothing stored in the browser. "
+                    "Guests are visitors who came in with no account, and those of them who priced a trade, counted by the API when it gives a pass and when a pass first prices. "
                     "Sign-ups, trades, confirmations and anchors are counted from the tables themselves; test accounts and test trades are excluded."}
 
 

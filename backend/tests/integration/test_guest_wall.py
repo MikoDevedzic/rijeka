@@ -123,6 +123,42 @@ def test_a_guest_prices_a_swap_runs_its_xva_and_cannot_book_it(client, guest, pa
         assert r.status_code == 403 and guest.ASK in r.text, (method, url, r.status_code)
 
 
+def test_guests_are_counted_for_the_operator_as_people_who_came_and_people_who_priced(client, guest, auth_a):
+    """The usage panel's two columns: recorded by the API when it gives a pass and when a pass first prices."""
+    import sqlalchemy as sa
+    from tests.integration.conftest import STACK_URL, USER_A, set_role
+    from tests.integration.test_scenario_shifts import ASOF, _legs
+    eng = sa.create_engine(STACK_URL)
+    body = {"legs": _legs(0.0375), "valuation_date": ASOF, "curves": [{"curve_id": "USD_SOFR", "quotes": []}]}
+    def rows():
+        with eng.connect() as c:
+            return dict(c.execute(sa.text("SELECT event, count(*) FROM usage_hits WHERE event LIKE 'guest_%' AND at >= now() - interval '5 minutes' GROUP BY 1")).all())
+    try:
+        with eng.begin() as c:
+            c.execute(sa.text("DELETE FROM usage_hits WHERE event LIKE 'guest_%'"))
+        ua = {"User-Agent": "one browser"}
+        first = client.post("/api/public/guest", headers=ua).json()["token"]
+        again = client.post("/api/public/guest", headers=ua).json()["token"]            # the same person, a new pass
+        assert rows() == {"guest_entered": 2}
+        for token in (first, first, again):
+            assert client.post("/price/preview", headers={**ua, "Authorization": f"Bearer {token}"}, json=body).status_code == 200
+        assert client.get("/api/modules", headers={**ua, "Authorization": f"Bearer {first}"}).status_code == 200
+        assert rows() == {"guest_entered": 2, "guest_priced": 2}                          # once for each pass that priced, not for each price
+        refused = client.post("/api/public/hit", json={"event": "guest_entered", "route": "/guest"})
+        assert refused.json() == {"accepted": False}                                      # the beacon cannot say a guest came
+        assert rows() == {"guest_entered": 2, "guest_priced": 2}
+        set_role(USER_A, "admin")
+        out = client.get("/api/ops/usage", headers=auth_a).json()
+        today = out["series"][-1]
+        assert today["guests"] == 1 and today["guests_priced"] == 1                       # one person, however many passes
+        assert out["totals"]["guests"] >= 1 and "Guests are visitors who came in with no account" in out["note"]
+    finally:
+        set_role(USER_A, "trader"); guest.forget_account()
+        with eng.begin() as c:
+            c.execute(sa.text("DELETE FROM usage_hits WHERE event LIKE 'guest_%'"))
+        eng.dispose()
+
+
 def test_a_guest_leaves_no_row_and_is_no_account(client, guest, pass_):
     import sqlalchemy as sa
     from tests.integration.conftest import STACK_URL

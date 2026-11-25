@@ -3,6 +3,20 @@
 By date, newest first. The API reports its version and commit on `GET /api/ops/health`; the
 methodology document carries its own version (v1.50). Commits on `main` are the detail.
 
+## 0.67.2 · 25 November 2026
+
+**Guests are counted on the operator's usage panel.** Two columns beside VISITORS and VIEWS: GUESTS, the visitors
+who came in with no account that day, and PRICED, those of them who priced a trade. Until now a guest was one of
+the day's visitors and nothing said how many there were.
+
+- **Counted by the API, as people.** The API records that a guest came in when it gives a pass, and that one
+  priced when a pass prices for the first time: the same row a page view makes (the event, the day, the release
+  and the daily-rotating visitor hash, no address and nothing the guest entered). A pass is taken again every
+  half hour and a guest prices many times, so the day counts the visitor once for each column. The public beacon
+  cannot record either: only the API does.
+- **No migration:** the rows go in the table the views are kept in. The privacy notice (1.4) says so.
+- **Checked by** `tests/test_usage.py`, `tests/test_guest.py` and `tests/integration/test_guest_wall.py`.
+
 ## 0.67.1 · 25 November 2026
 
 **A link to the app is shown with today's picture.** Telegram showed a link to `app.rijeka.app` with the picture
@@ -36,7 +50,7 @@ given a guest desk (one setting and one account); no figure changes, and nothing
   every pass; the app takes a new one and the guest does not notice. `docs/architecture.md` has the design;
   `docs/ops/environment.md` the setting (`RIJEKA_GUEST_EMAIL`).
 - **Not done.** The ticket is not kept across the sign-up; guests are not counted apart from visitors on the
-  operator's usage panel.
+  operator's usage panel (they are from 0.67.2).
 - **Checked by** `tests/test_guest.py` (the pass: what makes one and what does not; the limits),
   `tests/integration/test_guest_wall.py` (every route of the API called with a pass), `src/lib/guest.test.js`, and
   `e2e/guest.spec.js` on a monitor and at phone sizes; looked at in Safari on the iPhone simulator.

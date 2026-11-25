@@ -483,7 +483,7 @@ confirming on chain, the Excel workbooks, the assistant and chat are an account'
 - **One guest desk.** Every guest acts as one ordinary demo account (`RIJEKA_GUEST_EMAIL`), signed up once by the
   operator: its own entity, the demo counterparty, the market data every demo account is given, and no trades.
   A guest is a viewer whatever that account's role is (`api/routes/_roles.py`, `me.py`), is answered one fixed set
-  of modules (`api/routes/modules.py`), and the account may not be an administrator. Nothing is stored per guest.
+  of modules (`api/routes/modules.py`), and the account may not be an administrator. Nothing is stored per guest but those two counts.
 - **Deny by default.** A guest's request is answered only when its method and its own path are on
   `guest.ALLOWED`: the reads the ticket and the two documents need, and the routes that price what is in the
   request and store nothing. The request's path is matched, not the matched route's name (a router included under a
@@ -506,7 +506,9 @@ confirming on chain, the Excel workbooks, the assistant and chat are an account'
   account adds), `/methodology` and `/roadmap`, and any other page sends a guest back (`AuthGuard`). BOOK and every
   Excel export open one question that leads to the ordinary sign-up (`store/useGuestStore`, `guest/GuestAsk`). A
   guest's ticket is not carried across the sign-up. A guest is not an account: nothing of a guest's goes on the
-  activity record, and the usage panel does not count guests apart from the visitors and views it already counts.
+  activity record. The usage panel counts guests as it counts visitors (`api/routes/usage.py: record_guest`): the API
+  records that a guest came in when it gives a pass and that one priced when a pass first prices, as rows of
+  `usage_hits` with the daily visitor hash, and the panel shows the people, not the passes. The beacon cannot record either.
 
 ## What an account does: the activity record
 

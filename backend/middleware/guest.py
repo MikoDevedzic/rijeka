@@ -4,7 +4,8 @@ A guest never holds a Supabase session, so the database's own interface never se
 API gives the browser a pass of its own (`POST /api/public/guest`): a token signed HS256 with a secret this process
 makes for itself, half an hour long, written nowhere. Every guest acts as ONE account, the guest desk (RIJEKA_GUEST_EMAIL: an
 ordinary demo account its owner signed up once, holding its entity, the demo counterparty and market data, and no
-trades), with the role of a viewer. Nothing is stored per guest.
+trades), with the role of a viewer. Nothing is stored per guest but the count the usage panel keeps of any
+visitor (that a guest came in, and that one priced: the day and a daily-rotating hash, api/routes/usage.py).
 
 Three rules hold the design up, and `tests/test_guest.py` holds them:
 
@@ -302,6 +303,8 @@ def user(authorization: Optional[str], request: Optional[Request]) -> dict:
     desk = account_id()
     if desk is None:
         raise HTTPException(status_code=503, detail="The guest desk is not set up on this instance.")
+    if request.method == "POST":
+        _count_priced(claims.get("jti"), request)
     # (the activity record keeps what `request.state.rijeka_account` names, which verify_token sets for an account
     # and nothing sets for a guest: a guest is not on it)
     return {"sub": desk, "role": "viewer", "user_metadata": {"role": "viewer"}, "email": None,
@@ -321,6 +324,21 @@ def paths(user_: Optional[dict], n: int) -> int:
     """The number of paths a run uses: for a guest never above MAX_PATHS, also where it comes from a setting and
     not from the request (the counterparty run takes the firm's)."""
     return min(int(n), MAX_PATHS) if is_guest(user_) else int(n)
+
+
+_priced: set = set()
+
+
+def _count_priced(jti: Optional[str], request: Request) -> None:
+    """The first pricing of a pass is counted for the operator's usage panel (api/routes/usage.py record_guest): once
+    for a pass, so a guest dragging a scenario is one guest who priced, and one row."""
+    if not jti or jti in _priced:
+        return
+    if len(_priced) > 20000:
+        _priced.clear()
+    _priced.add(jti)
+    from api.routes.usage import record_guest
+    record_guest("guest_priced", request)
 
 
 def is_guest(user_: Optional[dict]) -> bool:

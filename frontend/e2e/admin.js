@@ -6,7 +6,7 @@ import { API, REST } from './fixtures.js'
 
 export const ADOPTION = JSON.parse(readFileSync(new URL('./adoption-body.json', import.meta.url), 'utf8'))
 export const PROBLEMS = JSON.parse(readFileSync(new URL('./problems-body.json', import.meta.url), 'utf8'))
-export const USAGE = { days: 14, from: '2026-11-05', to: '2026-11-18', series: [], totals: { visitors: 0, views: 0, signup_started: 0, signups: 0, trades: 0, confirms: 0, anchors: 0 }, hits_stored_in: 'usage_hits', note: '' }
+export const USAGE = { days: 14, from: '2026-11-05', to: '2026-11-18', series: [], totals: { visitors: 0, views: 0, guests: 0, guests_priced: 0, signup_started: 0, signups: 0, trades: 0, confirms: 0, anchors: 0 }, hits_stored_in: 'usage_hits', note: '' }
 
 export async function asAdmin(app, { adoption = ADOPTION, problems = PROBLEMS, usage = USAGE } = {}) {
   await app.route(/\/rest\/v1\/profiles/, async route => {

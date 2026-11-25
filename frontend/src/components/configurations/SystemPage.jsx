@@ -42,7 +42,9 @@ export default function SystemPage() {
     import('../../lib/session').then(({ getSessionMaybe }) => getSessionMaybe()).then(s => fetch(`${API}/api/ops/usage`, { headers: { Authorization: `Bearer ${s?.access_token}` } }))
       .then(r => r.ok ? r.json() : Promise.reject(new Error(`usage ${r.status}`))).then(setU).catch(() => setU({ error: true }))
   }, [role])
-  const umax = Math.max(1, ...((u?.series || []).map(d => Math.max(d.visitors, d.signups, d.trades, d.confirms))))
+  // DAY, then nine counts; SIGN-UP STARTED is the longest heading and has the width its words need, so none breaks
+  const USAGE_COLS = '7rem repeat(4, 1fr) 1.5fr repeat(4, 1fr)'
+  const umax = Math.max(1, ...((u?.series || []).map(d => Math.max(d.visitors, d.guests || 0, d.signups, d.trades, d.confirms))))
   return (
     <div className="pnl">
       <div className="pnl-bar">
@@ -74,16 +76,16 @@ export default function SystemPage() {
           <header><span>USAGE · LAST {u?.days || 14} DAYS</span><span className="pnl-sub">{u && !u.error ? `${u.totals.visitors} visitors · ${u.totals.views} views · ${u.totals.signups} accounts · ${u.totals.trades} trades · ${u.totals.confirms} confirmations · ${u.totals.anchors} anchored` : u?.error ? 'could not be read just now' : 'loading…'}</span></header>
           {u && !u.error && (<>
             <div className="rk-rows">
-              <div className="rk-row dim" style={{ gridTemplateColumns: '7rem repeat(7, 1fr)' }}><span>DAY</span><span>VISITORS</span><span>VIEWS</span><span>SIGN-UP STARTED</span><span>ACCOUNTS</span><span>TRADES</span><span>CONFIRMED</span><span>ANCHORED</span></div>
+              <div className="rk-row dim" style={{ gridTemplateColumns: USAGE_COLS }}><span>DAY</span><span>VISITORS</span><span>VIEWS</span><span title="Visitors who came in with no account">GUESTS</span><span title="Guests who priced a trade">PRICED</span><span>SIGN-UP STARTED</span><span>ACCOUNTS</span><span>TRADES</span><span>CONFIRMED</span><span>ANCHORED</span></div>
               {u.series.slice().reverse().map(d => (
-                <div key={d.date} className="rk-row" style={{ gridTemplateColumns: '7rem repeat(7, 1fr)' }}>
+                <div key={d.date} className="rk-row" style={{ gridTemplateColumns: USAGE_COLS }}>
                   <span className="rk-ref">{new Date(d.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short' })}</span>
-                  {['visitors', 'views', 'signup_started', 'signups', 'trades', 'confirms', 'anchors'].map(k => (
+                  {['visitors', 'views', 'guests', 'guests_priced', 'signup_started', 'signups', 'trades', 'confirms', 'anchors'].map(k => (
                     <span key={k} className={`pnl-tv${d[k] ? '' : ' dim'}`} style={{ textAlign: 'left' }}>{d[k] || '·'}{k !== 'views' && k !== 'signup_started' && d[k] ? <i style={{ display: 'inline-block', marginLeft: 6, height: 6, width: `${Math.round(d[k] / umax * 40)}px`, background: 'var(--accent)', opacity: 0.6, verticalAlign: 'middle' }} /> : null}</span>))}
                 </div>
               ))}
             </div>
-            <div className="pnl-foot">{u.note} Hits are kept in {u.hits_stored_in}.</div>
+            <div className="pnl-foot"><span data-testid="sys-usage-guests">Guests in these {u.days} days: {u.totals.guests ?? 0}, of whom {u.totals.guests_priced ?? 0} priced a trade.</span> {u.note} Hits are kept in {u.hits_stored_in}.</div>
           </>)}
         </section>}
 
