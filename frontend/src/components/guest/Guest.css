@@ -1,29 +1,29 @@
 /* A guest's page, strip and question (components/guest). Tokens only; sizes in px (docs/design.md). */
 .gst-page { max-width: 760px; margin: 0 auto; padding: 56px 24px 40px; color: var(--text); font-family: var(--sans); }
-.gst-eyebrow { font-size: 12px; letter-spacing: 0.14em; color: var(--accent); font-weight: 600; margin: 0 0 10px; }
+.gst-eyebrow { font-size: 11px; letter-spacing: 0.14em; color: var(--text-dim); font-weight: 600; margin: 0 0 10px; }      /* a label, not a thing to press: not brass */
 .gst-title { font-size: 20px; line-height: 1.25; font-weight: 600; color: var(--text-hi); margin: 0 0 12px; text-wrap: balance; }
 .gst-lead { font-size: 14px; line-height: 1.6; color: var(--text-dim); margin: 0 0 24px; max-width: 62ch; }
 .gst-rows { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 0 0 28px; }
 .gst-row { border: 1px solid var(--border); border-radius: var(--r-2); padding: 14px 16px; background: var(--bg-deep); }
-.gst-row h3 { font-size: 12px; letter-spacing: 0.1em; font-weight: 600; margin: 0 0 8px; color: var(--text-hi); }
+.gst-row h3 { font-size: 11px; letter-spacing: 0.1em; font-weight: 600; margin: 0 0 8px; color: var(--text-hi); }
 .gst-row ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: 14px; line-height: 1.45; color: var(--text-dim); }
 .gst-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+/* The page's and the question's buttons. The brass one is the view's action and is raised like the app's pressable
+   controls (`rj-press`, index.css); the quiet one is an `rj-btn`, which brings its own face. Only the size is here. */
 .gst-go { background: var(--accent); border: 1px solid var(--accent); color: var(--accent-ink); font-family: var(--sans); font-size: 14px;
-  font-weight: 600; letter-spacing: 0.06em; padding: 10px 18px; border-radius: var(--r-2); cursor: pointer; transition: background 0.12s; }
+  font-weight: 600; letter-spacing: 0.06em; padding: 9px 18px; border-radius: var(--r-2); cursor: pointer; transition: background 0.12s; }
 .gst-go:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
-.gst-go:focus-visible, .gst-quiet:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
-.gst-quiet { background: transparent; border: 1px solid var(--border); color: var(--text); font-family: var(--sans); font-size: 14px;
-  font-weight: 500; letter-spacing: 0.06em; padding: 10px 18px; border-radius: var(--r-2); cursor: pointer; }
-.gst-quiet:hover { border-color: var(--text-dim); color: var(--text-hi); }
+.gst-go:focus-visible, .gst-quiet:focus-visible, .gst-bar-quiet:focus-visible { outline: 2px solid var(--accent-hi); outline-offset: 2px; }
+.gst-quiet { border: 1px solid var(--border); font-family: var(--sans); font-size: 14px; font-weight: 500; letter-spacing: 0.06em;
+  padding: 9px 18px; border-radius: var(--r-2); cursor: pointer; }
 .gst-note { font-size: 13px; color: var(--text-dim); margin: 18px 0 0; line-height: 1.5; }
 
-.gst-tag { color: var(--accent); border: 1px solid var(--accent); font-weight: 600; font-size: 12px; letter-spacing: 0.1em; padding: 2px 8px; border-radius: var(--r-1); }
-.gst-bar-go { background: var(--accent); border: 1px solid var(--accent); color: var(--accent-ink); font-family: var(--sans); font-size: 13px;
-  font-weight: 600; letter-spacing: 0.08em; padding: 5px 12px; border-radius: var(--r-2); cursor: pointer; }
-.gst-bar-go:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
-.gst-bar-quiet { background: transparent; border: 1px solid var(--border); color: var(--text-dim); font-family: var(--sans); font-size: 13px;
-  font-weight: 500; letter-spacing: 0.08em; padding: 5px 11px; border-radius: var(--r-2); cursor: pointer; }
-.gst-bar-quiet:hover { color: var(--text-hi); border-color: var(--text-dim); }
+/* the top bar: the word GUEST is a tag like DEMO · SEPOLIA beside it (amber, not brass), and the two ways on are
+   quiet buttons the size of EXIT: the brass on a guest's screen is the page's or the ticket's own action */
+.gst-tag { color: var(--amber); border: 1px solid var(--amber-dim); font-weight: 500; font-size: 12px; letter-spacing: 0.06em; padding: 2px 7px; border-radius: var(--r-1); cursor: help; }
+.gst-bar-quiet { border: 1px solid var(--border); font-family: var(--sans); font-size: 11.5px; font-weight: 500; letter-spacing: 0.08em;
+  padding: 4px 10px; border-radius: var(--r-2); cursor: pointer; }
+.gst-bar-quiet.is-first { color: var(--text-hi) !important; border-color: var(--border-hi) !important; }
 
 .gst-veil { position: fixed; inset: 0; z-index: 4000; display: flex; align-items: center; justify-content: center; padding: 16px;
   background: color-mix(in srgb, var(--bg-deep) 72%, transparent); }
@@ -37,9 +37,9 @@
 @media (max-width: 640px) {
   .gst-page { padding: 24px 16px 32px; }
   .gst-desk { display: none; }
+  .gst-rows { grid-template-columns: 1fr; }
   .gst-actions { flex-direction: column; align-items: stretch; }
   .gst-go, .gst-quiet { padding: 13px 16px; text-align: center; }
   .gst-ask .gst-actions { flex-direction: column-reverse; }
-  .gst-bar-go { padding: 8px 12px; }
-  .gst-rows { grid-template-columns: 1fr; }
+  .gst-bar-quiet { padding: 12px 12px; font-size: 12px; }      /* a thumb's height in the bar */
 }

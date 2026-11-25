@@ -429,3 +429,15 @@ journey or the owner caught. One line each; the ledger has the day and the case.
   first did nothing; two calls at once (two tabs of one new account) both found nothing, and the second answered
   500 on launch morning (0.66.5). Calling a route twice in a row does not show this: release two calls from a gate
   on a real database, and where they collide take the owner's transaction lock first, with an end to its wait.
+- A sentence about what cannot be forged is checked against the process as it is started, not copied from the
+  comment beside it. The guest view's limiter (0.67.0) said of the caller's address what two older limiters'
+  comments said, and the security review of the code found the start command made it untrue. Before writing that
+  an input is the proxy's and not the client's, read how the server is told to trust the proxy (the start command
+  and its flags), and where the host does not document what it sends, do not build on it: hold the line with a
+  count that does not ask who is calling, and say in the code which count is the guarantee.
+- What a framework knows a route by is looked at in a running app before a rule is hung on it. The guest's
+  allow-list first matched the matched route's own path, which for a router included under a prefix is the short
+  one ("/" for a dozen routes); a toy app with the prefix on the router itself had shown the full path. The walk of
+  every real route with a pass caught it the first time it ran: a rule about "every route" is tested on every route
+  of the real application, not on an example of one.
+

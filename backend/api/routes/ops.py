@@ -125,6 +125,15 @@ def stale_batches(db: Session) -> list[dict]:
     return [{"name": k, **v} for k, v in h["checks"].items() if not v["ok"]]
 
 
+def _guest_desk() -> dict:
+    """Why guests are on or off (middleware/guest.py), for the operator: whether the guest desk is named, whether its
+    account is there to act as (an administrator is not), and where the last guest's address was read from. No
+    address and no account is said."""
+    from middleware import guest
+    named = guest.enabled()
+    return {"named": named, "desk": bool(named and guest.account_id()), "address_from": guest.address_source()}
+
+
 @router.get("/health")
 def ops_health(db: Session = Depends(get_db)):
     """Batch freshness and the commit this process runs (Render's RENDER_GIT_COMMIT): the release-sync
@@ -136,7 +145,7 @@ def ops_health(db: Session = Depends(get_db)):
     from db import migrate
     from version import VERSION
     return {**health(db), "client_errors": {"last_24h": client_error_summary()["last_24h"]}, "problems": _problems_count(db),
-            "scheduler": scheduler.status(), "worker": worker_status(db), "schema": schema_status(db),
+            "scheduler": scheduler.status(), "worker": worker_status(db), "schema": schema_status(db), "guest": _guest_desk(),
             "migrations": migrate.public_summary(),  # counts only on this public body; names and reasons are GET /api/ops/migrations (admin)
             "version": VERSION,
             "commit": os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("GIT_COMMIT") or None}

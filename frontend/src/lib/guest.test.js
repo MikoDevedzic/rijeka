@@ -138,5 +138,43 @@ describe('a pass that ended with the API that signed it (a restart)', () => {
     expect(r.status).toBe(401)
     expect(calls.length).toBe(2)
   })
+
+  it('the instance stopped taking guests, or its guest desk is gone: the tab is nobody\'s and goes back to the door', async () => {
+    for (const status of [404, 503]) {
+      const went = []
+      const target = { location: { assign: to => went.push(to) }, fetch: vi.fn(async (url) => answer({ detail: 'no' }, false, String(url).endsWith('/api/public/guest') ? status : 401)) }
+      store.set('rijeka.guest', JSON.stringify({ token: 'pass-1', expires_at: now() + 1800 })); vi.resetModules()
+      const g = await import('./guest')
+      globalThis.fetch = (...a) => target.fetch(...a)
+      g.isGuest(); g.watchForAnEndedPass(target)
+      const r = await target.fetch(API + '/api/modules', { headers: { Authorization: 'Bearer pass-1' } })
+      expect(r.status).toBe(401)
+      expect(g.isGuest(), String(status)).toBe(false)
+      expect(went).toEqual(['/login'])
+    }
+  })
+
+  it('an address that only begins like the API\'s is not the API', async () => {
+    const { target, calls } = await setUp([answer({}, false, 401)])
+    await target.fetch(API + '.elsewhere.example/api/modules', { headers: { Authorization: 'Bearer pass-1' } })
+    expect(calls.length).toBe(1)
+  })
+})
+
+describe('what the door last knew', () => {
+  it('is kept for the next visit\'s first paint, and an unanswered question does not change it', async () => {
+    const kept = new Map()
+    globalThis.localStorage = { getItem: k => (kept.has(k) ? kept.get(k) : null), setItem: (k, v) => kept.set(k, String(v)) }
+    expect(guest.guestsTakenLast()).toBe(false)
+    globalThis.fetch = vi.fn(async () => answer({ enabled: true }))
+    expect(await guest.guestsTaken()).toBe(true)
+    expect(guest.guestsTakenLast()).toBe(true)
+    globalThis.fetch = vi.fn(async () => { throw new Error('offline') })
+    expect(await guest.guestsTaken()).toBe(true)
+    globalThis.fetch = vi.fn(async () => answer({ enabled: false }))
+    expect(await guest.guestsTaken()).toBe(false)
+    expect(guest.guestsTakenLast()).toBe(false)
+    delete globalThis.localStorage
+  })
 })
 

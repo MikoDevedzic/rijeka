@@ -39,6 +39,9 @@ services:
                              # RIJEKA_HELD_MODULES: P&L, risk, credit, capital, collateral, XVA reserves, IPV)
       - key: RIJEKA_DEMO_TEMPLATE_EMAIL
         sync: false          # whose market data new visitors get a copy of
+      - key: RIJEKA_GUEST_EMAIL
+        sync: false          # the guest desk: one ordinary account as which visitors with no account price and read
+                             # (middleware/guest.py); unset, guests are off and the door offers nothing
       - key: RIJEKA_CHAIN_DEV_SEED
         generateValue: true  # keys for DEMO* entities only (see next line); never reuse a local seed
       - key: RIJEKA_CHAIN_DEV_LEI_PREFIX

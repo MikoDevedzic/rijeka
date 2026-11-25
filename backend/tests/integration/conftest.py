@@ -196,9 +196,9 @@ def _no_rate_limit(request):
         yield
         return
     from api.routes import _limits
-    _limits._buckets.clear()
+    _limits._buckets.clear(); _limits._windows.clear()
     yield
-    _limits._buckets.clear()
+    _limits._buckets.clear(); _limits._windows.clear()
 
 
 # ── the book: every product once, shared by the modules ──────────────────────────────────────────

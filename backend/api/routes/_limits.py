@@ -37,25 +37,52 @@ def demo_line() -> str:
 
 GUEST_SHARE = 2          # all guests together may run this many times what one account may, each minute
 
+# Sliding windows by name, for what is not counted per account: a guest (middleware/guest.py) is counted by address
+# and against a ceiling for all guests together. One store and one sweep, so that there is one counter of this
+# kind and not one per caller. A key is the caller's to name and is cut to a length: an address is a few dozen
+# characters, and a header a stranger wrote is not allowed to be a kilobyte of this process's memory.
+_windows: dict[str, tuple[float, deque]] = {}
+_swept = 0.0
+KEY_MAX = 96
+
+
+def take_all(counts: list[tuple[str, float, int, str]]) -> None:
+    """Each of `counts` is (name, seconds, most, what it is called in the refusal). All are looked at first and
+    recorded only if none is full: a caller at its own limit does not use up the one it shares with others.
+    429 with Retry-After from the first that is full. Off where the journeys switch the limits off (`_off`)."""
+    if _off():
+        return
+    global _swept
+    now = time.time()
+    qs = []
+    for name, window, most, what in counts:
+        name = name[:KEY_MAX]
+        held = _windows.get(name)
+        q = held[1] if held else deque()
+        while q and now - q[0] > window:
+            q.popleft()
+        if len(q) >= most:
+            wait = max(1, int(window - (now - q[0])) + 1)
+            raise HTTPException(status_code=429, headers={"Retry-After": str(wait)},
+                                detail=f"Too many {what}; the next is taken in {wait} s. An account has a limit of its own.{demo_line()}")
+        qs.append((name, window, q))
+    for name, window, q in qs:
+        q.append(now)
+        _windows[name] = (window, q)
+    if now - _swept > 60 and len(_windows) > 2000:          # at most once a minute, and only when there is something to sweep
+        _swept = now
+        for k in [k for k, (w, q) in _windows.items() if not q or now - q[-1] > w]:
+            _windows.pop(k, None)
+
 
 def _guest(user: dict, key: str, per_minute: int) -> None:
     """A guest has no account to count against: every guest is the one guest desk. So a guest is counted by address
-    (half an account's allowance, never under two a minute), and all guests together against a ceiling, because the
-    one CPU they share is also the one the accounts use."""
-    now = time.time()
+    (half an account's allowance, never under two a minute) and all guests together against a ceiling, because the
+    one CPU they share is also the one the accounts use. The ceiling is the guarantee: the address is what the
+    host's proxy passed on (middleware/guest.py `address`)."""
     own = max(2, per_minute // 2)
-    for bucket, most, whose in ((f"{key}:guest:{user.get('guest_address') or 'unknown'}", own, "This address"),
-                                (f"{key}:guests", per_minute * GUEST_SHARE, "Guests together")):
-        q = _buckets.setdefault(bucket, deque())
-        while q and now - q[0] > 60:
-            q.popleft()
-        if len(q) >= most:
-            wait = max(1, int(60 - (now - q[0])) + 1)
-            raise HTTPException(status_code=429, headers={"Retry-After": str(wait)},
-                                detail=(f"Too many {key} requests; wait a minute. {whose} ran {most} in the last minute; the next is "
-                                        f"taken in {wait} s. An account has a limit of its own.{demo_line()}"))
-    for bucket in (f"{key}:guest:{user.get('guest_address') or 'unknown'}", f"{key}:guests"):
-        _buckets[bucket].append(now)
+    take_all([(f"heavy:{key}:guest:{user.get('guest_address') or 'unknown'}", 60.0, own, f"{key} requests from this address"),
+              (f"heavy:{key}:guests", 60.0, per_minute * GUEST_SHARE, f"{key} requests by guests")])
 
 
 def heavy(user: dict, key: str, per_minute: int) -> None:

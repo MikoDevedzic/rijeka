@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
 import { supabase } from '../../lib/supabase'
 import AuthScene, { Field, SubmitBtn } from './AuthScene'
-import { guestsTaken, GUEST_HOME } from '../../lib/guest'
+import { guestsTaken, guestsTakenLast, GUEST_HOME } from '../../lib/guest'
 
 export default function LoginPage() {
   const { signIn } = useAuthStore()
@@ -11,7 +11,7 @@ export default function LoginPage() {
   const navigate   = useNavigate()
 
   // The way in with no account, offered where the instance takes guests (lib/guest.js): asked once, shown when yes.
-  const [guests, setGuests] = useState(false)
+  const [guests, setGuests] = useState(guestsTakenLast)          // what the API last said, so the door is drawn once; the answer below corrects it
   const [entering, setEntering] = useState(false)
   useEffect(() => { let on = true; guestsTaken().then(y => { if (on) setGuests(y) }); return () => { on = false } }, [])
   const lookAround = async () => {

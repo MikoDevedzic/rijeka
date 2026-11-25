@@ -21,15 +21,17 @@ def guest(monkeypatch):
     monkeypatch.setenv("RIJEKA_GUEST_EMAIL", "desk@rijeka.test")
     monkeypatch.setenv("RIJEKA_RATE_LIMITS", "1")
     monkeypatch.setattr(g, "account_id", lambda: DESK)
-    for b in (g._requests, g._pricings, g._passes):
-        b.clear()
+    from api.routes import _limits
+    monkeypatch.setattr(_limits, "_off", lambda: False)
+    _limits._windows.clear(); _limits._buckets.clear()
+    g._source["last"] = None
     return g
 
 
 def _request(method: str, route: str, host: str = "203.0.113.7"):
     # the matched route's own name is the short one a prefixed router knows it by: the wall must not read it
     return SimpleNamespace(method=method, scope={"path": route, "route": SimpleNamespace(path="/")}, client=SimpleNamespace(host=host),
-                           state=SimpleNamespace(), url=SimpleNamespace(path=route))
+                           state=SimpleNamespace(), url=SimpleNamespace(path=route), headers={})
 
 
 def _bearer(token: str) -> str:
@@ -94,7 +96,7 @@ def test_a_pass_is_a_viewer_on_the_guest_desk(guest):
     u = guest.user(_bearer(token), req)
     assert u["sub"] == DESK and u["role"] == "viewer" and u["user_metadata"]["role"] == "viewer" and u["is_guest"] is True
     assert u["guest_address"] == "203.0.113.7" and u["email"] is None
-    assert req.state.rijeka_guest is True and not hasattr(req.state, "rijeka_account")      # a guest is not an account in the activity record
+    assert not hasattr(req.state, "rijeka_account")      # what the activity record keeps is an account's: a guest sets none
 
 
 def _forge(guest, key=SECRET, alg="HS256", kid="guest", **claims):
@@ -205,7 +207,6 @@ def test_the_guest_desk_missing_is_a_503_and_is_asked_again(guest, monkeypatch):
 # ── volume ───────────────────────────────────────────────────────────────────
 
 def test_requests_are_counted_by_address(guest, monkeypatch):
-    monkeypatch.setattr(guest, "_limits_off", lambda: False)
     monkeypatch.setattr(guest, "PER_MINUTE", 5)
     token, _ = guest.mint()
     for _ in range(5):
@@ -217,25 +218,47 @@ def test_requests_are_counted_by_address(guest, monkeypatch):
 
 
 def test_pricing_is_counted_by_address_and_for_all_guests(guest, monkeypatch):
-    monkeypatch.setattr(guest, "_limits_off", lambda: False)
     monkeypatch.setattr(guest, "PRICINGS_PER_MINUTE", 3)
     monkeypatch.setattr(guest, "ALL_PRICINGS_PER_MINUTE", 5)
     token, _ = guest.mint()
     for _ in range(3):
         guest.user(_bearer(token), _request("POST", "/price/preview", host="198.51.100.1"))
-    with pytest.raises(HTTPException) as e:
-        guest.user(_bearer(token), _request("POST", "/price/preview", host="198.51.100.1"))
-    assert e.value.status_code == 429
+    for _ in range(4):                                                                                  # refused at its own limit, four times:
+        with pytest.raises(HTTPException) as e:
+            guest.user(_bearer(token), _request("POST", "/price/preview", host="198.51.100.1"))
+        assert e.value.status_code == 429 and "this address" in e.value.detail
     guest.user(_bearer(token), _request("GET", "/api/modules", host="198.51.100.1"))                    # reading is not pricing
-    for host in ("198.51.100.2", "198.51.100.3"):
+    for host in ("198.51.100.2", "198.51.100.3"):                                                       # ...and it did not use up what the others share
         guest.user(_bearer(token), _request("POST", "/price/preview", host=host))
     with pytest.raises(HTTPException) as e:
         guest.user(_bearer(token), _request("POST", "/price/preview", host="198.51.100.4"))             # the ceiling for all guests
-    assert e.value.status_code == 429
+    assert e.value.status_code == 429 and "by guests" in e.value.detail
+
+
+def test_the_ceilings_hold_whatever_address_a_guest_claims(guest, monkeypatch):
+    """The counts by address are only as good as the address. Whatever address each request comes with, the ceilings
+    for all guests hold: they do not ask who it is."""
+    monkeypatch.setattr(guest, "ALL_PRICINGS_PER_MINUTE", 30)
+    monkeypatch.setattr(guest, "ALL_PASSES_PER_HOUR", 25)
+    token, _ = guest.mint()
+    done = 0
+    for i in range(200):
+        try:
+            guest.user(_bearer(token), _request("POST", "/price/preview", host=f"203.0.113.{i}"))
+            done += 1
+        except HTTPException as e:
+            assert e.status_code == 429
+    assert done == 30
+    taken = 0
+    for i in range(200):
+        try:
+            guest.take_pass(_request("POST", "/api/public/guest", host=f"203.0.113.{i}")); taken += 1
+        except HTTPException as e:
+            assert e.status_code == 429
+    assert taken == 25
 
 
 def test_passes_are_counted_by_address(guest, monkeypatch):
-    monkeypatch.setattr(guest, "_limits_off", lambda: False)
     monkeypatch.setattr(guest, "PASSES_PER_HOUR", 2)
     req = _request("POST", "/api/public/guest", host="198.51.100.9")
     guest.take_pass(req); guest.take_pass(req)
@@ -244,30 +267,50 @@ def test_passes_are_counted_by_address(guest, monkeypatch):
     assert e.value.status_code == 429
 
 
-def test_the_address_is_the_proxys_not_a_header(guest):
+def test_the_address_is_cloudflares_when_it_is_one_and_the_proxys_otherwise(guest):
     req = _request("GET", "/api/modules", host="198.51.100.1")
-    req.headers = {"x-forwarded-for": "10.0.0.1"}
-    assert guest.address(req) == "198.51.100.1" and guest.address(None) == "unknown"
+    assert guest.address(req) == "198.51.100.1" and guest.address_source() == "proxy"
+    req.headers = {"cf-connecting-ip": " 2001:db8::7 ", "x-forwarded-for": "10.0.0.1"}
+    assert guest.address(req) == "2001:db8::7" and guest.address_source() == "cf-connecting-ip"
+    for junk in ("not-an-address", "1.2.3.4, 5.6.7.8", "x" * 5000, ""):
+        req.headers = {"cf-connecting-ip": junk}
+        assert guest.address(req) == "198.51.100.1", junk[:20]                # a header that is not an address is not used
+    long = _request("GET", "/api/modules", host="h" * 5000)
+    assert len(guest.address(long)) == 64 and guest.address(None) == "unknown"
+
+
+def test_a_name_a_stranger_wrote_is_cut_and_old_windows_are_swept(guest, monkeypatch):
+    from api.routes import _limits
+    _limits.take_all([("k" * 5000, 60.0, 5, "things")])
+    assert max(len(k) for k in _limits._windows) == _limits.KEY_MAX
+    monkeypatch.setattr(_limits, "_swept", 0.0)
+    for i in range(2100):
+        _limits._windows[f"old:{i}"] = (60.0, __import__("collections").deque([time.time() - 3600]))
+    _limits.take_all([("fresh", 60.0, 5, "things")])
+    assert not any(k.startswith("old:") for k in _limits._windows) and "fresh" in _limits._windows
+
+
+def test_a_guests_run_is_never_larger_than_the_tickets_default_whatever_names_its_size(guest):
+    g = {"is_guest": True}
+    assert guest.paths(g, 5000) == guest.MAX_PATHS and guest.paths(g, 500) == 500
+    assert guest.paths({"sub": DESK}, 5000) == 5000
 
 
 def test_heavy_counts_a_guest_by_address_and_all_guests_together(guest, monkeypatch):
     from api.routes import _limits
-    monkeypatch.setattr(_limits, "_off", lambda: False)
-    _limits._buckets.clear()
     a = {"sub": DESK, "is_guest": True, "guest_address": "198.51.100.1"}
     for _ in range(3):                                                      # half of six
         _limits.heavy(a, "XVA simulation", 6)
     with pytest.raises(HTTPException) as e:
         _limits.heavy(a, "XVA simulation", 6)
-    assert e.value.status_code == 429 and "This address" in e.value.detail
+    assert e.value.status_code == 429 and "from this address" in e.value.detail
     for i in range(2, 5):                                                   # nine more from three other addresses: twelve in all
         for _ in range(3):
             _limits.heavy({"sub": DESK, "is_guest": True, "guest_address": f"198.51.100.{i}"}, "XVA simulation", 6)
     with pytest.raises(HTTPException) as e:
         _limits.heavy({"sub": DESK, "is_guest": True, "guest_address": "198.51.100.9"}, "XVA simulation", 6)
-    assert e.value.status_code == 429 and "Guests together" in e.value.detail
+    assert e.value.status_code == 429 and "by guests" in e.value.detail
     _limits.heavy({"sub": DESK}, "XVA simulation", 6)                       # the desk's owner, signed in, has the account's own count
-    _limits._buckets.clear()
 
 
 def test_a_guests_simulation_is_no_larger_than_the_tickets_default(guest):

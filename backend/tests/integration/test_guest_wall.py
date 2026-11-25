@@ -115,6 +115,8 @@ def test_a_guest_prices_a_swap_runs_its_xva_and_cannot_book_it(client, guest, pa
     assert x.status_code == 200, x.text[:300]
     big = client.post("/api/xva/simulate", headers=pass_, json={"notional": 10_000_000, "maturity_y": 5, "fixed_rate": 0.04, "paths": 5000})
     assert big.status_code == 403 and "2,000 paths" in big.text
+    health = client.get("/api/ops/health").json()["guest"]
+    assert health["named"] is True and health["desk"] is True and health["address_from"] in ("proxy", "cf-connecting-ip")
     for method, url in (("POST", "/api/book/trade"), ("POST", "/api/trades/"), ("PUT", "/api/me/role"), ("POST", "/api/analyse/"),
                         ("POST", "/api/xva/calibrate"), ("GET", "/api/trades/"), ("POST", "/api/demo/provision")):
         r = client.request(method, url, headers=pass_, json={} if method != "GET" else None)

@@ -26,10 +26,14 @@ export const useAuthStore = create((set, get) => ({
     // login button sat on AUTHENTICATING for 10s+. Defer the work instead.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        if (!session && isGuest()) return                 // the client has no sign-in of its own while the tab is a guest's
-        if (session) leaveGuest()                         // an account signed in: the tab is the account's from here
+        const wasGuest = isGuest()
+        if (!session && wasGuest) return                  // the client has no sign-in of its own while the tab is a guest's
+        if (session && wasGuest) leaveGuest()             // an account is signed in: the tab is the account's from here
         set({ session, loading: false })
-        if (event === 'SIGNED_IN' && session) {
+        // SIGNED_IN, or an account's session found in a tab that was a guest's (the event is then INITIAL_SESSION, and
+        // the start above read no profile and set up no workspace because the tab was a guest's): the account's own
+        if ((event === 'SIGNED_IN' || wasGuest) && session) {
+          if (wasGuest) set({ profile: null })
           setTimeout(async () => {
             const isNew = await get().fetchProfile(session.user.id)
             if (isNew) set({ isNewSignup: true })
@@ -88,6 +92,7 @@ export const useAuthStore = create((set, get) => ({
 
   // The way in with no account: a pass from the API, and the app shown as a guest sees it (components/guest).
   enterAsGuest: async () => {
+    if (get().session && !get().session.is_guest) throw new Error('You are signed in: sign out first to look around as a guest.')
     const session = await enterAsGuest()
     set({ session, profile: GUEST_PROFILE, loading: false, demo: null, isNewSignup: false })
     return session

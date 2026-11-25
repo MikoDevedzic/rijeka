@@ -17,17 +17,18 @@ Three rules hold the design up, and `tests/test_guest.py` holds them:
      snapshot or a cashflow for "the caller" would let one guest change another's prices. Such routes stay off the
      list by name (NEVER).
 
-Volume is limited by address (the caller's, as the trusted proxy saw it: never a forwarded header the client wrote)
-and, on the routes that burn the CPU, for all guests together (api/routes/_limits.py). Guests are off until the
+Volume is held by ceilings for all guests together (pricings, passes, and the routes that burn the CPU), which do
+not depend on who is asking, and by counts by address, which are as good as the address the host's proxy passes on
+(see `address`). Guests are off until the
 guest desk is named (RIJEKA_GUEST_EMAIL) and its account exists."""
 from __future__ import annotations
 
+import ipaddress
 import logging
 import os
 import re
 import secrets
 import time
-from collections import deque
 from typing import Optional
 
 import jwt
@@ -49,6 +50,7 @@ PER_MINUTE = 120                # a guest address's requests a minute, all allow
 PRICINGS_PER_MINUTE = 60        # of which the ones that price (the POSTs): a person dragging a scenario, not a script
 ALL_PRICINGS_PER_MINUTE = 300   # every guest together: the one CPU is the accounts' too
 PASSES_PER_HOUR = 20            # passes one address may take in an hour
+ALL_PASSES_PER_HOUR = 1200      # and every address together
 MAX_PATHS = 2000                # the ticket's own default: a guest's simulation is no larger
 
 ASK = "A guest can price a trade and read. To book, confirm or export, create an account: it is free."
@@ -221,42 +223,42 @@ def _claims(token: str) -> dict:
     return dict(claims)
 
 
-# ── volume, by address ───────────────────────────────────────────────────────
-_requests: dict[str, deque] = {}
-_pricings: dict[str, deque] = {}
-_passes: dict[str, deque] = {}
+# ── volume ───────────────────────────────────────────────────────────────────
+# Two kinds of count, and they are not equally strong. The ceilings for ALL guests together (pricings a minute, passes
+# an hour, and the heavy routes' in api/routes/_limits.py) do not depend on knowing who is asking: they are what
+# keeps guests from taking the CPU the accounts share, whatever a guest sends. The counts BY ADDRESS keep one guest
+# from using up the others' share, and are only as good as the address this process is given. Behind a host's proxy
+# that is a header: the edge's own (CF-Connecting-IP) when it is there and is an address, else what the server read
+# from the forwarded headers. Nothing here relies on the address being right: a guest with a wrong one meets the
+# ceilings. `address_source` says which of the two this process has been reading, for the operator's health page.
+_source = {"last": None}
 
 
 def address(request: Optional[Request]) -> str:
-    # uvicorn runs with --proxy-headers, so request.client is the address the trusted proxy saw; a forwarded
-    # header read here would be whatever the client chose to write
-    return request.client.host if request is not None and request.client else "unknown"
+    if request is None:
+        return "unknown"
+    cf = (request.headers.get("cf-connecting-ip") or "").strip() if hasattr(request, "headers") else ""
+    if cf:
+        try:
+            _source["last"] = "cf-connecting-ip"
+            return str(ipaddress.ip_address(cf))
+        except ValueError:
+            pass                                    # not an address: not Cloudflare's, and not used
+    _source["last"] = "proxy"
+    return (request.client.host if request.client else "unknown")[:64]
 
 
-def _limits_off() -> bool:
-    from api.routes._limits import _off
-    return _off()
-
-
-def _take(buckets: dict[str, deque], key: str, window: float, most: int, what: str) -> None:
-    now = time.time()
-    q = buckets.setdefault(key, deque())
-    while q and now - q[0] > window:
-        q.popleft()
-    if len(q) >= most:
-        wait = max(1, int(window - (now - q[0])) + 1)
-        raise HTTPException(status_code=429, headers={"Retry-After": str(wait)},
-                            detail=f"Too many {what}; the next is taken in {wait} s. An account has a limit of its own.")
-    q.append(now)
-    if len(buckets) > 20000:
-        for k in [k for k, v in buckets.items() if not v or now - v[-1] > window]:
-            buckets.pop(k, None)
+def address_source() -> Optional[str]:
+    """Where the last guest's address came from: "cf-connecting-ip", "proxy" (uvicorn's reading of the forwarded
+    header) or None when no guest has asked yet."""
+    return _source["last"]
 
 
 def take_pass(request: Optional[Request]) -> None:
-    """Counts a pass against its address: at most PASSES_PER_HOUR an hour."""
-    if not _limits_off():
-        _take(_passes, address(request), 3600.0, PASSES_PER_HOUR, "guest sessions")
+    """Counts a pass against its address and against every address together."""
+    from api.routes._limits import take_all
+    take_all([(f"guest:pass:{address(request)}", 3600.0, PASSES_PER_HOUR, "guest sessions from this address"),
+              ("guest:passes", 3600.0, ALL_PASSES_PER_HOUR, "guest sessions")])
 
 
 # ── the wall ─────────────────────────────────────────────────────────────────
@@ -291,26 +293,34 @@ def user(authorization: Optional[str], request: Optional[Request]) -> dict:
         log.info("guest refused: %s %s", request.method, str(path)[:120])
         raise HTTPException(status_code=403, detail=ASK)
     addr = address(request)
-    if not _limits_off():
-        _take(_requests, addr, 60.0, PER_MINUTE, "requests")
-        if request.method == "POST":
-            _take(_pricings, addr, 60.0, PRICINGS_PER_MINUTE, "pricing requests")
-            _take(_pricings, "*", 60.0, ALL_PRICINGS_PER_MINUTE, "pricing requests by guests")
+    from api.routes._limits import take_all
+    counts = [(f"guest:req:{addr}", 60.0, PER_MINUTE, "requests from this address")]
+    if request.method == "POST":
+        counts += [(f"guest:price:{addr}", 60.0, PRICINGS_PER_MINUTE, "pricing requests from this address"),
+                   ("guest:prices", 60.0, ALL_PRICINGS_PER_MINUTE, "pricing requests by guests")]
+    take_all(counts)
     desk = account_id()
     if desk is None:
         raise HTTPException(status_code=503, detail="The guest desk is not set up on this instance.")
-    request.state.rijeka_guest = True                 # the activity record keeps accounts, and a guest is not one
+    # (the activity record keeps what `request.state.rijeka_account` names, which verify_token sets for an account
+    # and nothing sets for a guest: a guest is not on it)
     return {"sub": desk, "role": "viewer", "user_metadata": {"role": "viewer"}, "email": None,
             "is_guest": True, "guest_address": addr, "jti": claims.get("jti"), "exp": claims.get("exp")}
 
 
 def size(user_: Optional[dict], body) -> None:
-    """A guest's simulation is no larger than the ticket's own default. An account's own cap is the route's."""
+    """A guest's simulation is no larger than the ticket's default. An account's own cap is the route's."""
     if not is_guest(user_):
         return
     n = getattr(body, "paths", None) or getattr(body, "n_paths", None) or 0
     if n > MAX_PATHS:
         raise HTTPException(status_code=403, detail=f"A guest's simulation runs up to {MAX_PATHS:,} paths. For more, create an account: it is free.")
+
+
+def paths(user_: Optional[dict], n: int) -> int:
+    """The number of paths a run uses: for a guest never above MAX_PATHS, also where it comes from a setting and
+    not from the request (the counterparty run takes the firm's)."""
+    return min(int(n), MAX_PATHS) if is_guest(user_) else int(n)
 
 
 def is_guest(user_: Optional[dict]) -> bool:

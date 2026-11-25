@@ -45,9 +45,10 @@ export default function GuestDesk() {
         </section>
       </div>
       <div className="gst-actions">
-        {windows.length === 0 && <button type="button" className="gst-go" data-action="guest-new-trade" onClick={() => open(null)}>+ NEW TRADE</button>}
-        <button type="button" className={windows.length === 0 ? 'gst-quiet' : 'gst-go'} data-action="guest-signup" onClick={() => navigate('/signup')}>CREATE AN ACCOUNT</button>
-        <button type="button" className="gst-quiet gst-desk" onClick={() => navigate('/methodology')}>READ THE METHODOLOGY</button>
+        {/* one brass thing: a new ticket when none is open (with one open, the brass on the screen is the ticket's own) */}
+        {windows.length === 0 && <button type="button" className="gst-go rj-press" data-action="guest-new-trade" onClick={() => open(null)}>+ NEW TRADE</button>}
+        <button type="button" className="rj-btn gst-quiet" data-action="guest-signup" onClick={() => navigate('/signup')}>CREATE AN ACCOUNT</button>
+        <button type="button" className="rj-btn gst-quiet gst-desk" onClick={() => navigate('/methodology')}>READ THE METHODOLOGY</button>
       </div>
       <p className="gst-note">The guest desk is shared and small: a guest&rsquo;s simulation runs up to 2,000 paths, and what you price here is not kept.</p>
     </div>

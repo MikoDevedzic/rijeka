@@ -23,10 +23,19 @@ export function isGuest() { return !!read() }
 
 // Whether this instance takes guests: asked by the door before it offers the way in.
 export async function guestsTaken() {
+  let yes = false
   try {
     const r = await fetch(API + '/api/public/guest')
-    return r.ok && (await r.json()).enabled === true
-  } catch { return false }
+    yes = r.ok && (await r.json()).enabled === true
+  } catch { return guestsTakenLast() }                   // no answer: what the door last knew, so it does not change under a visitor
+  try { localStorage.setItem(TAKEN, yes ? '1' : '0') } catch { /* ignore */ }
+  return yes
+}
+// What the API last answered, for the door's first paint: the entry is there at once on a later visit, and does
+// not arrive a moment after the form (and move it).
+const TAKEN = 'rijeka.guests-taken'
+export function guestsTakenLast() {
+  try { return localStorage.getItem(TAKEN) === '1' } catch { return false }
 }
 
 async function take() {
@@ -69,6 +78,10 @@ export async function freshGuestSession() {
 // that: the call that was refused takes one new pass and is sent once more. This watches the page's own requests
 // only while the tab is a guest's, and only an API call that carried the guest's pass and came back 401 is touched.
 let watching = false
+const API_ORIGIN = (() => { try { return new URL(API).origin } catch { return null } })()
+function toApi(url) {                           // the API's own origin, exactly: not an address that merely begins like it
+  try { return API_ORIGIN !== null && new URL(url).origin === API_ORIGIN } catch { return false }
+}
 function authOf(input, init) {
   const h = init?.headers ?? (typeof input === 'object' ? input?.headers : null)
   if (!h) return ''
@@ -86,13 +99,18 @@ export function watchForAnEndedPass(target = globalThis) {
   const send = target.fetch.bind(target)
   target.fetch = async (input, init) => {
     const res = await send(input, init)
-    const mine = pass && res.status === 401 && typeof input === 'string' && input.startsWith(API)
+    const mine = pass && res.status === 401 && typeof input === 'string' && toApi(input)
       && authOf(input, init) === 'Bearer ' + pass.token && (init?.body == null || typeof init.body === 'string')
     if (!mine) return res
     try {
       taking = taking || take().finally(() => { taking = null })
       await taking
-    } catch { return res }                               // no new pass to be had: the refusal stands, and is shown
+    } catch (e) {
+      // no new pass to be had. Where the instance has stopped taking guests (404) or its guest desk is gone (503),
+      // the tab is nobody's: it goes back to the door. Otherwise (too many, offline) the refusal stands and is shown.
+      if (e?.status === 404 || e?.status === 503) { leaveGuest(); try { target.location?.assign('/login') } catch { /* ignore */ } }
+      return res
+    }
     return send(input, withAuth(init, 'Bearer ' + pass.token))
   }
 }

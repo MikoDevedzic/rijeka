@@ -65,8 +65,8 @@ export default function AppBar() {
         {demo?.enabled && <span style={{color:'var(--border)'}}>·</span>}
         {guest ? <>
           <span className="gst-tag" title="You are looking around with no account: you can price a trade, run its XVA and read. Booking, confirming on chain and the Excel need an account, which is free.">GUEST</span>
-          <button className="gst-bar-go" data-action="guest-bar-signup" onClick={() => navigate('/signup')}>CREATE ACCOUNT</button>
-          <button className="gst-bar-quiet" onClick={() => navigate('/login')}>SIGN IN</button>
+          <button className="rj-btn gst-bar-quiet is-first" data-action="guest-bar-signup" onClick={() => navigate('/signup')}>CREATE ACCOUNT</button>
+          <button className="rj-btn gst-bar-quiet" onClick={() => navigate('/login')}>SIGN IN</button>
         </> : <>
         <RoleSwitch />
         <span style={{color:'var(--border)'}}>·</span>

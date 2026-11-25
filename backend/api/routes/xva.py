@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session
 from db.session import get_db
 from middleware.auth import verify_token
 from api.routes._limits import heavy
-from middleware.guest import size as guest_size
+from middleware.guest import paths as guest_paths, size as guest_size
 from api.routes._errors import internal
 from pricing.calibration import calibrate_hw1f, tenor_to_years, hw1f_swaption_vol_normal
 from pricing.hw1f_mc import simulate_swap_paths
@@ -1517,6 +1517,7 @@ def incremental_xva(body: IncrementalXvaRequest, db: Session = Depends(get_db), 
     st = dict(settings(db, firm_of(db, uid)))
     if body.n_paths:
         st["n_paths"] = int(body.n_paths)
+    st["n_paths"] = guest_paths(user, st["n_paths"])        # a guest's run is the ticket's default size at most, whatever the firm's setting is
     tpl = template_uid(db)
     cp = None
     if body.counterparty_id:

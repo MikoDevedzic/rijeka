@@ -44,7 +44,9 @@ flowchart LR
 user's Supabase JWT and subscribes to the `trades` table over Supabase realtime (filtered by row-level
 security) so the blotter follows bookings and confirmations without a reload. A firm's own reference data (its
 hierarchy, legal entities and counterparties) the app reads and writes straight through Supabase, under row-level
-security; trades, legs and events are written by the API alone. Heavy libraries
+security; trades, legs and events are written by the API alone. A visitor with no account is a guest: the app
+then holds no Supabase session and sends the API a pass of the API's own (see "A guest: pricing with no account").
+Heavy libraries
 (three.js, ExcelJS) and the secondary pages are code-split; the first screen after sign-in is the
 blotter, the command centre and the messenger. On a screen up to 640px wide the same app shows its phone view
 (`frontend/src/lib/phone.js`, `components/layout/Phone.css`, `PhoneNav.jsx`): the home, the trades, the trade window,
@@ -488,10 +490,16 @@ confirming on chain, the Excel workbooks, the assistant and chat are an account'
   prefix knows its routes by their short path). A route that stores for its caller (a calibration, a snapshot, a
   cashflow) is never put on the list, because all guests are one account and one would move another's prices
   (`guest.NEVER` names them). `tests/integration/test_guest_wall.py` calls every route of the API with a pass.
-- **Volume.** A guest is counted by address (`request.client.host`, as the trusted proxy saw it): passes an hour,
-  requests a minute, pricings a minute, and every guest's pricings together; on the routes that burn the CPU
-  `_limits.heavy` counts a guest by address at half an account's allowance and all guests against a ceiling. A
-  guest's simulation is no larger than the ticket's default (2,000 paths).
+- **Volume.** Two kinds of count, in one store (`_limits.take_all`). The ceilings for all guests together (pricings
+  a minute, passes an hour, and on the routes that burn the CPU twice one account's allowance) do not depend on
+  who is asking: they are what keeps guests from the CPU the accounts share. The counts by address (passes an
+  hour, requests and pricings a minute, half an account's allowance on the heavy routes) keep one guest from
+  using up the others' share, and are only as good as the address the host's proxy passes on; nothing relies on
+  it being right (`guest.address`; the health page says where it was read from, under `guest.address_from`). A guest's simulation is no larger than the ticket's default (2,000
+  paths), also where its size comes from the firm's setting and not the request.
+- **For the operator.** `GET /api/ops/health` answers `guest`: whether the guest desk is named, whether its account
+  is there to act as, and where a guest's address was last read from. The public `GET /api/public/guest` answers
+  only yes or no. The lookup of the guest desk reads that one account's row in `auth.users` and `profiles`.
 - **In the app** (`lib/guest.js`): the pass is kept for the tab and given in a session's shape, so every call
   that sends "the session's token" to the API sends it (`lib/supabase.js`); no table is read in a guest's name. The
   door offers the way in where the instance takes guests; a guest's place is `/guest` (the ticket, and what an
@@ -633,6 +641,9 @@ deploy; what it checks and what it cannot is `docs/ops/monitoring.md`. Versions:
 
 ## Local stack and tests
 
+(The journeys' stack takes guests: `frontend/e2e/serve.sh` names the seeded template account as the guest desk, so
+`e2e/guest.spec.js` enters from the door with no sign-in at all.)
+
 `backend/stack/` builds a Rijeka database on a plain PostgreSQL 16 with no Supabase and no Docker:
 `auth_stub.sql` (the `auth` schema, `auth.uid()` and the roles the policies name, the realtime
 publication), `apply.py` (the auth stub, `docs/schema.sql`, `docs/migrations/*.sql` in date order,
@@ -680,8 +691,9 @@ checklist in `docs/ops/release.md`.
   price about 0.01s, an XVA run about 0.02s, a live P&L or credit report about 0.1s, a live market risk report 1.1s
   (5.7s until 0.42.3). The risk report is the one to watch as a book grows: it values every trade once for every
   quoted tenor it is sensitive to.
-- One API process, in-request Monte Carlo and full-revaluation VaR, rate-limited per account
-  (`api/routes/_limits.py`). A larger book moves these to a worker without changing the engines.
+- One API process, in-request Monte Carlo and full-revaluation VaR, rate-limited per account, and for guests by
+  address and by a ceiling for all of them together (`api/routes/_limits.py`). A guest's pass is signed with that
+  one process's own secret, which is why a second process would need `RIJEKA_GUEST_SECRET`. A larger book moves these to a worker without changing the engines.
 - One request may send 256 kB (`middleware/body_limit.py`, `RIJEKA_MAX_BODY_KB`): a layer in front of every route,
   inside CORS, answers 413 for a larger body: by its declared length before a byte is read, and for every body by
   counting what arrives (a length declared beside `chunked` is not taken on trust); thirty seconds for a piece

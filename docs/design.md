@@ -638,15 +638,20 @@ A visitor with no account (`lib/guest.js`) meets four things, all set in the app
 
 - **The door's first action.** Where the instance takes guests the door carries PRICE A TRADE · NO ACCOUNT above
   the sign-in, in brass: it is what a new visitor presses. Signing in is then the door's second action and its
-  button is outlined (`.au-form-second`), so the view keeps one brass thing. On a phone the entry is its button
+  button is a quiet outline in the border's colour (`.au-form-second`), so the view keeps one brass thing. The door
+  is drawn with what the API last answered, so the entry does not arrive after the form and move it. On a phone the entry is its button
   alone, in the place of the card's title, and the door is still one screen; on a phone under 600px tall the
   door is as it was.
 - **The guest's page** (`/guest`): what a guest can do, what an account adds, and the ways on; it opens the ticket
   and stays behind it. On a phone it is one column with buttons the width of the screen, and the methodology (laid
   out for a monitor) is not offered.
 - **The top bar and the foot.** A guest's top bar has three places (PRICE A TRADE, METHODOLOGY, ROADMAP), the word
-  GUEST in a brass outline, and CREATE ACCOUNT in brass beside a quiet SIGN IN; a phone keeps the logo and CREATE
-  ACCOUNT. A phone's bar at the foot has a guest's three things: GUEST, NEW, ACCOUNT.
+  GUEST as a tag in amber like DEMO · SEPOLIA beside it (a label is never brass), and CREATE ACCOUNT and SIGN IN as
+  quiet buttons the size of EXIT (`rj-btn`): the brass on a guest's screen is the page's + NEW TRADE or the ticket's
+  own action, one at a time. A phone keeps the logo and CREATE ACCOUNT, a thumb high. A phone's bar at the foot has
+  a guest's three things: GUEST, NEW, ACCOUNT.
+- **The buttons** are the app's families: the brass one is raised (`rj-press`), the quiet ones are `rj-btn`; the
+  guest's own classes (`gst-go`, `gst-quiet`, `gst-bar-quiet`) say only their size. Labels in capitals are 11px.
 - **The question.** BOOK and every Excel export open one dialog over everything, the ticket included: what an
   account gives, CREATE AN ACCOUNT in brass, KEEP LOOKING beside it; Escape or a press outside closes it. It says
   plainly that a guest's ticket is not kept.

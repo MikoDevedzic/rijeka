@@ -109,6 +109,7 @@ services:
       FRONTEND_URL: ${RIJEKA_PUBLIC_URL:-http://localhost:8080}
       RIJEKA_DEMO_PROVISION: ${RIJEKA_DEMO_PROVISION:-0}
       RIJEKA_DEMO_MARKET_DATA: ${RIJEKA_DEMO_MARKET_DATA:-0}
+      RIJEKA_GUEST_EMAIL: ${RIJEKA_GUEST_EMAIL:-}          # the guest desk's address; empty = no guests
       RIJEKA_SCHEDULER: ${RIJEKA_SCHEDULER:-1}
       RIJEKA_PUBLIC_URL: ${RIJEKA_PUBLIC_URL:-http://localhost:8080}
     ports:

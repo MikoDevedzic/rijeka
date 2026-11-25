@@ -40,6 +40,7 @@
   .ab-bar { padding: 0 12px !important; gap: 10px !important; }
   .ab-desk { display: none !important; }
   .ab-right > *:not(.rj-btn):not(:nth-last-child(2)) { display: none !important; }      /* the name and EXIT stay */
+  .ab-right > .gst-bar-quiet:not(.is-first) { display: none !important; }      /* a guest's bar keeps the way to an account; SIGN IN is on the door */
   .ms-launcher { display: none !important; }         /* CHAT is in the navigation */
 
   /* ── home: a few things, clean ──

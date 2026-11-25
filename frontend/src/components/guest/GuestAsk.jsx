@@ -33,8 +33,8 @@ export default function GuestAsk() {
         <h2 id="gst-ask-title">{w.title}</h2>
         <p>{w.body}</p>
         <div className="gst-actions">
-          <button type="button" className="gst-quiet" data-action="guest-ask-stay" onClick={close}>KEEP LOOKING</button>
-          <button type="button" className="gst-go" data-action="guest-ask-signup" ref={go} onClick={() => { close(); navigate('/signup') }}>CREATE AN ACCOUNT</button>
+          <button type="button" className="rj-btn gst-quiet" data-action="guest-ask-stay" onClick={close}>KEEP LOOKING</button>
+          <button type="button" className="gst-go rj-press" data-action="guest-ask-signup" ref={go} onClick={() => { close(); navigate('/signup') }}>CREATE AN ACCOUNT</button>
         </div>
       </div>
     </div>
